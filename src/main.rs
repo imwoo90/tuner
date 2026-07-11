@@ -6,6 +6,7 @@ pub mod cleanup;
 pub mod heartbeat;
 pub mod cron;
 pub mod workspace;
+pub mod background;
 
 #[cfg(test)]
 pub mod telegram_tests;
@@ -21,6 +22,12 @@ pub mod cron_tests;
 
 #[cfg(test)]
 pub mod workspace_tests;
+
+#[cfg(test)]
+pub mod background_tests;
+
+#[cfg(test)]
+pub mod background_tests_extra;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
