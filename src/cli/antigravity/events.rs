@@ -140,7 +140,8 @@ pub fn read_transcript_answer(
         .join(".system_generated")
         .join("logs")
         .join("transcript.jsonl");
-    let raw = std::fs::read_to_string(transcript_path).ok()?;
+    let bytes = std::fs::read(transcript_path).ok()?;
+    let raw = String::from_utf8_lossy(&bytes);
     let mut answer = None;
     for line in raw.lines() {
         let stripped = line.trim();

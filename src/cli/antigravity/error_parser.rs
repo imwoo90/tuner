@@ -21,7 +21,11 @@ pub fn parse_cli_error(stderr: &str, returncode: i32) -> String {
         );
     }
 
-    if returncode == 127 || lower_stderr.contains("not found") {
+    if returncode == 127
+        || lower_stderr.contains("command not found")
+        || lower_stderr.contains("agy: not found")
+        || lower_stderr.contains("no such file or directory")
+    {
         return format!(
             "❌ [우덕터] agy CLI is not installed or not available in the system PATH.\n\
              💡 Suggestion: Verify if 'agy' is installed and that its location is appended to your PATH environment variable."

@@ -31,6 +31,7 @@ pub fn parse_models(output: &str) -> Vec<String> {
 pub async fn discover_models(cmd_name: &str) -> Vec<String> {
     let mut child = match Command::new(cmd_name)
         .arg("models")
+        .env_remove("CODEX_SANDBOX_NETWORK_DISABLED")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

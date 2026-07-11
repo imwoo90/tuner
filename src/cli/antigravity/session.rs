@@ -21,6 +21,8 @@ pub struct SessionHolder {
     pub child: Child,
     pub drain_task: JoinHandle<()>,
     pub last_active: Instant,
+    pub chat_id: Option<i64>,
+    pub topic_id: Option<i64>,
 }
 
 impl Drop for SessionHolder {
@@ -123,16 +125,40 @@ pub fn spawn_session(
         }
     });
 
+    let chat_id = env.get("DUCTOR_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
+    let topic_id = env.get("DUCTOR_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
+
     Ok(SessionHolder {
         child,
         drain_task,
         last_active: Instant::now(),
+        chat_id,
+        topic_id,
     })
 }
 
 #[derive(Default)]
 pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
+}
+
+fn terminate_duplicates(
+    session_id: &str,
+    chat_id: Option<i64>,
+    topic_id: Option<i64>,
+    holders: &mut HashMap<String, SessionHolder>,
+) {
+    if let Some(cid) = chat_id {
+        let mut keys_to_remove = Vec::new();
+        for (id, h) in holders.iter_mut() {
+            if id != session_id && h.chat_id == Some(cid) && h.topic_id == topic_id {
+                keys_to_remove.push(id.clone());
+            }
+        }
+        for id in keys_to_remove {
+            holders.remove(&id);
+        }
+    }
 }
 
 impl SessionManager {
@@ -172,19 +198,32 @@ impl SessionManager {
     ) -> Result<(), String> {
         self.cleanup_expired().await;
 
+        let chat_id = env.get("DUCTOR_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
+        let topic_id = env.get("DUCTOR_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
+
         let mut holders = self.holders.lock().await;
-        if let Some(holder) = holders.get_mut(session_id) {
-            let is_running = match holder.child.try_wait() {
+        let is_running = if let Some(holder) = holders.get_mut(session_id) {
+            match holder.child.try_wait() {
                 Ok(None) => true,
                 _ => false,
-            };
-            if is_running {
-                holder.last_active = Instant::now();
-                return Ok(());
-            } else {
-                holders.remove(session_id);
             }
+        } else {
+            false
+        };
+
+        if is_running {
+            // Terminate any other old sessions for the same chat/topic
+            terminate_duplicates(session_id, chat_id, topic_id, &mut holders);
+            if let Some(holder) = holders.get_mut(session_id) {
+                holder.last_active = Instant::now();
+            }
+            return Ok(());
+        } else {
+            holders.remove(session_id);
         }
+
+        // Terminate any old sessions for the same chat/topic before spawning the new one
+        terminate_duplicates(session_id, chat_id, topic_id, &mut holders);
 
         let holder = spawn_session(workspace, cmd_name, cmd_args, env)?;
         holders.insert(session_id.to_string(), holder);

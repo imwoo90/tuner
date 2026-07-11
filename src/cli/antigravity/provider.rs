@@ -18,11 +18,16 @@ impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env = HashMap::new();
         for (k, v) in std::env::vars() {
-            env.insert(k, v);
+            if k != "CODEX_SANDBOX_NETWORK_DISABLED" {
+                env.insert(k, v);
+            }
         }
         
         env.insert("DUCTOR_AGENT_NAME".to_string(), "main".to_string());
         env.insert("DUCTOR_CHAT_ID".to_string(), self.config.chat_id.to_string());
+        if let Some(topic_id) = self.config.topic_id {
+            env.insert("DUCTOR_TOPIC_ID".to_string(), topic_id.to_string());
+        }
         env.insert("DUCTOR_TRANSPORT".to_string(), self.config.transport.clone());
 
         let state_root = events::agy_state_root(Some(&env));
@@ -64,24 +69,30 @@ impl AntigravityCli {
         env: &HashMap<String, String>,
         workspace: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
-        let child = Command::new("agy")
-            .args(&cmd_args[1..])
+        let mut cmd = Command::new("agy");
+        cmd.args(&cmd_args[1..])
             .current_dir(workspace)
             .envs(env)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()
+            .kill_on_drop(true);
+
+        let child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
 
-        let output = child
-            .wait_with_output()
-            .await
-            .map_err(|e| format!("Failed to wait for agy: {}", e))?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        Ok((stdout, stderr, output.status))
+        let timeout_dur = tokio::time::Duration::from_secs(300);
+        match tokio::time::timeout(timeout_dur, child.wait_with_output()).await {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                Ok((stdout, stderr, output.status))
+            }
+            Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
+            Err(_) => {
+                Err("Command timed out after 300 seconds".to_string())
+            }
+        }
     }
 
     fn resolve_result_text(
@@ -171,11 +182,21 @@ impl AgentProvider for AntigravityCli {
         let resume_id = resume_session.map(|s| s.to_string());
         let workspace_path = workspace.clone();
 
+        let env = self.build_env();
+        let agy_ws = self.agy_workspace();
+        let initial_size = events::resolve_brain_dir(&agy_ws, Some(&env))
+            .map(|brain_dir| {
+                let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript.jsonl");
+                std::fs::metadata(&transcript_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0)
+            });
+
         let oneshot_handle = tokio::spawn(async move {
             self_arc.send(&prompt_string, resume_id.as_deref(), continue_session, workspace_path).await
         });
 
-        spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env());
+        spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), initial_size);
 
         let stream = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|event| (event, rx))
@@ -220,9 +241,10 @@ fn spawn_log_polling(
     tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
     agy_ws: PathBuf,
     env: HashMap<String, String>,
+    initial_size: Option<u64>,
 ) {
     tokio::spawn(async move {
-        let mut prev_size = None;
+        let mut prev_size = initial_size;
         let mut parser = super::log_parser::AntigravityLogParser::new();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
         loop {

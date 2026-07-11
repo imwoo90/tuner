@@ -126,3 +126,26 @@ async fn test_session_manager_terminate_all_kills_descendants() {
     assert!(nix::sys::signal::kill(nix_pid2, None).is_err());
 }
 
+#[tokio::test]
+async fn test_session_manager_terminates_duplicate_chat_sessions() {
+    use super::session::SessionManager;
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut env = HashMap::new();
+    env.insert("DUCTOR_CHAT_ID".to_string(), "100".to_string());
+    env.insert("DUCTOR_TOPIC_ID".to_string(), "200".to_string());
+    let manager = SessionManager::new();
+
+    // 1. Spawning session-1
+    let res1 = manager.ensure_session("session-1", &workspace, "cat", &[], &env).await;
+    assert!(res1.is_ok());
+    assert!(manager.is_active("session-1").await);
+
+    // 2. Spawning session-2 with the same chat/topic keys should terminate session-1
+    let res2 = manager.ensure_session("session-2", &workspace, "cat", &[], &env).await;
+    assert!(res2.is_ok());
+
+    // Verify session-2 is active, but session-1 is terminated
+    assert!(manager.is_active("session-2").await);
+    assert!(!manager.is_active("session-1").await);
+}
+

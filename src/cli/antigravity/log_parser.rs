@@ -90,7 +90,7 @@ fn clean_tool_call_args(tc: &serde_json::Value) -> String {
                 || k == "ReplacementContent"
                 || k == "ReplacementChunks"
                 || k == "TargetContent"
-                || (v.as_str().map(|s| s.len() > 200).unwrap_or(false))
+                || (v.as_str().map(|s| s.chars().count() > 200).unwrap_or(false))
             {
                 clean_args.insert(k.clone(), serde_json::Value::String("<omitted...>".to_string()));
             } else {
@@ -104,6 +104,17 @@ fn clean_tool_call_args(tc: &serde_json::Value) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!("`{}({})`", name, args_str)
+}
+
+fn get_friendly_name(t: &str) -> &str {
+    match t {
+        "RUN_COMMAND" => "run_command (execute)",
+        "VIEW_FILE" => "view_file (read)",
+        "LIST_DIRECTORY" => "list_dir (list)",
+        "GREP_SEARCH" => "grep_search (search)",
+        "CODE_ACTION" => "replace_file_content (edit)",
+        _ => t,
+    }
 }
 
 fn process_entry(
@@ -129,7 +140,12 @@ fn process_entry(
                     tool_calls.push(clean_tool_call_args(tc));
                 }
             }
-            if status == Some("DONE") && entry.get("tool_calls").is_none() {
+            let tool_calls_empty_or_missing = match entry.get("tool_calls") {
+                None => true,
+                Some(serde_json::Value::Array(arr)) => arr.is_empty(),
+                _ => false,
+            };
+            if status == Some("DONE") && tool_calls_empty_or_missing {
                 if let Some(content) = entry.get("content").and_then(|c| c.as_str()) {
                     if !content.trim().is_empty() {
                         *final_content = Some(content.trim().to_string());
@@ -138,15 +154,7 @@ fn process_entry(
             }
         } else if status == Some("DONE") {
             if let Some(t) = etype {
-                let friendly_name = match t {
-                    "RUN_COMMAND" => "run_command (execute)",
-                    "VIEW_FILE" => "view_file (read)",
-                    "LIST_DIRECTORY" => "list_dir (list)",
-                    "GREP_SEARCH" => "grep_search (search)",
-                    "CODE_ACTION" => "replace_file_content (edit)",
-                    _ => t,
-                };
-                tool_completions.push(format!("`{}` completed", friendly_name));
+                tool_completions.push(format!("`{}` completed", get_friendly_name(t)));
             }
         }
     }
@@ -184,11 +192,13 @@ fn build_formatted_progress(
     }
 }
 
-pub struct AntigravityLogParser;
+pub struct AntigravityLogParser {
+    seen_final: bool,
+}
 
 impl AntigravityLogParser {
     pub fn new() -> Self {
-        Self
+        Self { seen_final: false }
     }
 
     pub fn parse_log_delta(
@@ -200,6 +210,14 @@ impl AntigravityLogParser {
             Ok(res) => res,
             Err(_) => return (prev_size.unwrap_or(0), None),
         };
+
+        let is_truncated = match prev_size {
+            Some(size) => new_size < size,
+            None => false,
+        };
+        if is_truncated {
+            self.seen_final = false;
+        }
 
         if new_content.is_empty() {
             return (new_size, None);
@@ -223,6 +241,12 @@ impl AntigravityLogParser {
                 &mut tool_completions,
                 &mut final_content,
             );
+        }
+
+        if self.seen_final {
+            final_content = None;
+        } else if final_content.is_some() {
+            self.seen_final = true;
         }
 
         let formatted = build_formatted_progress(
