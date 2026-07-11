@@ -40,13 +40,42 @@ impl SessionKey {
             Some(tid) => format!("{}:{}:{}", self.transport, self.chat_id, tid),
         }
     }
+
+    pub fn lock_key(&self) -> (i64, Option<i64>) {
+        (self.chat_id, self.topic_id)
+    }
+
+    pub fn matrix(chat_id: i64) -> Self {
+        Self {
+            transport: "mx".to_string(),
+            chat_id,
+            topic_id: None,
+        }
+    }
+
+    pub fn for_transport(transport: &str, chat_id: i64, topic_id: Option<i64>) -> Self {
+        Self {
+            transport: transport.to_string(),
+            chat_id,
+            topic_id,
+        }
+    }
 }
 
 impl FromStr for SessionKey {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err("Empty key string".to_string());
+        }
         let p: Vec<&str> = s.split(':').collect();
+        if p.len() > 3 {
+            return Err(format!("Invalid key format: {}", s));
+        }
+        if p.iter().any(|part| part.is_empty()) {
+            return Err(format!("Invalid key format: {}", s));
+        }
         let err = |name, val: &str| format!("Invalid {}: {}", name, val);
         match p.len() {
             1 => Ok(Self {
@@ -120,5 +149,34 @@ mod tests {
         assert_eq!(k3.transport, "mx");
         assert_eq!(k3.chat_id, 98765);
         assert_eq!(k3.topic_id, None);
+    }
+
+    #[test]
+    fn test_lock_key() {
+        let k = SessionKey { transport: "mx".to_string(), chat_id: 42, topic_id: Some(7) };
+        assert_eq!(k.lock_key(), (42, Some(7)));
+    }
+
+    #[test]
+    fn test_matrix_factory() {
+        let k = SessionKey::matrix(42);
+        assert_eq!(k.transport, "mx");
+        assert_eq!(k.chat_id, 42);
+        assert_eq!(k.topic_id, None);
+    }
+
+    #[test]
+    fn test_for_transport_factory() {
+        let k = SessionKey::for_transport("discord", 99, Some(101));
+        assert_eq!(k.transport, "discord");
+        assert_eq!(k.chat_id, 99);
+        assert_eq!(k.topic_id, Some(101));
+    }
+
+    #[test]
+    fn test_parse_invalid_keys() {
+        assert!(SessionKey::from_str("a:b:c:d").is_err());
+        assert!(SessionKey::from_str("tg:123:45:67").is_err());
+        assert!(SessionKey::from_str("").is_err());
     }
 }

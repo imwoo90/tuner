@@ -7,6 +7,9 @@ pub mod key;
 pub mod data;
 pub mod manager;
 pub mod freshness;
+pub mod named;
 
 #[cfg(test)]
 pub mod manager_tests;
+#[cfg(test)]
+pub mod named_tests;
