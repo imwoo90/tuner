@@ -8,6 +8,7 @@ pub mod cron;
 pub mod workspace;
 pub mod background;
 pub mod security;
+pub mod bus;
 
 #[cfg(test)]
 pub mod telegram_tests;
@@ -35,6 +36,10 @@ pub mod security_tests;
 
 #[cfg(test)]
 pub mod security_tests_extra;
+
+#[cfg(test)]
+pub mod bus_tests;
+
 
 
 #[tokio::main]
