@@ -19,11 +19,36 @@ pub struct CliConfig {
     pub telegram_token: String,
     pub allowed_user_ids: Vec<i64>,
     pub allowed_group_ids: Vec<i64>,
+    pub user_timezone: Option<String>,
     pub telegram_heartbeat_enabled: bool,
     pub telegram_heartbeat_interval_minutes: Option<i64>,
     pub telegram_heartbeat_quiet_start: Option<u32>,
     pub telegram_heartbeat_quiet_end: Option<u32>,
     pub telegram_heartbeat_ack_token: Option<String>,
+    pub heartbeat: HeartbeatConfig,
+    pub cleanup: crate::cleanup::observer::CleanupConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct HeartbeatConfig {
+    pub enabled: bool,
+    pub interval_minutes: Option<i64>,
+    pub quiet_start: Option<u32>,
+    pub quiet_end: Option<u32>,
+    pub ack_token: Option<String>,
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_minutes: Some(30),
+            quiet_start: Some(21),
+            quiet_end: Some(8),
+            ack_token: Some("HEARTBEAT_OK".to_string()),
+        }
+    }
 }
 
 impl Default for CliConfig {
@@ -44,11 +69,14 @@ impl Default for CliConfig {
             telegram_token: String::new(),
             allowed_user_ids: Vec::new(),
             allowed_group_ids: Vec::new(),
+            user_timezone: None,
             telegram_heartbeat_enabled: false,
             telegram_heartbeat_interval_minutes: None,
             telegram_heartbeat_quiet_start: None,
             telegram_heartbeat_quiet_end: None,
             telegram_heartbeat_ack_token: None,
+            heartbeat: HeartbeatConfig::default(),
+            cleanup: crate::cleanup::observer::CleanupConfig::default(),
         }
     }
 }

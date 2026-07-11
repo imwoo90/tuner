@@ -15,6 +15,17 @@ pub struct CleanupConfig {
     pub check_hour: u32,
 }
 
+impl Default for CleanupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            media_files_days: 30,
+            output_to_user_days: 30,
+            check_hour: 3,
+        }
+    }
+}
+
 pub struct CleanupObserver {
     pub config: CleanupConfig,
     pub telegram_files_dir: PathBuf,

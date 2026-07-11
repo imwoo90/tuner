@@ -34,15 +34,51 @@ impl HeartbeatScheduler {
         }
     }
 
+    pub fn heartbeat_enabled(&self) -> bool {
+        self.config.heartbeat.enabled || self.config.telegram_heartbeat_enabled
+    }
+
+    pub fn heartbeat_interval_minutes(&self) -> i64 {
+        if self.config.heartbeat.enabled {
+            self.config.heartbeat.interval_minutes.unwrap_or(30)
+        } else {
+            self.config.telegram_heartbeat_interval_minutes.unwrap_or(30)
+        }
+    }
+
+    pub fn heartbeat_quiet_start(&self) -> Option<u32> {
+        if self.config.heartbeat.enabled {
+            self.config.heartbeat.quiet_start
+        } else {
+            self.config.telegram_heartbeat_quiet_start
+        }
+    }
+
+    pub fn heartbeat_quiet_end(&self) -> Option<u32> {
+        if self.config.heartbeat.enabled {
+            self.config.heartbeat.quiet_end
+        } else {
+            self.config.telegram_heartbeat_quiet_end
+        }
+    }
+
+    pub fn heartbeat_ack_token(&self) -> String {
+        if self.config.heartbeat.enabled {
+            self.config.heartbeat.ack_token.clone().unwrap_or_else(|| "HEARTBEAT_OK".to_string())
+        } else {
+            self.config.telegram_heartbeat_ack_token.clone().unwrap_or_else(|| "HEARTBEAT_OK".to_string())
+        }
+    }
+
     /// Evaluates if the current tick falls into quiet hours and should be skipped.
     pub fn should_skip_tick(&self, now: &DateTime<Tz>) -> bool {
-        if !self.config.telegram_heartbeat_enabled {
+        if !self.heartbeat_enabled() {
             return true;
         }
 
         if let (Some(start_h), Some(end_h)) = (
-            self.config.telegram_heartbeat_quiet_start,
-            self.config.telegram_heartbeat_quiet_end,
+            self.heartbeat_quiet_start(),
+            self.heartbeat_quiet_end(),
         ) {
             let start = NaiveTime::from_hms_opt(start_h, 0, 0).unwrap();
             let end = NaiveTime::from_hms_opt(end_h, 0, 0).unwrap();
@@ -67,7 +103,7 @@ impl HeartbeatScheduler {
     /// Evaluates if the session activity is still within the cooldown threshold.
     pub fn is_cooling_down(&self, session: &SessionData) -> bool {
         // Cooldown configuration (default 30 minutes if not provided)
-        let cooldown_min = self.config.telegram_heartbeat_interval_minutes.unwrap_or(30);
+        let cooldown_min = self.heartbeat_interval_minutes();
         if let Ok(last) = DateTime::parse_from_rfc3339(&session.last_active) {
             let now = Utc::now();
             let gap = now.signed_duration_since(last.with_timezone(&Utc));
@@ -80,7 +116,7 @@ impl HeartbeatScheduler {
 
     /// Starts the background interval check.
     pub fn start(self: Arc<Self>, bot: Bot) {
-        let interval_mins = self.config.telegram_heartbeat_interval_minutes.unwrap_or(30) as u64;
+        let interval_mins = self.heartbeat_interval_minutes() as u64;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_mins * 60));
             // Skip the immediate first tick
@@ -95,9 +131,7 @@ impl HeartbeatScheduler {
 
     /// Perform a single tick check over all persisted sessions.
     pub async fn tick(&self, bot: &Bot) -> Result<(), String> {
-        let user_tz = self.config.telegram_heartbeat_ack_token.as_ref()
-            .map(|_| "UTC".to_string())
-            .unwrap_or_else(|| "UTC".to_string());
+        let user_tz = self.config.user_timezone.as_deref().unwrap_or("UTC");
         
         let tz = user_tz.parse::<Tz>().unwrap_or(Tz::UTC);
         let now_local = Utc::now().with_timezone(&tz);
@@ -128,14 +162,14 @@ impl HeartbeatScheduler {
 
     async fn run_heartbeat_for_chat(&self, bot: &Bot, session: &SessionData) -> Result<(), String> {
         let prompt = "System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly.";
-        let ack_token = self.config.telegram_heartbeat_ack_token.as_deref().unwrap_or("HEARTBEAT_OK");
+        let ack_token = self.heartbeat_ack_token();
 
         let sid = session.get_session_id(&self.config.provider);
         let opt_sid = if sid.is_empty() { None } else { Some(&sid[..]) };
 
         let res = self.cli.send(prompt, opt_sid, false, self.config.working_dir.clone()).await;
         if let Ok(resp) = res {
-            if !super::quiet::should_suppress_heartbeat(&resp.result, ack_token) {
+            if !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
                 let html_text = crate::telegram::formatting::markdown_to_telegram_html(&resp.result);
                 let _ = bot.send_message(ChatId(session.chat_id), html_text)
                     .parse_mode(teloxide::types::ParseMode::Html)

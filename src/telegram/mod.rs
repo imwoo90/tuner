@@ -7,9 +7,8 @@
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
-use crate::cli::{AgentProvider, StreamEvent};
+use crate::cli::AgentProvider;
 use std::sync::Arc;
-use std::time::{Instant, Duration};
 
 pub mod formatting;
 #[cfg(test)]
@@ -161,11 +160,23 @@ fn start_schedulers(
     let cron_path = std::path::PathBuf::from(home).join(".ductor").join("cron_jobs.json");
     let cron_manager = Arc::new(crate::cron::manager::CronManager::new(cron_path));
     let cron_scheduler = Arc::new(crate::cron::scheduler::CronScheduler::new(
-        config,
+        config.clone(),
         cron_manager.clone(),
         cli,
     ));
     cron_scheduler.start(bot);
+
+    let telegram_files_dir = config.working_dir.join("telegram_files");
+    let output_to_user_dir = config.working_dir.join("output_to_user");
+    let cleanup_obs = Arc::new(crate::cleanup::observer::CleanupObserver::new(
+        config.cleanup.clone(),
+        telegram_files_dir,
+        output_to_user_dir,
+    ));
+    tokio::spawn(async move {
+        cleanup_obs.start().await;
+    });
+
     cron_manager
 }
 
