@@ -13,10 +13,10 @@
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | cli/antigravity provider | Core provider client, events parsing, and discovery | none | IN_PROGRESS (1cd75db9-3e98-4a63-b6d7-94f69735cf92) |
-| 2 | PTY session lifecycle | Process spawning, pty control, process lifecycle | M1 | PLANNED |
-| 3 | Session state persistence | Named session manager, storage, state files | M2 | PLANNED |
-| 4 | Telegram bot formatting | Text formatters, HTML escaping, formatting tests | none | PLANNED |
+| 1 | cli/antigravity provider | Core provider client, events parsing, and discovery | none | DONE |
+| 2 | PTY session lifecycle | Process spawning, pty control, process lifecycle | M1 | DONE |
+| 3 | Session state persistence | Named session manager, storage, state files | M2 | DONE |
+| 4 | Telegram bot formatting | Text formatters, HTML escaping, formatting tests | none | IN_PROGRESS |
 | 5 | Telegram commands & replies | Commands (/new, /reset, etc.), reply helper | M4, M3 | PLANNED |
 | 6 | Heartbeat scheduler | Quiet hours check, heartbeat task, observer | none | PLANNED |
 | 7 | Cron task manager | Job parser, job executor, state store | none | PLANNED |
