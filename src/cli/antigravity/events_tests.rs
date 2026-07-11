@@ -199,6 +199,25 @@ fn test_log_parser_initializes_to_file_size() {
 }
 
 #[test]
+fn test_log_parser_first_read_with_content() {
+    let root = create_test_dir("log_parser_first_read");
+    let transcript = root.join("transcript.jsonl");
+    let entry = serde_json::json!({
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "thinking": "Initial thought process",
+    });
+    std::fs::write(&transcript, entry.to_string() + "\n").unwrap();
+
+    let mut parser = AntigravityLogParser::new();
+    let (next_size, delta) = parser.parse_log_delta(&transcript, None);
+    assert!(next_size > 0);
+    assert!(delta.is_some());
+    let text = delta.unwrap();
+    assert!(text.contains("Initial thought process"));
+}
+
+#[test]
 fn test_log_parser_extracts_thinking_and_tools() {
     let root = create_test_dir("log_parser_extracts");
     let transcript = root.join("transcript.jsonl");

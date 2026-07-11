@@ -74,7 +74,8 @@ fn create_command(
         .stdin(stdin)
         .stdout(stdout)
         .stderr(stderr)
-        .process_group(0);
+        .process_group(0)
+        .kill_on_drop(true);
     cmd
 }
 

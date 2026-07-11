@@ -25,7 +25,7 @@ fn get_new_content_string(path: &Path, prev_size: Option<u64>) -> Result<(String
     let file_size = metadata.len();
 
     let mut start_pos = match prev_size {
-        None => return Ok((String::new(), file_size)),
+        None => 0,
         Some(size) => size,
     };
 

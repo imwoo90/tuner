@@ -30,11 +30,8 @@ impl AntigravityCli {
         }
         env.insert("DUCTOR_TRANSPORT".to_string(), self.config.transport.clone());
 
-        let state_root = events::agy_state_root(Some(&env));
-        env.insert("DUCTOR_HOME".to_string(), state_root.to_string_lossy().to_string());
-
-        let shared_mem = state_root.join("shared_memory.json");
-        env.insert("DUCTOR_SHARED_MEMORY_PATH".to_string(), shared_mem.to_string_lossy().to_string());
+        env.insert("DUCTOR_HOME".to_string(), "/home/wimvm/.ductor".to_string());
+        env.insert("DUCTOR_SHARED_MEMORY_PATH".to_string(), "/home/wimvm/.ductor/SHAREDMEMORY.md".to_string());
 
         env
     }
@@ -42,7 +39,7 @@ impl AntigravityCli {
     async fn ensure_interactive_session(
         &self,
         session_id: &str,
-        workspace: &Path,
+        _workspace: &Path,
         env: &HashMap<String, String>,
     ) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
@@ -59,7 +56,7 @@ impl AntigravityCli {
         cmd_args.push("".to_string());
 
         self.sessions
-            .ensure_session(session_id, workspace, "agy", &cmd_args, env)
+            .ensure_session(session_id, &agy_ws, "agy", &cmd_args, env)
             .await
     }
 
@@ -135,19 +132,19 @@ impl AgentProvider for AntigravityCli {
         prompt: &str,
         resume_session: Option<&str>,
         continue_session: bool,
-        workspace: PathBuf,
+        _workspace: PathBuf,
     ) -> Result<CliResponse, String> {
         let env = self.build_env();
         let agy_ws = self.agy_workspace();
 
-        crate::cli::antigravity::trust::trust_workspace_in_settings(&workspace, None);
+        crate::cli::antigravity::trust::trust_workspace_in_settings(&agy_ws, None);
 
         if let Some(session_id) = resume_session {
-            self.ensure_interactive_session(session_id, &workspace, &env).await?;
+            self.ensure_interactive_session(session_id, &agy_ws, &env).await?;
         }
 
         let cmd_args = self.build_command(prompt, resume_session, continue_session);
-        let (stdout_str, stderr_str, status) = self.run_oneshot(&cmd_args, &env, &workspace).await?;
+        let (stdout_str, stderr_str, status) = self.run_oneshot(&cmd_args, &env, &agy_ws).await?;
 
         let resolved_brain_dir = events::resolve_brain_dir(&agy_ws, Some(&env));
         let final_session_id = resolved_brain_dir
@@ -157,7 +154,7 @@ impl AgentProvider for AntigravityCli {
 
         let result_text = self.resolve_result_text(&agy_ws, &env, &stdout_str, resolved_brain_dir.as_deref());
 
-        self.handle_session_transition(resume_session, final_session_id.as_deref(), &workspace, &env).await?;
+        self.handle_session_transition(resume_session, final_session_id.as_deref(), &agy_ws, &env).await?;
 
         let is_error = !status.success();
         Ok(CliResponse {
@@ -245,6 +242,7 @@ fn spawn_log_polling(
 ) {
     tokio::spawn(async move {
         let mut prev_size = initial_size;
+        let mut active_path: Option<PathBuf> = None;
         let mut parser = super::log_parser::AntigravityLogParser::new();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
         loop {
@@ -256,6 +254,13 @@ fn spawn_log_polling(
                 _ = interval.tick() => {
                     if let Some(brain_dir) = events::resolve_brain_dir(&agy_ws, Some(&env)) {
                         let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript.jsonl");
+                        if let Some(ref old_path) = active_path {
+                            if old_path != &transcript_path {
+                                prev_size = None;
+                                parser = super::log_parser::AntigravityLogParser::new();
+                            }
+                        }
+                        active_path = Some(transcript_path.clone());
                         let (new_size, delta_text) = parser.parse_log_delta(&transcript_path, prev_size);
                         prev_size = Some(new_size);
                         if let Some(text) = delta_text {
