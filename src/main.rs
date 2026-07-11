@@ -9,9 +9,14 @@ pub mod workspace;
 pub mod background;
 pub mod security;
 pub mod bus;
+pub mod webhook;
 
 #[cfg(test)]
 pub mod telegram_tests;
+
+#[cfg(test)]
+pub mod webhook_tests;
+
 
 #[cfg(test)]
 pub mod cleanup_tests;

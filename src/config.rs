@@ -27,6 +27,56 @@ pub struct CliConfig {
     pub telegram_heartbeat_ack_token: Option<String>,
     pub heartbeat: HeartbeatConfig,
     pub cleanup: crate::cleanup::observer::CleanupConfig,
+    pub webhooks: WebhookConfig,
+    pub api: ApiConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct WebhookConfig {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+    pub token: String,
+    pub max_body_bytes: usize,
+    pub rate_limit_per_minute: usize,
+}
+
+impl Default for WebhookConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: "127.0.0.1".to_string(),
+            port: 8742,
+            token: String::new(),
+            max_body_bytes: 262144,
+            rate_limit_per_minute: 30,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct ApiConfig {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+    pub token: String,
+    pub chat_id: i64,
+    pub allow_public: bool,
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: "0.0.0.0".to_string(),
+            port: 8741,
+            token: String::new(),
+            chat_id: 0,
+            allow_public: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -77,6 +127,8 @@ impl Default for CliConfig {
             telegram_heartbeat_ack_token: None,
             heartbeat: HeartbeatConfig::default(),
             cleanup: crate::cleanup::observer::CleanupConfig::default(),
+            webhooks: WebhookConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 }

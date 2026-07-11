@@ -18,6 +18,19 @@ html-escape = "0.2"
 cron = "0.12"
 filetime = "0.2"
 
+axum = { version = "0.7", features = ["ws", "multipart"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+crypto_box = { version = "0.9", features = ["serde"] }
+subtle = "2.5"
+hmac = "0.12"
+sha2 = "0.10"
+sha1 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+mime_guess = "2.0"
+rand = "0.8"
+
 [dev-dependencies]
 tempfile = "3.10"
+
 
