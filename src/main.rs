@@ -5,6 +5,7 @@ pub mod session;
 pub mod cleanup;
 pub mod heartbeat;
 pub mod cron;
+pub mod workspace;
 
 #[cfg(test)]
 pub mod telegram_tests;
@@ -17,6 +18,9 @@ pub mod heartbeat_tests;
 
 #[cfg(test)]
 pub mod cron_tests;
+
+#[cfg(test)]
+pub mod workspace_tests;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {

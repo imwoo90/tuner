@@ -16,8 +16,8 @@ chrono-tz = "0.9"
 regex = "1.10"
 html-escape = "0.2"
 cron = "0.12"
+filetime = "0.2"
 
 [dev-dependencies]
 tempfile = "3.10"
-filetime = "0.2"
 

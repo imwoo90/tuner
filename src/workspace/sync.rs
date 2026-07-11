@@ -1,0 +1,193 @@
+//! # Filesystem Synchronization
+//!
+//! Handles creating directory layouts, deploying framework-managed files (Zone 2),
+//! seeding defaults (Zone 3), merging user config, rule sync, and watcher loops.
+
+use crate::workspace::paths::DuctorPaths;
+use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_rule_files_recursive, walk_and_copy};
+use std::path::Path;
+
+static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.ductor`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
+
+static HOST_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**WARNING: YOU ARE RUNNING DIRECTLY ON THE HOST SYSTEM. THERE IS NO SANDBOX.**\n\n- Every file operation, command, and script runs on the user's real machine.\n- Be careful with destructive commands (`rm -rf`, `chmod`, etc.).\n- Ask before touching anything outside `workspace/`.\n";
+
+static TRANSPORT_TELEGRAM: &str = "\n\n---\n\n## Messenger Rules\n\n- Replies are Telegram messages (4096-char limit; auto-split is handled).\n- Keep responses mobile-friendly and structured.\n- To send files, use `<file:/absolute/path>`.\n- Save generated deliverables in `output_to_user/`.\n- Do not suggest GUI-only actions like `xdg-open`.\n\n### Quick Reply Buttons\n\nUse button syntax at the end of messages:\n\n- `[button:Label]` markers\n- same line = one row\n- new line = new row\n\nKeep labels short. Callback data is truncated to 64 bytes by the framework.\nDo not place button markers inside code blocks.\n";
+
+static IDENTITY_MAIN: &str = "\n\n---\n\n## Multi-Agent Identity\n\n**You are the MAIN agent (`{name}`).**\n\n- You are the primary agent and coordinator in a multi-agent system.\n- You can create, manage, and communicate with sub-agents.\n- Each sub-agent has its own **bot** with a separate chat (Telegram or Matrix).\n\n### How the user interacts with sub-agents\n\nThe user has TWO ways to use a sub-agent:\n\n1. **Direct chat**: The user opens the sub-agent's bot and chats directly. This is the primary way — each sub-agent is a full independent assistant with its own memory and workspace.\n2. **Delegation via you**: The user asks YOU to delegate a task. You use the agent tools below to send the task. The response comes back to YOUR chat (never to the sub-agent's chat).\n\n**After creating a sub-agent, always tell the user they can open the sub-agent's chat directly to talk to it.** Do not suggest Python tool commands to the user — those are for YOU to use internally.\n\n### Agent tools (for YOUR internal use)\n\n- `python3 tools/agent_tools/ask_agent.py TARGET \"message\"` — sync, blocks\n- `python3 tools/agent_tools/ask_agent_async.py TARGET \"message\"` — async\n- Add `--new` before TARGET to start a fresh session (discard prior context)\n- `python3 tools/agent_tools/list_agents.py`\n- `python3 tools/agent_tools/edit_shared_knowledge.py`\n\nResponses from these tools always come back to YOU, never to the sub-agent's chat.\nUse async for tasks that may take more than a few seconds.\n\nWhen you delegate a task asynchronously, the sub-agent processes it in a Named Session called `ia-{name}`. The user can continue that session in the sub-agent's chat via `@ia-{name} <message>`. When reporting results to the user, mention this session name so they know how to follow up directly with the sub-agent.\n";
+
+/// Initializes the workspace directory structure and configurations.
+pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
+    let old_tasks = paths.workspace().join("tasks");
+    if old_tasks.is_dir() && !paths.cron_tasks_dir().exists() {
+        let _ = std::fs::rename(&old_tasks, paths.cron_tasks_dir());
+    }
+
+    let _ = crate::workspace::skills::sync_bundled_skills(paths, false);
+
+    if paths.home_defaults.is_dir() {
+        walk_and_copy(&paths.home_defaults, &paths.ductor_home, &paths.home_defaults)?;
+    }
+
+    let required_dirs = [
+        "workspace",
+        "workspace/memory_system",
+        "workspace/cron_tasks",
+        "workspace/tools",
+        "workspace/tools/user_tools",
+        "workspace/tools/cron_tools",
+        "workspace/tools/media_tools",
+        "workspace/tools/webhook_tools",
+        "workspace/tools/agent_tools",
+        "workspace/output_to_user",
+        "workspace/tasks",
+        "workspace/skills",
+        "config",
+    ];
+    for rel in &required_dirs {
+        let d = paths.ductor_home.join(rel);
+        if !d.is_dir() {
+            let _ = std::fs::create_dir_all(&d);
+        }
+    }
+    let _ = std::fs::create_dir_all(paths.logs_dir());
+
+    let selector = crate::workspace::rules::RulesSelector::new(paths.clone());
+    let _ = selector.deploy_rules();
+
+    let _ = ensure_task_rule_files(&paths.cron_tasks_dir());
+    let _ = sync_rule_files(&paths.workspace());
+    let _ = smart_merge_config(paths);
+
+    if paths.workspace().is_dir() {
+        if let Ok(entries) = std::fs::read_dir(paths.workspace()) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_symlink() && !path.exists() {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = crate::workspace::skills::sync_skills(paths, false);
+    Ok(())
+}
+
+/// Injects runtime environment notices into CLAUDE.md.
+pub fn inject_runtime_environment(
+    paths: &DuctorPaths,
+    docker_container: Option<&str>,
+) -> Result<(), String> {
+    let env_notice = if let Some(container) = docker_container {
+        DOCKER_NOTICE.replace("{container}", container)
+    } else {
+        HOST_NOTICE.to_string()
+    };
+
+    let identity_notice = IDENTITY_MAIN.replace("{name}", "main");
+    let transport_notice = TRANSPORT_TELEGRAM.to_string();
+
+    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
+    for name in &rule_filenames {
+        let target = paths.workspace().join(name);
+        if target.is_file() {
+            if let Ok(content) = std::fs::read_to_string(&target) {
+                if content.contains("## Multi-Agent Identity") || content.contains("## Runtime Environment") {
+                    continue;
+                }
+                let new_content = format!("{}{}{}{}", content, transport_notice, identity_notice, env_notice);
+                let _ = std::fs::write(&target, new_content);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recursively synchronizes existing rule files across the workspace.
+pub fn sync_rule_files(root: &Path) -> Result<(), String> {
+    if !root.is_dir() {
+        return Ok(());
+    }
+    sync_group(root)?;
+    sync_rule_files_recursive(root)?;
+    Ok(())
+}
+
+/// Asynchronously monitors changes to rule files and syncs them periodically.
+pub async fn watch_rule_files(root: &Path, interval_ms: u64) -> Result<(), String> {
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
+    let cron_tasks_dir = root.join("cron_tasks");
+    loop {
+        interval.tick().await;
+        let root_clone = root.to_path_buf();
+        let cron_tasks_clone = cron_tasks_dir.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            let _ = ensure_task_rule_files(&cron_tasks_clone);
+            let _ = sync_rule_files(&root_clone);
+        }).await;
+    }
+}
+
+pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
+    if !cron_tasks_dir.is_dir() {
+        return Ok(0);
+    }
+    let expected = detect_rule_filenames(cron_tasks_dir);
+    let mut created = 0;
+    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
+
+    let entries = match std::fs::read_dir(cron_tasks_dir) {
+        Ok(e) => e,
+        Err(e) => return Err(format!("Failed to read dir: {}", e)),
+    };
+
+    for entry in entries {
+        if let Ok(entry) = entry {
+            let task_dir = entry.path();
+            if task_dir.is_dir() {
+                let mut existing = Vec::new();
+                for name in &rule_filenames {
+                    if task_dir.join(name).is_file() {
+                        existing.push(*name);
+                    }
+                }
+                if existing.is_empty() {
+                    continue;
+                }
+                let mut missing = Vec::new();
+                for name in &expected {
+                    if !task_dir.join(name).is_file() {
+                        missing.push(name.clone());
+                    }
+                }
+                if missing.is_empty() {
+                    continue;
+                }
+                if let Ok(source_content) = std::fs::read_to_string(task_dir.join(existing[0])) {
+                    for name in missing {
+                        let _ = std::fs::write(task_dir.join(name), &source_content);
+                        created += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(created)
+}
+
+fn detect_rule_filenames(cron_tasks_dir: &Path) -> Vec<String> {
+    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
+    let mut found = Vec::new();
+    for name in &rule_filenames {
+        if cron_tasks_dir.join(name).is_file() {
+            found.push(name.to_string());
+        }
+    }
+    if found.is_empty() {
+        vec!["CLAUDE.md".to_string()]
+    } else {
+        found
+    }
+}
