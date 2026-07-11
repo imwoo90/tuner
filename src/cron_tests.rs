@@ -85,4 +85,50 @@ mod tests {
         let next_time = next_run.unwrap();
         assert!(next_time > chrono::Utc::now());
     }
+
+    #[tokio::test]
+    async fn test_cron_manager_duplicate_job_rejected() {
+        let temp = NamedTempFile::new().unwrap();
+        let manager = CronManager::new(temp.path().to_path_buf());
+
+        let job = CronJob::new(
+            "dup1".to_string(), "T".to_string(), "*/5 * * * *".to_string(),
+            "dir".to_string(), "task".to_string(), 100, None,
+        );
+        manager.add_job(job.clone()).await.unwrap();
+        let result = manager.add_job(job).await;
+        assert!(result.is_err(), "Adding a duplicate job should return Err");
+    }
+
+    #[tokio::test]
+    async fn test_cron_manager_get_nonexistent_returns_none() {
+        let temp = NamedTempFile::new().unwrap();
+        let manager = CronManager::new(temp.path().to_path_buf());
+        let result = manager.get_job("nonexistent").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_cron_manager_set_all_enabled() {
+        let temp = NamedTempFile::new().unwrap();
+        let manager = CronManager::new(temp.path().to_path_buf());
+
+        for id in &["job-a", "job-b"] {
+            let job = CronJob::new(
+                id.to_string(), "T".to_string(), "*/5 * * * *".to_string(),
+                "dir".to_string(), "task".to_string(), 100, None,
+            );
+            manager.add_job(job).await.unwrap();
+        }
+
+        manager.set_all_enabled(false).await.unwrap();
+        for job in manager.list_jobs().await.unwrap() {
+            assert!(!job.enabled, "All jobs should be disabled");
+        }
+
+        manager.set_all_enabled(true).await.unwrap();
+        for job in manager.list_jobs().await.unwrap() {
+            assert!(job.enabled, "All jobs should be enabled");
+        }
+    }
 }
