@@ -236,6 +236,21 @@ impl SessionManager {
         holders.remove(session_id).is_some()
     }
 
+    pub async fn abort(&self, chat_id: i64, topic_id: Option<i64>) -> usize {
+        let mut holders = self.holders.lock().await;
+        let mut to_remove = Vec::new();
+        for (id, holder) in holders.iter() {
+            if holder.chat_id == Some(chat_id) && holder.topic_id == topic_id {
+                to_remove.push(id.clone());
+            }
+        }
+        let count = to_remove.len();
+        for id in to_remove {
+            holders.remove(&id);
+        }
+        count
+    }
+
     pub async fn terminate_all(&self) {
         let mut holders = self.holders.lock().await;
         holders.clear();

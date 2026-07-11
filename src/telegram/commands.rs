@@ -19,14 +19,11 @@ async fn send_reply(
     req.await
 }
 
-pub(crate) async fn handle_commands(
+async fn handle_info_commands(
     bot: &Bot,
     msg: &Message,
     text: &str,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-    cron_manager: &crate::cron::manager::CronManager,
 ) -> Result<bool, teloxide::RequestError> {
     if text == "/help" {
         let _ = send_reply(bot, msg, "🤖 [우덕터] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다.").await;
@@ -43,12 +40,28 @@ pub(crate) async fn handle_commands(
     if text == "/restart" {
         let _ = send_reply(bot, msg, "🤖 [우덕터] 재기동을 요청합니다...").await;
         let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
-        let restart_path = std::path::PathBuf::from(home).join(".ductor").join("restart-requested");
+        let restart_path = std::path::PathBuf::from(home).join(".ductor").join("restart-sentinel.json");
         let _ = std::fs::write(restart_path, "");
         return Ok(true);
     }
-    if text == "/new" || text == "/abort" {
-        return handle_session_control_commands(bot, msg, text, config, sessions, cli).await;
+    Ok(false)
+}
+
+pub(crate) async fn handle_commands(
+    bot: &Bot,
+    msg: &Message,
+    text: &str,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+    cron_manager: &crate::cron::manager::CronManager,
+    topic_cache: &super::TopicNameCache,
+) -> Result<bool, teloxide::RequestError> {
+    if handle_info_commands(bot, msg, text, config).await? {
+        return Ok(true);
+    }
+    if text.starts_with("/new") || text.starts_with("/reset") || text == "/stop" || text == "/stop_all" || text == "/abort" {
+        return handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).await;
     }
     if text.starts_with("/model") {
         let args = text["/model".len()..].trim();
@@ -88,20 +101,39 @@ async fn handle_cron_command(
 async fn handle_session_control_commands(
     bot: &Bot,
     msg: &Message,
-    cmd: &str,
+    text: &str,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
+    topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
-    if cmd == "/new" {
-        let topic_id = crate::telegram::get_topic_id(msg);
+    let args = text.trim();
+    let cmd = args.split_whitespace().next().unwrap_or("");
+    let mut topic_id = crate::telegram::get_topic_id(msg);
+
+    if cmd == "/new" || cmd == "/reset" {
+        let parts: Vec<&str> = args.split_whitespace().collect();
+        if parts.len() > 1 {
+            let name = parts[1];
+            if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, name) {
+                topic_id = Some(resolved_tid);
+            } else {
+                let _ = send_reply(bot, msg, format!("⚠️ [우덕터] 알 수 없는 토픽 이름입니다: {}", name)).await;
+                return Ok(true);
+            }
+        }
         let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
         let model = config.model.as_deref().unwrap_or("antigravity-default");
         let _ = sessions.reset_provider_session(&key, &config.provider, model).await;
         let _ = send_reply(bot, msg, "🤖 [우덕터] 기존 세션을 초기화하고 새 대화를 시작합니다.").await;
         return Ok(true);
     }
-    if cmd == "/abort" {
+    if cmd == "/stop" {
+        let count = cli.sessions.abort(msg.chat.id.0, topic_id).await;
+        let _ = send_reply(bot, msg, format!("🤖 [우덕터] 이 토픽에서 진행 중인 프로세스 {}개를 강제 종료(stop)했습니다.", count)).await;
+        return Ok(true);
+    }
+    if cmd == "/stop_all" || cmd == "/abort" {
         cli.sessions.terminate_all().await;
         let _ = send_reply(bot, msg, "🤖 [우덕터] 진행 중인 모든 프로세스를 강제 종료(abort)했습니다.").await;
         return Ok(true);
