@@ -3,15 +3,13 @@
 //! Handles wiring up background observers (heartbeat, cron, background, webhooks) to
 //! submit their output results automatically to the `MessageBus`.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use async_trait::async_trait;
 use super::bus::MessageBus;
-use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use super::adapters::{
-    WebhookResult, InterAgentResult, TaskResult,
     from_heartbeat, from_cron_result, from_background_result, from_webhook_cron_result,
+    WebhookResult,
 };
-use crate::background::models::BackgroundResult;
 
 #[async_trait]
 pub trait HeartbeatObserverTrait: Send + Sync {

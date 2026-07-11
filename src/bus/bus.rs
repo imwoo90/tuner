@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
-use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
+use super::envelope::{Envelope, LockMode, DeliveryMode};
 use super::lock_pool::LockPool;
 
 #[async_trait]
@@ -193,7 +193,7 @@ impl MessageBus {
 
 fn generate_envelope_id() -> String {
     use std::io::Read;
-    let mut seed = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u32;
+    let seed = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u32;
     if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
         let mut buf = [0u8; 6];
         if f.read_exact(&mut buf).is_ok() {

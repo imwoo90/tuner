@@ -3,7 +3,6 @@
 //! Provides conversion functions to map various domain events and results
 //! (e.g., CronResult, BackgroundResult, InterAgentResult, TaskResult) into unified `Envelope` models.
 
-use std::collections::HashMap;
 use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use crate::background::models::{BackgroundResult, BackgroundResultStatus};
 
