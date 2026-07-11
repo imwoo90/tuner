@@ -24,6 +24,47 @@ mod tests {
     }
 
     #[test]
+    fn test_is_quiet_hours_boundary_start_is_quiet() {
+        // quiet 21-08: 21 is boundary start, should be quiet (inclusive)
+        let start = NaiveTime::from_hms_opt(21, 0, 0).unwrap();
+        let end = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        let tz: Tz = "UTC".parse().unwrap();
+        let t = tz.from_utc_datetime(&DateTime::parse_from_rfc3339("2026-07-11T21:00:00Z").unwrap().naive_utc());
+        assert!(is_within_quiet_hours(&t, start, end));
+    }
+
+    #[test]
+    fn test_is_quiet_hours_boundary_end_is_not_quiet() {
+        // quiet 21-08: 08 is boundary end, should NOT be quiet (exclusive)
+        let start = NaiveTime::from_hms_opt(21, 0, 0).unwrap();
+        let end = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        let tz: Tz = "UTC".parse().unwrap();
+        let t = tz.from_utc_datetime(&DateTime::parse_from_rfc3339("2026-07-11T08:00:00Z").unwrap().naive_utc());
+        assert!(!is_within_quiet_hours(&t, start, end));
+    }
+
+    #[test]
+    fn test_is_quiet_hours_midnight_in_wrap_window() {
+        // quiet 21-08: midnight (00:00) should be quiet
+        let start = NaiveTime::from_hms_opt(21, 0, 0).unwrap();
+        let end = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        let tz: Tz = "UTC".parse().unwrap();
+        let t = tz.from_utc_datetime(&DateTime::parse_from_rfc3339("2026-07-11T00:00:00Z").unwrap().naive_utc());
+        assert!(is_within_quiet_hours(&t, start, end));
+    }
+
+    #[test]
+    fn test_is_quiet_hours_same_start_end_never_quiet() {
+        // same start/end means never quiet
+        let same = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
+        let tz: Tz = "UTC".parse().unwrap();
+        let t = tz.from_utc_datetime(&DateTime::parse_from_rfc3339("2026-07-11T08:00:00Z").unwrap().naive_utc());
+        assert!(!is_within_quiet_hours(&t, same, same));
+        let t2 = tz.from_utc_datetime(&DateTime::parse_from_rfc3339("2026-07-11T12:00:00Z").unwrap().naive_utc());
+        assert!(!is_within_quiet_hours(&t2, same, same));
+    }
+
+    #[test]
     fn test_is_quiet_hours_wrapping() {
         // Quiet hours: 22:00 to 07:00 (crosses midnight)
         let start = NaiveTime::from_hms_opt(22, 0, 0).unwrap();
