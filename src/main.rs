@@ -10,12 +10,23 @@ pub mod background;
 pub mod security;
 pub mod bus;
 pub mod webhook;
+pub mod tasks;
+pub mod i18n;
 
 #[cfg(test)]
 pub mod telegram_tests;
 
 #[cfg(test)]
 pub mod webhook_tests;
+
+#[cfg(test)]
+pub mod tasks_tests;
+
+#[cfg(test)]
+pub mod i18n_tests;
+
+#[cfg(test)]
+pub mod i18n_check_tests;
 
 
 #[cfg(test)]
