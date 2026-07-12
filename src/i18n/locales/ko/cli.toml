@@ -1,0 +1,268 @@
+# 한국어 CLI 스트링 (Rich 형식, 터미널에 표시됨).
+
+[status]
+running = "[bold green]실행 중[/bold green]  pid={pid}  실행시간: {uptime}"
+not_running = "[dim]실행 중이 아님[/dim]"
+provider = "제공자:  [cyan]{provider}[/cyan] ({model})"
+docker_enabled = "Docker:    [green]활성화됨[/green] ({name})"
+docker_disabled = "Docker:    [dim]비활성화됨[/dim]"
+errors_found = "오류:    최근 로그에서 [bold red]{count}[/bold red]개 발견됨"
+errors_none = "오류:    [green]0[/green]개"
+paths_header = "[bold]경로:[/bold]"
+not_configured = "[bold yellow]설정되지 않았습니다.[/bold yellow]\n\n설정 마법사를 시작하려면 [bold]ductor[/bold]를 실행하십시오."
+
+[config]
+incomplete = "[bold yellow]설정이 불완전합니다. [bold]ductor onboarding[/bold]을 실행하십시오.[/bold yellow]"
+matrix_no_homeserver = "[bold yellow]Matrix 홈서버 URL이 필요합니다.{hint}[/bold yellow]"
+matrix_no_user = "[bold yellow]Matrix user_id가 필요합니다.{hint}[/bold yellow]"
+matrix_no_auth = "[bold yellow]Matrix 비밀번호 또는 access_token이 필요합니다.{hint}[/bold yellow]"
+matrix_no_target = "[bold yellow]적어도 하나의 allowed_room 또는 allowed_user가 필요합니다.{hint}[/bold yellow]"
+onboarding_hint = " 다시 설정하려면 [bold]ductor onboarding[/bold]을 실행하십시오."
+
+[lifecycle]
+stopping_docker = "[dim]Docker 컨테이너 '{name}' 정지 중...[/dim]"
+docker_stopped = "[green]Docker 컨테이너가 정지되었습니다.[/green]"
+stopping_bot = "[dim]봇 정지 중 (pid={pid})...[/dim]"
+bot_stopped = "[green]봇이 정지되었습니다.[/green]"
+killed_extra = "[dim]남은 ductor 프로세스 {count}개를 정지했습니다.[/dim]"
+no_instance = "[dim]실행 중인 봇 인스턴스를 찾을 수 없습니다.[/dim]"
+
+[lifecycle.uninstall]
+title = "[bold red]ductor 삭제[/bold red]"
+body = """\
+[bold red]시스템에서 ductor가 영구적으로 제거됩니다.[/bold red]\n
+  1. 실행 중인 봇 정지 (활성화된 경우)
+  2. Docker 컨테이너 및 이미지 제거 (사용된 경우)
+  3. ~/.ductor/의 모든 데이터 삭제
+  4. ductor 패키지 삭제"""
+confirm = "정말로 모든 요소를 삭제하시겠습니까?"
+cancelled = "[dim]삭제가 취소되었습니다.[/dim]"
+removing_image = "[dim]Docker 이미지 '{image}' 제거 중...[/dim]"
+image_removed = "[green]Docker 이미지가 제거되었습니다.[/green]"
+uninstalling = "[dim]ductor 패키지 제거 중...[/dim]"
+delete_warning = "[yellow]경고: {home}을(를) 완전히 삭제할 수 없습니다 (일부 파일이 잠겨 있을 수 있음). 수동으로 제거하십시오.[/yellow]"
+deleted = "[green]{home} 삭제됨[/green]"
+done_title = "[bold green]안녕히 가십시오[/bold green]"
+done_body = "[bold green]ductor가 완전히 제거되었습니다.[/bold green]\n\nductor를 이용해 주셔서 감사합니다!"
+
+[lifecycle.upgrade]
+dev_title = "[bold yellow]개발 설치[/bold yellow]"
+dev_body = """\
+[bold yellow]소스에서 실행 중 (편집 가능한 설치).[/bold yellow]\n
+자체 업데이트를 사용할 수 없습니다.
+프로젝트 디렉토리에서 [bold]git pull[/bold]을 실행하여 업데이트하십시오."""
+title = "[bold cyan]ductor 업데이트 중...[/bold cyan]"
+body = """\
+  1. 봇을 안전하게 종료
+  2. 최신 버전으로 업데이트
+  3. 재시작"""
+upgrading = "[dim]패키지 업데이트 중...[/dim]"
+complete = "[green]업데이트 완료: {old} -> {new}[/green]"
+unchanged = "[bold yellow]업데이트 후에도 버전이 변경되지 않았습니다 ({version}).[/bold yellow]\n자동 재시도가 시도되었으나, 아직 새로운 설치 버전이 확인되지 않았습니다."
+restarting = "[dim]재시작 중...[/dim]"
+
+[docker]
+config_not_found = "[bold red]설정을 찾을 수 없습니다. ductor를 먼저 실행하십시오.[/bold red]"
+config_read_error = "[bold red]설정을 읽는 데 실패했습니다.[/bold red]"
+enabled = "Docker 샌드박스: [green]활성화됨[/green]"
+disabled = "Docker 샌드박스: [dim]비활성화됨[/dim]"
+restart_hint = "[dim]적용하려면 봇을 재시작하십시오.[/dim]"
+
+[docker.rebuild]
+stopping = "[dim]봇 정지 중...[/dim]"
+removing_container = "[dim]컨테이너 '{name}' 제거 중...[/dim]"
+removing_image = "[dim]이미지 '{name}' 제거 중...[/dim]"
+done = "[green]완료되었습니다.[/green] 다음 봇 시작 시 이미지가 다시 빌드됩니다.\n[dim]서비스로 실행 중인 경우 자동으로 재시작됩니다.[/dim]"
+
+[docker.mount]
+usage = "[bold red]사용법: ductor docker mount <path>[/bold red]"
+not_exist = "[bold red]경로가 존재하지 않습니다: {path}[/bold red]"
+not_dir = "[bold red]디렉토리가 아닙니다: {path}[/bold red]"
+already = "[dim]이미 마운트됨: {path}[/dim]"
+done = "[green]마운트됨:[/green] {path}{target}"
+apply_hint = "[dim]적용하려면 봇을 재시작하거나 컨테이너를 다시 빌드하십시오.[/dim]"
+
+[docker.unmount]
+usage = "[bold red]사용법: ductor docker unmount <path>[/bold red]"
+not_found = "[bold red]마운트를 찾을 수 없습니다: {path}[/bold red]"
+done = "[green]마운트 해제됨:[/green] {path}"
+
+[docker.mounts]
+empty = "[dim]설정된 마운트가 없습니다.[/dim]"
+add_hint = "[dim]추가하려면 'ductor docker mount <path>'를 사용하십시오.[/dim]"
+
+[docker.extras]
+col_package = "패키지"
+col_description = "설명"
+col_status = "상태"
+selected = "[green]선택됨[/green]"
+not_selected = "[dim]—[/dim]"
+apply_hint = "[dim]선택한 추가 기능을 이미지에 적용하려면 'ductor docker rebuild'를 실행하십시오.[/dim]"
+add_hint = "[dim]추가 기능을 추가하려면 'ductor docker extras-add <id>'를 사용하십시오.[/dim]"
+remove_hint = "[dim]추가 기능을 제거하려면 'ductor docker extras-remove <id>'를 사용하십시오.[/dim]"
+usage_add = "[bold red]사용법: ductor docker extras-add <id>[/bold red]"
+usage_remove = "[bold red]사용법: ductor docker extras-remove <id>[/bold red]"
+see_ids = "[dim]사용 가능한 ID를 보려면 'ductor docker extras'를 실행하십시오.[/dim]"
+see_installed = "[dim]설치된 ID를 보려면 'ductor docker extras'를 실행하십시오.[/dim]"
+unknown = "[bold red]알 수 없는 추가 기능: {id}[/bold red]"
+already_installed = "[dim]이미 설치됨: {id}[/dim]"
+not_installed = "[bold red]설치되지 않음: {id}[/bold red]"
+added = "[green]추가됨:[/green] {names}"
+auto_deps = "[dim]자동 추가된 의존성 패키지: {names}[/dim]"
+removed = "[green]제거됨:[/green] {name}"
+rebuild_hint = "[yellow]적용하려면 'ductor docker rebuild'를 실행하십시오.[/yellow]"
+dep_warning = "[yellow]경고: {dependents}이(가) {name}에 의존합니다.[/yellow]"
+
+[service]
+not_installed = "[dim]서비스가 설치되지 않았습니다. [bold]ductor service install[/bold]을 실행하십시오.[/dim]"
+not_running = "[dim]서비스가 실행 중이 아닙니다.[/dim]"
+no_service = "[dim]설치된 서비스가 없습니다.[/dim]"
+no_binary = "[bold red]PATH에서 ductor 바이너리를 찾을 수 없습니다.[/bold red]"
+removed = "[green]서비스가 제거되었습니다.[/green]"
+started = "[green]서비스가 시작되었습니다.[/green]"
+stopped = "[green]서비스가 정지되었습니다.[/green]"
+start_failed = "[red]시작 실패: {error}[/red]"
+stop_failed = "[red]정지 실패: {error}[/red]"
+
+[service.install]
+title = "ductor 백그라운드 서비스"
+body = """\
+[bold green]ductor가 이제 백그라운드 서비스로 실행됩니다.[/bold green]\n
+{detail}\n
+[bold]유용한 명령어:[/bold]\n
+  [cyan]ductor service status[/cyan]     실행 여부 확인
+  [cyan]ductor service stop[/cyan]       서비스 정지
+  [cyan]ductor service logs[/cyan]       {logs_hint}
+  [cyan]ductor service uninstall[/cyan]  서비스 제거"""
+
+[service.linux]
+no_systemd = "[bold red]systemd를 찾을 수 없습니다. 서비스 설치에는 systemd가 탑재된 Linux가 필요합니다.[/bold red]"
+linger_warning = "[bold yellow]로그아웃 후에도 ductor가 계속 실행되도록 Linger를 활성화해야 합니다.[/bold yellow]"
+linger_enabled = "[green]Linger가 활성화되었습니다.[/green]"
+linger_manual = "[yellow]Linger를 자동으로 활성화할 수 없습니다.[/yellow]\n수동 실행: [bold]sudo loginctl enable-linger {user}[/bold]"
+start_failed = "[bold red]서비스 시작 실패:[/bold red] {error}"
+detail = "부팅 시 시작되며 충돌 시 자동으로 재시작됩니다."
+
+[service.macos]
+no_launchctl = "[bold red]launchctl을 찾을 수 없습니다. 서비스 설치에는 macOS가 필요합니다.[/bold red]"
+start_failed = "[bold red]Launch Agent 로드 실패:[/bold red] {error}"
+detail = "로그인 시 시작되며 충돌 시 자동으로 재시작됩니다 (10초 대기)."
+unload_failed = "[red]에이전트 언로드 실패: {error}[/red]"
+not_loaded = "[red]에이전트가 로드되지 않았습니다. 시도: [bold]ductor service install[/bold][/red]"
+
+[service.windows]
+admin_title = "[bold yellow]관리자 권한 필요[/bold yellow]"
+admin_body = """\
+[bold yellow]관리자 권한이 필요합니다.[/bold yellow]\n
+관리자 권한으로 터미널을 열고 다시 시도하십시오:\n
+  [bold]1.[/bold] CMD 또는 PowerShell 우클릭
+  [bold]2.[/bold] [cyan]'관리자 권한으로 실행'[/cyan] 선택
+  [bold]3.[/bold] 실행: [cyan]ductor service install[/cyan]"""
+no_scheduler = "[bold red]작업 스케줄러를 사용할 수 없습니다. 서비스 설치에는 Windows가 필요합니다.[/bold red]"
+no_pythonw = "[dim]참고: pythonw.exe를 찾을 수 없습니다. 콘솔 창이 보일 수 있습니다.[/dim]"
+create_failed = "[bold red]예약된 작업 생성 실패:[/bold red] {error}"
+start_failed = "[bold red]작업이 생성되었으나 시작에 실패했습니다:[/bold red] {error}"
+remove_failed = "[red]작업 제거 실패: {error}[/red]"
+detail = "로그인 10초 후에 시작되며 충돌 시 자동으로 재시작됩니다 (최대 3회 재시도, 1분 간격)."
+query_failed = "[red]작업 상태를 쿼리할 수 없습니다: {error}[/red]"
+
+[service.logs]
+no_logs = "[dim]로그 파일을 찾을 수 없습니다.[/dim]"
+showing = "[dim]{name}의 마지막 {count}줄 표시 중[/dim]"
+read_error = "[red]로그 파일을 읽을 수 없습니다: {error}[/red]"
+full_path = "[dim]전체 로그 경로: {path}[/dim]"
+not_installed = "[dim]서비스가 설치되지 않았습니다.[/dim]"
+streaming = "[dim]로그 표시 중 (중지하려면 Ctrl+C)...[/dim]"
+no_journalctl = "[bold red]journalctl을 찾을 수 없습니다.[/bold red]"
+
+[api]
+title = "[bold]API 명령어[/bold] [dim](베타)[/dim]"
+status_not_configured = "[dim]설정되지 않음[/dim]"
+status_enabled = "[green]활성화됨[/green] (포트 {port})"
+status_disabled = "[dim]비활성화됨[/dim]"
+
+[api.missing_dep]
+title = "[bold]의존성 누락[/bold]"
+body = """\
+[bold yellow]API 서버(E2E 암호화)에는 PyNaCl이 필요합니다.[/bold yellow]\n
+다음 명령으로 설치하십시오:\n
+  [bold]{hint}[/bold]\n
+그 다음 [bold]ductor api enable[/bold]을 다시 실행하십시오."""
+
+[api.enabled]
+title = "[bold]API 서버[/bold] [dim](베타)[/dim]"
+body = """\
+[bold green]API 서버가 활성화되었습니다.[/bold green]\n
+  호스트:   [cyan]{host}[/cyan]
+  포트:   [cyan]{port}[/cyan]
+  토큰:  [cyan]{token}[/cyan]\n
+[dim]API 서버를 구동하려면 봇을 재시작하십시오.[/dim]
+[dim]Tailscale 또는 다른 사설 네트워크와 함께 사용하도록 설계되었습니다.[/dim]"""
+
+[api.disabled]
+status = "API 서버: [dim]비활성화됨[/dim]"
+
+[agents]
+col_agent = "에이전트"
+col_status = "상태"
+col_uptime = "실행 시간"
+col_provider = "제공자"
+col_model = "모델"
+status_running = "[bold green]실행 중[/bold green]"
+status_starting = "[yellow]시작 중[/yellow]"
+status_crashed = "[bold red]충돌함[/bold red]"
+status_stopped = "[dim]정지됨[/dim]"
+empty = "[dim]설정된 서브 에이전트가 없습니다.[/dim]"
+add_hint = "[dim]생성하려면 'ductor agents add <name>'을 사용하십시오.[/dim]"
+
+[agents.add]
+usage = "[bold red]사용법: ductor agents add <name>[/bold red]"
+reserved = "[bold red]'main'이라는 이름은 예약되어 있습니다.[/bold red]"
+exists = "[bold red]에이전트 '{name}'이(가) 이미 존재합니다.[/bold red]"
+prompt_token = "'{name}'의 Telegram 봇 토큰 입력:"
+prompt_users = "허용할 사용자 ID (쉼표로 구분):"
+prompt_groups = "허용할 그룹 ID (쉼표로 구분, 없으면 비워둠):"
+prompt_provider = "제공자:"
+prompt_model = "모델 (예: opus, sonnet, o3):"
+cancelled = "[dim]취소되었습니다.[/dim]"
+done = "[green]에이전트 '{name}'이(가) agents.json에 추가되었습니다.[/green]"
+auto_start = "[dim]다음 봇 (재)시작 시 자동으로 시작됩니다.[/dim]"
+
+[agents.remove]
+usage = "[bold red]사용법: ductor agents remove <name>[/bold red]"
+not_found = "[bold red]에이전트 '{name}'을(를) 찾을 수 없습니다.[/bold red]"
+confirm = "에이전트 '{name}'을(를) 제거하시겠습니까? (작업 공간 데이터는 삭제되지 않습니다.)"
+done = "[green]에이전트 '{name}'이(가) agents.json에서 제거되었습니다.[/green]"
+data_hint = "[dim]작업 공간 데이터는 {path}에 유지됩니다.[/dim]"
+
+[install]
+already = "[green]✓[/green] {description}이(가) 이미 설치되어 있습니다."
+installing = "{description} 설치 중..."
+command = "[dim]$ {cmd}[/dim]"
+done = "[green]✓[/green] {description} 설치에 성공했습니다."
+failed = "[red]✗[/red] 설치에 실패했습니다."
+col_extra = "추가 기능"
+col_description = "설명"
+col_status = "상태"
+status_installed = "[green]설치됨[/green]"
+status_not_installed = "[dim]설치되지 않음[/dim]"
+
+[help]
+col_command = "명령어"
+col_description = "설명"
+ductor = "봇 시작 (필요한 경우 온보딩 실행)"
+onboarding = "설정 마법사 (이미 설정된 경우 초기화 후 실행)"
+stop = "실행 중인 봇 및 Docker 컨테이너 정지"
+restart = "봇 재시작"
+reset = "전체 재설정 및 마법사 다시 실행"
+upgrade = "정지, 최신 버전으로 업데이트 후 재시작"
+uninstall = "모든 요소를 삭제하고 패키지 삭제"
+service_install = "백그라운드 서비스로 실행 ({hint})"
+service = "서비스 관리 (상태/정지/로그/...)"
+agents = "서브 에이전트 관리 (목록/추가/제거)"
+docker = "Docker 관리 (재빌드/활성화/비활성화)"
+api = "API 서버 관리 (활성화/비활성화) [베타]"
+install = "선택적 추가 기능 설치 (matrix, api)"
+status = "봇 상태, 경로 및 에이전트 표시"
+help = "이 도움말 메시지 표시"
+verbose = "로그 정보 상세 출력"

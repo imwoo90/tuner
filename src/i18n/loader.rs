@@ -1,6 +1,12 @@
+//! # i18n Loader Module
+//!
+//! Handles locating locale files, parsing TOML translations, flattening structures,
+//! and doing placeholder substitution.
+
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// Find the directory where translation locales are stored.
 pub fn find_locales_dir() -> PathBuf {
     if let Ok(val) = std::env::var("WOODUCTOR_I18N_DIR") {
         let p = PathBuf::from(val);
@@ -12,7 +18,6 @@ pub fn find_locales_dir() -> PathBuf {
         "src/i18n/locales",
         "i18n/locales",
         "../src/i18n/locales",
-        "/home/wimvm/.ductor/workspace/projects/wooductor/src/i18n/locales",
     ] {
         let pb = PathBuf::from(p);
         if pb.exists() {
@@ -22,6 +27,7 @@ pub fn find_locales_dir() -> PathBuf {
     PathBuf::from("src/i18n/locales")
 }
 
+/// Recursively flattens a nested TOML value into a dot-notation key map.
 pub fn flatten(value: &toml::Value, prefix: &str, map: &mut HashMap<String, String>) {
     match value {
         toml::Value::Table(table) => {
@@ -50,36 +56,35 @@ pub fn flatten(value: &toml::Value, prefix: &str, map: &mut HashMap<String, Stri
     }
 }
 
-pub fn load_toml(path: &Path) -> HashMap<String, String> {
+/// Load and parse a TOML file into a flat key-value map.
+///
+/// # Examples
+/// ```no_run
+/// use std::path::Path;
+/// let result = tuner::i18n::loader::load_toml(Path::new("en/chat.toml"));
+/// ```
+pub fn load_toml(path: &Path) -> anyhow::Result<HashMap<String, String>> {
     let mut map = HashMap::new();
-    match std::fs::read_to_string(path) {
-        Ok(content) => {
-            match content.parse::<toml::Value>() {
-                Ok(value) => {
-                    flatten(&value, "", &mut map);
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse translation file: {:?}: {}", path, e);
-                }
-            }
-        }
-        Err(_) => {}
-    }
-    map
+    let content = std::fs::read_to_string(path)?;
+    let value = content.parse::<toml::Value>()?;
+    flatten(&value, "", &mut map);
+    Ok(map)
 }
 
+/// Load the entire translation suite (chat, cli/wizard, commands) for a language.
 pub fn load_language(root: &Path, lang: &str) -> (HashMap<String, String>, HashMap<String, String>, HashMap<String, String>) {
     let lang_dir = root.join(lang);
-    let chat = load_toml(&lang_dir.join("chat.toml"));
-    let mut cli = load_toml(&lang_dir.join("cli.toml"));
-    let wizard = load_toml(&lang_dir.join("wizard.toml"));
+    let chat = load_toml(&lang_dir.join("chat.toml")).unwrap_or_default();
+    let mut cli = load_toml(&lang_dir.join("cli.toml")).unwrap_or_default();
+    let wizard = load_toml(&lang_dir.join("wizard.toml")).unwrap_or_default();
     for (k, v) in wizard {
         cli.insert(format!("wizard.{}", k), v);
     }
-    let cmd = load_toml(&lang_dir.join("commands.toml"));
+    let cmd = load_toml(&lang_dir.join("commands.toml")).unwrap_or_default();
     (chat, cli, cmd)
 }
 
+/// Represents a collection of localized strings and their English fallbacks.
 #[derive(Clone, Debug)]
 pub struct TranslationStore {
     pub language: String,
@@ -92,26 +97,13 @@ pub struct TranslationStore {
 }
 
 impl TranslationStore {
+    /// Create a new TranslationStore using the default locales path.
     pub fn new(language: &str) -> Self {
         let root = find_locales_dir();
-        let (en_chat, en_cli, en_cmd) = load_language(&root, "en");
-        let (primary_chat, primary_cli, primary_cmd) = if language == "en" {
-            (None, None, None)
-        } else {
-            let (chat, cli, cmd) = load_language(&root, language);
-            (Some(chat), Some(cli), Some(cmd))
-        };
-        Self {
-            language: language.to_string(),
-            en_chat,
-            en_cli,
-            en_cmd,
-            primary_chat,
-            primary_cli,
-            primary_cmd,
-        }
+        Self::new_with_root(language, &root)
     }
 
+    /// Create a new TranslationStore with a specific locales path.
     pub fn new_with_root(language: &str, root: &Path) -> Self {
         let (en_chat, en_cli, en_cmd) = load_language(root, "en");
         let (primary_chat, primary_cli, primary_cmd) = if language == "en" {
@@ -131,24 +123,24 @@ impl TranslationStore {
         }
     }
 
+    /// Retrieve a chat translation.
     pub fn chat(&self, key: &str, args: &[(&str, &str)]) -> String {
         self.resolve(self.primary_chat.as_ref(), &self.en_chat, key, args)
     }
 
+    /// Retrieve a CLI translation.
     pub fn cli(&self, key: &str, args: &[(&str, &str)]) -> String {
         self.resolve(self.primary_cli.as_ref(), &self.en_cli, key, args)
     }
 
+    /// Retrieve a command translation.
     pub fn cmd(&self, key: &str) -> String {
         let raw = self.primary_cmd.as_ref()
             .and_then(|m| m.get(key))
             .or_else(|| self.en_cmd.get(key));
         match raw {
             Some(val) => val.clone(),
-            None => {
-                eprintln!("Missing translation key: commands.{}", key);
-                format!("[MISSING: {}]", key)
-            }
+            None => format!("[MISSING: {}]", key),
         }
     }
 
@@ -162,10 +154,7 @@ impl TranslationStore {
         let raw = primary.and_then(|m| m.get(key)).or_else(|| fallback.get(key));
         match raw {
             Some(raw_str) => format_string(key, raw_str, args),
-            None => {
-                eprintln!("Missing translation key: {}", key);
-                format!("[MISSING: {}]", key)
-            }
+            None => format!("[MISSING: {}]", key),
         }
     }
 
@@ -203,26 +192,15 @@ impl TranslationStore {
     }
 }
 
-pub fn format_string(key: &str, raw: &str, args: &[(&str, &str)]) -> String {
+/// Format a translation string by replacing placeholders like `{name}` or `{first.name}`.
+/// Performs best-effort substitution when some arguments are missing.
+pub fn format_string(_key: &str, raw: &str, args: &[(&str, &str)]) -> String {
     use regex::Regex;
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"\{(\w+)\}").unwrap());
+    let re = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").unwrap());
 
     if args.is_empty() {
-        return raw.to_string();
-    }
-
-    let mut missing_any = false;
-    for cap in re.captures_iter(raw) {
-        let ph_name = &cap[1];
-        if !args.iter().any(|(k, _)| *k == ph_name) {
-            eprintln!("Translation key {}: missing placeholder {}", key, ph_name);
-            missing_any = true;
-        }
-    }
-
-    if missing_any {
         return raw.to_string();
     }
 

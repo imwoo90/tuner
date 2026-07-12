@@ -59,7 +59,7 @@ async fn process_text(
     let (sess, _) = sessions.resolve_session(&key, &config.provider, model).await.unwrap();
     let sid = sess.get_session_id(&config.provider);
 
-    let mut req = bot.send_message(msg.chat.id, "⏳ [우덕터] Processing...");
+    let mut req = bot.send_message(msg.chat.id, crate::t!("bot.processing"));
     if let Some(t) = msg.thread_id { req = req.message_thread_id(t); }
     let proc_msg = match req.await { Ok(m) => m, Err(_) => return Ok(()), };
 
@@ -244,7 +244,7 @@ async fn handle_callback_query(
                     let _ = bot.edit_message_text(
                         msg.chat.id,
                         msg.id,
-                        format!("🤖 [우덕터] 세션의 LLM 모델이 `{}`(으)로 전환되었습니다.", model_name)
+                        crate::t!("bot.model_switch_success", model = model_name)
                     ).await;
                 }
             }

@@ -6,6 +6,7 @@
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
+use crate::t;
 
 async fn send_reply(
     bot: &Bot,
@@ -26,19 +27,17 @@ async fn handle_info_commands(
     config: &CliConfig,
 ) -> Result<bool, teloxide::RequestError> {
     if text == "/help" {
-        let _ = send_reply(bot, msg, "🤖 [우덕터] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다.").await;
+        let _ = send_reply(bot, msg, t!("bot.help")).await;
         return Ok(true);
     }
     if text == "/status" {
-        let status_msg = format!(
-            "🤖 [우덕터] 상태:\n- 프로바이더: {}\n- 모델: {:?}",
-            config.provider, config.model
-        );
+        let model_str = config.model.as_deref().unwrap_or("unknown");
+        let status_msg = t!("bot.status", provider = config.provider, model = model_str);
         let _ = send_reply(bot, msg, status_msg).await;
         return Ok(true);
     }
     if text == "/restart" {
-        let _ = send_reply(bot, msg, "🤖 [우덕터] 재기동을 요청합니다...").await;
+        let _ = send_reply(bot, msg, t!("bot.restart")).await;
         let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
         let restart_path = std::path::PathBuf::from(home).join(".ductor").join("restart-sentinel.json");
         let _ = std::fs::write(restart_path, "");
@@ -118,24 +117,24 @@ async fn handle_session_control_commands(
             if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, name) {
                 topic_id = Some(resolved_tid);
             } else {
-                let _ = send_reply(bot, msg, format!("⚠️ [우덕터] 알 수 없는 토픽 이름입니다: {}", name)).await;
+                let _ = send_reply(bot, msg, t!("bot.unknown_topic", name = name)).await;
                 return Ok(true);
             }
         }
         let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
         let model = config.model.as_deref().unwrap_or("antigravity-default");
         let _ = sessions.reset_provider_session(&key, &config.provider, model).await;
-        let _ = send_reply(bot, msg, "🤖 [우덕터] 기존 세션을 초기화하고 새 대화를 시작합니다.").await;
+        let _ = send_reply(bot, msg, t!("bot.new_session")).await;
         return Ok(true);
     }
     if cmd == "/stop" {
         let count = cli.sessions.abort(msg.chat.id.0, topic_id).await;
-        let _ = send_reply(bot, msg, format!("🤖 [우덕터] 이 토픽에서 진행 중인 프로세스 {}개를 강제 종료(stop)했습니다.", count)).await;
+        let _ = send_reply(bot, msg, t!("bot.stop_success", count = count)).await;
         return Ok(true);
     }
     if cmd == "/stop_all" || cmd == "/abort" {
         cli.sessions.terminate_all().await;
-        let _ = send_reply(bot, msg, "🤖 [우덕터] 진행 중인 모든 프로세스를 강제 종료(abort)했습니다.").await;
+        let _ = send_reply(bot, msg, t!("bot.stop_all_success")).await;
         return Ok(true);
     }
     Ok(false)
@@ -165,7 +164,7 @@ async fn handle_model_command(
             keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(m, format!("model:{}", m))]);
         }
         let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
-        let mut req = bot.send_message(msg.chat.id, "🤖 [우덕터] 사용할 모델을 아래에서 선택해 주세요:");
+        let mut req = bot.send_message(msg.chat.id, t!("bot.model_select_header"));
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }
@@ -176,7 +175,7 @@ async fn handle_model_command(
         sess.model = args.to_string();
         let _ = sessions.update_session(&sess, 0.0, 0).await;
         
-        let status_msg = format!("🤖 [우덕터] 세션의 LLM 모델이 `{}`(으)로 전환되었습니다.", args);
+        let status_msg = t!("bot.model_switch_success", model = args);
         let _ = send_reply(bot, msg, status_msg).await;
     }
     Ok(())
@@ -203,14 +202,14 @@ async fn handle_diagnose_command(
         "🔴 Missing"
     };
 
-    let report = format!(
-        "🤖 [우덕터] 자가 진단 리포트\n\n\
-         - agy CLI 상태: {}\n\
-         - 텔레그램 토큰: {}\n\
-         - 활성 세션 수: {} 개\n\
-         - 프로바이더: {}\n\
-         - 기본 모델: {:?}",
-        agy_status, token_present, session_count, config.provider, config.model
+    let model_str = config.model.as_deref().unwrap_or("None");
+    let report = t!(
+        "bot.diagnose_report",
+        agy_status = agy_status,
+        token_present = token_present,
+        session_count = session_count,
+        provider = config.provider,
+        model = model_str
     );
 
     let _ = send_reply(bot, msg, report).await;
@@ -222,7 +221,7 @@ async fn handle_memory_command(
     msg: &Message,
 ) -> Result<(), teloxide::RequestError> {
     let content = std::fs::read_to_string("/home/wimvm/ductor/workspace/memory_system/MAINMEMORY.md")
-        .unwrap_or_else(|_| "🤖 [우덕터] 현재 등록된 기억(MAINMEMORY.md)이 없습니다.".to_string());
+        .unwrap_or_else(|_| t!("bot.memory_empty"));
     
     let html_text = crate::telegram::formatting::markdown_to_telegram_html(&content);
     let chunks = crate::telegram::formatting::split_html_message(&html_text, 4000);

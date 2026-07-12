@@ -63,6 +63,8 @@ pub mod bus_tests;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
+    i18n::init("ko");
+
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     let config_path = std::path::PathBuf::from(home)
         .join(".ductor")

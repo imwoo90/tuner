@@ -44,7 +44,7 @@ fn test_flatten_deep() {
 fn test_load_toml_missing() {
     let tmp = tempfile::tempdir().unwrap();
     let result = load_toml(&tmp.path().join("nonexistent.toml"));
-    assert!(result.is_empty());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn test_load_toml_invalid() {
     let bad = tmp.path().join("bad.toml");
     std::fs::write(&bad, "this is not [valid toml").unwrap();
     let result = load_toml(&bad);
-    assert!(result.is_empty());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn test_load_toml_valid() {
     let tmp = tempfile::tempdir().unwrap();
     let good = tmp.path().join("good.toml");
     std::fs::write(&good, "[section]\nkey = \"value\"").unwrap();
-    let result = load_toml(&good);
+    let result = load_toml(&good).unwrap();
     let mut expected = HashMap::new();
     expected.insert("section.key".to_string(), "value".to_string());
     assert_eq!(result, expected);

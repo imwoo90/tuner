@@ -1,0 +1,32 @@
+# Bot command descriptions (≤22 chars for Telegram mobile clients).
+
+[bot]
+new = "새 대화 시작"
+reset = "현재 대화 초기화"
+stop = "진행/대기 메시지 중지"
+interrupt = "현재 작업 중지(대기 유지)"
+model = "모델 보기/전환"
+status = "세션 정보"
+memory = "주 메모리 표시"
+plan = "[agy] 단계별 계획"
+goal = "[agy] 자동 작업 실행"
+grill_me = "[agy] 대화형 질의응답"
+learn = "[agy] 새 규칙 저장"
+teamwork_preview = "[agy] 에이전트 팀 미리보기"
+session = "백그라운드 세션"
+tasks = "백그라운드 작업"
+cron = "크론 작업 관리"
+agent_commands = "다중 에이전트 시스템"
+showfiles = "파일 브라우저"
+info = "문서 및 정보"
+help = "모든 명령 보기"
+diagnose = "시스템 자가 진단"
+upgrade = "업데이트 확인"
+restart = "봇 재기동"
+
+[multiagent]
+agents = "에이전트 목록"
+agent_start = "서브 에이전트 시작"
+agent_stop = "서브 에이전트 정지"
+agent_restart = "서브 에이전트 재기동"
+stop_all = "모든 에이전트 중지"

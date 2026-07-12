@@ -450,3 +450,27 @@ changelog_header = "**Changelog v{version}**"
 
 [multiagent]
 async_task_received = "📥 **Tâche asynchrone reçue** de `{sender}`\nSession : `{session}` · ID tâche : `{task_id}`\n\n_{preview}_"
+
+# -- Bot commands & user-facing Telegram strings from commands.rs ---------------
+[bot]
+help = "🤖 [wooductor] Help:\n- Talk to the agy CLI agent by sending a normal message."
+status = "🤖 [wooductor] Status:\n- Provider: {provider}\n- Model: {model}"
+restart = "🤖 [wooductor] Requesting reboot..."
+unknown_topic = "⚠️ [wooductor] Unknown topic name: {name}"
+new_session = "🤖 [wooductor] Resetting current session and starting a new conversation."
+stop_success = "🤖 [wooductor] Forcefully terminated {count} process(es) in this topic."
+stop_all_success = "🤖 [wooductor] Forcefully terminated all active processes."
+model_select_header = "🤖 [wooductor] Please select a model to use below:"
+model_switch_success = "🤖 [wooductor] Session LLM model switched to `{model}`."
+diagnose_report = """\
+🤖 [wooductor] Self-Diagnosis Report
+
+- agy CLI Status: {agy_status}
+- Telegram Token: {token_present}
+- Active Sessions: {session_count}
+- Provider: {provider}
+- Default Model: {model}\
+"""
+memory_empty = "🤖 [wooductor] Currently no memory registered (MAINMEMORY.md)."
+processing = "⏳ [wooductor] Processing..."
+

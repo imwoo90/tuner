@@ -1,8 +1,15 @@
+//! # i18n Completeness Checker
+//!
+//! Compares translated locale files against the English source of truth to identify
+//! missing keys, extra keys, and mismatched formatting placeholders.
+
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+/// The list of translation domains (TOML files) verified by the checker.
 pub const DOMAINS: &[&str] = &["chat", "cli", "commands", "wizard"];
 
+/// Represents a mismatch in formatting placeholders for a specific key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceholderMismatch {
     pub key: String,
@@ -10,6 +17,7 @@ pub struct PlaceholderMismatch {
     pub locale_only: BTreeSet<String>,
 }
 
+/// Completeness report for a single domain.
 #[derive(Debug, Clone, Default)]
 pub struct DomainReport {
     pub missing: Vec<String>,
@@ -18,15 +26,18 @@ pub struct DomainReport {
 }
 
 impl DomainReport {
+    /// Return true if the domain has no missing, extra, or mismatched keys.
     pub fn clean(&self) -> bool {
         self.missing.is_empty() && self.extra.is_empty() && self.placeholder_mismatches.is_empty()
     }
 
+    /// Return the total number of issues identified in this domain.
     pub fn total_issues(&self) -> usize {
         self.missing.len() + self.extra.len() + self.placeholder_mismatches.len()
     }
 }
 
+/// Completeness report for a single locale containing multiple domains.
 #[derive(Debug, Clone)]
 pub struct LocaleReport {
     pub locale: String,
@@ -34,15 +45,18 @@ pub struct LocaleReport {
 }
 
 impl LocaleReport {
+    /// Return true if all domains in the locale are fully synced and clean.
     pub fn clean(&self) -> bool {
         self.domains.values().all(|d| d.clean())
     }
 
+    /// Return the total number of issues identified across all domains in the locale.
     pub fn total_issues(&self) -> usize {
         self.domains.values().map(|d| d.total_issues()).sum()
     }
 }
 
+/// Top-level report containing completeness results for all tested locales.
 #[derive(Debug, Clone)]
 pub struct Report {
     pub root: PathBuf,
@@ -50,25 +64,29 @@ pub struct Report {
 }
 
 impl Report {
+    /// Return true if all locales in the report are fully synced and clean.
     pub fn clean(&self) -> bool {
         self.locales.iter().all(|l| l.clean())
     }
 }
 
+/// Extract all placeholders (e.g. `{count}`) from a translation string.
 pub fn placeholders(text: &str) -> BTreeSet<String> {
     use regex::Regex;
     use std::sync::OnceLock;
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"\{(\w+)\}").unwrap());
+    let re = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").unwrap());
     re.captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
 }
 
+/// Load a specific domain (TOML file) for a given locale.
 pub fn load_domain(root: &Path, locale: &str, domain: &str) -> HashMap<String, String> {
-    super::load_toml(&root.join(locale).join(format!("{}.toml", domain)))
+    super::load_toml(&root.join(locale).join(format!("{}.toml", domain))).unwrap_or_default()
 }
 
+/// Compare a translated domain against the English source of truth.
 pub fn compare_domain(en: &HashMap<String, String>, tr: &HashMap<String, String>) -> DomainReport {
     let en_keys: BTreeSet<&String> = en.keys().collect();
     let tr_keys: BTreeSet<&String> = tr.keys().collect();
@@ -108,9 +126,17 @@ pub fn compare_domain(en: &HashMap<String, String>, tr: &HashMap<String, String>
     }
 }
 
-pub fn build_report(root: &Path, locales: Option<Vec<String>>) -> Result<Report, String> {
+/// Build a completeness report for specified locales or all supported locales.
+///
+/// # Examples
+/// ```no_run
+/// use std::path::Path;
+/// let report = tuner::i18n::check::build_report(Path::new("src/i18n/locales"), None);
+/// assert!(report.is_ok());
+/// ```
+pub fn build_report(root: &Path, locales: Option<Vec<String>>) -> anyhow::Result<Report> {
     if !root.join("en").is_dir() {
-        return Err(format!("English source-of-truth locale not found under {:?}", root));
+        anyhow::bail!("English source-of-truth locale not found under {:?}", root);
     }
 
     let target_locales = match locales {
@@ -226,6 +252,7 @@ fn format_locale_detail(loc: &LocaleReport) -> Vec<String> {
     lines
 }
 
+/// Format a Report into a markdown string summary.
 pub fn format_report(report: &Report) -> String {
     let mut lines = vec![
         "# i18n completeness report".to_string(),
@@ -254,6 +281,7 @@ pub fn format_report(report: &Report) -> String {
     lines.join("\n")
 }
 
+/// Main execution function for the i18n-check CLI entrypoint.
 pub fn run_checker(argv: &[String]) -> i32 {
     let mut root_path = None;
     let mut quiet = false;

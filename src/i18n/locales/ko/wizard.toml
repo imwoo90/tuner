@@ -1,0 +1,186 @@
+# 한국어 온보딩 마법사 스트링 (Rich 형식, 터미널에 표시됨).
+
+[common]
+cancelled = "[dim]설정이 취소되었습니다.[/dim]"
+subtitle = "ductor.dev"
+
+[cli_backends]
+title = "CLI 백엔드"
+header = "[bold]감지된 AI 백엔드:[/bold]\n"
+claude = "  Claude Code CLI   {status}"
+codex = "  OpenAI Codex CLI  {status}"
+gemini = "  Google Gemini CLI {status}"
+antigravity = "  Antigravity CLI   {status}"
+no_auth = """\
+\n[bold red]적어도 하나의 CLI가 설치되고 인증되어야 합니다.[/bold red]\n
+  Claude: [dim]https://docs.anthropic.com/en/docs/claude-code[/dim]
+  Codex:  [dim]https://github.com/openai/codex[/dim]
+  Gemini: [dim]https://github.com/google-gemini/gemini-cli[/dim]"""
+claude_check_failed = "[yellow]Claude 인증 확인 실패: {error}. 건너뜁니다.[/yellow]"
+codex_check_failed = "[yellow]Codex 인증 확인 실패: {error}. 건너뜁니다.[/yellow]"
+gemini_check_failed = "[yellow]Gemini 인증 확인 실패: {error}. 건너뜁니다.[/yellow]"
+antigravity_check_failed = "[yellow]Antigravity 인증 확인 실패: {error}. 건너뜁니다.[/yellow]"
+
+[disclaimer]
+title = "[bold yellow]면책 조항[/bold yellow]"
+body = """\
+[bold]계속하기 전에 중요 사항을 읽어주십시오.[/bold]\n
+ductor는 AI 에이전트 백엔드로 [bold]Anthropic Claude CLI[/bold] 및 \
+[bold]OpenAI Codex CLI[/bold]에 연결합니다.\n
+봇은 [bold yellow]전체 권한 우회 모드[/bold yellow]로 작동합니다. \
+에이전트는 확인 요청 없이 시스템에서 파일을 읽고, 쓰고, 삭제하고, \
+명령을 실행하고, 상호 작용할 수 있습니다.\n
+안전 장치가 있지만, 데이터 손실, 예기치 않은 파일 변경, 또는 의도하지 않은 \
+명령 실행을 포함하여 [bold red]의도하지 않은 동작이 발생할 수 있습니다[/bold red].\n
+호스트 시스템과 격리하기 위해 [bold green]ductor를 Docker 컨테이너 내에서 실행할 것을 강력히 권장합니다[/bold green]."""
+confirm = "위험을 이해했으며 계속 진행하겠습니다."
+
+[transport]
+title = "[bold]메시징 전송 프로토콜[/bold]"
+body = """\
+[bold]사용자가 봇과 통신할 방법을 선택하십시오:[/bold]\n
+  [bold cyan]Telegram[/bold cyan]  — @BotFather로부터 받은 봇 토큰이 필요합니다
+  [bold cyan]Matrix[/bold cyan]    — 홈서버의 Matrix 계정(예: Element)이 필요합니다"""
+prompt = "전송 프로토콜 선택:"
+
+[telegram.token]
+title = "[bold]Telegram 봇 토큰[/bold]"
+body = """\
+[bold]Telegram 봇 토큰을 가져오는 방법:[/bold]\n
+  1. Telegram을 열고 [bold cyan]@BotFather[/bold cyan] 검색
+  2. [bold]/newbot[/bold]을 전송하고 지시를 따름
+  3. 봇의 이름과 사용자 이름을 선택
+  4. BotFather가 봇 토큰을 응답으로 보냄\n
+[dim]토큰 형식: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz[/dim]"""
+prompt = "봇 토큰 붙여넣기:"
+error = "[red]유효하지 않은 토큰 형식입니다. 예상 형식: 숫자:영숫자 (예: 123456:ABC-xyz)[/red]"
+
+[telegram.user_id]
+title = "[bold]Telegram 사용자 ID[/bold]"
+body = """\
+[bold]본인의 Telegram 사용자 ID를 찾는 방법:[/bold]\n
+  1. Telegram을 열고 [bold cyan]@userinfobot[/bold cyan] 검색
+  2. 봇에게 [bold]/start[/bold] 전송
+  3. 봇이 본인의 고유 숫자 ID를 응답으로 보냄\n
+[dim]이 사용자 ID가 보낸 메시지만 봇이 수락합니다.[/dim]"""
+prompt = "본인의 숫자 사용자 ID 입력:"
+error_nan = "[red]유효한 숫자를 입력해 주십시오.[/red]"
+error_negative = "[red]사용자 ID는 양수여야 합니다.[/red]"
+
+[matrix.homeserver]
+title = "[bold]Matrix 홈서버[/bold]"
+body = """\
+[bold]Matrix 홈서버 URL을 입력하십시오.[/bold]\n
+  봇 계정이 존재하는 서버 주소입니다.\n
+[dim]예시: https://matrix.example.com[/dim]"""
+prompt = "홈서버 URL:"
+error = "[red]HTTPS URL 형태여야 합니다 (예: https://matrix.example.com)[/red]"
+
+[matrix.user_id]
+title = "[bold]Matrix 봇 사용자 ID[/bold]"
+body = """\
+[bold]봇의 Matrix 사용자 ID를 입력하십시오.[/bold]\n
+  홈서버에 봇을 위한 전용 계정을 생성해야 합니다.\n
+[dim]형식: @botname:homeserver.domain[/dim]"""
+prompt = "봇 사용자 ID:"
+error = "[red]유효하지 않은 형식입니다. 예상 형식: @로컬파트:도메인 (예: @mybot:matrix.org)[/red]"
+
+[matrix.password]
+title = "[bold]Matrix 비밀번호[/bold]"
+body = """\
+[bold]봇 계정의 비밀번호를 입력하십시오.[/bold]\n
+  최초 로그인 시에만 사용됩니다. 로그인 후에는 액세스
+  토큰이 저장되며 비밀번호는 더 이상 필요하지 않습니다."""
+prompt = "비밀번호:"
+error = "[red]비밀번호는 비워둘 수 없습니다.[/red]"
+
+[matrix.allowed_users]
+title = "[bold]허용된 사용자[/bold]"
+body = """\
+[bold]이 봇과 대화할 수 있는 사용자는 누구인가요?[/bold]\n
+  본인의 Matrix 사용자 ID를 입력하십시오. 허용된 사용자가
+  보낸 메시지만 처리됩니다.\n
+[dim]형식: @username:homeserver.domain[/dim]"""
+prompt = "본인의 Matrix 사용자 ID:"
+error = "[red]유효하지 않은 형식입니다. 예상 형식: @사용자:도메인 (예: @nik:matrix.org)[/red]"
+
+[docker]
+title = "[bold]Docker 샌드박싱[/bold]"
+found_body = """\
+[bold green]시스템에서 Docker가 감지되었습니다.[/bold green]\n
+ductor를 Docker 내부에서 실행하여 호스트와 격리합니다.
+안전을 위해 권장되는 설정입니다."""
+found_prompt = "Docker 샌드박싱을 활성화하시겠습니까? (권장)"
+not_found_body = """\
+[bold yellow]시스템에서 Docker를 찾을 수 없습니다.[/bold yellow]\n
+격리된 컨테이너에서 봇을 실행하기 위해 Docker 설치를 권장합니다.
+나중에 설정 파일에서 Docker 샌드박싱을 활성화할 수 있습니다.\n
+[dim]https://docs.docker.com/get-docker/[/dim]"""
+
+[docker.extras]
+title = "[bold]사용 가능한 Docker 추가 기능[/bold]"
+col_package = "패키지"
+col_description = "설명"
+col_size = "크기"
+prompt = "추가 기능 선택 (스페이스바로 토글, 엔터로 확정):"
+hint = """\
+[dim]이 패키지들은 선택 사항이며 이미지 빌드 시간을 증가시킵니다.
+나중에 [cyan]ductor docker extras-add / extras-remove[/cyan] 명령으로 변경할 수 있습니다.[/dim]"""
+auto_deps = "[dim]자동 추가된 의존성 패키지: {names}[/dim]"
+
+[timezone]
+title = "[bold]시간대[/bold]"
+body = """\
+시간대는 크론 스케줄링, 하트비트 조용한 시간,
+및 일일 세션 리셋에 사용됩니다."""
+prompt = "본인의 시간대 선택:"
+manual_prompt = "IANA 시간대 입력 (예: Asia/Seoul):"
+error = "[red]알 수 없는 시간대입니다: {tz}[/red]"
+
+[service]
+title = "[bold]백그라운드 서비스[/bold]"
+body = """\
+[bold]ductor를 백그라운드 서비스로 실행하시겠습니까?[/bold]\n
+이를 통해 다음과 같은 {mechanism}가 생성됩니다:\n
+  - {trigger} 시 ductor가 시작됨
+  - 충돌 시 자동으로 재시작됨
+  - 백그라운드에서 계속 유지됨\n
+[dim]VPS 또는 상시 가동 환경에 권장됩니다.[/dim]"""
+prompt = "백그라운드 서비스로 설치하시겠습니까? (VPS 환경에 권장)"
+
+[complete]
+title = "[bold green]준비 완료[/bold green]"
+header = "[bold green]설정이 완료되었습니다![/bold green]"
+files_header = "[bold]ductor 설정 파일 목록:[/bold]"
+home = "  홈 경로:      [cyan]{path}[/cyan]"
+config = "  설정 파일:    [cyan]{path}[/cyan]"
+workspace = "  작업 공간:    [cyan]{path}[/cyan]"
+logs = "  로그 파일:    [cyan]{path}[/cyan]"
+installing_service = "서비스 설치 중..."
+starting_bot = "봇 시작 중..."
+
+[reset]
+title = "[bold yellow]기존 설정 감지됨[/bold yellow]"
+body = """\
+[bold yellow]이미 설정된 구성이 존재합니다.[/bold yellow]\n
+온보딩을 다시 실행하면 [bold red]전체 재설정[/bold red]이 수행됩니다:\n
+  [dim]{home}[/dim] 경로가 완전히 삭제됩니다.
+  모든 세션, 설정, 메모리, 크론 작업이 손실됩니다."""
+
+[reset.docker]
+title = "[bold]Docker 정리[/bold]"
+body = """\
+[bold]현재 설정에서 Docker 샌드박싱이 활성화되어 있습니다.[/bold]\n
+  컨테이너: [cyan]{container}[/cyan]
+  이미지:     [cyan]{image}[/cyan]"""
+prompt = "Docker 컨테이너와 이미지를 제거하시겠습니까?"
+removing = "[dim]Docker 자원 제거 중...[/dim]"
+done = "[green]Docker 정리가 완료되었습니다.[/green]"
+
+[reset.confirm]
+prompt = "모든 데이터를 삭제하고 새로 시작하시겠습니까?"
+deleted = "[dim]작업 공간이 삭제되었습니다.[/dim]"
+warning = "[yellow]경고: {home}을(를) 완전히 삭제할 수 없습니다. 수동으로 제거하십시오.[/yellow]"
+
+[language]
+prompt = "언어 선택 / Select language:"
