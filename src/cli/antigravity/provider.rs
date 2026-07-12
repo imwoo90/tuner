@@ -16,23 +16,15 @@ use tokio::process::Command;
 
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
-        let mut env = HashMap::new();
-        for (k, v) in std::env::vars() {
-            if k != "CODEX_SANDBOX_NETWORK_DISABLED" {
-                env.insert(k, v);
-            }
-        }
-        
+        let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
         env.insert("DUCTOR_AGENT_NAME".to_string(), "main".to_string());
         env.insert("DUCTOR_CHAT_ID".to_string(), self.config.chat_id.to_string());
-        if let Some(topic_id) = self.config.topic_id {
-            env.insert("DUCTOR_TOPIC_ID".to_string(), topic_id.to_string());
+        if let Some(tid) = self.config.topic_id {
+            env.insert("DUCTOR_TOPIC_ID".to_string(), tid.to_string());
         }
         env.insert("DUCTOR_TRANSPORT".to_string(), self.config.transport.clone());
-
         env.insert("DUCTOR_HOME".to_string(), "/home/wimvm/.ductor".to_string());
         env.insert("DUCTOR_SHARED_MEMORY_PATH".to_string(), "/home/wimvm/.ductor/SHAREDMEMORY.md".to_string());
-
         env
     }
 
@@ -43,21 +35,12 @@ impl AntigravityCli {
         env: &HashMap<String, String>,
     ) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
-        let mut cmd_args = vec![
-            "--add-dir".to_string(),
-            agy_ws.to_string_lossy().to_string(),
-            "--conversation".to_string(),
-            session_id.to_string(),
-        ];
+        let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
         if self.config.permission_mode == "bypassPermissions" {
-            cmd_args.push("--dangerously-skip-permissions".to_string());
+            args.push("--dangerously-skip-permissions".into());
         }
-        cmd_args.push("--prompt-interactive".to_string());
-        cmd_args.push("".to_string());
-
-        self.sessions
-            .ensure_session(session_id, &agy_ws, "agy", &cmd_args, env)
-            .await
+        args.extend(vec!["--prompt-interactive".into(), "".into()]);
+        self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
 
     async fn run_oneshot(
@@ -74,12 +57,28 @@ impl AntigravityCli {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        #[cfg(unix)]
+        cmd.process_group(0);
 
         let child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
 
+        let task_id = if self.config.process_label.starts_with("task:") {
+            Some(self.config.process_label["task:".len()..].to_string())
+        } else {
+            None
+        };
+
+        if let Some(ref tid) = task_id {
+            if let Some(pid) = child.id() {
+                if let Some(registry) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
+                    registry.register(tid.clone(), pid).await;
+                }
+            }
+        }
+
         let timeout_dur = tokio::time::Duration::from_secs(300);
-        match tokio::time::timeout(timeout_dur, child.wait_with_output()).await {
+        let res = match tokio::time::timeout(timeout_dur, child.wait_with_output()).await {
             Ok(Ok(output)) => {
                 let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -89,7 +88,15 @@ impl AntigravityCli {
             Err(_) => {
                 Err("Command timed out after 300 seconds".to_string())
             }
+        };
+
+        if let Some(ref tid) = task_id {
+            if let Some(registry) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
+                registry.unregister(tid).await;
+            }
         }
+
+        res
     }
 
     fn resolve_result_text(
@@ -202,6 +209,10 @@ impl AgentProvider for AntigravityCli {
     }
 }
 
+fn err_resp(msg: String) -> CliResponse {
+    CliResponse { session_id: None, result: msg.clone(), is_error: true, returncode: None, stderr: msg }
+}
+
 fn handle_oneshot_finish(
     res: Result<Result<CliResponse, String>, tokio::task::JoinError>,
     tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
@@ -211,25 +222,8 @@ fn handle_oneshot_finish(
             let _ = tx.send(StreamEvent::TextDelta(resp.result.clone()));
             let _ = tx.send(StreamEvent::Result(resp));
         }
-        Ok(Err(e)) => {
-            let _ = tx.send(StreamEvent::Result(CliResponse {
-                session_id: None,
-                result: e.clone(),
-                is_error: true,
-                returncode: None,
-                stderr: e,
-            }));
-        }
-        Err(e) => {
-            let err_msg = format!("Join error: {}", e);
-            let _ = tx.send(StreamEvent::Result(CliResponse {
-                session_id: None,
-                result: err_msg.clone(),
-                is_error: true,
-                returncode: None,
-                stderr: err_msg,
-            }));
-        }
+        Ok(Err(e)) => { let _ = tx.send(StreamEvent::Result(err_resp(e))); }
+        Err(e) => { let _ = tx.send(StreamEvent::Result(err_resp(format!("Join error: {}", e)))); }
     }
 }
 

@@ -76,7 +76,8 @@ pub fn parse_file_refs(text: &str) -> Vec<serde_json::Value> {
             && path_str.chars().nth(2) == Some('/')
         {
             let letter = path_str.chars().nth(1).unwrap();
-            path_str = format!("{}:{}", letter, &path_str[2..]);
+            let rest: String = path_str.chars().skip(2).collect();
+            path_str = format!("{}:{}", letter, rest);
         }
         let path_obj = Path::new(&path_str);
         let name = path_obj

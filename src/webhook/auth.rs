@@ -64,14 +64,9 @@ pub fn validate_bearer_token(auth_header: &str, expected_token: &str) -> bool {
     if expected_token.is_empty() {
         return false;
     }
-    if auth_header.len() < 7 {
-        return false;
-    }
-    let prefix = &auth_header[..7];
-    if !prefix.eq_ignore_ascii_case("Bearer ") {
-        return false;
-    }
-    let token = &auth_header[7..];
+    let Some(prefix) = auth_header.get(..7) else { return false; };
+    if !prefix.eq_ignore_ascii_case("Bearer ") { return false; }
+    let Some(token) = auth_header.get(7..) else { return false; };
     safe_compare(token.as_bytes(), expected_token.as_bytes())
 }
 

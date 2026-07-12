@@ -5,6 +5,10 @@
 #[cfg(test)]
 pub mod adversarial_tests;
 #[cfg(test)]
+pub mod adversarial_tests_extra;
+#[cfg(test)]
+pub mod adversarial_tests_concurrency;
+#[cfg(test)]
 pub mod api_server_tests;
 #[cfg(test)]
 pub mod auth_tests;

@@ -26,6 +26,9 @@ pub mod tasks_tests;
 pub mod i18n_tests;
 
 #[cfg(test)]
+pub mod i18n_tests_extra;
+
+#[cfg(test)]
 pub mod i18n_check_tests;
 
 
