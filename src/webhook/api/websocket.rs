@@ -2,17 +2,12 @@
 //!
 //! Handles upgrade, in-band auth, and sequential message execution for direct API sessions.
 
-use crate::webhook::api::server::ApiServerState;
 use crate::webhook::api::handshake::perform_handshake;
+use crate::webhook::api::server::ApiServerState;
 use crate::webhook::api::session_loop::run_session_loop;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use futures::sink::SinkExt;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use futures::StreamExt;
+use futures::sink::SinkExt;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -86,7 +81,8 @@ async fn handle_ws_session(
         default_chat_id,
         &provider_info,
         getter.as_ref(),
-    ).await;
+    )
+    .await;
 
     let Ok((key, e2e)) = handshake_res else {
         return;

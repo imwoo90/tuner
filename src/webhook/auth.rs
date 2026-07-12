@@ -61,17 +61,29 @@ pub fn safe_compare(a: &[u8], b: &[u8]) -> bool {
 }
 
 pub fn validate_bearer_token(auth_header: &str, expected_token: &str) -> bool {
-    let prefix = "Bearer ";
-    if !auth_header.starts_with(prefix) {
+    if expected_token.is_empty() {
         return false;
     }
-    let token = &auth_header[prefix.len()..];
+    if auth_header.len() < 7 {
+        return false;
+    }
+    let prefix = &auth_header[..7];
+    if !prefix.eq_ignore_ascii_case("Bearer ") {
+        return false;
+    }
+    let token = &auth_header[7..];
     safe_compare(token.as_bytes(), expected_token.as_bytes())
 }
 
-fn extract_signature(sig_value: &str, sig_prefix: &str, sig_regex: &str) -> Option<String> {
+fn extract_signature(
+    sig_value: &str,
+    sig_prefix: &str,
+    sig_regex: &str,
+    cache: &std::sync::OnceLock<Option<regex::Regex>>,
+) -> Option<String> {
     if !sig_regex.is_empty() {
-        let re = regex::Regex::new(sig_regex).ok()?;
+        let re_opt = cache.get_or_init(|| regex::Regex::new(sig_regex).ok());
+        let re = re_opt.as_ref()?;
         let caps = re.captures(sig_value)?;
         caps.get(1).map(|m| m.as_str().to_string())
     } else if !sig_prefix.is_empty() {
@@ -114,19 +126,28 @@ pub fn validate_hmac_signature(
     hmac_encoding: &str,
     hmac_sig_prefix: &str,
     hmac_sig_regex: &str,
+    hmac_sig_regex_cached: &std::sync::OnceLock<Option<regex::Regex>>,
     hmac_payload_prefix_regex: &str,
+    hmac_payload_prefix_regex_cached: &std::sync::OnceLock<Option<regex::Regex>>,
 ) -> bool {
     if sig_value.is_empty() || secret.is_empty() {
         return false;
     }
 
-    let Some(extracted_sig) = extract_signature(sig_value, hmac_sig_prefix, hmac_sig_regex) else {
+    let Some(extracted_sig) = extract_signature(
+        sig_value,
+        hmac_sig_prefix,
+        hmac_sig_regex,
+        hmac_sig_regex_cached,
+    ) else {
         return false;
     };
 
     let mut signed_payload = body.to_vec();
     if !hmac_payload_prefix_regex.is_empty() {
-        if let Ok(re) = regex::Regex::new(hmac_payload_prefix_regex) {
+        let re_opt = hmac_payload_prefix_regex_cached
+            .get_or_init(|| regex::Regex::new(hmac_payload_prefix_regex).ok());
+        if let Some(re) = re_opt {
             if let Some(caps) = re.captures(sig_value) {
                 if let Some(m) = caps.get(1) {
                     let mut prefix_bytes = m.as_str().as_bytes().to_vec();
@@ -147,7 +168,8 @@ pub fn validate_hmac_signature(
         return false;
     };
 
-    let Some(computed_bytes) = compute_hmac(hmac_algorithm, secret.as_bytes(), &signed_payload) else {
+    let Some(computed_bytes) = compute_hmac(hmac_algorithm, secret.as_bytes(), &signed_payload)
+    else {
         return false;
     };
 
@@ -170,7 +192,9 @@ pub fn validate_hook_auth(
             &hook.hmac_encoding,
             &hook.hmac_sig_prefix,
             &hook.hmac_sig_regex,
+            &hook.hmac_sig_regex_cached,
             &hook.hmac_payload_prefix_regex,
+            &hook.hmac_payload_prefix_regex_cached,
         )
     } else {
         let expected = if hook.token.is_empty() {

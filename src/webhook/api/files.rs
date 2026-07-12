@@ -4,16 +4,17 @@
 
 use crate::webhook::api::server::ApiServerState;
 use axum::{
-    extract::State,
-    http::{header, HeaderMap, StatusCode},
-    response::IntoResponse,
     Json,
+    extract::State,
+    http::{HeaderMap, StatusCode, header},
+    response::IntoResponse,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub fn sanitize_filename(name: &str) -> String {
-    let re = regex::Regex::new(r#"[\\/<>:"|?*\x00]"#).unwrap();
+    static SANITIZE_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = SANITIZE_RE.get_or_init(|| regex::Regex::new(r#"[\\/<>:"|?*\x00]"#).unwrap());
     let mut cleaned = re.replace_all(name, "_").into_owned();
     while cleaned.contains("__") {
         cleaned = cleaned.replace("__", "_");
@@ -63,7 +64,8 @@ pub fn is_image_path(path_str: &str) -> bool {
 }
 
 pub fn parse_file_refs(text: &str) -> Vec<serde_json::Value> {
-    let re = regex::Regex::new(r"<file:([^>]+)>").unwrap();
+    static REFS_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = REFS_RE.get_or_init(|| regex::Regex::new(r"<file:([^>]+)>").unwrap());
     let mut refs = Vec::new();
     for cap in re.captures_iter(text) {
         let raw_path = &cap[1];
@@ -96,10 +98,7 @@ pub fn verify_bearer(headers: &HeaderMap, expected_token: &str) -> bool {
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    if !auth.starts_with("Bearer ") {
-        return false;
-    }
-    crate::webhook::auth::safe_compare(auth[7..].as_bytes(), expected_token.as_bytes())
+    crate::webhook::auth::validate_bearer_token(auth, expected_token)
 }
 
 pub async fn handle_file_download(
@@ -115,11 +114,25 @@ pub async fn handle_file_download(
         return (StatusCode::BAD_REQUEST, "missing 'path' query parameter").into_response();
     };
     let file_path = PathBuf::from(raw_path);
-    let roots = { state.lock().unwrap().allowed_roots.clone() };
-    if let Some(r) = roots {
-        if !crate::security::paths::is_path_safe(&file_path, &r) {
-            return (StatusCode::FORBIDDEN, "path outside allowed roots").into_response();
+    let roots = {
+        let s = state.lock().unwrap();
+        match &s.allowed_roots {
+            Some(r) if !r.is_empty() => r.clone(),
+            _ => {
+                let mut fallback = Vec::new();
+                if let Some(ws) = &s.workspace {
+                    fallback.push(ws.clone());
+                } else if let Ok(pwd) = std::env::current_dir() {
+                    fallback.push(pwd);
+                } else {
+                    fallback.push(PathBuf::from("."));
+                }
+                fallback
+            }
         }
+    };
+    if !crate::security::paths::is_path_safe(&file_path, &roots) {
+        return (StatusCode::FORBIDDEN, "path outside allowed roots").into_response();
     }
     if !file_path.is_file() {
         return (StatusCode::NOT_FOUND, "file not found").into_response();
@@ -207,7 +220,11 @@ pub async fn handle_file_upload(
     let uploaded = match parse_multipart(multipart).await {
         Ok(u) => u,
         Err(e) => {
-            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response()
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": e })),
+            )
+                .into_response();
         }
     };
 
@@ -230,7 +247,12 @@ pub async fn handle_file_upload(
             .into_response();
     }
 
-    let resp = build_upload_response(&dest, &uploaded.mime_type, uploaded.file_bytes.len(), uploaded.caption.as_deref());
+    let resp = build_upload_response(
+        &dest,
+        &uploaded.mime_type,
+        uploaded.file_bytes.len(),
+        uploaded.caption.as_deref(),
+    );
     (StatusCode::OK, Json(resp)).into_response()
 }
 

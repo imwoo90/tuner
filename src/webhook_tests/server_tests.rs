@@ -33,6 +33,8 @@ fn make_hook(id: &str) -> WebhookEntry {
         hmac_sig_prefix: "".to_string(),
         hmac_sig_regex: "".to_string(),
         hmac_payload_prefix_regex: "".to_string(),
+        hmac_sig_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
+        hmac_payload_prefix_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
         provider: None,
         model: None,
         reasoning_effort: None,

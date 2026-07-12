@@ -188,27 +188,11 @@ impl CronScheduler {
         )
     }
 
-    async fn execute_job(&self, job: CronJob, bot: Bot) -> Result<(), String> {
+    async fn run_cli_command(&self, job: &CronJob, bot: &Bot, workspace: std::path::PathBuf) -> Result<(), String> {
         let job_id = job.id.clone();
         let job_title = job.title.clone();
         let chat_id = job.chat_id;
         let topic_id = job.topic_id;
-
-        if self.check_quiet_hours(&job) {
-            println!("🤖 [우덕터] Cron job {} skipped due to quiet hours", job_title);
-            return Ok(());
-        }
-
-        println!("🤖 [우덕터] Cron job executing: {}", job_title);
-
-        let workspace = self.config.working_dir.join("cron_tasks").join(&job.task_folder);
-        if !workspace.is_dir() {
-            let err_msg = format!("Cron task folder missing: {}", workspace.display());
-            eprintln!("❌ [우덕터] {}", err_msg);
-            self.manager.update_run_status(&job_id, "error:folder_missing").await?;
-            return Err(err_msg);
-        }
-
         let enriched = self.get_enriched_prompt(&job.agent_instruction, &job.task_folder);
         let res = self.cli.send(&enriched, None, false, workspace).await;
         match res {
@@ -223,15 +207,38 @@ impl CronScheduler {
 
                 if !job.silent_on_success || resp.is_error {
                     let html_text = crate::telegram::formatting::markdown_to_telegram_html(&resp.result);
-                    self.send_telegram(&bot, chat_id, topic_id, &html_text).await;
+                    self.send_telegram(bot, chat_id, topic_id, &html_text).await;
                 }
             }
             Err(e) => {
                 self.manager.update_run_status(&job_id, &format!("error:{}", e)).await?;
-                self.send_telegram(&bot, chat_id, topic_id, &format!("❌ Cron job '{}' failed: {}", job_title, e)).await;
+                self.send_telegram(bot, chat_id, topic_id, &format!("❌ Cron job '{}' failed: {}", job_title, e)).await;
             }
         }
-
         Ok(())
+    }
+
+    async fn execute_job(&self, job: CronJob, bot: Bot) -> Result<(), String> {
+        if self.check_quiet_hours(&job) {
+            println!("🤖 [우덕터] Cron job {} skipped due to quiet hours", job.title);
+            return Ok(());
+        }
+
+        println!("🤖 [우덕터] Cron job executing: {}", job.title);
+
+        let ctr = self.config.working_dir.join("cron_tasks");
+        let workspace = ctr.join(&job.task_folder);
+        if !crate::security::paths::is_path_safe(&workspace, &[ctr]) {
+            let _ = self.manager.update_run_status(&job.id, "error:path_outside_allowed_roots").await;
+            return Err("Cron task folder outside allowed roots".into());
+        }
+        if !workspace.is_dir() {
+            let err_msg = format!("Cron task folder missing: {}", workspace.display());
+            eprintln!("❌ [우덕터] {}", err_msg);
+            self.manager.update_run_status(&job.id, "error:folder_missing").await?;
+            return Err(err_msg);
+        }
+
+        self.run_cli_command(&job, &bot, workspace).await
     }
 }

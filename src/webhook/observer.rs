@@ -2,12 +2,12 @@
 //!
 //! Registers the observer to the message bus, runs file-change loops, and runs tasks.
 
-use async_trait::async_trait;
 use crate::bus::adapters::WebhookResult;
 use crate::bus::observers_wire::WebhookObserverTrait;
 use crate::webhook::manager::WebhookManager;
 use crate::webhook::models::WebhookEntry;
 use crate::webhook::server::WebhookServer;
+use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -66,13 +66,19 @@ impl WebhookObserver {
             self.config.webhooks.max_body_bytes,
         );
 
-        server.start(&self.config.webhooks.host, self.config.webhooks.port).await?;
+        server
+            .start(&self.config.webhooks.host, self.config.webhooks.port)
+            .await?;
         *self.server.lock().await = Some(server);
 
         let (stop_watcher_tx, stop_watcher_rx) = tokio::sync::oneshot::channel::<()>();
         *self.stop_watcher_tx.lock().unwrap() = Some(stop_watcher_tx);
 
-        spawn_watcher(self.webhooks_path.clone(), self.manager.clone(), stop_watcher_rx);
+        spawn_watcher(
+            self.webhooks_path.clone(),
+            self.manager.clone(),
+            stop_watcher_rx,
+        );
 
         Ok(())
     }
@@ -86,7 +92,9 @@ impl WebhookObserver {
         }
     }
 
-    fn get_dispatch_handler(&self) -> Arc<dyn Fn(String, serde_json::Value) + Send + Sync + 'static> {
+    fn get_dispatch_handler(
+        &self,
+    ) -> Arc<dyn Fn(String, serde_json::Value) + Send + Sync + 'static> {
         let manager = self.manager.clone();
         let result_handler = self.result_handler.clone();
         let wake_handler = self.wake_handler.clone();
@@ -182,7 +190,13 @@ async fn dispatch_webhook(
     let mut result_text = String::new();
 
     if hook.mode == "wake" {
-        status = handle_wake_mode(&safe_prompt, &wake_handler, &allowed_user_ids, &mut result_text).await;
+        status = handle_wake_mode(
+            &safe_prompt,
+            &wake_handler,
+            &allowed_user_ids,
+            &mut result_text,
+        )
+        .await;
     } else if hook.mode == "cron_task" {
         status = handle_cron_task_mode(&safe_prompt, &hook, &config, &mut result_text).await;
     } else {
@@ -227,29 +241,39 @@ async fn handle_wake_mode(
     }
 }
 
+fn is_quiet_hours(hook: &WebhookEntry, config: &crate::config::CliConfig) -> bool {
+    if let (Some(qs), Some(qe)) = (hook.quiet_start, hook.quiet_end) {
+        let tz_str = config.user_timezone.as_deref().unwrap_or("UTC");
+        let tz: chrono_tz::Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
+        let now_local = chrono::Utc::now().with_timezone(&tz);
+        use chrono::NaiveTime;
+        if let (Some(start), Some(end)) = (
+            NaiveTime::from_hms_opt(qs, 0, 0),
+            NaiveTime::from_hms_opt(qe, 0, 0),
+        ) {
+            return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
+        }
+    }
+    false
+}
+
 async fn handle_cron_task_mode(
     prompt: &str,
     hook: &WebhookEntry,
     config: &crate::config::CliConfig,
     result_text: &mut String,
 ) -> String {
-    let mut is_quiet = false;
-    if let (Some(qs), Some(qe)) = (hook.quiet_start, hook.quiet_end) {
-        let tz_str = config.user_timezone.as_deref().unwrap_or("UTC");
-        let tz: chrono_tz::Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
-        let now_local = chrono::Utc::now().with_timezone(&tz);
-        use chrono::NaiveTime;
-        if let (Some(start), Some(end)) = (NaiveTime::from_hms_opt(qs, 0, 0), NaiveTime::from_hms_opt(qe, 0, 0)) {
-            is_quiet = crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
-        }
-    }
-    if is_quiet {
+    if is_quiet_hours(hook, config) {
         return "skipped:quiet_hours".to_string();
     }
     let Some(ref folder) = hook.task_folder else {
         return "error:no_task_folder".to_string();
     };
     let workspace_dir = config.working_dir.join("cron_tasks").join(folder);
+    let cron_tasks_root = config.working_dir.join("cron_tasks");
+    if !crate::security::paths::is_path_safe(&workspace_dir, &[cron_tasks_root]) {
+        return "error:path_outside_allowed_roots".to_string();
+    }
     if !workspace_dir.is_dir() {
         return "error:folder_missing".to_string();
     }
@@ -262,7 +286,8 @@ async fn handle_cron_task_mode(
     }
     if !hook.cli_parameters.is_empty() {
         let provider_key = tcfg.provider.clone();
-        tcfg.cli_parameters.insert(provider_key, hook.cli_parameters.clone());
+        tcfg.cli_parameters
+            .insert(provider_key, hook.cli_parameters.clone());
     }
     let tcli = crate::cli::antigravity::AntigravityCli::new(tcfg);
     use crate::cli::AgentProvider;

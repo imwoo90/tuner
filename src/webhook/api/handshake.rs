@@ -63,6 +63,9 @@ fn validate_auth_msg(
     if data.get("type").and_then(|t| t.as_str()) != Some("auth") {
         return Err("Not auth type".to_string());
     }
+    if expected_token.is_empty() {
+        return Err("Authentication token is empty".to_string());
+    }
     let token = data.get("token").and_then(|t| t.as_str()).unwrap_or("");
     if !crate::webhook::auth::safe_compare(token.as_bytes(), expected_token.as_bytes()) {
         return Err("Invalid token".to_string());

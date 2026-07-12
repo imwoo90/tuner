@@ -2,7 +2,7 @@
 //!
 //! Tests for schema deserialization, template rendering, and validation.
 
-use crate::webhook::models::{render_template, WebhookEntry};
+use crate::webhook::models::{WebhookEntry, render_template};
 use serde_json::json;
 
 #[test]
@@ -42,6 +42,8 @@ fn test_webhook_entry_to_dict_includes_auth_fields() {
         hmac_sig_prefix: "sha256=".to_string(),
         hmac_sig_regex: "".to_string(),
         hmac_payload_prefix_regex: "".to_string(),
+        hmac_sig_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
+        hmac_payload_prefix_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
         provider: None,
         model: None,
         reasoning_effort: None,

@@ -33,6 +33,12 @@ pub struct WebhookEntry {
     pub hmac_sig_regex: String,
     #[serde(default)]
     pub hmac_payload_prefix_regex: String,
+    #[serde(skip)]
+    #[serde(default)]
+    pub hmac_sig_regex_cached: std::sync::Arc<std::sync::OnceLock<Option<regex::Regex>>>,
+    #[serde(skip)]
+    #[serde(default)]
+    pub hmac_payload_prefix_regex_cached: std::sync::Arc<std::sync::OnceLock<Option<regex::Regex>>>,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -82,7 +88,8 @@ pub struct WebhookResult {
 ///
 /// Missing keys render as `{{?field}}` so they are visible but non-fatal.
 pub fn render_template(template: &str, payload: &serde_json::Value) -> String {
-    let re = regex::Regex::new(r"\{\{(\w+)\}\}").unwrap();
+    static TEMPLATE_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = TEMPLATE_RE.get_or_init(|| regex::Regex::new(r"\{\{(\w+)\}\}").unwrap());
     re.replace_all(template, |caps: &regex::Captures| {
         let key = &caps[1];
         match payload.get(key) {

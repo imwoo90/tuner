@@ -7,7 +7,10 @@ use crate::webhook::api::files::{is_image_path, parse_file_refs, sanitize_filena
 #[test]
 fn test_sanitize_filename() {
     assert_eq!(sanitize_filename("valid_name.txt"), "valid_name.txt");
-    assert_eq!(sanitize_filename("illegal/path\\chars.png"), "illegal_path_chars.png");
+    assert_eq!(
+        sanitize_filename("illegal/path\\chars.png"),
+        "illegal_path_chars.png"
+    );
     assert_eq!(sanitize_filename("a".repeat(200).as_str()).len(), 120);
 }
 

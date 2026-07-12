@@ -2,7 +2,7 @@
 //!
 //! Tests for Bearer token verification, sliding-window RateLimiter, and HMAC signature algorithms.
 
-use crate::webhook::auth::{validate_bearer_token, validate_hmac_signature, RateLimiter};
+use crate::webhook::auth::{RateLimiter, validate_bearer_token, validate_hmac_signature};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -31,6 +31,8 @@ async fn test_rate_limiter_blocks_above_limit() {
 #[test]
 fn test_validate_bearer_token() {
     assert!(validate_bearer_token("Bearer my-secret", "my-secret"));
+    assert!(validate_bearer_token("bearer my-secret", "my-secret"));
+    assert!(validate_bearer_token("BEaRER my-secret", "my-secret"));
     assert!(!validate_bearer_token("Bearer wrong", "my-secret"));
     assert!(!validate_bearer_token("my-secret", "my-secret"));
     assert!(!validate_bearer_token("", "my-secret"));
@@ -41,8 +43,10 @@ fn test_validate_hmac_sha256_hex() {
     let body = b"hello world";
     let secret = "my-secret";
     let sig = sign_sha256(body, secret);
+    let cache1 = std::sync::OnceLock::new();
+    let cache2 = std::sync::OnceLock::new();
     assert!(validate_hmac_signature(
-        body, &sig, secret, "sha256", "hex", "", "", ""
+        body, &sig, secret, "sha256", "hex", "", "", &cache1, "", &cache2
     ));
 }
 
@@ -51,8 +55,10 @@ fn test_validate_hmac_sig_prefix() {
     let body = b"hello world";
     let secret = "my-secret";
     let sig = format!("sha256={}", sign_sha256(body, secret));
+    let cache1 = std::sync::OnceLock::new();
+    let cache2 = std::sync::OnceLock::new();
     assert!(validate_hmac_signature(
-        body, &sig, secret, "sha256", "hex", "sha256=", "", ""
+        body, &sig, secret, "sha256", "hex", "sha256=", "", &cache1, "", &cache2
     ));
 }
 
@@ -67,6 +73,8 @@ fn test_sig_regex_stripe_style() {
 
     let sig = sign_sha256(&payload, secret);
     let header = format!("t={},v1={}", timestamp, sig);
+    let cache1 = std::sync::OnceLock::new();
+    let cache2 = std::sync::OnceLock::new();
     assert!(validate_hmac_signature(
         body,
         &header,
@@ -75,6 +83,8 @@ fn test_sig_regex_stripe_style() {
         "hex",
         "",
         r"v1=([a-f0-9]+)",
-        r"t=(\d+)"
+        &cache1,
+        r"t=(\d+)",
+        &cache2
     ));
 }

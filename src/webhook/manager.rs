@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 pub struct WebhookManager {
     hooks_path: PathBuf,
     hooks: RwLock<Vec<WebhookEntry>>,
+    save_lock: tokio::sync::Mutex<()>,
 }
 
 impl WebhookManager {
@@ -34,6 +35,7 @@ impl WebhookManager {
         Self {
             hooks_path,
             hooks: RwLock::new(initial_hooks),
+            save_lock: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -55,6 +57,7 @@ impl WebhookManager {
     }
 
     pub async fn save(&self) -> Result<(), String> {
+        let _guard = self.save_lock.lock().await;
         if let Some(parent) = self.hooks_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -62,12 +65,27 @@ impl WebhookManager {
         }
         let hooks = self.hooks.read().await;
         let wrapper = serde_json::json!({ "hooks": *hooks });
-        let temp_path = self.hooks_path.with_extension("tmp");
+
+        let rand_val: u64 = rand::random();
+        let temp_name = format!(
+            "{}.{}.tmp",
+            self.hooks_path
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or("webhooks"),
+            rand_val
+        );
+        let temp_path = self.hooks_path.with_file_name(temp_name);
+
         let bytes = serde_json::to_vec_pretty(&wrapper).map_err(|e| e.to_string())?;
-        tokio::fs::write(&temp_path, bytes).await.map_err(|e| e.to_string())?;
-        tokio::fs::rename(temp_path, &self.hooks_path)
-            .await
-            .map_err(|e| e.to_string())?;
+        if let Err(e) = tokio::fs::write(&temp_path, bytes).await {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Err(e.to_string());
+        }
+        if let Err(e) = tokio::fs::rename(&temp_path, &self.hooks_path).await {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Err(e.to_string());
+        }
         Ok(())
     }
 

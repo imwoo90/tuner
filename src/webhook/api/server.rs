@@ -4,7 +4,7 @@
 
 use crate::webhook::api::files::{handle_file_download, handle_file_upload};
 use crate::webhook::api::websocket::{handle_health, handle_websocket};
-use axum::{extract::DefaultBodyLimit, routing::get, routing::post, Router};
+use axum::{Router, extract::DefaultBodyLimit, routing::get, routing::post};
 use std::sync::Arc;
 
 pub struct ApiServerState {
@@ -19,7 +19,14 @@ pub struct ApiServerState {
     pub provider_info: serde_json::Value,
     pub active_state_getter: Option<crate::webhook::api::websocket::ActiveStateGetter>,
     pub next_conn_id: usize,
-    pub active_ws: Arc<std::sync::Mutex<std::collections::HashMap<usize, tokio::sync::mpsc::UnboundedSender<axum::extract::ws::Message>>>>,
+    pub active_ws: Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<
+                usize,
+                tokio::sync::mpsc::UnboundedSender<axum::extract::ws::Message>,
+            >,
+        >,
+    >,
 }
 
 pub struct ApiServer {
@@ -55,7 +62,10 @@ impl ApiServer {
         self.state.lock().unwrap().message_handler = Some(handler);
     }
 
-    pub fn set_abort_handler(&self, handler: Arc<dyn crate::webhook::api::websocket::ApiAbortHandler>) {
+    pub fn set_abort_handler(
+        &self,
+        handler: Arc<dyn crate::webhook::api::websocket::ApiAbortHandler>,
+    ) {
         self.state.lock().unwrap().abort_handler = Some(handler);
     }
 
