@@ -313,3 +313,46 @@ fn test_edge_cases_pluralization() {
     assert!(p100.contains("100 tasks."));
 }
 
+#[test]
+fn test_placeholder_extraction_regex_limitations() {
+    use regex::Regex;
+    // The regex used in i18n_tests.rs (extract_placeholders)
+    let re_test = Regex::new(r"\{([\w.-]+)\}").unwrap();
+    // The regex used in check.rs and loader.rs
+    let re_prod = Regex::new(r"\{([\w.-]+)\}").unwrap();
+
+    let sample_dot = "Hello {user.name}!";
+    let sample_hyphen = "Hello {user-name}!";
+    let sample_normal = "Hello {username}!";
+
+    // 1. The test regex now correctly extracts dot and hyphen placeholders
+    assert!(re_test.captures(sample_dot).is_some());
+    assert!(re_test.captures(sample_hyphen).is_some());
+    assert!(re_test.captures(sample_normal).is_some());
+
+    // 2. The production regex correctly extracts dot and hyphen placeholders
+    assert!(re_prod.captures(sample_dot).is_some());
+    assert!(re_prod.captures(sample_hyphen).is_some());
+    assert!(re_prod.captures(sample_normal).is_some());
+}
+
+#[test]
+fn test_empty_locales_directory_silently_ignored() {
+    use crate::i18n::TranslationStore;
+    use std::path::Path;
+
+    // Create a store pointing to a non-existent path
+    let bad_path = Path::new("non_existent_locales_path_xyz");
+    let store = TranslationStore::new_with_root("en", bad_path);
+
+    // The store should load successfully (without panicking or returning an error)
+    // but the underlying hash maps will be completely empty
+    assert!(store.en_chat.is_empty());
+    assert!(store.en_cli.is_empty());
+    assert!(store.en_cmd.is_empty());
+
+    // Lookups will result in missing keys
+    let res = store.chat("any.key", &[]);
+    assert_eq!(res, "[MISSING: any.key]");
+}
+

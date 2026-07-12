@@ -2,6 +2,7 @@ use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId};
 
 use crate::cron::manager::{CronJob, CronManager};
+use crate::t;
 
 const PAGE_SIZE: usize = 4;
 
@@ -19,16 +20,31 @@ fn format_job_and_button(
     idx: usize,
     current_page: usize,
 ) -> (String, InlineKeyboardButton) {
-    let status = if job.enabled { "🟢 활성" } else { "🔴 비활성" };
-    let last_run = job.last_run_status.as_deref().unwrap_or("없음");
-    let line = format!(
-        "{}. {} ({})\n   ↳ 스케줄: `{}` | 마지막: `{}`\n   ↳ 작업 폴더: `{}`",
-        number, job.title, status, job.schedule, last_run, job.task_folder
+    let status = if job.enabled {
+        t!("bot.cron_active")
+    } else {
+        t!("bot.cron_inactive")
+    };
+    let last_run_val = job.last_run_status.as_deref().unwrap_or("");
+    let last_run = if last_run_val.is_empty() {
+        t!("bot.cron_no_last_run")
+    } else {
+        last_run_val.to_string()
+    };
+    let number_str = number.to_string();
+    let line = t!(
+        "bot.cron_job_line",
+        number = number_str,
+        title = job.title,
+        status = status,
+        schedule = job.schedule,
+        last_run = last_run,
+        folder = job.task_folder
     );
     let button_text = if job.enabled {
-        format!("{}번 비활성화", number)
+        t!("bot.cron_deactivate_num", number = number_str)
     } else {
-        format!("{}번 활성화", number)
+        t!("bot.cron_activate_num", number = number_str)
     };
     let fp = fingerprint(&job.id);
     let button = InlineKeyboardButton::callback(
@@ -45,17 +61,17 @@ fn build_keyboard(
 ) -> Vec<Vec<InlineKeyboardButton>> {
     let mut nav_row = Vec::new();
     if current_page > 0 {
-        nav_row.push(InlineKeyboardButton::callback("◀ 이전", format!("crn:p:{}", current_page)));
+        nav_row.push(InlineKeyboardButton::callback(t!("bot.cron_prev_page"), format!("crn:p:{}", current_page)));
     }
-    nav_row.push(InlineKeyboardButton::callback("🔄 새로고침", format!("crn:r:{}", current_page)));
+    nav_row.push(InlineKeyboardButton::callback(t!("bot.cron_refresh"), format!("crn:r:{}", current_page)));
     if current_page < total_pages - 1 {
-        nav_row.push(InlineKeyboardButton::callback("다음 ▶", format!("crn:n:{}", current_page)));
+        nav_row.push(InlineKeyboardButton::callback(t!("bot.cron_next_page"), format!("crn:n:{}", current_page)));
     }
     keyboard.push(nav_row);
 
     keyboard.push(vec![
-        InlineKeyboardButton::callback("🟢 전체 켜기", format!("crn:ao:{}", current_page)),
-        InlineKeyboardButton::callback("🔴 전체 끄기", format!("crn:af:{}", current_page)),
+        InlineKeyboardButton::callback(t!("bot.cron_all_on"), format!("crn:ao:{}", current_page)),
+        InlineKeyboardButton::callback(t!("bot.cron_all_off"), format!("crn:af:{}", current_page)),
     ]);
     keyboard
 }
@@ -67,9 +83,7 @@ pub(crate) async fn build_cron_page(
 ) -> Result<(String, InlineKeyboardMarkup), String> {
     let jobs = manager.list_jobs().await?;
     if jobs.is_empty() {
-        let text = "🤖 [우덕터] 등록된 크론 작업이 없습니다.\n\n\
-                    크론 작업을 생성하여 ~/.ductor/cron_jobs.json 에 등록할 수 있습니다."
-            .to_string();
+        let text = t!("bot.cron_no_jobs");
         return Ok((text, InlineKeyboardMarkup::new(Vec::<Vec<InlineKeyboardButton>>::new())));
     }
 
@@ -79,7 +93,7 @@ pub(crate) async fn build_cron_page(
     let end = (start + PAGE_SIZE).min(jobs.len());
     let page_jobs = &jobs[start..end];
 
-    let mut lines = vec!["🤖 [우덕터] 크론 작업 목록:".to_string(), "".to_string()];
+    let mut lines = vec![t!("bot.cron_list_header"), "".to_string()];
     let mut keyboard = Vec::new();
 
     for (idx, job) in page_jobs.iter().enumerate() {
@@ -95,7 +109,11 @@ pub(crate) async fn build_cron_page(
     if let Some(n) = note {
         lines.push(n.to_string());
     }
-    lines.push(format!("페이지: {} / {}", current_page + 1, total_pages));
+    lines.push(t!(
+        "bot.cron_page_footer",
+        current = (current_page + 1).to_string(),
+        total = total_pages.to_string()
+    ));
 
     Ok((lines.join("\n"), InlineKeyboardMarkup::new(keyboard)))
 }
@@ -114,10 +132,18 @@ async fn handle_toggle_action(
             if fingerprint(&job.id) == fp {
                 let new_state = !job.enabled;
                 let _ = manager.set_enabled(&job.id, new_state).await?;
-                let state_str = if new_state { "활성화" } else { "비활성화" };
-                return Ok(Some(format!("👉 '{}' 작업이 {}되었습니다.", job.title, state_str)));
+                let state_str = if new_state {
+                    t!("bot.cron_state_enabled")
+                } else {
+                    t!("bot.cron_state_disabled")
+                };
+                return Ok(Some(t!(
+                    "bot.cron_toggle_success",
+                    title = job.title,
+                    state = state_str
+                )));
             } else {
-                return Ok(Some("❌ 작업의 정보가 일치하지 않습니다.".to_string()));
+                return Ok(Some(t!("bot.cron_toggle_mismatch")));
             }
         }
     }
@@ -147,17 +173,19 @@ pub(crate) async fn handle_cron_callback(
             update_message(bot, chat_id, message_id, manager, page + 1, None).await?;
         }
         "r" => {
-            update_message(bot, chat_id, message_id, manager, page, Some("🔄 최신 상태로 새로고침되었습니다.")).await?;
+            let note = t!("bot.cron_refreshed_note");
+            update_message(bot, chat_id, message_id, manager, page, Some(&note)).await?;
         }
         "ao" | "af" => {
             let enabled = action == "ao";
             let changed_count = manager.set_all_enabled(enabled).await?;
-            let note = Some(if enabled {
-                format!("🟢 {}개 작업이 모두 활성화되었습니다.", changed_count)
+            let changed_count_str = changed_count.to_string();
+            let note = if enabled {
+                t!("bot.cron_all_enabled_note", count = changed_count_str)
             } else {
-                format!("🔴 {}개 작업이 모두 비활성화되었습니다.", changed_count)
-            });
-            update_message(bot, chat_id, message_id, manager, page, note.as_deref()).await?;
+                t!("bot.cron_all_disabled_note", count = changed_count_str)
+            };
+            update_message(bot, chat_id, message_id, manager, page, Some(&note)).await?;
         }
         "t" => {
             let toggle_note = handle_toggle_action(manager, &parts, page).await?;

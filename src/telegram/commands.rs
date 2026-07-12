@@ -190,16 +190,16 @@ async fn handle_diagnose_command(
     let agy_status = match std::process::Command::new("agy").arg("--version").output() {
         Ok(out) => {
             let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            format!("🟢 Installed ({})", ver)
+            t!("bot.diagnose_installed", version = ver)
         }
-        Err(_) => "🔴 Not found in PATH".to_string(),
+        Err(_) => t!("bot.diagnose_not_found"),
     };
 
     let session_count = sessions.load().map(|m| m.len()).unwrap_or(0);
     let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
-        "🟢 Set"
+        t!("bot.diagnose_token_set")
     } else {
-        "🔴 Missing"
+        t!("bot.diagnose_token_missing")
     };
 
     let model_str = config.model.as_deref().unwrap_or("None");

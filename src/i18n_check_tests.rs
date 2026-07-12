@@ -89,6 +89,25 @@ fn test_compare_mismatch() {
 }
 
 #[test]
+fn test_compare_empty() {
+    let mut en = HashMap::new();
+    en.insert("a".to_string(), "hi".to_string());
+    en.insert("b".to_string(), "bye".to_string());
+
+    let mut tr = HashMap::new();
+    tr.insert("a".to_string(), "hola".to_string());
+    tr.insert("b".to_string(), "".to_string());
+
+    let r = compare_domain(&en, &tr);
+    assert_eq!(r.empty, vec!["b".to_string()]);
+    assert!(r.missing.is_empty());
+    assert!(r.extra.is_empty());
+    assert!(r.placeholder_mismatches.is_empty());
+    assert!(!r.clean());
+    assert_eq!(r.total_issues(), 1);
+}
+
+#[test]
 fn test_reorder_ph() {
     let mut en = HashMap::new();
     en.insert("a".to_string(), "{x} then {y}".to_string());
@@ -272,6 +291,7 @@ fn test_locale_report_aggregates() {
         missing: vec!["a".to_string(), "b".to_string()],
         extra: vec![],
         placeholder_mismatches: vec![],
+        empty: vec![],
     });
     loc.domains.insert("cli".to_string(), DomainReport::default());
     assert!(!loc.clean());

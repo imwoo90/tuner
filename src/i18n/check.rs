@@ -23,17 +23,18 @@ pub struct DomainReport {
     pub missing: Vec<String>,
     pub extra: Vec<String>,
     pub placeholder_mismatches: Vec<PlaceholderMismatch>,
+    pub empty: Vec<String>,
 }
 
 impl DomainReport {
-    /// Return true if the domain has no missing, extra, or mismatched keys.
+    /// Return true if the domain has no missing, extra, or mismatched keys, and no empty values.
     pub fn clean(&self) -> bool {
-        self.missing.is_empty() && self.extra.is_empty() && self.placeholder_mismatches.is_empty()
+        self.missing.is_empty() && self.extra.is_empty() && self.placeholder_mismatches.is_empty() && self.empty.is_empty()
     }
 
     /// Return the total number of issues identified in this domain.
     pub fn total_issues(&self) -> usize {
-        self.missing.len() + self.extra.len() + self.placeholder_mismatches.len()
+        self.missing.len() + self.extra.len() + self.placeholder_mismatches.len() + self.empty.len()
     }
 }
 
@@ -99,11 +100,17 @@ pub fn compare_domain(en: &HashMap<String, String>, tr: &HashMap<String, String>
         .map(|k| k.to_string())
         .collect();
 
+    let mut empty = Vec::new();
     let mut placeholder_mismatches = Vec::new();
     let common: BTreeSet<&String> = en_keys.intersection(&tr_keys).cloned().collect();
     for key in common {
         let en_val = en.get(key).unwrap();
         let tr_val = tr.get(key).unwrap();
+
+        if tr_val.is_empty() {
+            empty.push(key.clone());
+            continue;
+        }
 
         let en_ph = placeholders(en_val);
         let tr_ph = placeholders(tr_val);
@@ -123,6 +130,7 @@ pub fn compare_domain(en: &HashMap<String, String>, tr: &HashMap<String, String>
         missing,
         extra,
         placeholder_mismatches,
+        empty,
     }
 }
 
@@ -210,6 +218,12 @@ fn format_domain_detail(domain: &str, locale: &str, d: &DomainReport) -> Vec<Str
     if !d.extra.is_empty() {
         lines.push(format!("- extra / stale ({}):", d.extra.len()));
         for k in &d.extra {
+            lines.push(format!("    - `{}`", k));
+        }
+    }
+    if !d.empty.is_empty() {
+        lines.push(format!("- empty translation ({}):", d.empty.len()));
+        for k in &d.empty {
             lines.push(format!("    - `{}`", k));
         }
     }

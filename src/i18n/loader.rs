@@ -72,7 +72,18 @@ pub fn load_toml(path: &Path) -> anyhow::Result<HashMap<String, String>> {
 }
 
 /// Load the entire translation suite (chat, cli/wizard, commands) for a language.
+fn is_safe_lang(lang: &str) -> bool {
+    if lang.is_empty() {
+        return false;
+    }
+    lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Load the entire translation suite (chat, cli/wizard, commands) for a language.
 pub fn load_language(root: &Path, lang: &str) -> (HashMap<String, String>, HashMap<String, String>, HashMap<String, String>) {
+    if !is_safe_lang(lang) {
+        return (HashMap::new(), HashMap::new(), HashMap::new());
+    }
     let lang_dir = root.join(lang);
     let chat = load_toml(&lang_dir.join("chat.toml")).unwrap_or_default();
     let mut cli = load_toml(&lang_dir.join("cli.toml")).unwrap_or_default();
@@ -106,6 +117,7 @@ impl TranslationStore {
     /// Create a new TranslationStore with a specific locales path.
     pub fn new_with_root(language: &str, root: &Path) -> Self {
         let (en_chat, en_cli, en_cmd) = load_language(root, "en");
+        let language = if is_safe_lang(language) { language } else { "en" };
         let (primary_chat, primary_cli, primary_cmd) = if language == "en" {
             (None, None, None)
         } else {
@@ -151,7 +163,10 @@ impl TranslationStore {
         key: &str,
         args: &[(&str, &str)],
     ) -> String {
-        let raw = primary.and_then(|m| m.get(key)).or_else(|| fallback.get(key));
+        let raw = primary
+            .and_then(|m| m.get(key))
+            .filter(|s| !s.is_empty())
+            .or_else(|| fallback.get(key));
         match raw {
             Some(raw_str) => format_string(key, raw_str, args),
             None => format!("[MISSING: {}]", key),

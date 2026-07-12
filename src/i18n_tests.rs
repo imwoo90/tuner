@@ -98,6 +98,39 @@ fn test_store_missing_placeholder_graceful() {
     assert!(result.contains("{model}"));
 }
 
+#[test]
+fn test_path_traversal_sanitization() {
+    let store = TranslationStore::new("../invalid");
+    assert_eq!(store.language, "en");
+
+    let store2 = TranslationStore::new("en/../ko");
+    assert_eq!(store2.language, "en");
+}
+
+#[test]
+fn test_empty_string_fallback() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let en_dir = root.join("en");
+    std::fs::create_dir_all(&en_dir).unwrap();
+    std::fs::write(en_dir.join("chat.toml"), "hello = \"hello en\"\nempty_key = \"fallback en\"").unwrap();
+    std::fs::write(en_dir.join("cli.toml"), "").unwrap();
+    std::fs::write(en_dir.join("commands.toml"), "").unwrap();
+    std::fs::write(en_dir.join("wizard.toml"), "").unwrap();
+
+    let de_dir = root.join("de");
+    std::fs::create_dir_all(&de_dir).unwrap();
+    std::fs::write(de_dir.join("chat.toml"), "hello = \"hallo de\"\nempty_key = \"\"").unwrap();
+    std::fs::write(de_dir.join("cli.toml"), "").unwrap();
+    std::fs::write(de_dir.join("commands.toml"), "").unwrap();
+    std::fs::write(de_dir.join("wizard.toml"), "").unwrap();
+
+    let store = TranslationStore::new_with_root("de", root);
+    assert_eq!(store.chat("hello", &[]), "hallo de");
+    assert_eq!(store.chat("empty_key", &[]), "fallback en");
+}
+
 // -- Public API ----------------------------------------------------------------
 
 #[test]
@@ -228,7 +261,7 @@ fn test_command_descriptions_short() {
 
 fn extract_placeholders(text: &str) -> HashSet<String> {
     use regex::Regex;
-    let re = Regex::new(r"\{(\w+)\}").unwrap();
+    let re = Regex::new(r"\{([\w.-]+)\}").unwrap();
     re.captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
@@ -243,7 +276,7 @@ fn test_chat_placeholders_are_valid() {
         let phs = extract_placeholders(&val);
         for ph in phs {
             let is_ident = !ph.is_empty() && ph.chars().next().map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
-                && ph.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                && ph.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-');
             assert!(is_ident, "Bad placeholder {{{}}} in {}", ph, key);
         }
     }
@@ -268,85 +301,34 @@ fn test_all_language_dirs_exist() {
 // -- Completeness --------------------------------------------------------------
 
 #[test]
-fn test_chat_key_completeness() {
+fn test_key_completeness() {
     for &(lang, _) in LANGUAGES {
-        if lang == "en" {
-            continue;
-        }
+        if lang == "en" { continue; }
         let store = TranslationStore::new(lang);
-        let en_chat = store.all_chat_keys();
-        let lang_chat = store.lang_chat_keys();
-        let missing_chat: Vec<_> = en_chat.difference(&lang_chat).collect();
-        assert!(missing_chat.is_empty(), "[{}] chat.toml missing keys: {:?}", lang, missing_chat);
+        assert!(store.all_chat_keys().difference(&store.lang_chat_keys()).next().is_none(), "[{}] missing chat keys", lang);
+        assert!(store.all_cli_keys().difference(&store.lang_cli_keys()).next().is_none(), "[{}] missing cli keys", lang);
+        assert!(store.all_cmd_keys().difference(&store.lang_cmd_keys()).next().is_none(), "[{}] missing cmd keys", lang);
     }
 }
 
 #[test]
-fn test_cli_key_completeness() {
+fn test_placeholder_match() {
     for &(lang, _) in LANGUAGES {
-        if lang == "en" {
-            continue;
-        }
+        if lang == "en" { continue; }
         let store = TranslationStore::new(lang);
-        let en_cli = store.all_cli_keys();
-        let lang_cli = store.lang_cli_keys();
-        let missing_cli: Vec<_> = en_cli.difference(&lang_cli).collect();
-        assert!(missing_cli.is_empty(), "[{}] cli.toml/wizard.toml missing keys: {:?}", lang, missing_cli);
-    }
-}
-
-#[test]
-fn test_cmd_key_completeness() {
-    for &(lang, _) in LANGUAGES {
-        if lang == "en" {
-            continue;
-        }
-        let store = TranslationStore::new(lang);
-        let en_cmd = store.all_cmd_keys();
-        let lang_cmd = store.lang_cmd_keys();
-        let missing_cmd: Vec<_> = en_cmd.difference(&lang_cmd).collect();
-        assert!(missing_cmd.is_empty(), "[{}] commands.toml missing keys: {:?}", lang, missing_cmd);
-    }
-}
-
-#[test]
-fn test_chat_placeholder_match() {
-    for &(lang, _) in LANGUAGES {
-        if lang == "en" {
-            continue;
-        }
-        let store = TranslationStore::new(lang);
-        let en_chat = store.all_chat_keys();
-        for key in &en_chat {
+        for key in &store.all_chat_keys() {
             let en_val = store.en_chat.get(key).cloned().unwrap_or_default();
             let lang_val = store.primary_chat.as_ref().and_then(|m| m.get(key)).cloned().unwrap_or_default();
-            if lang_val.is_empty() {
-                continue;
+            if !lang_val.is_empty() {
+                assert_eq!(extract_placeholders(&en_val), extract_placeholders(&lang_val), "chat: {}", key);
             }
-            let en_ph = extract_placeholders(&en_val);
-            let lang_ph = extract_placeholders(&lang_val);
-            assert_eq!(en_ph, lang_ph, "[{}] chat key '{}': EN placeholders {:?} != {} placeholders {:?}", lang, key, en_ph, lang.to_uppercase(), lang_ph);
         }
-    }
-}
-
-#[test]
-fn test_cli_placeholder_match() {
-    for &(lang, _) in LANGUAGES {
-        if lang == "en" {
-            continue;
-        }
-        let store = TranslationStore::new(lang);
-        let en_cli = store.all_cli_keys();
-        for key in &en_cli {
+        for key in &store.all_cli_keys() {
             let en_val = store.en_cli.get(key).cloned().unwrap_or_default();
             let lang_val = store.primary_cli.as_ref().and_then(|m| m.get(key)).cloned().unwrap_or_default();
-            if lang_val.is_empty() {
-                continue;
+            if !lang_val.is_empty() {
+                assert_eq!(extract_placeholders(&en_val), extract_placeholders(&lang_val), "cli: {}", key);
             }
-            let en_ph = extract_placeholders(&en_val);
-            let lang_ph = extract_placeholders(&lang_val);
-            assert_eq!(en_ph, lang_ph, "[{}] cli key '{}': EN placeholders {:?} != {} placeholders {:?}", lang, key, en_ph, lang.to_uppercase(), lang_ph);
         }
     }
 }
