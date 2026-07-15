@@ -29,6 +29,35 @@ pub struct CliConfig {
     pub cleanup: crate::cleanup::observer::CleanupConfig,
     pub webhooks: WebhookConfig,
     pub api: ApiConfig,
+    pub matrix: MatrixConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+pub struct MatrixConfig {
+    pub homeserver: String,
+    pub user_id: String,
+    pub password: Option<String>,
+    pub access_token: Option<String>,
+    pub device_id: Option<String>,
+    pub allowed_rooms: Vec<String>,
+    pub allowed_users: Vec<String>,
+    pub store_path: String,
+}
+
+impl Default for MatrixConfig {
+    fn default() -> Self {
+        Self {
+            homeserver: "https://matrix.org".to_string(),
+            user_id: String::new(),
+            password: None,
+            access_token: None,
+            device_id: None,
+            allowed_rooms: Vec::new(),
+            allowed_users: Vec::new(),
+            store_path: ".matrix".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -129,6 +158,7 @@ impl Default for CliConfig {
             cleanup: crate::cleanup::observer::CleanupConfig::default(),
             webhooks: WebhookConfig::default(),
             api: ApiConfig::default(),
+            matrix: MatrixConfig::default(),
         }
     }
 }
@@ -163,5 +193,25 @@ mod tests {
         assert_eq!(config.allowed_user_ids, vec![456]);
         assert_eq!(config.allowed_group_ids, vec![-789]);
         assert_eq!(config.working_dir, PathBuf::from(".")); // defaulted
+    }
+
+    #[test]
+    fn test_load_from_file_parses_matrix_config() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.json");
+        let json = r#"{
+            "matrix": {
+                "homeserver": "https://custom.homeserver",
+                "user_id": "@bot:custom.homeserver",
+                "allowed_rooms": ["!room:custom.homeserver"]
+            }
+        }"#;
+        std::fs::write(&config_path, json).unwrap();
+
+        let config = CliConfig::load_from_file(&config_path).unwrap();
+        assert_eq!(config.matrix.homeserver, "https://custom.homeserver");
+        assert_eq!(config.matrix.user_id, "@bot:custom.homeserver");
+        assert_eq!(config.matrix.allowed_rooms, vec!["!room:custom.homeserver"]);
+        assert_eq!(config.matrix.store_path, ".matrix"); // defaulted
     }
 }
