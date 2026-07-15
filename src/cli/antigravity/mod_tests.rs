@@ -130,3 +130,30 @@ fn test_antigravity_plain_workspace_unchanged() {
     
     assert_eq!(cli.agy_workspace(), plain);
 }
+
+#[test]
+fn test_format_prompt_injects_workspace_rules_and_memory() {
+    let base = create_test_dir("prompt_inject_test");
+    
+    // Create GEMINI.md
+    let gemini_path = base.join("GEMINI.md");
+    std::fs::write(&gemini_path, "GEMINI_RULES_CONTENT").unwrap();
+    
+    // Create memory_system/MAINMEMORY.md
+    let mem_dir = base.join("memory_system");
+    std::fs::create_dir_all(&mem_dir).unwrap();
+    let mem_path = mem_dir.join("MAINMEMORY.md");
+    std::fs::write(&mem_path, "MAINMEMORY_CONTENT").unwrap();
+    
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        working_dir: base.clone(),
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let final_prompt = cli.format_prompt("user_prompt");
+    
+    assert!(final_prompt.contains("GEMINI_RULES_CONTENT"));
+    assert!(final_prompt.contains("MAINMEMORY_CONTENT"));
+    assert!(final_prompt.contains("user_prompt"));
+}

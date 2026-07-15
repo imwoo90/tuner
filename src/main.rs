@@ -81,7 +81,8 @@ async fn main() -> Result<(), String> {
     let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None);
     workspace::init::init_workspace(&paths)?;
 
-    let config = config::CliConfig::load_from_file(&paths.config_path())?;
+    let mut config = config::CliConfig::load_from_file(&paths.config_path())?;
+    config.working_dir = paths.workspace().clone();
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();

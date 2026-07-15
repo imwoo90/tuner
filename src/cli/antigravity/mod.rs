@@ -86,7 +86,7 @@ impl AntigravityCli {
         cmd
     }
 
-    fn format_prompt(&self, prompt: &str) -> String {
+    pub(crate) fn format_prompt(&self, prompt: &str) -> String {
         let mut final_prompt = String::new();
         if let Some(ref sp) = self.config.system_prompt {
             final_prompt.push_str(sp);
