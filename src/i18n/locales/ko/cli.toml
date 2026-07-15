@@ -33,7 +33,7 @@ body = """\
 [bold red]시스템에서 ductor가 영구적으로 제거됩니다.[/bold red]\n
   1. 실행 중인 봇 정지 (활성화된 경우)
   2. Docker 컨테이너 및 이미지 제거 (사용된 경우)
-  3. ~/.ductor/의 모든 데이터 삭제
+  3. ~/.tuner/의 모든 데이터 삭제
   4. ductor 패키지 삭제"""
 confirm = "정말로 모든 요소를 삭제하시겠습니까?"
 cancelled = "[dim]삭제가 취소되었습니다.[/dim]"

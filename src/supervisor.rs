@@ -48,7 +48,7 @@ impl Supervisor {
         let start = Instant::now();
         let mut child = Command::new(&self.child_path)
             .args(&self.args)
-            .env("DUCTOR_SUPERVISOR", "1")
+            .env("TUNER_SUPERVISOR", "1")
             .spawn()
             .map_err(|e| format!("Spawn failed: {}", e))?;
 

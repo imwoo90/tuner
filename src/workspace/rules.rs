@@ -109,7 +109,7 @@ impl RulesSelector {
                 Some(t) => t,
                 None => continue,
             };
-            let dst_dir = self.paths.ductor_home.join(rel_path);
+            let dst_dir = self.paths.tuner_home.join(rel_path);
             if let Err(e) = std::fs::create_dir_all(&dst_dir) {
                 return Err(format!("Failed to create directory {:?}: {}", dst_dir, e));
             }
@@ -148,9 +148,9 @@ impl RulesSelector {
 
     /// Removes files with the given name recursively, protecting cron task directories.
     pub fn remove_files_by_name(&self, filename: &str) -> Result<usize, String> {
-        let cron_tasks_path = self.paths.ductor_home.join("workspace").join("cron_tasks");
+        let cron_tasks_path = self.paths.tuner_home.join("workspace").join("cron_tasks");
         let mut count = 0;
-        remove_files_recursively(&self.paths.ductor_home, filename, &cron_tasks_path, &mut count);
+        remove_files_recursively(&self.paths.tuner_home, filename, &cron_tasks_path, &mut count);
         Ok(count)
     }
 }

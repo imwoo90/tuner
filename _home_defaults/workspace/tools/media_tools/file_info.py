@@ -14,14 +14,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-_DUCTOR_HOME = Path(
-    os.environ.get("DUCTOR_HOME", str(Path.home() / ".ductor"))
+_TUNER_HOME = Path(
+    os.environ.get("TUNER_HOME", str(Path.home() / ".tuner"))
 ).expanduser()
 
 _MEDIA_DIRS = (
-    _DUCTOR_HOME / "workspace" / "telegram_files",
-    _DUCTOR_HOME / "workspace" / "matrix_files",
-    _DUCTOR_HOME / "workspace" / "api_files",
+    _TUNER_HOME / "workspace" / "telegram_files",
+    _TUNER_HOME / "workspace" / "matrix_files",
+    _TUNER_HOME / "workspace" / "api_files",
 )
 
 

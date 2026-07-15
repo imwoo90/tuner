@@ -7,7 +7,7 @@ use crate::workspace::paths::DuctorPaths;
 use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_rule_files_recursive, walk_and_copy};
 use std::path::Path;
 
-static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.ductor`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
+static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.tuner`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
 
 static HOST_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**WARNING: YOU ARE RUNNING DIRECTLY ON THE HOST SYSTEM. THERE IS NO SANDBOX.**\n\n- Every file operation, command, and script runs on the user's real machine.\n- Be careful with destructive commands (`rm -rf`, `chmod`, etc.).\n- Ask before touching anything outside `workspace/`.\n";
 
@@ -25,7 +25,7 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
     let _ = crate::workspace::skills::sync_bundled_skills(paths, false);
 
     if paths.home_defaults.is_dir() {
-        walk_and_copy(&paths.home_defaults, &paths.ductor_home, &paths.home_defaults)?;
+        walk_and_copy(&paths.home_defaults, &paths.tuner_home, &paths.home_defaults)?;
     }
 
     let required_dirs = [
@@ -37,14 +37,13 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
         "workspace/tools/cron_tools",
         "workspace/tools/media_tools",
         "workspace/tools/webhook_tools",
-        "workspace/tools/agent_tools",
         "workspace/output_to_user",
         "workspace/tasks",
         "workspace/skills",
         "config",
     ];
     for rel in &required_dirs {
-        let d = paths.ductor_home.join(rel);
+        let d = paths.tuner_home.join(rel);
         if !d.is_dir() {
             let _ = std::fs::create_dir_all(&d);
         }

@@ -126,8 +126,8 @@ pub fn spawn_session(
         }
     });
 
-    let chat_id = env.get("DUCTOR_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
-    let topic_id = env.get("DUCTOR_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
+    let chat_id = env.get("TUNER_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
+    let topic_id = env.get("TUNER_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
 
     Ok(SessionHolder {
         child,
@@ -199,8 +199,8 @@ impl SessionManager {
     ) -> Result<(), String> {
         self.cleanup_expired().await;
 
-        let chat_id = env.get("DUCTOR_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
-        let topic_id = env.get("DUCTOR_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
+        let chat_id = env.get("TUNER_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
+        let topic_id = env.get("TUNER_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
 
         let mut holders = self.holders.lock().await;
         let is_running = if let Some(holder) = holders.get_mut(session_id) {

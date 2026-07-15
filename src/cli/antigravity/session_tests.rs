@@ -131,8 +131,8 @@ async fn test_session_manager_terminates_duplicate_chat_sessions() {
     use super::session::SessionManager;
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut env = HashMap::new();
-    env.insert("DUCTOR_CHAT_ID".to_string(), "100".to_string());
-    env.insert("DUCTOR_TOPIC_ID".to_string(), "200".to_string());
+    env.insert("TUNER_CHAT_ID".to_string(), "100".to_string());
+    env.insert("TUNER_TOPIC_ID".to_string(), "200".to_string());
     let manager = SessionManager::new();
 
     // 1. Spawning session-1

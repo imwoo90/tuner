@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn test_antigravity_dotted_workspace_mapped_to_symlink() {
         let base = create_test_dir("dotted_test");
-        // Since `base` is located under `/home/wimvm/.ductor/`, it already has a dot-prefixed ancestor.
+        // Since `base` is located under `/home/wimvm/.tuner/`, it already has a dot-prefixed ancestor.
         // It will be mapped to `/home/wimvm/ductor/...` which has no dots.
 
         let config = CliConfig {

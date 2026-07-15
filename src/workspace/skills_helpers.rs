@@ -108,7 +108,7 @@ pub fn ensure_link(link_path: &Path, target: &Path) -> std::io::Result<bool> {
 }
 
 pub fn ensure_copy(dest: &Path, source: &Path) -> std::io::Result<bool> {
-    let marker = dest.join(".ductor_managed");
+    let marker = dest.join(".tuner_managed");
     if is_managed_copy(dest) {
         if let (Ok(src_time), Ok(dest_meta)) = (newest_mtime(source), std::fs::metadata(&marker)) {
             if let Ok(dest_time) = dest_meta.modified() {
@@ -130,7 +130,7 @@ pub fn ensure_copy(dest: &Path, source: &Path) -> std::io::Result<bool> {
 }
 
 pub fn is_managed_copy(path: &Path) -> bool {
-    path.is_dir() && !path.is_symlink() && path.join(".ductor_managed").is_file()
+    path.is_dir() && !path.is_symlink() && path.join(".tuner_managed").is_file()
 }
 
 pub fn newest_mtime(dir: &Path) -> std::io::Result<std::time::SystemTime> {

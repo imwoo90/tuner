@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 _TELEGRAM_FILES = Path(
-    os.environ.get("DUCTOR_HOME", str(Path.home() / ".ductor"))
+    os.environ.get("TUNER_HOME", str(Path.home() / ".tuner"))
 ).expanduser() / "workspace" / "telegram_files"
 
 _MAX_FRAMES_DEFAULT = 8
@@ -154,12 +154,12 @@ def _extract_audio(path: Path, out_dir: Path) -> Path | None:
 
 
 def _transcribe_external(audio_path: Path) -> str | None:
-    """Invoke ``DUCTOR_VIDEO_TRANSCRIBE_COMMAND`` if set (#66).
+    """Invoke ``TUNER_VIDEO_TRANSCRIBE_COMMAND`` if set (#66).
 
     Returns the transcript text on success, None on any failure so the
     caller falls through to the built-in whisper strategy.
     """
-    raw = os.environ.get("DUCTOR_VIDEO_TRANSCRIBE_COMMAND", "").strip()
+    raw = os.environ.get("TUNER_VIDEO_TRANSCRIBE_COMMAND", "").strip()
     if not raw:
         return None
     try:

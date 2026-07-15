@@ -103,7 +103,7 @@ pub fn check_gemini(paths: &DuctorPaths) -> AuthResult {
 }
 
 pub fn check_antigravity(paths: &DuctorPaths) -> AuthResult {
-    if std::env::var("DUCTOR_TEST_MODE").is_ok() {
+    if std::env::var("TUNER_TEST_MODE").is_ok() {
         return AuthResult { provider: "antigravity".to_string(), status: AuthStatus::NotFound, auth_file: None, auth_age: None };
     }
     let binary_found = std::process::Command::new("agy").arg("models").output().is_ok();
@@ -117,15 +117,15 @@ pub fn check_antigravity(paths: &DuctorPaths) -> AuthResult {
 }
 
 fn get_home_dir(paths: &DuctorPaths) -> PathBuf {
-    if paths.ductor_home.ends_with(".ductor") {
-        paths.ductor_home.parent().unwrap_or(&paths.ductor_home).to_path_buf()
+    if paths.tuner_home.ends_with(".tuner") {
+        paths.tuner_home.parent().unwrap_or(&paths.tuner_home).to_path_buf()
     } else {
-        paths.ductor_home.clone()
+        paths.tuner_home.clone()
     }
 }
 
 fn check_claude_cli_logged_in() -> bool {
-    if std::env::var("DUCTOR_TEST_MODE").is_ok() {
+    if std::env::var("TUNER_TEST_MODE").is_ok() {
         return false;
     }
     match std::process::Command::new("claude").args(&["auth", "status"]).output() {
@@ -142,7 +142,7 @@ fn check_claude_cli_logged_in() -> bool {
 }
 
 fn find_gemini_cli() -> bool {
-    if std::env::var("DUCTOR_TEST_MODE").is_ok() {
+    if std::env::var("TUNER_TEST_MODE").is_ok() {
         return false;
     }
     if std::process::Command::new("gemini").arg("--version").output().is_ok() {

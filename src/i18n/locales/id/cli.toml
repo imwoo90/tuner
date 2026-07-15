@@ -39,7 +39,7 @@ body = """\
 [bold red]Ini akan menghapus ductor secara permanen dari sistem Anda.[/bold red]\n
   1. Hentikan bot yang berjalan (jika aktif)
   2. Hapus kontainer dan image Docker (jika digunakan)
-  3. Hapus semua data di ~/.ductor/
+  3. Hapus semua data di ~/.tuner/
   4. Hapus instalasi paket ductor"""
 confirm = "Apakah Anda yakin ingin menghapus segalanya?"
 cancelled = "[dim]Penghapusan instalasi dibatalkan.[/dim]"

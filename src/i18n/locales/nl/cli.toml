@@ -39,7 +39,7 @@ body = """\
 [bold red]Dit verwijdert ductor permanent van je systeem.[/bold red]\n
   1. Actieve bot stoppen (indien actief)
   2. Docker-container en image verwijderen (indien gebruikt)
-  3. Alle gegevens in ~/.ductor/ wissen
+  3. Alle gegevens in ~/.tuner/ wissen
   4. Het ductor-pakket verwijderen"""
 confirm = "Weet je zeker dat je alles wilt verwijderen?"
 cancelled = "[dim]Verwijdering geannuleerd.[/dim]"

@@ -104,8 +104,8 @@ async fn test_telegram_command_memory() {
 async fn test_telegram_command_stop_scoped() {
     let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info) = setup();
     let mut env = std::collections::HashMap::new();
-    env.insert("DUCTOR_CHAT_ID".to_string(), "123".to_string());
-    env.insert("DUCTOR_TOPIC_ID".to_string(), "456".to_string());
+    env.insert("TUNER_CHAT_ID".to_string(), "123".to_string());
+    env.insert("TUNER_TOPIC_ID".to_string(), "456".to_string());
     cli.sessions.ensure_session("sess-stop-test", &std::path::PathBuf::from("."), "cat", &[], &env).await.unwrap();
     assert!(cli.sessions.is_active("sess-stop-test").await);
 
@@ -119,7 +119,7 @@ async fn test_telegram_command_stop_scoped() {
 async fn test_telegram_command_stop_all() {
     let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info) = setup();
     let mut env = std::collections::HashMap::new();
-    env.insert("DUCTOR_CHAT_ID".to_string(), "123".to_string());
+    env.insert("TUNER_CHAT_ID".to_string(), "123".to_string());
     cli.sessions.ensure_session("sess-stop-all-test", &std::path::PathBuf::from("."), "cat", &[], &env).await.unwrap();
     assert!(cli.sessions.is_active("sess-stop-all-test").await);
 

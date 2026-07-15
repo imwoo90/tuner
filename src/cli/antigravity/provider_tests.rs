@@ -17,11 +17,11 @@ fn test_build_env_injects_agent_info() {
     let cli = AntigravityCli::new(config);
     let env = cli.build_env();
 
-    assert_eq!(env.get("DUCTOR_AGENT_NAME").unwrap(), "main");
-    assert_eq!(env.get("DUCTOR_CHAT_ID").unwrap(), "1234");
-    assert_eq!(env.get("DUCTOR_TRANSPORT").unwrap(), "tg");
-    assert!(env.contains_key("DUCTOR_HOME"));
-    assert!(env.contains_key("DUCTOR_SHARED_MEMORY_PATH"));
+    assert_eq!(env.get("TUNER_AGENT_NAME").unwrap(), "main");
+    assert_eq!(env.get("TUNER_CHAT_ID").unwrap(), "1234");
+    assert_eq!(env.get("TUNER_TRANSPORT").unwrap(), "tg");
+    assert!(env.contains_key("TUNER_HOME"));
+    assert!(env.contains_key("TUNER_SHARED_MEMORY_PATH"));
 }
 
 fn write_mock_script(dir: &Path, code: &str) {

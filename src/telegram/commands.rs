@@ -39,7 +39,7 @@ async fn handle_info_commands(
     if text == "/restart" {
         let _ = send_reply(bot, msg, t!("bot.restart")).await;
         let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
-        let restart_path = std::path::PathBuf::from(home).join(".ductor").join("restart-sentinel.json");
+        let restart_path = std::path::PathBuf::from(home).join(".tuner").join("restart-sentinel.json");
         let _ = std::fs::write(restart_path, "");
         return Ok(true);
     }

@@ -358,7 +358,7 @@ check_logs = "Error: revisa los logs para más detalles."
 [gemini]
 missing_key = """\
 Gemini está configurado en modo API-key, pero `gemini_api_key` en \
-`~/.ductor/config/config.json` es `"null"` o está vacío.
+`~/.tuner/config/config.json` es `"null"` o está vacío.
 Por qué es necesario: cuando ductor llama a la CLI de Gemini como proceso externo, \
 la CLI de Gemini no expone una API key introducida internamente al proceso que la llama.
 Configura una API key real en `gemini_api_key` y reinicia `ductor`."""
@@ -490,7 +490,7 @@ cron_refresh = "🔄 Refresh"
 cron_next_page = "Next ▶"
 cron_all_on = "🟢 All ON"
 cron_all_off = "🔴 All OFF"
-cron_no_jobs = "🤖 [tuner] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.ductor/cron_jobs.json."
+cron_no_jobs = "🤖 [tuner] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.tuner/cron_jobs.json."
 cron_list_header = "🤖 [tuner] Cron job list:"
 cron_page_footer = "Page: {current} / {total}"
 cron_state_enabled = "enabled"

@@ -39,7 +39,7 @@ body = """\
 [bold red]Ceci supprimera définitivement ductor de ton système.[/bold red]\n
   1. Arrêter le bot en cours (si actif)
   2. Supprimer le conteneur et l'image Docker (si utilisés)
-  3. Supprimer toutes les données dans ~/.ductor/
+  3. Supprimer toutes les données dans ~/.tuner/
   4. Désinstaller le paquet ductor"""
 confirm = "Es-tu sûr de vouloir tout désinstaller ?"
 cancelled = "[dim]Désinstallation annulée.[/dim]"

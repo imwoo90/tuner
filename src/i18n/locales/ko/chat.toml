@@ -300,7 +300,7 @@ check_logs = "오류: 자세한 내용은 로그를 확인하십시오."
 
 [gemini]
 missing_key = """\
-Gemini가 API 키 인증 모드로 설정되어 있지만 `~/.ductor/config/config.json`의 \
+Gemini가 API 키 인증 모드로 설정되어 있지만 `~/.tuner/config/config.json`의 \
 `gemini_api_key`가 `"null"`이거나 비어 있습니다.
 이것이 필요한 이유: ductor가 Gemini CLI를 외부 프로세스로 호출할 때 \
 Gemini CLI는 내부적으로 입력된 API 키를 호출자에게 공개하지 않기 때문입니다.
@@ -419,7 +419,7 @@ cron_refresh = "🔄 새로고침"
 cron_next_page = "다음 ▶"
 cron_all_on = "🟢 전체 켜기"
 cron_all_off = "🔴 전체 끄기"
-cron_no_jobs = "🤖 [tuner] 등록된 크론 작업이 없습니다.\n\n크론 작업을 생성하여 ~/.ductor/cron_jobs.json 에 등록할 수 있습니다."
+cron_no_jobs = "🤖 [tuner] 등록된 크론 작업이 없습니다.\n\n크론 작업을 생성하여 ~/.tuner/cron_jobs.json 에 등록할 수 있습니다."
 cron_list_header = "🤖 [tuner] 크론 작업 목록:"
 cron_page_footer = "페이지: {current} / {total}"
 cron_state_enabled = "활성화"

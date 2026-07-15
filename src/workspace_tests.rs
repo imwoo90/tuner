@@ -17,7 +17,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn setup_mock_defaults(fw: &Path) {
-        unsafe { std::env::set_var("DUCTOR_TEST_MODE", "1"); }
+        unsafe { std::env::set_var("TUNER_TEST_MODE", "1"); }
         let ws = fw.join("workspace");
         fs::create_dir_all(&ws).unwrap();
         fs::write(ws.join("CLAUDE.md"), "# Framework CLAUDE.md").unwrap();
@@ -42,15 +42,15 @@ mod tests {
 
     #[test]
     fn test_workspace_paths_properties() {
-        let home = PathBuf::from("/home/user/.ductor");
+        let home = PathBuf::from("/home/user/.tuner");
         let fw = PathBuf::from("/opt/ductor");
         let hd = fw.join("workspace");
         let paths = DuctorPaths::new(home, hd, fw);
 
-        assert_eq!(paths.workspace(), PathBuf::from("/home/user/.ductor/workspace"));
-        assert_eq!(paths.config_path(), PathBuf::from("/home/user/.ductor/config/config.json"));
-        assert_eq!(paths.logs_dir(), PathBuf::from("/home/user/.ductor/logs"));
-        assert_eq!(paths.mainmemory_path(), PathBuf::from("/home/user/.ductor/workspace/memory_system/MAINMEMORY.md"));
+        assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/workspace"));
+        assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
+        assert_eq!(paths.logs_dir(), PathBuf::from("/home/user/.tuner/logs"));
+        assert_eq!(paths.mainmemory_path(), PathBuf::from("/home/user/.tuner/workspace/memory_system/MAINMEMORY.md"));
     }
 
     #[test]
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_rules_selector_get_variant_suffix() {
-        unsafe { std::env::set_var("DUCTOR_TEST_MODE", "1"); }
+        unsafe { std::env::set_var("TUNER_TEST_MODE", "1"); }
         let home = PathBuf::from("/h");
         let fw = PathBuf::from("/f");
         let paths = DuctorPaths::new(home.clone(), fw.join("w"), fw);

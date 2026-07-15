@@ -17,14 +17,14 @@ use tokio::process::Command;
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
-        env.insert("DUCTOR_AGENT_NAME".to_string(), "main".to_string());
-        env.insert("DUCTOR_CHAT_ID".to_string(), self.config.chat_id.to_string());
+        env.insert("TUNER_AGENT_NAME".to_string(), "main".to_string());
+        env.insert("TUNER_CHAT_ID".to_string(), self.config.chat_id.to_string());
         if let Some(tid) = self.config.topic_id {
-            env.insert("DUCTOR_TOPIC_ID".to_string(), tid.to_string());
+            env.insert("TUNER_TOPIC_ID".to_string(), tid.to_string());
         }
-        env.insert("DUCTOR_TRANSPORT".to_string(), self.config.transport.clone());
-        env.insert("DUCTOR_HOME".to_string(), "/home/wimvm/.ductor".to_string());
-        env.insert("DUCTOR_SHARED_MEMORY_PATH".to_string(), "/home/wimvm/.ductor/SHAREDMEMORY.md".to_string());
+        env.insert("TUNER_TRANSPORT".to_string(), self.config.transport.clone());
+        env.insert("TUNER_HOME".to_string(), "/home/wimvm/.tuner".to_string());
+        env.insert("TUNER_SHARED_MEMORY_PATH".to_string(), "/home/wimvm/.tuner/SHAREDMEMORY.md".to_string());
         env
     }
 

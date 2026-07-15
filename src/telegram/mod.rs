@@ -1,8 +1,4 @@
-//! # Telegram Bot Integration for Tuner
-//!
-//! This module implements the Teloxide-based Telegram Bot interface.
-//! It polls message updates, filters allowed chats/users, maps chat IDs
-//! to persistent agy conversation sessions, and streams real-time updates.
+//! # Telegram Bot
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -28,6 +24,7 @@ pub mod transport;
 
 pub(crate) use reply::build_reply_prompt;
 pub use transport::TelegramTransport;
+pub mod typing;
 
 
 pub(crate) fn get_topic_id(msg: &Message) -> Option<i64> {
@@ -41,9 +38,9 @@ pub use topic_cache::{BotInfo, TopicNameCache};
 
 fn parse_model_directive(text: &str) -> (Option<String>, &str) {
     let t = text.trim();
-    if t.starts_with("@model ") {
-        let p: Vec<&str> = t["@model ".len()..].splitn(2, ' ').collect();
-        if !p.is_empty() { return (Some(p[0].to_string()), p.get(1).unwrap_or(&"").trim()); }
+    if let Some(r) = t.strip_prefix("@model ") {
+        let p: Vec<&str> = r.splitn(2, ' ').collect();
+        return (Some(p[0].to_string()), p.get(1).unwrap_or(&"").trim());
     } else if t.starts_with('@') {
         let dir = t.split_whitespace().next().unwrap_or("");
         let m = &dir[1..];
@@ -64,22 +61,19 @@ async fn run_cli_stream(
     sess: SessionData,
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
-    let mut req = bot.send_message(msg.chat.id, crate::t!("bot.processing"));
-    if let Some(t) = msg.thread_id { req = req.message_thread_id(t); }
-    let proc_msg_opt = req.await.ok();
-
+    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+    let _guard = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let opt_sid = (!sid.is_empty()).then_some(sid);
     let stream_res = cli.send_streaming(prompt, opt_sid, false, config.working_dir.clone()).await;
     match stream_res {
-        Ok(stream) => {
-            let proc_msg_id = proc_msg_opt.map(|m| m.id).unwrap_or(teloxide::types::MessageId(0));
-            stream::consume_stream(bot, msg.chat.id, proc_msg_id, msg.thread_id, stream, sessions, sess, config).await?;
+        Ok(s) => {
+            stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config).await?;
         }
         Err(e) => {
-            eprintln!("CLI STREAM ERROR: {:?}", e);
-            if let Some(proc_msg) = proc_msg_opt {
-                let _ = bot.edit_message_text(msg.chat.id, proc_msg.id, format!("❌ Error: {}", e)).await;
-            }
+            eprintln!("CLI ERROR: {:?}", e);
+            let mut req = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
+            if let Some(t) = msg.thread_id { req = req.message_thread_id(t); }
+            let _ = req.await;
         }
     }
     Ok(())
@@ -138,6 +132,7 @@ pub(crate) async fn handle_message(
 ) -> Result<(), teloxide::RequestError> {
     let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
     let chat_id_raw = msg.chat.id.0;
+    eprintln!("🤖 [tuner] Incoming message: from_id={}, chat_id={}", from_id, chat_id_raw);
     if let Some(target_chat_id) = msg.migrate_to_chat_id() {
         let _ = sessions.migrate_chat_id(chat_id_raw, target_chat_id.0).await;
         return Ok(());
@@ -178,19 +173,19 @@ fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> Sessi
 }
 fn start_schedulers(
     bot: Bot,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
+    cfg: Arc<CliConfig>,
+    sess: Arc<SessionManager>,
     cli: Arc<AntigravityCli>,
     home: &str,
 ) -> Arc<crate::cron::manager::CronManager> {
     let bus = Arc::new(crate::bus::bus::MessageBus::new());
     bus.register_transport(Arc::new(TelegramTransport::new(bot.clone())));
-    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(config.clone(), sessions, cli.clone(), bus.clone())).start();
-    let cron_manager = Arc::new(crate::cron::manager::CronManager::new(std::path::PathBuf::from(home).join(".ductor/cron_jobs.json")));
-    Arc::new(crate::cron::scheduler::CronScheduler::new(config.clone(), cron_manager.clone(), cli, bus)).start();
-    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(config.cleanup.clone(), config.working_dir.join("telegram_files"), config.working_dir.join("output_to_user")));
+    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
+    let cron = Arc::new(crate::cron::manager::CronManager::new(std::path::PathBuf::from(home).join(".tuner/cron_jobs.json")));
+    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli, bus)).start();
+    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
     tokio::spawn(async move { clean.start().await; });
-    cron_manager
+    cron
 }
 
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
@@ -204,7 +199,7 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     
     let topic_cache = Arc::new(TopicNameCache::new());
-    let sessions = Arc::new(build_sessions(std::path::PathBuf::from(&home).join(".ductor/sessions.json"), topic_cache.clone()));
+    let sessions = Arc::new(build_sessions(std::path::PathBuf::from(&home).join(".tuner/sessions.json"), topic_cache.clone()));
 
     if let Ok(all) = sessions.list_all().await {
         for s in all {
@@ -229,27 +224,25 @@ async fn handle_callback_query(
     q: teloxide::types::CallbackQuery,
     config: Arc<CliConfig>,
     sessions: Arc<SessionManager>,
-    cron_manager: Arc<crate::cron::manager::CronManager>,
+    cron: Arc<crate::cron::manager::CronManager>,
 ) -> Result<(), teloxide::RequestError> {
-    if let Some(ref data) = q.data {
-        if data.starts_with("model:") {
-            let model_name = &data["model:".len()..];
+    if let Some(ref d) = q.data {
+        if let Some(m) = d.strip_prefix("model:") {
             if let Some(ref msg) = q.message {
                 let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
-                let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-                if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-                    sess.model = model_name.to_string();
-                    let _ = sessions.update_session(&sess, 0.0, 0).await;
-                    let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = model_name)).await;
+                let dm = config.model.as_deref().unwrap_or("antigravity-default");
+                if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+                    s.model = m.to_string();
+                    let _ = sessions.update_session(&s, 0.0, 0).await;
+                    let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = m)).await;
                 }
             }
-            let _ = bot.answer_callback_query(q.id).await;
-        } else if data.starts_with("crn:") {
+        } else if d.starts_with("crn:") {
             if let Some(ref msg) = q.message {
-                let _ = cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, data, &cron_manager).await;
+                let _ = cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
             }
-            let _ = bot.answer_callback_query(q.id).await;
         }
+        let _ = bot.answer_callback_query(q.id).await;
     }
     Ok(())
 }

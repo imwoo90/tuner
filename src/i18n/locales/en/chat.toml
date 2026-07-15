@@ -359,7 +359,7 @@ check_logs = "Error: check logs for details."
 [gemini]
 missing_key = """\
 Gemini is set to API-key auth mode, but `gemini_api_key` in \
-`~/.ductor/config/config.json` is `"null"` or empty.
+`~/.tuner/config/config.json` is `"null"` or empty.
 Why this is required: when ductor calls Gemini CLI as an external process, \
 Gemini CLI does not expose an internally entered API key to that caller.
 Set a real API key in `gemini_api_key` and restart `ductor`."""
@@ -491,7 +491,7 @@ cron_refresh = "🔄 Refresh"
 cron_next_page = "Next ▶"
 cron_all_on = "🟢 All ON"
 cron_all_off = "🔴 All OFF"
-cron_no_jobs = "🤖 [tuner] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.ductor/cron_jobs.json."
+cron_no_jobs = "🤖 [tuner] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.tuner/cron_jobs.json."
 cron_list_header = "🤖 [tuner] Cron job list:"
 cron_page_footer = "Page: {current} / {total}"
 cron_state_enabled = "enabled"

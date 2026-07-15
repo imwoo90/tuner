@@ -77,12 +77,11 @@ async fn main() -> Result<(), String> {
     i18n::init("ko");
 
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
-    let config_path = std::path::PathBuf::from(home)
-        .join(".ductor")
-        .join("config")
-        .join("config.json");
+    let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
+    let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None);
+    workspace::init::init_workspace(&paths)?;
 
-    let config = config::CliConfig::load_from_file(&config_path)?;
+    let config = config::CliConfig::load_from_file(&paths.config_path())?;
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -102,7 +101,7 @@ async fn main() -> Result<(), String> {
     }
 
 
-    println!("🤖 [tuner] Loading config from: {:?}", config_path);
+    println!("🤖 [tuner] Loading config from: {:?}", paths.config_path());
     println!("🤖 [tuner] Starting Telegram bot...");
     telegram::run_bot(config).await?;
     

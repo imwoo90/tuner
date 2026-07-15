@@ -330,9 +330,9 @@ def main() -> None:
         job["dependency"] = args.dependency.strip()
     if args.silent_on_success:
         job["silent_on_success"] = True
-    chat_id = os.environ.get("DUCTOR_CHAT_ID", "")
-    topic_id = os.environ.get("DUCTOR_TOPIC_ID", "")
-    transport = os.environ.get("DUCTOR_TRANSPORT", "tg")
+    chat_id = os.environ.get("TUNER_CHAT_ID", "")
+    topic_id = os.environ.get("TUNER_TOPIC_ID", "")
+    transport = os.environ.get("TUNER_TRANSPORT", "tg")
     if chat_id:
         job["chat_id"] = int(chat_id)
     if topic_id:

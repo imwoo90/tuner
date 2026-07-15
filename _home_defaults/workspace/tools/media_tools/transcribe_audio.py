@@ -21,12 +21,12 @@ import sys
 from pathlib import Path
 
 _TELEGRAM_FILES = Path(
-    os.environ.get("DUCTOR_HOME", str(Path.home() / ".ductor"))
+    os.environ.get("TUNER_HOME", str(Path.home() / ".tuner"))
 ).expanduser() / "workspace" / "telegram_files"
 
 
 def _transcribe_external(path: Path) -> dict:
-    """Transcribe via the ``DUCTOR_TRANSCRIBE_COMMAND`` external hook (#66).
+    """Transcribe via the ``TUNER_TRANSCRIBE_COMMAND`` external hook (#66).
 
     The env var holds a shell-style command (split with ``shlex``); the
     audio path is appended as the final argv element. Stdout is tried as
@@ -36,16 +36,16 @@ def _transcribe_external(path: Path) -> dict:
     Returns a result dict with ``transcript`` on success, or ``error`` on
     any failure so the caller can fall through to the built-in strategies.
     """
-    raw = os.environ.get("DUCTOR_TRANSCRIBE_COMMAND", "").strip()
+    raw = os.environ.get("TUNER_TRANSCRIBE_COMMAND", "").strip()
     if not raw:
-        return {"error": "DUCTOR_TRANSCRIBE_COMMAND unset"}
+        return {"error": "TUNER_TRANSCRIBE_COMMAND unset"}
 
     try:
         argv = shlex.split(raw)
     except ValueError as exc:
-        return {"error": f"Invalid DUCTOR_TRANSCRIBE_COMMAND: {exc}"}
+        return {"error": f"Invalid TUNER_TRANSCRIBE_COMMAND: {exc}"}
     if not argv:
-        return {"error": "DUCTOR_TRANSCRIBE_COMMAND empty after split"}
+        return {"error": "TUNER_TRANSCRIBE_COMMAND empty after split"}
     argv.append(str(path))
 
     try:
