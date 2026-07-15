@@ -108,7 +108,10 @@ mod tests {
         });
 
         let cli = std::sync::Arc::new(crate::cli::antigravity::AntigravityCli::new((*cfg).clone()));
-        let scheduler = crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg, mgr, cli);
+        let bus = std::sync::Arc::new(crate::bus::bus::MessageBus::new());
+        let scheduler = crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg, mgr, cli, bus);
+
+
 
         // Under quiet hour boundary check (e.g. at 23:00)
         let tz: Tz = "UTC".parse().unwrap();
@@ -131,7 +134,10 @@ mod tests {
             ..Default::default()
         });
         let cli = std::sync::Arc::new(crate::cli::antigravity::AntigravityCli::new((*cfg).clone()));
-        let scheduler = crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg, mgr, cli);
+        let bus = std::sync::Arc::new(crate::bus::bus::MessageBus::new());
+        let scheduler = crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg, mgr, cli, bus);
+
+
 
         // Case 1: last_active is 10 minutes ago (within 30 mins cooldown)
         let ten_mins_ago = chrono::Utc::now() - chrono::Duration::minutes(10);

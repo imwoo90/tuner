@@ -5,7 +5,7 @@ use chrono::{DateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
 use cron::Schedule;
 use std::str::FromStr;
-use teloxide::prelude::*;
+
 
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
@@ -16,6 +16,7 @@ pub struct CronScheduler {
     pub config: Arc<CliConfig>,
     pub manager: Arc<CronManager>,
     pub cli: Arc<AntigravityCli>,
+    pub bus: Arc<crate::bus::bus::MessageBus>,
 }
 
 impl CronScheduler {
@@ -23,11 +24,13 @@ impl CronScheduler {
         config: Arc<CliConfig>,
         manager: Arc<CronManager>,
         cli: Arc<AntigravityCli>,
+        bus: Arc<crate::bus::bus::MessageBus>,
     ) -> Self {
         Self {
             config,
             manager,
             cli,
+            bus,
         }
     }
 
@@ -59,7 +62,7 @@ impl CronScheduler {
         Ok(next_local.with_timezone(&Utc))
     }
 
-    pub fn start(self: Arc<Self>, bot: Bot) {
+    pub fn start(self: Arc<Self>) {
         let scheduler = self.clone();
         tokio::spawn(async move {
             let mut last_mtime: Option<SystemTime> = None;
@@ -70,7 +73,7 @@ impl CronScheduler {
 
             loop {
                 check_interval.tick().await;
-                let _ = scheduler.tick(&mut last_mtime, &mut next_run_times, &bot).await;
+                let _ = scheduler.tick(&mut last_mtime, &mut next_run_times).await;
             }
         });
     }
@@ -79,10 +82,9 @@ impl CronScheduler {
         &self,
         last_mtime: &mut Option<SystemTime>,
         next_run_times: &mut HashMap<String, DateTime<Utc>>,
-        bot: &Bot,
     ) -> Result<(), String> {
         let _ = self.reload_if_changed(last_mtime, next_run_times).await;
-        let _ = self.run_due_jobs(next_run_times, bot).await;
+        let _ = self.run_due_jobs(next_run_times).await;
         Ok(())
     }
 
@@ -122,7 +124,6 @@ impl CronScheduler {
     async fn run_due_jobs(
         &self,
         next_run_times: &mut HashMap<String, DateTime<Utc>>,
-        bot: &Bot,
     ) -> Result<(), String> {
         let now = Utc::now();
         let mut jobs_to_run = Vec::new();
@@ -135,12 +136,11 @@ impl CronScheduler {
 
         for job_id in jobs_to_run {
             if let Ok(Some(job)) = self.manager.get_job(&job_id).await {
-                let bot_clone = bot.clone();
-                let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.cli.clone()));
+                let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.cli.clone(), self.bus.clone()));
                 let job_for_task = job.clone();
                 
                 tokio::spawn(async move {
-                    let _ = self_clone.execute_job(job_for_task, bot_clone).await;
+                    let _ = self_clone.execute_job(job_for_task).await;
                 });
 
                 if let Ok(next_run) = self.calculate_next_run(&job) {
@@ -151,15 +151,6 @@ impl CronScheduler {
             }
         }
         Ok(())
-    }
-
-    async fn send_telegram(&self, bot: &Bot, chat_id: i64, topic_id: Option<i64>, text: &str) {
-        let mut req = bot.send_message(ChatId(chat_id), text.to_string())
-            .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = topic_id {
-            req = req.message_thread_id(tid as i32);
-        }
-        let _ = req.await;
     }
 
     fn check_quiet_hours(&self, job: &CronJob) -> bool {
@@ -188,7 +179,7 @@ impl CronScheduler {
         )
     }
 
-    async fn run_cli_command(&self, job: &CronJob, bot: &Bot, workspace: std::path::PathBuf) -> Result<(), String> {
+    async fn run_cli_command(&self, job: &CronJob, workspace: std::path::PathBuf) -> Result<(), String> {
         let job_id = job.id.clone();
         let job_title = job.title.clone();
         let chat_id = job.chat_id;
@@ -206,19 +197,34 @@ impl CronScheduler {
                 self.manager.update_run_status(&job_id, &status).await?;
 
                 if !job.silent_on_success || resp.is_error {
-                    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&resp.result);
-                    self.send_telegram(bot, chat_id, topic_id, &html_text).await;
+                    let mut env = crate::bus::adapters::from_cron_result(
+                        &job_title,
+                        &resp.result,
+                        &status,
+                        Some(chat_id),
+                        topic_id,
+                        Some(&self.config.transport),
+                    );
+                    self.bus.submit(&mut env).await;
                 }
             }
             Err(e) => {
                 self.manager.update_run_status(&job_id, &format!("error:{}", e)).await?;
-                self.send_telegram(bot, chat_id, topic_id, &format!("❌ Cron job '{}' failed: {}", job_title, e)).await;
+                let mut env = crate::bus::adapters::from_cron_result(
+                    &job_title,
+                    "",
+                    &format!("error:{}", e),
+                    Some(chat_id),
+                    topic_id,
+                    Some(&self.config.transport),
+                );
+                self.bus.submit(&mut env).await;
             }
         }
         Ok(())
     }
 
-    async fn execute_job(&self, job: CronJob, bot: Bot) -> Result<(), String> {
+    async fn execute_job(&self, job: CronJob) -> Result<(), String> {
         if self.check_quiet_hours(&job) {
             println!("🤖 [우덕터] Cron job {} skipped due to quiet hours", job.title);
             return Ok(());
@@ -239,6 +245,7 @@ impl CronScheduler {
             return Err(err_msg);
         }
 
-        self.run_cli_command(&job, &bot, workspace).await
+        self.run_cli_command(&job, workspace).await
     }
 }
+

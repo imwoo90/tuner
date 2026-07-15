@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use chrono::{DateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
-use teloxide::prelude::*;
+
 
 use crate::config::CliConfig;
 use crate::session::manager::SessionManager;
@@ -19,6 +19,7 @@ pub struct HeartbeatScheduler {
     pub config: Arc<CliConfig>,
     pub sessions: Arc<SessionManager>,
     pub cli: Arc<AntigravityCli>,
+    pub bus: Arc<crate::bus::bus::MessageBus>,
 }
 
 impl HeartbeatScheduler {
@@ -26,11 +27,13 @@ impl HeartbeatScheduler {
         config: Arc<CliConfig>,
         sessions: Arc<SessionManager>,
         cli: Arc<AntigravityCli>,
+        bus: Arc<crate::bus::bus::MessageBus>,
     ) -> Self {
         Self {
             config,
             sessions,
             cli,
+            bus,
         }
     }
 
@@ -115,8 +118,9 @@ impl HeartbeatScheduler {
     }
 
     /// Starts the background interval check.
-    pub fn start(self: Arc<Self>, bot: Bot) {
+    pub fn start(self: Arc<Self>) {
         let interval_mins = self.heartbeat_interval_minutes() as u64;
+        let scheduler = self.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_mins * 60));
             // Skip the immediate first tick
@@ -124,13 +128,13 @@ impl HeartbeatScheduler {
 
             loop {
                 interval.tick().await;
-                let _ = self.tick(&bot).await;
+                let _ = scheduler.tick().await;
             }
         });
     }
 
     /// Perform a single tick check over all persisted sessions.
-    pub async fn tick(&self, bot: &Bot) -> Result<(), String> {
+    pub async fn tick(&self) -> Result<(), String> {
         let user_tz = self.config.user_timezone.as_deref().unwrap_or("UTC");
         
         let tz = user_tz.parse::<Tz>().unwrap_or(Tz::UTC);
@@ -142,7 +146,7 @@ impl HeartbeatScheduler {
 
         let all_sessions = self.sessions.load()?;
         for (_, session) in all_sessions {
-            if session.transport != "tg" {
+            if session.transport != "tg" && session.transport != "mx" {
                 continue;
             }
 
@@ -154,13 +158,13 @@ impl HeartbeatScheduler {
                 continue;
             }
 
-            let _ = self.run_heartbeat_for_chat(bot, &session).await;
+            let _ = self.run_heartbeat_for_chat(&session).await;
         }
 
         Ok(())
     }
 
-    async fn run_heartbeat_for_chat(&self, bot: &Bot, session: &SessionData) -> Result<(), String> {
+    async fn run_heartbeat_for_chat(&self, session: &SessionData) -> Result<(), String> {
         let prompt = "System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly.";
         let ack_token = self.heartbeat_ack_token();
 
@@ -170,12 +174,16 @@ impl HeartbeatScheduler {
         let res = self.cli.send(prompt, opt_sid, false, self.config.working_dir.clone()).await;
         if let Ok(resp) = res {
             if !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
-                let html_text = crate::telegram::formatting::markdown_to_telegram_html(&resp.result);
-                let _ = bot.send_message(ChatId(session.chat_id), html_text)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .await;
+                let mut env = crate::bus::adapters::from_heartbeat(
+                    session.chat_id,
+                    &resp.result,
+                    None,
+                    Some(&session.transport),
+                );
+                self.bus.submit(&mut env).await;
             }
         }
         Ok(())
     }
 }
+

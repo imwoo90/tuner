@@ -68,7 +68,10 @@ mod tests {
         let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
         let temp = NamedTempFile::new().unwrap();
         let manager = Arc::new(CronManager::new(temp.path().to_path_buf()));
-        let scheduler = CronScheduler::new(cfg, manager, cli);
+        let bus = Arc::new(crate::bus::bus::MessageBus::new());
+        let scheduler = CronScheduler::new(cfg, manager, cli, bus);
+
+
 
         let job = CronJob::new(
             "job1".to_string(),

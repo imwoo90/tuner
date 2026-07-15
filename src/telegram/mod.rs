@@ -22,8 +22,11 @@ pub mod commands;
 pub mod cron_selector;
 pub mod topic_cache;
 pub mod stream;
+pub mod transport;
 
 pub(crate) use reply::build_reply_prompt;
+pub use transport::TelegramTransport;
+
 
 pub(crate) fn get_topic_id(msg: &Message) -> Option<i64> {
     let is_topic = match &msg.kind {
@@ -142,7 +145,6 @@ fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> crate
     crate::session::manager::SessionManager::new(path, 30, 4, false, "UTC".to_string(), None)
         .with_topic_resolver(Arc::new(move |cid, tid| resolver_cache.find_by_id(cid, tid)))
 }
-
 fn start_schedulers(
     bot: Bot,
     config: Arc<CliConfig>,
@@ -150,12 +152,17 @@ fn start_schedulers(
     cli: Arc<AntigravityCli>,
     home: &str,
 ) -> Arc<crate::cron::manager::CronManager> {
+    let bus = Arc::new(crate::bus::bus::MessageBus::new());
+    let tg_transport = Arc::new(TelegramTransport::new(bot.clone()));
+    bus.register_transport(tg_transport);
+
     let scheduler = Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(
         config.clone(),
         sessions,
         cli.clone(),
+        bus.clone(),
     ));
-    scheduler.start(bot.clone());
+    scheduler.start();
 
     let cron_path = std::path::PathBuf::from(home).join(".ductor").join("cron_jobs.json");
     let cron_manager = Arc::new(crate::cron::manager::CronManager::new(cron_path));
@@ -163,8 +170,9 @@ fn start_schedulers(
         config.clone(),
         cron_manager.clone(),
         cli,
+        bus,
     ));
-    cron_scheduler.start(bot);
+    cron_scheduler.start();
 
     let telegram_files_dir = config.working_dir.join("telegram_files");
     let output_to_user_dir = config.working_dir.join("output_to_user");
