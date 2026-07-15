@@ -7,21 +7,18 @@ This is the navigation index for workspace tools.
 - Prefer these tool scripts over manual JSON/file surgery.
 - Run with `python3`.
 - Normal successful runs are JSON-oriented; tutorial/help output may be plain text.
-- Open the matching subfolder `CLAUDE.md` before non-trivial changes.
+- Open the matching subfolder `RULES.md` before non-trivial changes.
 
 ## Routing
 
-- recurring tasks / schedules -> `cron_tools/CLAUDE.md`
-- incoming HTTP triggers -> `webhook_tools/CLAUDE.md`
-- file/media processing -> `media_tools/CLAUDE.md`
-- sub-agent management (create/remove/list/ask) -> `agent_tools/CLAUDE.md` (DEPRECATED for antigravity; use native define_subagent / invoke_subagent)
-- background tasks (delegate, list, cancel) -> `task_tools/CLAUDE/GEMINI/AGENTS.md` (DEPRECATED for antigravity; use native run_command in background)
-- custom user scripts -> `user_tools/CLAUDE.md`
+- recurring tasks / schedules -> `cron_tools/RULES.md`
+- incoming HTTP triggers -> `webhook_tools/RULES.md`
+- file/media processing -> `media_tools/RULES.md`
+- custom user scripts -> `user_tools/RULES.md`
 
 ## External API Secrets
 
-External API keys are loaded from `~/.tuner/.env` and injected into all
-CLI subprocesses (host and Docker). Standard dotenv syntax:
+External API keys are loaded from `~/.tuner/.env` and injected into all CLI subprocesses. Standard dotenv syntax:
 
 ```env
 PPLX_API_KEY=sk-xxx
@@ -40,7 +37,6 @@ touch ~/.tuner/restart-requested
 ```
 
 The bot picks up this marker within seconds and restarts cleanly.
-No tool script needed — just create the file.
 
 ## Output and Memory
 

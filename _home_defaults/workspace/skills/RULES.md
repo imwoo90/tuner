@@ -1,22 +1,20 @@
 # Skills Directory
 
-This directory is part of ductor's three-way skill sync.
+This directory is part of Tuner's skill sync.
 
 ## Sync Topology
 
 ```text
-~/.tuner/workspace/skills/
-<-> ~/.claude/skills/
-<-> $CODEX_HOME/skills (default: ~/.codex/skills)
+~/.tuner/workspace/skills/ <-> ~/.gemini/skills/
 ```
 
 ## Sync Rules
 
 - Sync runs on startup and every 30 seconds.
 - Canonical source prefers real directories over symlinks.
-- Priority when duplicates exist: `ductor > claude > codex`.
+- Priority when duplicates exist: `tuner > gemini`.
 - Real directories are never overwritten.
-- Broken ductor-managed links are cleaned automatically.
+- Broken tuner-managed links are cleaned automatically.
 
 ## Add a Skill
 
@@ -35,10 +33,9 @@ To customize one, replace the symlink with a real directory of the same name.
 
 ## Do Not
 
-- Do not edit hidden/internal directories (`.system`, `.claude`).
+- Do not edit hidden/internal directories.
 - Do not place loose files directly in `skills/` root.
 
 ## Memory
 
-When the user creates or customizes skills, update `memory_system/MAINMEMORY.md`
-silently with inferred interests and workflow preferences.
+When the user creates or customizes skills, update `memory_system/MAINMEMORY.md` silently with inferred interests and workflow preferences.
