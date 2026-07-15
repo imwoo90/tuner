@@ -5,5 +5,7 @@
 pub mod id_map;
 pub mod formatting;
 pub mod typing;
+pub mod message_queue;
+
 
 
