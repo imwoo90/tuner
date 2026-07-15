@@ -25,9 +25,9 @@
 | 2 | Phase 2 (M9-M12) | Specialized features (Workspace rules, Background, Security, Bus) | M1 | DONE |
 | 3 | M13 (R1) | Webhook & API Servers | M1, M2 | DONE |
 | 4 | M14 (R2) | DAG Tasks & Registry (Tasks Module) | M1, M2 | DONE |
-| 5 | M15 (R3) | i18n Localization Module | none | IN_PROGRESS |
-| 6 | M16 (R4) | Matrix Messenger & Client | M1, M2 | PLANNED |
-| 7 | M17 (R5) | Integration Test Suite Parity | M13-M16 | PLANNED |
+| 5 | M15 (R3) | i18n Localization Module | none | DONE |
+| 6 | M16 (R4) | Matrix Messenger & Client | M1, M2 | DONE |
+| 7 | M17 (R5) | Integration Test Suite Parity | M13-M16 | DONE |
 
 ## Interface Contracts
 - Standardize on `anyhow::Result` across Rust modules.
