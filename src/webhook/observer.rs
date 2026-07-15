@@ -217,10 +217,7 @@ async fn dispatch_webhook(
         status,
     };
 
-    let opt_handler = { result_handler.lock().await.clone() };
-    if let Some(handler) = opt_handler {
-        handler(res);
-    }
+    if let Some(h) = result_handler.lock().await.clone() { h(res); }
 }
 
 async fn handle_wake_mode(
@@ -229,11 +226,8 @@ async fn handle_wake_mode(
     allowed_user_ids: &[i64],
     result_text: &mut String,
 ) -> String {
-    let opt_handler = { wake_handler.lock().await.clone() };
-    if let Some(handler) = opt_handler {
-        for chat_id in allowed_user_ids {
-            handler(*chat_id, prompt);
-        }
+    if let Some(handler) = wake_handler.lock().await.clone() {
+        for chat_id in allowed_user_ids { handler(*chat_id, prompt); }
         *result_text = "wake trigger sent".to_string();
         "success".to_string()
     } else {
@@ -242,16 +236,21 @@ async fn handle_wake_mode(
 }
 
 fn is_quiet_hours(hook: &WebhookEntry, config: &crate::config::CliConfig) -> bool {
+    is_quiet_hours_at(hook, config, chrono::Utc::now())
+}
+
+pub fn is_quiet_hours_at(
+    hook: &WebhookEntry,
+    config: &crate::config::CliConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
     if let (Some(qs), Some(qe)) = (hook.quiet_start, hook.quiet_end) {
-        let tz_str = config.user_timezone.as_deref().unwrap_or("UTC");
-        let tz: chrono_tz::Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
-        let now_local = chrono::Utc::now().with_timezone(&tz);
-        use chrono::NaiveTime;
+        let tz: chrono_tz::Tz = config.user_timezone.as_deref().unwrap_or("UTC").parse().unwrap_or(chrono_tz::UTC);
         if let (Some(start), Some(end)) = (
-            NaiveTime::from_hms_opt(qs, 0, 0),
-            NaiveTime::from_hms_opt(qe, 0, 0),
+            chrono::NaiveTime::from_hms_opt(qs, 0, 0),
+            chrono::NaiveTime::from_hms_opt(qe, 0, 0),
         ) {
-            return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
+            return crate::heartbeat::quiet::is_within_quiet_hours(&now.with_timezone(&tz), start, end);
         }
     }
     false
@@ -263,42 +262,26 @@ async fn handle_cron_task_mode(
     config: &crate::config::CliConfig,
     result_text: &mut String,
 ) -> String {
-    if is_quiet_hours(hook, config) {
-        return "skipped:quiet_hours".to_string();
-    }
-    let Some(ref folder) = hook.task_folder else {
-        return "error:no_task_folder".to_string();
-    };
+    if is_quiet_hours(hook, config) { return "skipped:quiet_hours".to_string(); }
+    let Some(folder) = &hook.task_folder else { return "error:no_task_folder".to_string(); };
     let workspace_dir = config.working_dir.join("cron_tasks").join(folder);
     let cron_tasks_root = config.working_dir.join("cron_tasks");
     if !crate::security::paths::is_path_safe(&workspace_dir, &[cron_tasks_root]) {
         return "error:path_outside_allowed_roots".to_string();
     }
-    if !workspace_dir.is_dir() {
-        return "error:folder_missing".to_string();
-    }
+    if !workspace_dir.is_dir() { return "error:folder_missing".to_string(); }
     let mut tcfg = config.clone();
-    if let Some(ref provider) = hook.provider {
-        tcfg.provider = provider.clone();
-    }
-    if let Some(ref model) = hook.model {
-        tcfg.model = Some(model.clone());
-    }
+    if let Some(p) = &hook.provider { tcfg.provider = p.clone(); }
+    if let Some(m) = &hook.model { tcfg.model = Some(m.clone()); }
     if !hook.cli_parameters.is_empty() {
-        let provider_key = tcfg.provider.clone();
-        tcfg.cli_parameters
-            .insert(provider_key, hook.cli_parameters.clone());
+        tcfg.cli_parameters.insert(tcfg.provider.clone(), hook.cli_parameters.clone());
     }
     let tcli = crate::cli::antigravity::AntigravityCli::new(tcfg);
     use crate::cli::AgentProvider;
     match tcli.send(prompt, None, false, workspace_dir).await {
         Ok(resp) => {
             *result_text = resp.result;
-            if resp.is_error {
-                format!("error:exit_{}", resp.returncode.unwrap_or(1))
-            } else {
-                "success".to_string()
-            }
+            if resp.is_error { format!("error:exit_{}", resp.returncode.unwrap_or(1)) } else { "success".to_string() }
         }
         Err(e) => format!("error:{}", e),
     }
