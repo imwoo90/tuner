@@ -33,6 +33,8 @@ rand = "0.8"
 anyhow = "1.0"
 matrix-sdk = "0.18.0"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
+url = "2.5"
+
 
 
 [dev-dependencies]
