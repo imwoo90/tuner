@@ -12,6 +12,8 @@ pub mod bus;
 pub mod webhook;
 pub mod tasks;
 pub mod i18n;
+pub mod messenger;
+
 
 #[cfg(test)]
 pub mod telegram_tests;
