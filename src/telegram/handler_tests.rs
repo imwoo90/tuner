@@ -3,6 +3,7 @@ use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::session::key::SessionKey;
 use crate::session::manager::SessionManager;
+use crate::cron::manager::CronManager;
 use std::sync::Arc;
 use teloxide::Bot;
 use teloxide::types::Message;
@@ -13,7 +14,7 @@ fn setup() -> (
     Arc<CliConfig>,
     Arc<AntigravityCli>,
     Bot,
-    Arc<crate::cron::manager::CronManager>,
+    Arc<CronManager>,
     Arc<TopicNameCache>,
     Arc<BotInfo>
 ) {
@@ -28,7 +29,7 @@ fn setup() -> (
     let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
     let bot = Bot::new("123:abc");
     let temp_cron = tempfile::NamedTempFile::new().unwrap();
-    let cron_mgr = Arc::new(crate::cron::manager::CronManager::new(temp_cron.path().to_path_buf()));
+    let cron_mgr = Arc::new(CronManager::new(temp_cron.path().to_path_buf()));
     let topic_cache = Arc::new(TopicNameCache::new());
     let bot_info = Arc::new(BotInfo { username: Some("my_bot".to_string()) });
     (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info)
@@ -81,23 +82,21 @@ async fn test_telegram_command_model() {
 }
 
 #[tokio::test]
-async fn test_telegram_command_diagnose() {
+async fn test_telegram_command_status() {
     let (mgr, cfg, cli, bot, _, topic_cache, _) = setup();
-    let cron_mgr = crate::cron::manager::CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
-    let msg = make_msg(r#"{"message_id":7,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/diagnose"}"#);
-    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/diagnose", &cfg, &mgr, &cli, &cron_mgr, &topic_cache).await;
-    assert!(res.is_ok());
-    assert_eq!(res.unwrap(), true);
+    let cron_mgr = CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
+    let msg = make_msg(r#"{"message_id":7,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/status"}"#);
+    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/status", &cfg, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    assert!(res.is_ok() && res.unwrap());
 }
 
 #[tokio::test]
 async fn test_telegram_command_memory() {
     let (mgr, cfg, cli, bot, _, topic_cache, _) = setup();
-    let cron_mgr = crate::cron::manager::CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
+    let cron_mgr = CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
     let msg = make_msg(r#"{"message_id":8,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/memory"}"#);
     let res = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg, &mgr, &cli, &cron_mgr, &topic_cache).await;
-    assert!(res.is_ok());
-    assert_eq!(res.unwrap(), true);
+    assert!(res.is_ok() && res.unwrap());
 }
 
 #[tokio::test]
@@ -186,14 +185,15 @@ async fn test_telegram_commands_specification() {
     let commands = crate::telegram::commands::get_bot_commands();
     assert!(!commands.is_empty());
     for cmd in &commands {
-        assert!(cmd.command.len() >= 1 && cmd.command.len() <= 32);
+        assert!(!cmd.command.is_empty() && cmd.command.len() <= 32);
         for c in cmd.command.chars() {
             assert!(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
         }
-        assert!(cmd.description.len() >= 1 && cmd.description.len() <= 256);
+        assert!(!cmd.description.is_empty() && cmd.description.len() <= 256);
     }
-    let names: Vec<&str> = commands.iter().map(|c| c.command.as_str()).collect();
+    let names: Vec<_> = commands.iter().map(|c| c.command.as_str()).collect();
     for n in &["help", "new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork_preview"] {
         assert!(names.contains(n));
     }
+    assert!(!names.contains(&"diagnose"));
 }

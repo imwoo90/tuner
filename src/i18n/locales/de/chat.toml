@@ -454,7 +454,15 @@ async_task_received = "📥 **Async-Aufgabe empfangen** von `{sender}`\nSession:
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
 help = "🤖 [tuner] Help:\n- Talk to the agy CLI agent by sending a normal message."
-status = "🤖 [tuner] Status:\n- Provider: {provider}\n- Model: {model}"
+status = """\
+🤖 [tuner] Status Report
+
+- agy CLI Status: {agy_status}
+- Telegram Token: {token_present}
+- Active Sessions: {session_count}
+- Provider: {provider}
+- Model: {model}\
+"""
 restart = "🤖 [tuner] Requesting reboot..."
 unknown_topic = "⚠️ [tuner] Unknown topic name: {name}"
 new_session = "🤖 [tuner] Resetting current session and starting a new conversation."

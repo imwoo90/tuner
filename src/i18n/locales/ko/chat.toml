@@ -383,7 +383,15 @@ async_task_received = "📥 **비동기 작업 수신됨** (발신자: `{sender}
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
 help = "🤖 [tuner] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다."
-status = "🤖 [tuner] 상태:\n- 프로바이더: {provider}\n- 모델: {model}"
+status = """\
+🤖 [tuner] 상태 리포트
+
+- agy CLI 상태: {agy_status}
+- 텔레그램 토큰: {token_present}
+- 활성 세션 수: {session_count} 개
+- 프로바이더: {provider}
+- 모델: {model}\
+"""
 restart = "🤖 [tuner] 재기동을 요청합니다..."
 unknown_topic = "⚠️ [tuner] 알 수 없는 토픽 이름입니다: {name}"
 new_session = "🤖 [tuner] 기존 세션을 초기화하고 새 대화를 시작합니다."

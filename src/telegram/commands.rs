@@ -32,9 +32,29 @@ async fn handle_info_commands(
         return Ok(true);
     }
     if text == "/status" {
+        let agy_status = match std::process::Command::new("agy").arg("--version").output() {
+            Ok(out) => {
+                let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                t!("bot.diagnose_installed", version = ver)
+            }
+            Err(_) => t!("bot.diagnose_not_found"),
+        };
+        let session_count = sessions.load().map(|m| m.len()).unwrap_or(0);
+        let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
+            t!("bot.diagnose_token_set")
+        } else {
+            t!("bot.diagnose_token_missing")
+        };
         let model_str = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
-        let status_msg = t!("bot.status", provider = config.provider, model = model_str);
-        let _ = send_reply(bot, msg, status_msg).await;
+        let report = t!(
+            "bot.status",
+            agy_status = agy_status,
+            token_present = token_present,
+            session_count = session_count,
+            provider = config.provider,
+            model = model_str
+        );
+        let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
     if text == "/restart" {
@@ -64,10 +84,6 @@ pub(crate) async fn handle_commands(
     if text.starts_with("/model") {
         let args = text["/model".len()..].trim();
         let _ = handle_model_command(bot, msg, args, config, sessions, cli).await;
-        return Ok(true);
-    }
-    if text == "/diagnose" {
-        let _ = handle_diagnose_command(bot, msg, config, sessions).await;
         return Ok(true);
     }
     if text == "/memory" {
@@ -180,41 +196,6 @@ async fn handle_model_command(
     Ok(())
 }
 
-async fn handle_diagnose_command(
-    bot: &Bot,
-    msg: &Message,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-) -> Result<(), teloxide::RequestError> {
-    let agy_status = match std::process::Command::new("agy").arg("--version").output() {
-        Ok(out) => {
-            let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            t!("bot.diagnose_installed", version = ver)
-        }
-        Err(_) => t!("bot.diagnose_not_found"),
-    };
-
-    let session_count = sessions.load().map(|m| m.len()).unwrap_or(0);
-    let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
-        t!("bot.diagnose_token_set")
-    } else {
-        t!("bot.diagnose_token_missing")
-    };
-
-    let model_str = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
-
-    let report = t!(
-        "bot.diagnose_report",
-        agy_status = agy_status,
-        token_present = token_present,
-        session_count = session_count,
-        provider = config.provider,
-        model = model_str
-    );
-
-    let _ = send_reply(bot, msg, report).await;
-    Ok(())
-}
 
 async fn handle_memory_command(
     bot: &Bot,
@@ -246,9 +227,8 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("stop", "Cancel active CLI processes in chat"),
         ("abort", "Forcefully stop all running workers"),
         ("model", "Select or change active AI model"),
-        ("status", "Show bot daemon and session metrics"),
+        ("status", "Show bot status and diagnostics report"),
         ("memory", "Print workspace MAINMEMORY.md contents"),
-        ("diagnose", "Perform self-diagnostic validation checks"),
         ("restart", "Trigger clean restart of tuner service"),
         ("plan", "Request step-by-step plan before execution"),
         ("grill_me", "Start interactive interview alignment"),
