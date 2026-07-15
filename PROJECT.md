@@ -1,7 +1,7 @@
-# Project: wooductor
+# Project: tuner
 
 ## Architecture
-- `wooductor` is a Rust-based agent supervisor and automation runtime (replaces the Python `ductor_for_agy` service).
+- `tuner` is a Rust-based agent supervisor and automation runtime (replaces the Python `ductor_for_agy` service).
 - Module boundaries:
   - `src/cli/antigravity`: wraps `agy` CLI, parses events, error handling, model discovery, and trust checks.
   - `src/session`: manages session keys, data persistence, and lifecycle.

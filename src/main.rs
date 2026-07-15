@@ -102,8 +102,8 @@ async fn main() -> Result<(), String> {
     }
 
 
-    println!("🤖 [우덕터] Loading config from: {:?}", config_path);
-    println!("🤖 [우덕터] Starting Telegram bot...");
+    println!("🤖 [튜너] Loading config from: {:?}", config_path);
+    println!("🤖 [튜너] Starting Telegram bot...");
     telegram::run_bot(config).await?;
     
     Ok(())
@@ -147,7 +147,7 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
     std::fs::write(&service_file, unit_content)
         .map_err(|e| format!("Failed to write tuner.service: {}", e))?;
 
-    println!("🤖 [우덕터] Tuner systemd user service installed successfully!");
+    println!("🤖 [튜너] Tuner systemd user service installed successfully!");
     println!("📂 Service Path: {:?}", service_file);
     println!("💡 Run the following commands to enable and start Tuner:");
     println!("   systemctl --user daemon-reload");

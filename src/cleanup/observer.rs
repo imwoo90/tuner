@@ -128,7 +128,7 @@ impl CleanupObserver {
                         last_run_date = date_str;
                         let (del_tg, del_out) = self.execute().await;
                         println!(
-                            "🧹 [우덕터] Daily cleanup done. Deleted tg: {}, out: {}",
+                            "🧹 [튜너] Daily cleanup done. Deleted tg: {}, out: {}",
                             del_tg, del_out
                         );
                     }

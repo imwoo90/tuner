@@ -52,7 +52,7 @@ impl CronScheduler {
             let mut last_mtime: Option<SystemTime> = None;
             let mut next_run_times: HashMap<String, DateTime<Utc>> = HashMap::new();
             let mut check_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-            println!("🤖 [우덕터] CronScheduler started");
+            println!("🤖 [튜너] CronScheduler started");
             loop {
                 check_interval.tick().await;
                 let _ = scheduler.tick(&mut last_mtime, &mut next_run_times).await;
@@ -78,7 +78,7 @@ impl CronScheduler {
         let current_mtime = std::fs::metadata(self.manager.jobs_path()).ok().and_then(|m| m.modified().ok());
         if current_mtime != *last_mtime {
             *last_mtime = current_mtime;
-            println!("🤖 [우덕터] CronScheduler: reloading jobs");
+            println!("🤖 [튜너] CronScheduler: reloading jobs");
             if let Ok(jobs) = self.manager.list_jobs().await {
                 let mut updated = HashMap::new();
                 for job in jobs {
@@ -191,10 +191,10 @@ impl CronScheduler {
 
     async fn execute_job(&self, job: CronJob) -> Result<(), String> {
         if self.check_quiet_hours(&job) {
-            println!("🤖 [우덕터] Cron job {} skipped due to quiet hours", job.title);
+            println!("🤖 [튜너] Cron job {} skipped due to quiet hours", job.title);
             return Ok(());
         }
-        println!("🤖 [우덕터] Cron job executing: {}", job.title);
+        println!("🤖 [튜너] Cron job executing: {}", job.title);
         let ctr = self.config.working_dir.join("cron_tasks");
         let workspace = ctr.join(&job.task_folder);
         if !crate::security::paths::is_path_safe(&workspace, &[ctr]) {
@@ -203,7 +203,7 @@ impl CronScheduler {
         }
         if !workspace.is_dir() {
             let err_msg = format!("Cron task folder missing: {}", workspace.display());
-            eprintln!("❌ [우덕터] {}", err_msg);
+            eprintln!("❌ [튜너] {}", err_msg);
             self.manager.update_run_status(&job.id, "error:folder_missing").await?;
             return Err(err_msg);
         }

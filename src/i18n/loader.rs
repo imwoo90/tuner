@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 /// Find the directory where translation locales are stored.
 pub fn find_locales_dir() -> PathBuf {
-    if let Ok(val) = std::env::var("WOODUCTOR_I18N_DIR") {
+    if let Ok(val) = std::env::var("TUNER_I18N_DIR") {
         let p = PathBuf::from(val);
         if p.exists() {
             return p;

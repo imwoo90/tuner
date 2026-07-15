@@ -1,6 +1,6 @@
 //! # Skill Directory Synchronization
 //!
-//! Synchronizes custom agent skill folders between wooductor and CLI providers.
+//! Synchronizes custom agent skill folders between tuner and CLI providers.
 
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::skills_helpers::{
@@ -114,7 +114,7 @@ pub fn sync_bundled_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(
       Ok(())
 }
 
-/// Cleans up wooductor-created symlinks and copies from provider directories.
+/// Cleans up tuner-created symlinks and copies from provider directories.
 pub fn cleanup_ductor_links(paths: &DuctorPaths) -> Result<usize, String> {
     let mut managed_roots = vec![paths.skills_dir()];
     let bundled = paths.bundled_skills_dir();

@@ -453,17 +453,17 @@ async_task_received = "📥 **Tâche asynchrone reçue** de `{sender}`\nSession 
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
-help = "🤖 [wooductor] Help:\n- Talk to the agy CLI agent by sending a normal message."
-status = "🤖 [wooductor] Status:\n- Provider: {provider}\n- Model: {model}"
-restart = "🤖 [wooductor] Requesting reboot..."
-unknown_topic = "⚠️ [wooductor] Unknown topic name: {name}"
-new_session = "🤖 [wooductor] Resetting current session and starting a new conversation."
-stop_success = "🤖 [wooductor] Forcefully terminated {count} process(es) in this topic."
-stop_all_success = "🤖 [wooductor] Forcefully terminated all active processes."
-model_select_header = "🤖 [wooductor] Please select a model to use below:"
-model_switch_success = "🤖 [wooductor] Session LLM model switched to `{model}`."
+help = "🤖 [tuner] Help:\n- Talk to the agy CLI agent by sending a normal message."
+status = "🤖 [tuner] Status:\n- Provider: {provider}\n- Model: {model}"
+restart = "🤖 [tuner] Requesting reboot..."
+unknown_topic = "⚠️ [tuner] Unknown topic name: {name}"
+new_session = "🤖 [tuner] Resetting current session and starting a new conversation."
+stop_success = "🤖 [tuner] Forcefully terminated {count} process(es) in this topic."
+stop_all_success = "🤖 [tuner] Forcefully terminated all active processes."
+model_select_header = "🤖 [tuner] Please select a model to use below:"
+model_switch_success = "🤖 [tuner] Session LLM model switched to `{model}`."
 diagnose_report = """\
-🤖 [wooductor] Self-Diagnosis Report
+🤖 [tuner] Self-Diagnosis Report
 
 - agy CLI Status: {agy_status}
 - Telegram Token: {token_present}
@@ -471,8 +471,8 @@ diagnose_report = """\
 - Provider: {provider}
 - Default Model: {model}\
 """
-memory_empty = "🤖 [wooductor] Currently no memory registered (MAINMEMORY.md)."
-processing = "⏳ [wooductor] Processing..."
+memory_empty = "🤖 [tuner] Currently no memory registered (MAINMEMORY.md)."
+processing = "⏳ [tuner] Processing..."
 
 diagnose_installed = "🟢 Installed ({version})"
 diagnose_not_found = "🔴 Not found in PATH"
@@ -490,8 +490,8 @@ cron_refresh = "🔄 Refresh"
 cron_next_page = "Next ▶"
 cron_all_on = "🟢 All ON"
 cron_all_off = "🔴 All OFF"
-cron_no_jobs = "🤖 [wooductor] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.ductor/cron_jobs.json."
-cron_list_header = "🤖 [wooductor] Cron job list:"
+cron_no_jobs = "🤖 [tuner] No cron jobs configured.\n\nYou can create cron jobs by registering them in ~/.ductor/cron_jobs.json."
+cron_list_header = "🤖 [tuner] Cron job list:"
 cron_page_footer = "Page: {current} / {total}"
 cron_state_enabled = "enabled"
 cron_state_disabled = "disabled"

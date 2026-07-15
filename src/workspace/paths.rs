@@ -1,6 +1,6 @@
 //! # Workspace Paths Resolution
 //!
-//! SINGLE SOURCE OF TRUTH for all workspace and configuration paths in wooductor.
+//! SINGLE SOURCE OF TRUTH for all workspace and configuration paths in tuner.
 
 use std::path::PathBuf;
 
