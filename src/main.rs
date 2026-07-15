@@ -20,6 +20,9 @@ pub mod supervisor;
 pub mod telegram_tests;
 
 #[cfg(test)]
+pub mod supervisor_tests;
+
+#[cfg(test)]
 pub mod webhook_tests;
 
 #[cfg(test)]
