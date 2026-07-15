@@ -31,6 +31,9 @@ base64 = "0.22"
 mime_guess = "2.0"
 rand = "0.8"
 anyhow = "1.0"
+matrix-sdk = "0.18.0"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+
 
 [dev-dependencies]
 tempfile = "3.10"

@@ -4,4 +4,6 @@
 
 pub mod id_map;
 pub mod formatting;
+pub mod typing;
+
 
