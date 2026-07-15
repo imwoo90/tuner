@@ -29,6 +29,10 @@ pub static LANGUAGES: &[(&str, &str)] = &[
 static REGISTRY: OnceLock<HashMap<String, TranslationStore>> = OnceLock::new();
 static GLOBAL_ACTIVE_LANG: RwLock<String> = RwLock::new(String::new());
 
+tokio::task_local! {
+    pub static TASK_ACTIVE_LANG: String;
+}
+
 thread_local! {
     static ACTIVE_LANG: RefCell<Option<String>> = RefCell::new(None);
 }
@@ -48,6 +52,9 @@ fn get_registry() -> &'static HashMap<String, TranslationStore> {
 
 /// Helper function to retrieve the active language, falling back to global settings.
 fn get_active_language() -> String {
+    if let Ok(task_lang) = TASK_ACTIVE_LANG.try_with(|l| l.clone()) {
+        return task_lang;
+    }
     ACTIVE_LANG.with(|l| {
         if let Some(ref val) = *l.borrow() {
             return val.clone();
