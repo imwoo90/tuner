@@ -453,7 +453,6 @@ async_task_received = "📥 **Tarea asíncrona recibida** de `{sender}`\nSesión
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
-help = "🤖 [tuner] Help:\n- Talk to the agy CLI agent by sending a normal message."
 status = """\
 🤖 [tuner] Status Report
 

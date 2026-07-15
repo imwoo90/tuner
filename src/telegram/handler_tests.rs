@@ -192,7 +192,7 @@ async fn test_telegram_commands_specification() {
         assert!(!cmd.description.is_empty() && cmd.description.len() <= 256);
     }
     let names: Vec<_> = commands.iter().map(|c| c.command.as_str()).collect();
-    for n in &["help", "new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork_preview"] {
+    for n in &["new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork_preview"] {
         assert!(names.contains(n));
     }
     assert!(!names.contains(&"diagnose"));

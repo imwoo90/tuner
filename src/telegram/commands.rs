@@ -27,10 +27,6 @@ async fn handle_info_commands(
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
 ) -> Result<bool, teloxide::RequestError> {
-    if text == "/help" {
-        let _ = send_reply(bot, msg, t!("bot.help")).await;
-        return Ok(true);
-    }
     if text == "/status" {
         let agy_status = match std::process::Command::new("agy").arg("--version").output() {
             Ok(out) => {
@@ -226,7 +222,6 @@ async fn handle_memory_command(
 
 pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
     let list = [
-        ("help", "Show help and usage instructions"),
         ("new", "Start a fresh conversation session"),
         ("reset", "Alias for /new"),
         ("stop", "Cancel active CLI processes in chat"),

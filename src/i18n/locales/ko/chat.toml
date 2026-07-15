@@ -382,7 +382,6 @@ async_task_received = "📥 **비동기 작업 수신됨** (발신자: `{sender}
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
-help = "🤖 [tuner] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다."
 status = """\
 🤖 [tuner] 상태 리포트
 
