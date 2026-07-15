@@ -382,17 +382,17 @@ async_task_received = "📥 **비동기 작업 수신됨** (발신자: `{sender}
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
-help = "🤖 [튜너] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다."
-status = "🤖 [튜너] 상태:\n- 프로바이더: {provider}\n- 모델: {model}"
-restart = "🤖 [튜너] 재기동을 요청합니다..."
-unknown_topic = "⚠️ [튜너] 알 수 없는 토픽 이름입니다: {name}"
-new_session = "🤖 [튜너] 기존 세션을 초기화하고 새 대화를 시작합니다."
-stop_success = "🤖 [튜너] 이 토픽에서 진행 중인 프로세스 {count}개를 강제 종료(stop)했습니다."
-stop_all_success = "🤖 [튜너] 진행 중인 모든 프로세스를 강제 종료(abort)했습니다."
-model_select_header = "🤖 [튜너] 사용할 모델을 아래에서 선택해 주세요:"
-model_switch_success = "🤖 [튜너] 세션의 LLM 모델이 `{model}`(으)로 전환되었습니다."
+help = "🤖 [tuner] 도움말:\n- 일반 메시지 송신 시 agy CLI 에이전트와 대화합니다."
+status = "🤖 [tuner] 상태:\n- 프로바이더: {provider}\n- 모델: {model}"
+restart = "🤖 [tuner] 재기동을 요청합니다..."
+unknown_topic = "⚠️ [tuner] 알 수 없는 토픽 이름입니다: {name}"
+new_session = "🤖 [tuner] 기존 세션을 초기화하고 새 대화를 시작합니다."
+stop_success = "🤖 [tuner] 이 토픽에서 진행 중인 프로세스 {count}개를 강제 종료(stop)했습니다."
+stop_all_success = "🤖 [tuner] 진행 중인 모든 프로세스를 강제 종료(abort)했습니다."
+model_select_header = "🤖 [tuner] 사용할 모델을 아래에서 선택해 주세요:"
+model_switch_success = "🤖 [tuner] 세션의 LLM 모델이 `{model}`(으)로 전환되었습니다."
 diagnose_report = """\
-🤖 [튜너] 자가 진단 리포트
+🤖 [tuner] 자가 진단 리포트
 
 - agy CLI 상태: {agy_status}
 - 텔레그램 토큰: {token_present}
@@ -400,8 +400,8 @@ diagnose_report = """\
 - 프로바이더: {provider}
 - 기본 모델: {model}\
 """
-memory_empty = "🤖 [튜너] 현재 등록된 기억(MAINMEMORY.md)이 없습니다."
-processing = "⏳ [튜너] Processing..."
+memory_empty = "🤖 [tuner] 현재 등록된 기억(MAINMEMORY.md)이 없습니다."
+processing = "⏳ [tuner] Processing..."
 
 diagnose_installed = "🟢 설치됨 ({version})"
 diagnose_not_found = "🔴 PATH에서 찾을 수 없음"
@@ -419,8 +419,8 @@ cron_refresh = "🔄 새로고침"
 cron_next_page = "다음 ▶"
 cron_all_on = "🟢 전체 켜기"
 cron_all_off = "🔴 전체 끄기"
-cron_no_jobs = "🤖 [튜너] 등록된 크론 작업이 없습니다.\n\n크론 작업을 생성하여 ~/.ductor/cron_jobs.json 에 등록할 수 있습니다."
-cron_list_header = "🤖 [튜너] 크론 작업 목록:"
+cron_no_jobs = "🤖 [tuner] 등록된 크론 작업이 없습니다.\n\n크론 작업을 생성하여 ~/.ductor/cron_jobs.json 에 등록할 수 있습니다."
+cron_list_header = "🤖 [tuner] 크론 작업 목록:"
 cron_page_footer = "페이지: {current} / {total}"
 cron_state_enabled = "활성화"
 cron_state_disabled = "비활성화"
