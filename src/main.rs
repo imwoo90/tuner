@@ -13,6 +13,7 @@ pub mod webhook;
 pub mod tasks;
 pub mod i18n;
 pub mod messenger;
+pub mod supervisor;
 
 
 #[cfg(test)]
@@ -61,6 +62,11 @@ pub mod security_tests_extra;
 #[cfg(test)]
 pub mod bus_tests;
 
+#[cfg(test)]
+#[path = "messenger/matrix/concurrency_tests.rs"]
+pub mod matrix_concurrency_tests;
+
+
 
 
 #[tokio::main]
@@ -80,6 +86,18 @@ async fn main() -> Result<(), String> {
     if args.contains(&"--install-systemd".to_string()) {
         return install_systemd_service(&config);
     }
+    if args.contains(&"--supervisor".to_string()) {
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
+        let filtered_args: Vec<String> = args
+            .into_iter()
+            .skip(1)
+            .filter(|arg| arg != "--supervisor")
+            .collect();
+        let supervisor = supervisor::Supervisor::with_args(current_exe, filtered_args);
+        return supervisor.run().await;
+    }
+
 
     println!("🤖 [우덕터] Loading config from: {:?}", config_path);
     println!("🤖 [우덕터] Starting Telegram bot...");
