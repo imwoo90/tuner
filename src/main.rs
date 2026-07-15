@@ -116,12 +116,20 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
     let current_exe = std::env::current_exe()
         .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
         
+    let project_root = current_exe
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("/home/wimvm/.ductor/workspace/projects/wooductor"));
+
     let unit_content = format!(
         "[Unit]\n\
          Description=Tuner - Telegram Bot Daemon for Antigravity CLI\n\
          After=network.target\n\n\
          [Service]\n\
          Type=simple\n\
+         WorkingDirectory={}\n\
          ExecStart={}\n\
          Environment=\"TELEGRAM_TOKEN={}\"\n\
          Environment=\"HOME={}\"\n\
@@ -129,6 +137,7 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
          RestartSec=10\n\n\
          [Install]\n\
          WantedBy=default.target\n",
+        project_root.to_string_lossy(),
         current_exe.to_string_lossy(),
         token,
         home
@@ -146,13 +155,8 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
     std::fs::write(&service_file, unit_content)
         .map_err(|e| format!("Failed to write tuner.service: {}", e))?;
 
-    println!("🤖 [tuner] Tuner systemd user service installed successfully!");
-    println!("📂 Service Path: {:?}", service_file);
-    println!("💡 Run the following commands to enable and start Tuner:");
-    println!("   systemctl --user daemon-reload");
-    println!("   systemctl --user enable tuner");
-    println!("   systemctl --user start tuner");
-    println!("   systemctl --user status tuner");
+    println!("🤖 [tuner] Installed successfully to {:?}", service_file);
+    println!("💡 Run: systemctl --user daemon-reload && systemctl --user restart tuner");
     
     Ok(())
 }
