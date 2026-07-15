@@ -49,7 +49,11 @@ async fn run_cli_stream(
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _guard = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let opt_sid = (!sid.is_empty()).then_some(sid);
-    let stream_res = cli.send_streaming(prompt, opt_sid, false, config.working_dir.clone()).await;
+    let mut cli_clone = (*cli).clone();
+    if !sess.model.is_empty() {
+        cli_clone.config.model = Some(sess.model.clone());
+    }
+    let stream_res = cli_clone.send_streaming(prompt, opt_sid, false, config.working_dir.clone()).await;
     match stream_res {
         Ok(s) => {
             stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config).await?;

@@ -25,13 +25,14 @@ async fn handle_info_commands(
     msg: &Message,
     text: &str,
     config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
 ) -> Result<bool, teloxide::RequestError> {
     if text == "/help" {
         let _ = send_reply(bot, msg, t!("bot.help")).await;
         return Ok(true);
     }
     if text == "/status" {
-        let model_str = config.model.as_deref().unwrap_or("unknown");
+        let model_str = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
         let status_msg = t!("bot.status", provider = config.provider, model = model_str);
         let _ = send_reply(bot, msg, status_msg).await;
         return Ok(true);
@@ -54,7 +55,7 @@ pub(crate) async fn handle_commands(
     cron_manager: &crate::cron::manager::CronManager,
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
-    if handle_info_commands(bot, msg, text, config).await? {
+    if handle_info_commands(bot, msg, text, config, sessions).await? {
         return Ok(true);
     }
     if text.starts_with("/new") || text.starts_with("/reset") || text == "/stop" || text == "/stop_all" || text == "/abort" {
@@ -200,7 +201,8 @@ async fn handle_diagnose_command(
         t!("bot.diagnose_token_missing")
     };
 
-    let model_str = config.model.as_deref().unwrap_or("None");
+    let model_str = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
+
     let report = t!(
         "bot.diagnose_report",
         agy_status = agy_status,

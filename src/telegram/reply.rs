@@ -150,3 +150,18 @@ pub(crate) async fn load_sessions_cache(
         }
     }
 }
+
+pub(crate) async fn resolve_session_model(
+    msg: &Message,
+    config: &crate::config::CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+) -> String {
+    let topic_id = crate::telegram::get_topic_id(msg);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
+        sess.model
+    } else {
+        default_model.to_string()
+    }
+}
