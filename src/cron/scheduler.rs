@@ -6,7 +6,6 @@ use chrono_tz::Tz;
 use cron::Schedule;
 use std::str::FromStr;
 
-
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::AgentProvider;
@@ -26,12 +25,7 @@ impl CronScheduler {
         cli: Arc<AntigravityCli>,
         bus: Arc<crate::bus::bus::MessageBus>,
     ) -> Self {
-        Self {
-            config,
-            manager,
-            cli,
-            bus,
-        }
+        Self { config, manager, cli, bus }
     }
 
     fn normalize_cron_expression(expr: &str) -> String {
@@ -46,19 +40,9 @@ impl CronScheduler {
     pub(crate) fn calculate_next_run(&self, job: &CronJob) -> Result<DateTime<Utc>, String> {
         let normalized = Self::normalize_cron_expression(&job.schedule);
         let sched = Schedule::from_str(&normalized).map_err(|e| e.to_string())?;
-
-        let tz_str = if job.timezone.is_empty() {
-            self.config.telegram_heartbeat_ack_token.as_ref()
-                .map(|_| "UTC")
-                .unwrap_or("UTC")
-        } else {
-            &job.timezone
-        };
+        let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
         let tz: Tz = tz_str.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
-
-        let next_local = sched.upcoming(tz).next()
-            .ok_or_else(|| "No upcoming execution time found".to_string())?;
-
+        let next_local = sched.upcoming(tz).next().ok_or_else(|| "No upcoming execution time found".to_string())?;
         Ok(next_local.with_timezone(&Utc))
     }
 
@@ -68,9 +52,7 @@ impl CronScheduler {
             let mut last_mtime: Option<SystemTime> = None;
             let mut next_run_times: HashMap<String, DateTime<Utc>> = HashMap::new();
             let mut check_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-
             println!("🤖 [우덕터] CronScheduler started");
-
             loop {
                 check_interval.tick().await;
                 let _ = scheduler.tick(&mut last_mtime, &mut next_run_times).await;
@@ -93,56 +75,37 @@ impl CronScheduler {
         last_mtime: &mut Option<SystemTime>,
         next_run_times: &mut HashMap<String, DateTime<Utc>>,
     ) -> Result<(), String> {
-        let current_mtime = std::fs::metadata(self.manager.jobs_path())
-            .ok()
-            .and_then(|m| m.modified().ok());
-
+        let current_mtime = std::fs::metadata(self.manager.jobs_path()).ok().and_then(|m| m.modified().ok());
         if current_mtime != *last_mtime {
             *last_mtime = current_mtime;
             println!("🤖 [우덕터] CronScheduler: reloading jobs");
             if let Ok(jobs) = self.manager.list_jobs().await {
-                let mut updated_times = HashMap::new();
+                let mut updated = HashMap::new();
                 for job in jobs {
                     if job.enabled {
-                        if let Ok(next_run) = self.calculate_next_run(&job) {
-                            if let Some(existing) = next_run_times.get(&job.id) {
-                                if *existing > Utc::now() {
-                                    updated_times.insert(job.id, *existing);
-                                    continue;
-                                }
-                            }
-                            updated_times.insert(job.id, next_run);
+                        if let Ok(next) = self.calculate_next_run(&job) {
+                            let next_run = next_run_times.get(&job.id).filter(|&&e| e > Utc::now()).copied().unwrap_or(next);
+                            updated.insert(job.id, next_run);
                         }
                     }
                 }
-                *next_run_times = updated_times;
+                *next_run_times = updated;
             }
         }
         Ok(())
     }
 
-    async fn run_due_jobs(
-        &self,
-        next_run_times: &mut HashMap<String, DateTime<Utc>>,
-    ) -> Result<(), String> {
+    async fn run_due_jobs(&self, next_run_times: &mut HashMap<String, DateTime<Utc>>) -> Result<(), String> {
         let now = Utc::now();
         let mut jobs_to_run = Vec::new();
-
         for (job_id, next_run) in next_run_times.iter() {
-            if now >= *next_run {
-                jobs_to_run.push(job_id.clone());
-            }
+            if now >= *next_run { jobs_to_run.push(job_id.clone()); }
         }
-
         for job_id in jobs_to_run {
             if let Ok(Some(job)) = self.manager.get_job(&job_id).await {
                 let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.cli.clone(), self.bus.clone()));
                 let job_for_task = job.clone();
-                
-                tokio::spawn(async move {
-                    let _ = self_clone.execute_job(job_for_task).await;
-                });
-
+                tokio::spawn(async move { let _ = self_clone.execute_job(job_for_task).await; });
                 if let Ok(next_run) = self.calculate_next_run(&job) {
                     next_run_times.insert(job_id, next_run);
                 } else {
@@ -154,10 +117,14 @@ impl CronScheduler {
     }
 
     fn check_quiet_hours(&self, job: &CronJob) -> bool {
+        self.check_quiet_hours_at(job, Utc::now())
+    }
+
+    pub fn check_quiet_hours_at(&self, job: &CronJob, now: DateTime<Utc>) -> bool {
         if let (Some(qs), Some(qe)) = (job.quiet_start, job.quiet_end) {
             let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
             if let Ok(tz) = tz_str.parse::<Tz>() {
-                let now_local = Utc::now().with_timezone(&tz);
+                let now_local = now.with_timezone(&tz);
                 let start = NaiveTime::from_hms_opt(qs, 0, 0).unwrap();
                 let end = NaiveTime::from_hms_opt(qe, 0, 0).unwrap();
                 return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
@@ -179,13 +146,13 @@ impl CronScheduler {
         )
     }
 
-    async fn run_cli_command(&self, job: &CronJob, workspace: std::path::PathBuf) -> Result<(), String> {
+    async fn run_cli_command(&self, job: &CronJob, workspace: std::path::PathBuf, cli: &AntigravityCli) -> Result<(), String> {
         let job_id = job.id.clone();
         let job_title = job.title.clone();
         let chat_id = job.chat_id;
         let topic_id = job.topic_id;
         let enriched = self.get_enriched_prompt(&job.agent_instruction, &job.task_folder);
-        let res = self.cli.send(&enriched, None, false, workspace).await;
+        let res = cli.send(&enriched, None, false, workspace).await;
         match res {
             Ok(resp) => {
                 let status = if resp.is_error {
@@ -193,9 +160,7 @@ impl CronScheduler {
                 } else {
                     "success".to_string()
                 };
-
                 self.manager.update_run_status(&job_id, &status).await?;
-
                 if !job.silent_on_success || resp.is_error {
                     let mut env = crate::bus::adapters::from_cron_result(
                         &job_title,
@@ -229,9 +194,7 @@ impl CronScheduler {
             println!("🤖 [우덕터] Cron job {} skipped due to quiet hours", job.title);
             return Ok(());
         }
-
         println!("🤖 [우덕터] Cron job executing: {}", job.title);
-
         let ctr = self.config.working_dir.join("cron_tasks");
         let workspace = ctr.join(&job.task_folder);
         if !crate::security::paths::is_path_safe(&workspace, &[ctr]) {
@@ -245,7 +208,18 @@ impl CronScheduler {
             return Err(err_msg);
         }
 
-        self.run_cli_command(&job, workspace).await
+        let mut jc = (*self.config).clone();
+        if let Some(m) = &job.model { jc.model = Some(m.clone()); }
+        if let Some(p) = &job.provider { jc.provider = p.clone(); }
+        if !job.cli_parameters.is_empty() {
+            jc.cli_parameters.insert("antigravity".to_string(), job.cli_parameters.clone());
+        }
+        if let Some(r) = &job.reasoning_effort {
+            jc.cli_parameters.entry("antigravity".to_string()).or_default()
+                .extend(vec!["-c".to_string(), format!("model_reasoning_effort={}", r)]);
+        }
+
+        let job_cli = AntigravityCli::new(jc);
+        self.run_cli_command(&job, workspace, &job_cli).await
     }
 }
-
