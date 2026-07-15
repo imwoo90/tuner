@@ -154,7 +154,7 @@ mod tests {
     fn test_corrupt_file_starts_fresh() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("room_id_map.json");
-        fs::write(&path, "{bad json").unwrap();
+        fs::write(&path, "\x7bbad json").unwrap();
         let m = MatrixIdMap::new(dir.path());
         let int_id = m.room_to_int("!new:server");
         assert_ne!(int_id, 0);
@@ -169,5 +169,71 @@ mod tests {
             ids.insert(m.room_to_int(&format!("!room{}:server", i)));
         }
         assert_eq!(ids.len(), 50);
+    }
+
+    #[test]
+    fn test_high_volume_room_ids() {
+        let dir = tempdir().unwrap();
+        let m = MatrixIdMap::new(dir.path());
+        let mut ids = std::collections::HashMap::new();
+        
+        let start = std::time::Instant::now();
+        // Insert 5000 randomized room IDs
+        for i in 0..5000 {
+            let room_id = format!("!room_{}_{}:server.example.com", i, i * 31 + 17);
+            let int_id = m.room_to_int(&room_id);
+            
+            // Verify uniqueness
+            if let Some(existing_room) = ids.insert(int_id, room_id.clone()) {
+                panic!("Collision detected! Both {:?} and {:?} mapped to i64 {}", existing_room, room_id, int_id);
+            }
+        }
+        let duration = start.elapsed();
+        println!("Inserted 5000 rooms in {:?}", duration);
+        
+        // Verify determinism and roundtrip
+        for (int_id, room_id) in &ids {
+            let remapped = m.room_to_int(room_id);
+            assert_eq!(remapped, *int_id, "Determinism failed for room {}", room_id);
+            
+            let recovered = m.int_to_room(*int_id);
+            assert_eq!(recovered, Some(room_id.clone()), "Roundtrip failed for room {}", room_id);
+        }
+    }
+
+    #[test]
+    fn test_concurrent_room_to_int_race_condition() {
+        use std::sync::Arc;
+        use std::thread;
+        
+        let dir = tempdir().unwrap();
+        let m = Arc::new(MatrixIdMap::new(dir.path()));
+        let mut handles = vec![];
+        
+        for t in 0..10 {
+            let m_clone = Arc::clone(&m);
+            let handle = thread::spawn(move || {
+                for i in 0..100 {
+                    let room_id = format!("!room_thread_{}_{}:server.com", t, i);
+                    let _ = m_clone.room_to_int(&room_id);
+                    
+                    let shared_room_id = format!("!shared_room_{}:server.com", i);
+                    let _ = m_clone.room_to_int(&shared_room_id);
+                }
+            });
+            handles.push(handle);
+        }
+        
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        
+        let r_to_i = m.room_to_int.lock().unwrap();
+        let i_to_r = m.int_to_room.lock().unwrap();
+        
+        assert_eq!(r_to_i.len(), i_to_r.len(), "Map lengths mismatch under concurrency!");
+        for (room, id) in r_to_i.iter() {
+            assert_eq!(i_to_r.get(id), Some(room), "Mismatched bidirectional mapping for {}", room);
+        }
     }
 }
