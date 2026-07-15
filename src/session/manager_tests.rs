@@ -219,8 +219,10 @@ async fn test_preserve_session_identity() {
     let (s1, _) = m.resolve_session(&SessionKey::telegram(1, None), "claude", "opus").await.unwrap();
     let mut u = s1.clone();
     u.set_session_id("claude", "sess-xyz");
+    u.language = Some("ko".to_string());
     let res = m.preserve_session_identity(&u).await.unwrap();
     assert_eq!(res.get_session_id("claude"), "sess-xyz");
+    assert_eq!(res.language, Some("ko".to_string()));
     assert_eq!(res.provider_sessions.get("claude").unwrap().message_count, 0);
 }
 

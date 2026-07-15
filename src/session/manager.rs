@@ -149,6 +149,7 @@ impl SessionManager {
         let mut current = sessions.remove(&skey).unwrap_or_else(|| session.clone());
         current.provider = session.provider.clone();
         current.model = session.model.clone();
+        current.language = session.language.clone();
         if session.topic_name.is_some() && current.topic_name.is_none() {
             current.topic_name = session.topic_name.clone();
         }
