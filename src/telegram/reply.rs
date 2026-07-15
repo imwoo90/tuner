@@ -3,6 +3,7 @@
 //! This module helps construct context prompts when a user replies to an existing message.
 
 use teloxide::types::Message;
+use teloxide::requests::Requester;
 
 pub(crate) fn strip_mention(text: &str, bot_username: Option<&str>) -> String {
     let username = match bot_username {
@@ -165,3 +166,70 @@ pub(crate) async fn resolve_session_model(
         default_model.to_string()
     }
 }
+
+
+async fn handle_model_callback(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    model: &str,
+    sessions: &crate::session::manager::SessionManager,
+    config: &crate::config::CliConfig,
+) {
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let dm = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+        s.model = model.to_string();
+        let _ = sessions.update_session(&s, 0.0, 0).await;
+        let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = model)).await;
+    }
+}
+
+async fn handle_lang_callback(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    lang: &str,
+    sessions: &crate::session::manager::SessionManager,
+    config: &crate::config::CliConfig,
+) {
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let dm = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+        s.language = Some(lang.to_string());
+        let _ = sessions.update_session(&s, 0.0, 0).await;
+        crate::i18n::set_language(lang);
+        let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.language_switch_success", language = lang)).await;
+    }
+}
+
+pub(crate) async fn handle_callback_query(
+    bot: teloxide::Bot,
+    q: teloxide::types::CallbackQuery,
+    config: std::sync::Arc<crate::config::CliConfig>,
+    sessions: std::sync::Arc<crate::session::manager::SessionManager>,
+    cron: std::sync::Arc<crate::cron::manager::CronManager>,
+) -> Result<(), teloxide::RequestError> {
+    use teloxide::prelude::*;
+    if let Some(ref msg) = q.message {
+        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+        let dm = config.model.as_deref().unwrap_or("antigravity-default");
+        if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+            let active_lang = sess.language.as_deref().unwrap_or(config.language.as_deref().unwrap_or("en"));
+            crate::i18n::set_language(active_lang);
+        }
+    }
+
+    if let Some(ref d) = q.data {
+        if let Some(ref msg) = q.message {
+            if let Some(m) = d.strip_prefix("model:") {
+                handle_model_callback(&bot, msg, m, &sessions, &config).await;
+            } else if let Some(m) = d.strip_prefix("lang:") {
+                handle_lang_callback(&bot, msg, m, &sessions, &config).await;
+            } else if d.starts_with("crn:") {
+                let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
+            }
+        }
+        let _ = bot.answer_callback_query(q.id).await;
+    }
+    Ok(())
+}
+

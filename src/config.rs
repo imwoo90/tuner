@@ -30,6 +30,7 @@ pub struct CliConfig {
     pub webhooks: WebhookConfig,
     pub api: ApiConfig,
     pub matrix: MatrixConfig,
+    pub language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -159,6 +160,7 @@ impl Default for CliConfig {
             webhooks: WebhookConfig::default(),
             api: ApiConfig::default(),
             matrix: MatrixConfig::default(),
+            language: None,
         }
     }
 }

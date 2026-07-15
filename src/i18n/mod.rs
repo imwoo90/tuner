@@ -96,6 +96,17 @@ pub fn init(language: &str) {
     }
 }
 
+pub fn set_language(language: &str) {
+    let lang = if LANGUAGES.iter().any(|(code, _)| *code == language) {
+        language
+    } else {
+        "en"
+    };
+    ACTIVE_LANG.with(|l| {
+        *l.borrow_mut() = Some(lang.to_string());
+    });
+}
+
 /// Translate a chat string.
 ///
 /// # Examples

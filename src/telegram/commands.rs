@@ -86,6 +86,11 @@ pub(crate) async fn handle_commands(
         let _ = handle_model_command(bot, msg, args, config, sessions, cli).await;
         return Ok(true);
     }
+    if text.starts_with("/lang") {
+        let args = text["/lang".len()..].trim();
+        let _ = crate::telegram::lang::handle_lang_command(bot, msg, args, config, sessions).await;
+        return Ok(true);
+    }
     if text == "/memory" {
         let _ = handle_memory_command(bot, msg).await;
         return Ok(true);
@@ -227,6 +232,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("stop", "Cancel active CLI processes in chat"),
         ("abort", "Forcefully stop all running workers"),
         ("model", "Select or change active AI model"),
+        ("lang", "Change active language for this session"),
         ("status", "Show bot status and diagnostics report"),
         ("memory", "Print workspace MAINMEMORY.md contents"),
         ("restart", "Trigger clean restart of tuner service"),

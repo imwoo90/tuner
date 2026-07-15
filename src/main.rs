@@ -74,8 +74,6 @@ pub mod matrix_concurrency_tests;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    i18n::init("ko");
-
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
     let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None);
@@ -83,6 +81,9 @@ async fn main() -> Result<(), String> {
 
     let mut config = config::CliConfig::load_from_file(&paths.config_path())?;
     config.working_dir = paths.workspace().clone();
+
+    let startup_lang = config.language.as_deref().unwrap_or("en");
+    i18n::init(startup_lang);
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();

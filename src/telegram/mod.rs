@@ -21,6 +21,7 @@ pub mod cron_selector;
 pub mod topic_cache;
 pub mod stream;
 pub mod transport;
+pub mod lang;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
@@ -142,6 +143,9 @@ pub(crate) async fn handle_message(
     let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
     let chat_id_raw = msg.chat.id.0;
     eprintln!("🤖 [tuner] Incoming message: from_id={}, chat_id={}", from_id, chat_id_raw);
+    
+    lang::setup_thread_language(&msg, &config, &sessions).await;
+
     if let Some(target_chat_id) = msg.migrate_to_chat_id() {
         let _ = sessions.migrate_chat_id(chat_id_raw, target_chat_id.0).await;
         return Ok(());
@@ -215,38 +219,10 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
-        .branch(Update::filter_callback_query().endpoint(handle_callback_query));
+        .branch(Update::filter_callback_query().endpoint(reply::handle_callback_query));
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info])
         .build().dispatch().await;
-    Ok(())
-}
-
-async fn handle_callback_query(
-    bot: Bot,
-    q: teloxide::types::CallbackQuery,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
-    cron: Arc<crate::cron::manager::CronManager>,
-) -> Result<(), teloxide::RequestError> {
-    if let Some(ref d) = q.data {
-        if let Some(m) = d.strip_prefix("model:") {
-            if let Some(ref msg) = q.message {
-                let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
-                let dm = config.model.as_deref().unwrap_or("antigravity-default");
-                if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-                    s.model = m.to_string();
-                    let _ = sessions.update_session(&s, 0.0, 0).await;
-                    let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = m)).await;
-                }
-            }
-        } else if d.starts_with("crn:") {
-            if let Some(ref msg) = q.message {
-                let _ = cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
-            }
-        }
-        let _ = bot.answer_callback_query(q.id).await;
-    }
     Ok(())
 }

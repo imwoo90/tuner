@@ -508,5 +508,5 @@ cron_toggle_mismatch = "❌ Job information does not match."
 cron_refreshed_note = "🔄 Refreshed to the latest status."
 cron_all_enabled_note = "🟢 All {count} job(s) enabled."
 cron_all_disabled_note = "🔴 All {count} job(s) disabled."
-
-
+language_select_header = "🤖 [tuner] Please select a language below:"
+language_switch_success = "🤖 [tuner] Session language switched to `{language}`."

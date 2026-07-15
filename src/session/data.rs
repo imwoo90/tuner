@@ -44,6 +44,7 @@ impl Default for SessionData {
             created_at: now.clone(),
             last_active: now,
             provider_sessions: std::collections::HashMap::new(),
+            language: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,
@@ -69,6 +70,8 @@ pub struct SessionData {
     pub last_active: String,
     #[serde(default)]
     pub provider_sessions: HashMap<String, ProviderSessionData>,
+    #[serde(default)]
+    pub language: Option<String>,
 
     // Legacy fields used for migration
     #[serde(skip_serializing, default)]
@@ -99,6 +102,7 @@ impl SessionData {
             created_at: now.clone(),
             last_active: now,
             provider_sessions: HashMap::new(),
+            language: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,
