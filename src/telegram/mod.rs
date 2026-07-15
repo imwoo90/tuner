@@ -130,7 +130,7 @@ fn handle_forum_topic_events(msg: &Message, topic_cache: &TopicNameCache, chat_i
     }
 }
 
-pub(crate) async fn handle_message(
+async fn handle_message_inner(
     bot: Bot,
     msg: Message,
     config: Arc<CliConfig>,
@@ -143,8 +143,6 @@ pub(crate) async fn handle_message(
     let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
     let chat_id_raw = msg.chat.id.0;
     eprintln!("🤖 [tuner] Incoming message: from_id={}, chat_id={}", from_id, chat_id_raw);
-    
-    lang::setup_thread_language(&msg, &config, &sessions).await;
 
     if let Some(target_chat_id) = msg.migrate_to_chat_id() {
         let _ = sessions.migrate_chat_id(chat_id_raw, target_chat_id.0).await;
@@ -173,6 +171,31 @@ pub(crate) async fn handle_message(
         }
     }
     Ok(())
+}
+
+pub(crate) async fn handle_message(
+    bot: Bot,
+    msg: Message,
+    config: Arc<CliConfig>,
+    sessions: Arc<SessionManager>,
+    cli: Arc<AntigravityCli>,
+    cron_manager: Arc<crate::cron::manager::CronManager>,
+    topic_cache: Arc<TopicNameCache>,
+    bot_info: Arc<BotInfo>,
+) -> Result<(), teloxide::RequestError> {
+    let topic_id = get_topic_id(&msg);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
+    
+    let active_lang = if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
+        sess.language.unwrap_or_else(|| config.language.clone().unwrap_or_else(|| "en".to_string()))
+    } else {
+        config.language.clone().unwrap_or_else(|| "en".to_string())
+    };
+
+    crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+        handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
+    }).await
 }
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {

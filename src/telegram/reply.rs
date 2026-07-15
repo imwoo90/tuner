@@ -201,7 +201,7 @@ async fn handle_lang_callback(
     }
 }
 
-pub(crate) async fn handle_callback_query(
+async fn handle_callback_query_inner(
     bot: teloxide::Bot,
     q: teloxide::types::CallbackQuery,
     config: std::sync::Arc<crate::config::CliConfig>,
@@ -209,15 +209,6 @@ pub(crate) async fn handle_callback_query(
     cron: std::sync::Arc<crate::cron::manager::CronManager>,
 ) -> Result<(), teloxide::RequestError> {
     use teloxide::prelude::*;
-    if let Some(ref msg) = q.message {
-        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-        let dm = config.model.as_deref().unwrap_or("antigravity-default");
-        if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-            let active_lang = sess.language.as_deref().unwrap_or(config.language.as_deref().unwrap_or("en"));
-            crate::i18n::set_language(active_lang);
-        }
-    }
-
     if let Some(ref d) = q.data {
         if let Some(ref msg) = q.message {
             if let Some(m) = d.strip_prefix("model:") {
@@ -231,5 +222,26 @@ pub(crate) async fn handle_callback_query(
         let _ = bot.answer_callback_query(q.id).await;
     }
     Ok(())
+}
+
+pub(crate) async fn handle_callback_query(
+    bot: teloxide::Bot,
+    q: teloxide::types::CallbackQuery,
+    config: std::sync::Arc<crate::config::CliConfig>,
+    sessions: std::sync::Arc<crate::session::manager::SessionManager>,
+    cron: std::sync::Arc<crate::cron::manager::CronManager>,
+) -> Result<(), teloxide::RequestError> {
+    let mut active_lang = config.language.clone().unwrap_or_else(|| "en".to_string());
+    if let Some(ref msg) = q.message {
+        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+        let dm = config.model.as_deref().unwrap_or("antigravity-default");
+        if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+            active_lang = sess.language.unwrap_or_else(|| config.language.clone().unwrap_or_else(|| "en".to_string()));
+        }
+    }
+
+    crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+        handle_callback_query_inner(bot, q, config, sessions, cron).await
+    }).await
 }
 
