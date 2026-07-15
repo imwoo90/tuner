@@ -180,3 +180,20 @@ async fn test_telegram_forum_topic_events() {
     // Verify it is updated in topic_cache
     assert_eq!(topic_cache.find_by_name(123, "@QA & Testing Thread"), Some(999));
 }
+
+#[tokio::test]
+async fn test_telegram_commands_specification() {
+    let commands = crate::telegram::commands::get_bot_commands();
+    assert!(!commands.is_empty());
+    for cmd in &commands {
+        assert!(cmd.command.len() >= 1 && cmd.command.len() <= 32);
+        for c in cmd.command.chars() {
+            assert!(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        }
+        assert!(cmd.description.len() >= 1 && cmd.description.len() <= 256);
+    }
+    let names: Vec<&str> = commands.iter().map(|c| c.command.as_str()).collect();
+    for n in &["help", "new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork_preview"] {
+        assert!(names.contains(n));
+    }
+}

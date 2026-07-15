@@ -122,3 +122,31 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, &str) {
     }
     (None, t)
 }
+
+pub(crate) fn spawn_restart_watcher(home: String) {
+    tokio::spawn(async move {
+        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+        loop {
+            interval.tick().await;
+            if marker.exists() {
+                let _ = std::fs::remove_file(&marker);
+                println!("🤖 [tuner] Restart requested via marker. Exiting...");
+                std::process::exit(42);
+            }
+        }
+    });
+}
+
+pub(crate) async fn load_sessions_cache(
+    sessions: &crate::session::manager::SessionManager,
+    cache: &crate::telegram::TopicNameCache,
+) {
+    if let Ok(all) = sessions.list_all().await {
+        for s in all {
+            if let (Some(tid), Some(tname)) = (s.topic_id, s.topic_name) {
+                cache.insert(s.chat_id, tid, tname);
+            }
+        }
+    }
+}

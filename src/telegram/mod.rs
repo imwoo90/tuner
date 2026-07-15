@@ -105,6 +105,26 @@ async fn process_text(
     run_cli_stream(bot, msg, &prompt, &sess.get_session_id(&config.provider), cli, sessions, sess, config).await
 }
 
+fn handle_forum_topic_events(msg: &Message, topic_cache: &TopicNameCache, chat_id: i64) -> bool {
+    match &msg.kind {
+        teloxide::types::MessageKind::ForumTopicCreated(c) => {
+            if let Some(tid) = msg.thread_id {
+                topic_cache.insert(chat_id, tid as i64, c.forum_topic_created.name.clone());
+            }
+            true
+        }
+        teloxide::types::MessageKind::ForumTopicEdited(e) => {
+            if let Some(tid) = msg.thread_id {
+                if let Some(ref name) = e.forum_topic_edited.name {
+                    topic_cache.insert(chat_id, tid as i64, name.clone());
+                }
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 pub(crate) async fn handle_message(
     bot: Bot,
     msg: Message,
@@ -123,18 +143,8 @@ pub(crate) async fn handle_message(
         return Ok(());
     }
 
-    match &msg.kind {
-        teloxide::types::MessageKind::ForumTopicCreated(c) => {
-            if let Some(tid) = msg.thread_id { topic_cache.insert(chat_id_raw, tid as i64, c.forum_topic_created.name.clone()); }
-            return Ok(());
-        }
-        teloxide::types::MessageKind::ForumTopicEdited(e) => {
-            if let Some(tid) = msg.thread_id {
-                if let Some(ref name) = e.forum_topic_edited.name { topic_cache.insert(chat_id_raw, tid as i64, name.clone()); }
-            }
-            return Ok(());
-        }
-        _ => {}
+    if handle_forum_topic_events(&msg, &topic_cache, chat_id_raw) {
+        return Ok(());
     }
 
     let ok = if msg.chat.is_group() || msg.chat.is_supergroup() {
@@ -144,7 +154,12 @@ pub(crate) async fn handle_message(
     };
     if ok {
         let has_med = reply::has_media(&msg);
-        let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref());
+        let mut text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref());
+        if text.starts_with("/teamwork_preview") {
+            text = text.replacen("/teamwork_preview", "/teamwork-preview", 1);
+        } else if text.starts_with("/grill_me") {
+            text = text.replacen("/grill_me", "/grill-me", 1);
+        }
         if !text.is_empty() || has_med {
             process_text(&bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache).await?;
         }
@@ -173,31 +188,6 @@ fn start_schedulers(
     cron
 }
 
-fn spawn_restart_watcher(home: String) {
-    tokio::spawn(async move {
-        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
-        loop {
-            interval.tick().await;
-            if marker.exists() {
-                let _ = std::fs::remove_file(&marker);
-                println!("🤖 [tuner] Restart requested via marker. Exiting...");
-                std::process::exit(42);
-            }
-        }
-    });
-}
-
-async fn load_sessions_cache(sessions: &SessionManager, cache: &TopicNameCache) {
-    if let Ok(all) = sessions.list_all().await {
-        for s in all {
-            if let (Some(tid), Some(tname)) = (s.topic_id, s.topic_name) {
-                cache.insert(s.chat_id, tid, tname);
-            }
-        }
-    }
-}
-
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let token = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     if token.is_empty() { return Err("No Telegram token provided".to_string()); }
@@ -210,12 +200,12 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     
-    spawn_restart_watcher(home.clone());
+    reply::spawn_restart_watcher(home.clone());
     
     let topic_cache = Arc::new(TopicNameCache::new());
     let sessions = Arc::new(build_sessions(std::path::PathBuf::from(&home).join(".tuner/sessions.json"), topic_cache.clone()));
 
-    load_sessions_cache(&sessions, &topic_cache).await;
+    reply::load_sessions_cache(&sessions, &topic_cache).await;
     
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);

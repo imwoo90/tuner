@@ -236,7 +236,7 @@ async fn handle_memory_command(
     Ok(())
 }
 
-pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {
+pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
     let list = [
         ("help", "Show help and usage instructions"),
         ("new", "Start a fresh conversation session"),
@@ -248,11 +248,19 @@ pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::Request
         ("memory", "Print workspace MAINMEMORY.md contents"),
         ("diagnose", "Perform self-diagnostic validation checks"),
         ("restart", "Trigger clean restart of tuner service"),
+        ("plan", "Request step-by-step plan before execution"),
+        ("grill_me", "Start interactive interview alignment"),
+        ("goal", "Launch long-running thorough task"),
+        ("learn", "Record learning or behavior correction"),
+        ("teamwork_preview", "Launch collaborative multi-agent simulation"),
     ];
-    let commands: Vec<_> = list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
+    list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
         command: c.to_string(),
         description: d.to_string(),
-    }).collect();
-    let _ = bot.set_my_commands(commands).await;
+    }).collect()
+}
+
+pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {
+    bot.set_my_commands(get_bot_commands()).await?;
     Ok(())
 }
