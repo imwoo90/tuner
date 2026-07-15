@@ -107,3 +107,18 @@ pub(crate) fn has_media(message: &Message) -> bool {
         || message.video_note().is_some()
         || message.sticker().is_some()
 }
+
+pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, &str) {
+    let t = text.trim();
+    if let Some(r) = t.strip_prefix("@model ") {
+        let p: Vec<&str> = r.splitn(2, ' ').collect();
+        return (Some(p[0].to_string()), p.get(1).unwrap_or(&"").trim());
+    } else if t.starts_with('@') {
+        let dir = t.split_whitespace().next().unwrap_or("");
+        let m = &dir[1..];
+        if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
+            return (Some(m.to_string()), t[dir.len()..].trim());
+        }
+    }
+    (None, t)
+}

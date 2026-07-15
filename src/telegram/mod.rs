@@ -22,7 +22,7 @@ pub mod topic_cache;
 pub mod stream;
 pub mod transport;
 
-pub(crate) use reply::build_reply_prompt;
+pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
 pub mod typing;
 
@@ -35,21 +35,6 @@ pub(crate) fn get_topic_id(msg: &Message) -> Option<i64> {
 }
 
 pub use topic_cache::{BotInfo, TopicNameCache};
-
-fn parse_model_directive(text: &str) -> (Option<String>, &str) {
-    let t = text.trim();
-    if let Some(r) = t.strip_prefix("@model ") {
-        let p: Vec<&str> = r.splitn(2, ' ').collect();
-        return (Some(p[0].to_string()), p.get(1).unwrap_or(&"").trim());
-    } else if t.starts_with('@') {
-        let dir = t.split_whitespace().next().unwrap_or("");
-        let m = &dir[1..];
-        if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
-            return (Some(m.to_string()), t[dir.len()..].trim());
-        }
-    }
-    (None, t)
-}
 
 async fn run_cli_stream(
     bot: &Bot,
@@ -188,24 +173,49 @@ fn start_schedulers(
     cron
 }
 
+fn spawn_restart_watcher(home: String) {
+    tokio::spawn(async move {
+        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+        loop {
+            interval.tick().await;
+            if marker.exists() {
+                let _ = std::fs::remove_file(&marker);
+                println!("🤖 [tuner] Restart requested via marker. Exiting...");
+                std::process::exit(42);
+            }
+        }
+    });
+}
+
+async fn load_sessions_cache(sessions: &SessionManager, cache: &TopicNameCache) {
+    if let Ok(all) = sessions.list_all().await {
+        for s in all {
+            if let (Some(tid), Some(tname)) = (s.topic_id, s.topic_name) {
+                cache.insert(s.chat_id, tid, tname);
+            }
+        }
+    }
+}
+
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let token = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     if token.is_empty() { return Err("No Telegram token provided".to_string()); }
 
     let bot = Bot::new(token);
+    let _ = commands::register_commands(&bot).await;
+
     let me = bot.get_me().await.ok();
     let bot_info = Arc::new(BotInfo { username: me.and_then(|m| m.user.username) });
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     
+    spawn_restart_watcher(home.clone());
+    
     let topic_cache = Arc::new(TopicNameCache::new());
     let sessions = Arc::new(build_sessions(std::path::PathBuf::from(&home).join(".tuner/sessions.json"), topic_cache.clone()));
 
-    if let Ok(all) = sessions.list_all().await {
-        for s in all {
-            if let (Some(tid), Some(tname)) = (s.topic_id, s.topic_name) { topic_cache.insert(s.chat_id, tid, tname); }
-        }
-    }
+    load_sessions_cache(&sessions, &topic_cache).await;
     
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);

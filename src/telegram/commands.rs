@@ -38,10 +38,8 @@ async fn handle_info_commands(
     }
     if text == "/restart" {
         let _ = send_reply(bot, msg, t!("bot.restart")).await;
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
-        let restart_path = std::path::PathBuf::from(home).join(".tuner").join("restart-sentinel.json");
-        let _ = std::fs::write(restart_path, "");
-        return Ok(true);
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        std::process::exit(42);
     }
     Ok(false)
 }
@@ -220,7 +218,9 @@ async fn handle_memory_command(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), teloxide::RequestError> {
-    let content = std::fs::read_to_string("/home/wimvm/ductor/workspace/memory_system/MAINMEMORY.md")
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let memory_path = std::path::PathBuf::from(home).join(".tuner/workspace/memory_system/MAINMEMORY.md");
+    let content = std::fs::read_to_string(memory_path)
         .unwrap_or_else(|_| t!("bot.memory_empty"));
     
     let html_text = crate::telegram::formatting::markdown_to_telegram_html(&content);
@@ -233,5 +233,26 @@ async fn handle_memory_command(
         }
         let _ = req.await;
     }
+    Ok(())
+}
+
+pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {
+    let list = [
+        ("help", "Show help and usage instructions"),
+        ("new", "Start a fresh conversation session"),
+        ("reset", "Alias for /new"),
+        ("stop", "Cancel active CLI processes in chat"),
+        ("abort", "Forcefully stop all running workers"),
+        ("model", "Select or change active AI model"),
+        ("status", "Show bot daemon and session metrics"),
+        ("memory", "Print workspace MAINMEMORY.md contents"),
+        ("diagnose", "Perform self-diagnostic validation checks"),
+        ("restart", "Trigger clean restart of tuner service"),
+    ];
+    let commands: Vec<_> = list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
+        command: c.to_string(),
+        description: d.to_string(),
+    }).collect();
+    let _ = bot.set_my_commands(commands).await;
     Ok(())
 }
