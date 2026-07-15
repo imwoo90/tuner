@@ -288,4 +288,46 @@ mod tests {
         assert_eq!(chunks[0].0, long_line);
         assert_eq!(chunks[1].0, long_line);
     }
+
+    #[test]
+    fn test_adversarial_nesting_and_unclosed() {
+        let (plain, html) = markdown_to_matrix_html("**unclosed bold");
+        assert_eq!(plain, "**unclosed bold");
+        assert_eq!(html, "**unclosed bold<br>");
+
+        let (plain, html) = markdown_to_matrix_html("`unclosed code");
+        assert_eq!(plain, "`unclosed code");
+        assert_eq!(html, "`unclosed code<br>");
+
+        let (plain, html) = markdown_to_matrix_html("**bold *italic* and ~~strike~~ bold**");
+        assert!(html.contains("<strong>bold <em>italic</em> and <del>strike</del> bold</strong>"));
+        assert_eq!(plain, "bold italic and strike bold");
+
+        let (plain, html) = markdown_to_matrix_html("[Wiki](https://en.wikipedia.org/wiki/Tag_(metadata))");
+        println!("Wiki link output: html={}", html);
+    }
+
+    #[test]
+    fn test_large_input_splitting_edge_cases() {
+        let giant_line = "a".repeat(70000);
+        let chunks = split_text(&giant_line);
+        println!("Giant line split into {} chunks", chunks.len());
+        // Verify that giant line is NOT split (the bug where single line >60k is not split)
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].0.len() > 60000);
+
+        let code_block = format!("```rust\n{}\n```", "fn main() {}\n".repeat(5000));
+        assert!(code_block.len() > 60000);
+        let chunks = split_text(&code_block);
+        assert!(chunks.len() > 1);
+        println!("Code block split into {} chunks", chunks.len());
+        // Chunk 0 will end with </code></pre> because the markdown parser auto-closes open code blocks
+        assert!(chunks[0].1.ends_with("</code></pre>"));
+        // Chunk 1 will actually contain <pre><code> at the end because the closing ``` is
+        // incorrectly interpreted as the START of a code block (due to lack of syntax/context awareness)!
+        assert!(chunks[1].1.contains("<pre><code>"));
+        // And inside Chunk 1, code lines are corrupted and parsed as normal markdown,
+        // so they have <br> appended instead of being in pre/code tags.
+        assert!(chunks[1].1.contains("fn main() {}<br>"));
+    }
 }
