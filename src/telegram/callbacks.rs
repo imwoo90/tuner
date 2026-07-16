@@ -79,9 +79,9 @@ async fn handle_ask_answer_callback(
         let session_id = parts[1];
         if let Ok(index) = parts[2].parse::<usize>() {
             let response_input = if index == 0 {
-                "\n".to_string()
+                "\r".to_string()
             } else {
-                format!("{}\n", "j".repeat(index))
+                format!("{}\r", "j".repeat(index))
             };
             println!("🤖 [tuner] Writing to session: id = {}, input = {:?}", session_id, response_input);
             match cli.sessions.write_to_session(session_id, &response_input).await {
