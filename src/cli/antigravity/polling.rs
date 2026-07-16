@@ -36,7 +36,7 @@ fn parse_and_stream(
 ) {
     if let Some(bd) = super::events::resolve_brain_dir(ws, Some(env)) {
         let tp = bd.join(".system_generated").join("logs").join("transcript_full.jsonl");
-        if Some(&tp) != act_path.as_ref() {
+        if act_path.is_some() && Some(&tp) != act_path.as_ref() {
             *p_size = None;
             *parser = super::log_parser::AntigravityLogParser::new();
         }

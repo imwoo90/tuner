@@ -1,8 +1,3 @@
-//! # Antigravity CLI Log Delta Parser
-//!
-//! This module parses transcript JSONL logs incrementally, extracting
-//! thinking blocks, tool calls (with sanitized args), tool completions,
-//! and final answers for real-time progress updates.
 
 use std::path::Path;
 
@@ -86,12 +81,9 @@ fn clean_tool_call_args(tc: &serde_json::Value) -> String {
     let mut clean_args = serde_json::Map::new();
     if let Some(args_map) = args {
         for (k, v) in args_map {
-            if k == "CodeContent"
-                || k == "ReplacementContent"
-                || k == "ReplacementChunks"
-                || k == "TargetContent"
-                || (v.as_str().map(|s| s.chars().count() > 200).unwrap_or(false))
-            {
+            let omit = ["CodeContent", "ReplacementContent", "ReplacementChunks", "TargetContent"].contains(&k.as_str())
+                || v.as_str().map(|s| s.chars().count() > 200).unwrap_or(false);
+            if omit {
                 clean_args.insert(k.clone(), serde_json::Value::String("<omitted...>".to_string()));
             } else {
                 clean_args.insert(k.clone(), v.clone());
@@ -287,8 +279,10 @@ impl AntigravityLogParser {
 
         if self.seen_final {
             final_content = None;
+            ask_question = None;
         } else if final_content.is_some() {
             self.seen_final = true;
+            ask_question = None;
         }
 
         let formatted = build_formatted_progress(
