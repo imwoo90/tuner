@@ -83,27 +83,6 @@ fn set_non_blocking<Fd: AsFd>(fd: Fd) -> Result<(), String> {
     Ok(())
 }
 
-fn create_command(
-    cmd_name: &str,
-    args: &[String],
-    env: &HashMap<String, String>,
-    workspace: &Path,
-    stdin: Stdio,
-    stdout: Stdio,
-    stderr: Stdio,
-) -> Command {
-    let mut cmd = Command::new(cmd_name);
-    cmd.args(args)
-        .current_dir(workspace)
-        .envs(env)
-        .stdin(stdin)
-        .stdout(stdout)
-        .stderr(stderr)
-        .process_group(0)
-        .kill_on_drop(true);
-    cmd
-}
-
 /// Spawns a command inside a new PTY session with echo disabled.
 pub fn spawn_session(
     workspace: &Path,
@@ -123,19 +102,18 @@ pub fn spawn_session(
     let stdout_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
     let stderr_redirect = Stdio::from(pty.slave);
 
-    let mut cmd = create_command(
-        cmd_name,
-        args,
-        env,
-        workspace,
-        stdin_redirect,
-        stdout_redirect,
-        stderr_redirect,
-    );
+    let mut cmd = Command::new(cmd_name);
+    cmd.args(args)
+        .current_dir(workspace)
+        .envs(env)
+        .stdin(stdin_redirect)
+        .stdout(stdout_redirect)
+        .stderr(stderr_redirect)
+        .process_group(0)
+        .kill_on_drop(true);
+
     let child = cmd.spawn().map_err(|e| e.to_string())?;
-
     let output = std::sync::Arc::new(Mutex::new(Vec::new()));
-
     let async_master = AsyncFd::new(pty.master).map_err(|e| e.to_string())?;
     let drain_task = spawn_drain_task(async_master, output.clone());
 
@@ -165,12 +143,8 @@ fn spawn_drain_task(
                     match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if let Ok(mut out) = output.try_lock() {
-                                out.extend_from_slice(&buf[..n]);
-                            } else {
-                                let mut out = output.lock().await;
-                                out.extend_from_slice(&buf[..n]);
-                            }
+                            let mut out = output.lock().await;
+                            out.extend_from_slice(&buf[..n]);
                             guard.clear_ready();
                         }
                         Err(nix::Error::EAGAIN) => {
@@ -185,9 +159,18 @@ fn spawn_drain_task(
     })
 }
 
-#[derive(Default)]
 pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
+    pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
+}
+
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self {
+            holders: Mutex::new(HashMap::new()),
+            running_runs: Mutex::new(std::collections::HashSet::new()),
+        }
+    }
 }
 
 fn terminate_duplicates(
@@ -214,26 +197,28 @@ impl SessionManager {
         Self::default()
     }
 
+    pub async fn is_running(&self, session_id: &str) -> bool {
+        let runs = self.running_runs.lock().await;
+        runs.contains(session_id)
+    }
+
+    pub async fn set_running(&self, session_id: &str, running: bool) {
+        let mut runs = self.running_runs.lock().await;
+        if running {
+            runs.insert(session_id.to_string());
+        } else {
+            runs.remove(session_id);
+        }
+    }
+
     pub async fn cleanup_expired(&self) {
         let mut holders = self.holders.lock().await;
-        let mut expired = Vec::new();
         let now = Instant::now();
-
-        for (id, holder) in holders.iter_mut() {
-            let is_dead = match holder.child.try_wait() {
-                Ok(Some(_)) => true,
-                Err(_) => true,
-                Ok(None) => false,
-            };
-            let is_expired = now.duration_since(holder.last_active) > std::time::Duration::from_secs(86400);
-            if is_dead || is_expired {
-                expired.push(id.clone());
-            }
-        }
-
-        for id in expired {
-            holders.remove(&id);
-        }
+        holders.retain(|_, h| {
+            let is_dead = h.child.try_wait().map(|s| s.is_some()).unwrap_or(true);
+            let is_fresh = now.duration_since(h.last_active) < std::time::Duration::from_secs(86400);
+            !is_dead && is_fresh
+        });
     }
 
     pub async fn ensure_session(

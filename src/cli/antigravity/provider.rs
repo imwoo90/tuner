@@ -17,14 +17,15 @@ use tokio::process::Command;
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
-        env.insert("TUNER_AGENT_NAME".to_string(), "main".to_string());
-        env.insert("TUNER_CHAT_ID".to_string(), self.config.chat_id.to_string());
+        let mut add = |k: &str, v: String| { env.insert(k.into(), v); };
+        add("TUNER_AGENT_NAME", "main".into());
+        add("TUNER_CHAT_ID", self.config.chat_id.to_string());
         if let Some(tid) = self.config.topic_id {
-            env.insert("TUNER_TOPIC_ID".to_string(), tid.to_string());
+            add("TUNER_TOPIC_ID", tid.to_string());
         }
-        env.insert("TUNER_TRANSPORT".to_string(), self.config.transport.clone());
-        env.insert("TUNER_HOME".to_string(), "/home/wimvm/.tuner".to_string());
-        env.insert("TUNER_SHARED_MEMORY_PATH".to_string(), "/home/wimvm/.tuner/SHAREDMEMORY.md".to_string());
+        add("TUNER_TRANSPORT", self.config.transport.clone());
+        add("TUNER_HOME", "/home/wimvm/.tuner".into());
+        add("TUNER_SHARED_MEMORY_PATH", "/home/wimvm/.tuner/SHAREDMEMORY.md".into());
         env
     }
 
@@ -55,31 +56,40 @@ impl AntigravityCli {
             holders.contains_key(session_id)
         };
 
-        self.ensure_interactive_session(session_id, agy_ws, env).await?;
+        let sessions = self.sessions.clone();
+        let sid_str = session_id.to_string();
+        sessions.set_running(&sid_str, true).await;
 
-        if !was_running {
-            wait_for_pty_prompt(&self.sessions, session_id).await?;
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        }
+        let res = async {
+            self.ensure_interactive_session(session_id, agy_ws, env).await?;
 
-        let resolved_brain_dir = events::resolve_brain_dir(agy_ws, Some(env));
-        let transcript_path = resolved_brain_dir.as_ref().map(|d| {
-            d.join(".system_generated").join("logs").join("transcript_full.jsonl")
-        });
+            if !was_running {
+                wait_for_pty_prompt(&self.sessions, session_id).await?;
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
 
-        let current_size = transcript_path.as_ref()
-            .and_then(|p| std::fs::metadata(p).ok())
-            .map(|m| m.len())
-            .unwrap_or(0);
+            let resolved_brain_dir = events::resolve_brain_dir(agy_ws, Some(env));
+            let transcript_path = resolved_brain_dir.as_ref().map(|d| {
+                d.join(".system_generated").join("logs").join("transcript_full.jsonl")
+            });
 
-        let input_prompt = format!("{}\r", prompt);
-        self.sessions.write_to_session(session_id, &input_prompt).await?;
+            let current_size = transcript_path.as_ref()
+                .and_then(|p| std::fs::metadata(p).ok())
+                .map(|m| m.len())
+                .unwrap_or(0);
 
-        super::polling::wait_for_log_completion(&self.sessions, session_id, transcript_path, current_size).await?;
+            let input_prompt = format!("{}\r", prompt);
+            self.sessions.write_to_session(session_id, &input_prompt).await?;
 
-        use std::os::unix::process::ExitStatusExt;
-        let status = std::process::ExitStatus::from_raw(0);
-        Ok((String::new(), String::new(), status))
+            super::polling::wait_for_log_completion(&self.sessions, session_id, transcript_path, current_size).await?;
+
+            use std::os::unix::process::ExitStatusExt;
+            let status = std::process::ExitStatus::from_raw(0);
+            Ok((String::new(), String::new(), status))
+        }.await;
+
+        sessions.set_running(&sid_str, false).await;
+        res
     }
 
     async fn run_oneshot(
@@ -138,34 +148,23 @@ impl AntigravityCli {
         res
     }
 
-    fn resolve_result_text(
-        &self,
-        agy_ws: &Path,
-        env: &HashMap<String, String>,
-        stdout_str: &str,
-        brain_dir: Option<&Path>,
-    ) -> String {
-        let transcript_answer = events::read_transcript_answer(agy_ws, Some(env), brain_dir);
-        match transcript_answer {
-            Some(ans) => ans,
-            None => events::parse_antigravity_json(stdout_str),
-        }
+    fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, brain: Option<&Path>) -> String {
+        events::read_transcript_answer(ws, Some(env), brain)
+            .unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
 
     async fn handle_session_transition(
         &self,
-        resume_session: Option<&str>,
-        final_session_id: Option<&str>,
-        workspace: &Path,
+        resume: Option<&str>,
+        final_id: Option<&str>,
+        ws: &Path,
         env: &HashMap<String, String>,
     ) -> Result<(), String> {
-        if let Some(final_id) = final_session_id {
-            if let Some(resume_id) = resume_session {
-                if resume_id != final_id {
-                    self.sessions.terminate(resume_id).await;
-                }
+        if let Some(fid) = final_id {
+            if resume.filter(|&r| r != fid).is_some() {
+                self.sessions.terminate(resume.unwrap()).await;
             }
-            self.ensure_interactive_session(final_id, workspace, env).await?;
+            self.ensure_interactive_session(fid, ws, env).await?;
         }
         Ok(())
     }
