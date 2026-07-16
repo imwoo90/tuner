@@ -121,15 +121,13 @@ async fn process_text(
 
     let session_id = sess.get_session_id(&config.provider);
     if cli.sessions.is_active(&session_id).await && cli.sessions.is_running(&session_id).await {
+        let input_prompt = format!("{}\r", current_text);
+        println!("feed: {} {:?}", session_id, input_prompt);
+        let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
         if cli.sessions.is_ask_active(&session_id).await {
-            println!("aborting active ask: {}", session_id);
-            cli.sessions.terminate(&session_id).await;
-        } else {
-            let input_prompt = format!("{}\r", current_text);
-            println!("feed: {} {:?}", session_id, input_prompt);
-            let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
-            return Ok(());
+            cli.sessions.set_ask_active(&session_id, false).await;
         }
+        return Ok(());
     }
 
     run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions, sess, config).await

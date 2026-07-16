@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_telegram_active_ask_aborts_on_new_message() {
+    async fn test_telegram_active_ask_feeds_on_new_message() {
         let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let temp_dir = tempfile::tempdir().unwrap();
         let session_id = "test-session-abort-ask";
@@ -114,9 +114,10 @@ mod tests {
         ctx.cli.sessions.set_running(session_id, true).await;
         ctx.cli.sessions.set_ask_active(session_id, true).await;
         assert!(ctx.cli.sessions.is_ask_active(session_id).await);
-        let msg = make_message_json(chat_id, 100, "Abort existing ask");
+        let msg = make_message_json(chat_id, 100, "Answer to active ask");
         let res = handle_message(ctx.bot, msg, ctx.cfg, ctx.mgr, ctx.cli.clone(), ctx.cron_mgr, ctx.topic_cache, ctx.bot_info).await;
         assert!(res.is_ok());
-        assert!(!ctx.cli.sessions.is_active(session_id).await);
+        assert!(ctx.cli.sessions.is_active(session_id).await);
+        assert!(!ctx.cli.sessions.is_ask_active(session_id).await);
     }
 }
