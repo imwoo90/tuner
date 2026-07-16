@@ -463,6 +463,7 @@ status = """\
 - Model: {model}\
 """
 restart = "🤖 [tuner] Requesting reboot..."
+startup_complete = "🤖 [tuner] System restart has been completed."
 unknown_topic = "⚠️ [tuner] Unknown topic name: {name}"
 new_session = "🤖 [tuner] Resetting current session and starting a new conversation."
 stop_success = "🤖 [tuner] Forcefully terminated {count} process(es) in this topic."

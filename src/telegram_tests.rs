@@ -58,7 +58,7 @@ mod tests {
     fn mock_brain_dir(temp_dir: &tempfile::TempDir, sess_id: &str) {
         let p = temp_dir.path().join(format!(".gemini/antigravity-cli/brain/{}/.system_generated/logs", sess_id));
         std::fs::create_dir_all(&p).unwrap();
-        std::fs::write(p.join("transcript.jsonl"), "").unwrap();
+        std::fs::write(p.join("transcript_full.jsonl"), "").unwrap();
     }
 
     fn setup_e2e_env(temp_dir: &tempfile::TempDir, mock_script_code: &str) -> E2ETestEnv {

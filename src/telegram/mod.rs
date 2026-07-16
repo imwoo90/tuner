@@ -22,6 +22,7 @@ pub mod topic_cache;
 pub mod stream;
 pub mod transport;
 pub mod lang;
+pub mod callbacks;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
@@ -101,11 +102,8 @@ async fn process_text(
         }
     }
 
-    let prompt = if reply::has_media(msg) {
-        reply::prepend_reply_to_media(msg, if current_text.is_empty() { "[INCOMING FILE]" } else { current_text })
-    } else {
-        build_reply_prompt(msg, current_text)
-    };
+    let mut prompt = build_reply_prompt(msg, current_text);
+    let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     run_cli_stream(bot, msg, &prompt, &sess.get_session_id(&config.provider), cli, sessions, sess, config).await
 }
@@ -240,9 +238,16 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);
+
+    let bot_clone = bot.clone();
+    let sessions_clone = sessions.clone();
+    tokio::spawn(async move {
+        reply::send_startup_notification(bot_clone, sessions_clone).await;
+    });
+
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
-        .branch(Update::filter_callback_query().endpoint(reply::handle_callback_query));
+        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info])

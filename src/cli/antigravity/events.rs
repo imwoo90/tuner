@@ -96,7 +96,7 @@ fn newest_brain_dir(brain_root: &Path) -> Option<PathBuf> {
                 let transcript = path
                     .join(".system_generated")
                     .join("logs")
-                    .join("transcript.jsonl");
+                    .join("transcript_full.jsonl");
                 if let Ok(metadata) = transcript.metadata() {
                     if let Ok(modified) = metadata.modified() {
                         if modified > best_time {
@@ -139,7 +139,7 @@ pub fn read_transcript_answer(
     let transcript_path = resolved_dir
         .join(".system_generated")
         .join("logs")
-        .join("transcript.jsonl");
+        .join("transcript_full.jsonl");
     let bytes = std::fs::read(transcript_path).ok()?;
     let raw = String::from_utf8_lossy(&bytes);
     let mut answer = None;
@@ -165,6 +165,37 @@ pub fn read_transcript_answer(
         }
     }
     answer
+}
+
+pub fn is_placeholder_content(content: &str) -> bool {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let without_comments = remove_html_comments_and_nbsp(trimmed);
+    without_comments.trim().is_empty()
+}
+
+fn remove_html_comments_and_nbsp(s: &str) -> String {
+    let mut result = String::new();
+    let mut in_comment = false;
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if !in_comment && i + 4 <= chars.len() && chars[i..i+4] == ['<', '!', '-', '-'] {
+            in_comment = true;
+            i += 4;
+        } else if in_comment && i + 3 <= chars.len() && chars[i..i+3] == ['-', '-', '>'] {
+            in_comment = false;
+            i += 3;
+        } else if !in_comment {
+            result.push(chars[i]);
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    result.replace("&nbsp;", "").replace("&#160;", "")
 }
 
 

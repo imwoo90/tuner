@@ -392,6 +392,7 @@ status = """\
 - 모델: {model}\
 """
 restart = "🤖 [tuner] 재기동을 요청합니다..."
+startup_complete = "🤖 [tuner] 시스템 재기동이 완료되었습니다."
 unknown_topic = "⚠️ [tuner] 알 수 없는 토픽 이름입니다: {name}"
 new_session = "🤖 [tuner] 기존 세션을 초기화하고 새 대화를 시작합니다."
 stop_success = "🤖 [tuner] 이 토픽에서 진행 중인 프로세스 {count}개를 강제 종료(stop)했습니다."

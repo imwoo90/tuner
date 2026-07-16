@@ -31,7 +31,7 @@ fn write_transcript(root: &Path, conv_id: &str, entries: Vec<serde_json::Value>)
         .map(|e| e.to_string())
         .collect::<Vec<String>>()
         .join("\n");
-    std::fs::write(logs.join("transcript.jsonl"), content).unwrap();
+    std::fs::write(logs.join("transcript_full.jsonl"), content).unwrap();
 }
 
 fn map_cwd(root: &Path, cwd: &Path, conv_id: &str) {
@@ -188,12 +188,12 @@ fn test_falls_back_to_user_home() {
 #[test]
 fn test_log_parser_initializes_to_file_size() {
     let root = create_test_dir("log_parser_init");
-    let transcript = root.join("transcript.jsonl");
+    let transcript = root.join("transcript_full.jsonl");
     std::fs::write(&transcript, "{\"dummy\":true}\n").unwrap();
     let initial_size = transcript.metadata().unwrap().len();
 
     let mut parser = AntigravityLogParser::new();
-    let (next_size, delta) = parser.parse_log_delta(&transcript, None);
+    let (next_size, delta, _) = parser.parse_log_delta(&transcript, None);
     assert_eq!(next_size, initial_size);
     assert!(delta.is_none());
 }
@@ -201,7 +201,7 @@ fn test_log_parser_initializes_to_file_size() {
 #[test]
 fn test_log_parser_first_read_with_content() {
     let root = create_test_dir("log_parser_first_read");
-    let transcript = root.join("transcript.jsonl");
+    let transcript = root.join("transcript_full.jsonl");
     let entry = serde_json::json!({
         "source": "MODEL",
         "type": "PLANNER_RESPONSE",
@@ -210,7 +210,7 @@ fn test_log_parser_first_read_with_content() {
     std::fs::write(&transcript, entry.to_string() + "\n").unwrap();
 
     let mut parser = AntigravityLogParser::new();
-    let (next_size, delta) = parser.parse_log_delta(&transcript, None);
+    let (next_size, delta, _) = parser.parse_log_delta(&transcript, None);
     assert!(next_size > 0);
     assert!(delta.is_some());
     let text = delta.unwrap();
@@ -220,7 +220,7 @@ fn test_log_parser_first_read_with_content() {
 #[test]
 fn test_log_parser_extracts_thinking_and_tools() {
     let root = create_test_dir("log_parser_extracts");
-    let transcript = root.join("transcript.jsonl");
+    let transcript = root.join("transcript_full.jsonl");
     std::fs::write(&transcript, "").unwrap();
 
     let mut parser = AntigravityLogParser::new();
@@ -241,7 +241,7 @@ fn test_log_parser_extracts_thinking_and_tools() {
     });
     std::fs::write(&transcript, entry.to_string() + "\n").unwrap();
     
-    let (next_size, delta) = parser.parse_log_delta(&transcript, Some(0));
+    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(0));
     assert!(next_size > 0);
     assert!(delta.is_some());
     let text = delta.unwrap();
@@ -259,7 +259,7 @@ fn test_log_parser_extracts_thinking_and_tools() {
 #[test]
 fn test_log_parser_extracts_tool_completions_and_final_response() {
     let root = create_test_dir("log_parser_completions");
-    let transcript = root.join("transcript.jsonl");
+    let transcript = root.join("transcript_full.jsonl");
     std::fs::write(&transcript, "").unwrap();
 
     let mut parser = AntigravityLogParser::new();
@@ -280,7 +280,7 @@ fn test_log_parser_extracts_tool_completions_and_final_response() {
     let content = entries.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n") + "\n";
     std::fs::write(&transcript, content).unwrap();
     
-    let (next_size, delta) = parser.parse_log_delta(&transcript, Some(0));
+    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(0));
     assert!(next_size > 0);
     assert!(delta.is_some());
     let text = delta.unwrap();

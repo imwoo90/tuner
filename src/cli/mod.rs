@@ -19,10 +19,18 @@ pub struct CliResponse {
     pub stderr: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AskQuestionData {
+    pub question: String,
+    pub options: Vec<String>,
+    pub is_multi_select: bool,
+}
+
 #[derive(Clone, Debug)]
 pub enum StreamEvent {
     TextDelta(String),
     Result(CliResponse),
+    AskQuestion(AskQuestionData),
 }
 
 #[async_trait]

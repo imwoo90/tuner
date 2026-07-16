@@ -23,6 +23,8 @@ pub struct SessionHolder {
     pub last_active: Instant,
     pub chat_id: Option<i64>,
     pub topic_id: Option<i64>,
+    pub master_fd: std::os::unix::io::RawFd,
+    pub output: std::sync::Arc<Mutex<Vec<u8>>>,
 }
 
 impl Drop for SessionHolder {
@@ -38,6 +40,29 @@ impl Drop for SessionHolder {
 
         // Kill child process directly
         let _ = self.child.start_kill();
+
+        // Close duplicate master fd
+        let _ = nix::unistd::close(self.master_fd);
+    }
+}
+
+impl SessionHolder {
+    pub fn write_input(&self, input: &str) -> Result<(), String> {
+        let mut bytes_written = 0;
+        let data = input.as_bytes();
+        while bytes_written < data.len() {
+            match nix::unistd::write(self.master_fd, &data[bytes_written..]) {
+                Ok(n) => {
+                    if n == 0 {
+                        return Err("Written 0 bytes (pipe closed?)".to_string());
+                    }
+                    bytes_written += n;
+                }
+                Err(nix::Error::EINTR) => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        Ok(())
     }
 }
 
@@ -91,6 +116,9 @@ pub fn spawn_session(
     disable_echo(&pty.slave)?;
     set_non_blocking(&pty.master)?;
 
+    let master_raw = pty.master.as_raw_fd();
+    let master_dup = nix::unistd::dup(master_raw).map_err(|e| e.to_string())?;
+
     let stdin_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
     let stdout_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
     let stderr_redirect = Stdio::from(pty.slave);
@@ -106,25 +134,10 @@ pub fn spawn_session(
     );
     let child = cmd.spawn().map_err(|e| e.to_string())?;
 
+    let output = std::sync::Arc::new(Mutex::new(Vec::new()));
+
     let async_master = AsyncFd::new(pty.master).map_err(|e| e.to_string())?;
-    let drain_task = tokio::spawn(async move {
-        let mut buf = [0u8; 4096];
-        loop {
-            match async_master.readable().await {
-                Ok(mut guard) => {
-                    match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
-                        Ok(0) => break,
-                        Ok(_) => guard.clear_ready(),
-                        Err(nix::Error::EAGAIN) => {
-                            guard.clear_ready();
-                        }
-                        Err(_) => break,
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
+    let drain_task = spawn_drain_task(async_master, output.clone());
 
     let chat_id = env.get("TUNER_CHAT_ID").and_then(|s| s.parse::<i64>().ok());
     let topic_id = env.get("TUNER_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
@@ -135,6 +148,40 @@ pub fn spawn_session(
         last_active: Instant::now(),
         chat_id,
         topic_id,
+        master_fd: master_dup,
+        output,
+    })
+}
+
+fn spawn_drain_task(
+    async_master: AsyncFd<std::os::fd::OwnedFd>,
+    output: std::sync::Arc<Mutex<Vec<u8>>>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut buf = [0u8; 4096];
+        loop {
+            match async_master.readable().await {
+                Ok(mut guard) => {
+                    match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if let Ok(mut out) = output.try_lock() {
+                                out.extend_from_slice(&buf[..n]);
+                            } else {
+                                let mut out = output.lock().await;
+                                out.extend_from_slice(&buf[..n]);
+                            }
+                            guard.clear_ready();
+                        }
+                        Err(nix::Error::EAGAIN) => {
+                            guard.clear_ready();
+                        }
+                        Err(_) => break,
+                    }
+                }
+                Err(_) => break,
+            }
+        }
     })
 }
 
@@ -254,6 +301,16 @@ impl SessionManager {
     pub async fn terminate_all(&self) {
         let mut holders = self.holders.lock().await;
         holders.clear();
+    }
+
+    pub async fn write_to_session(&self, session_id: &str, input: &str) -> Result<bool, String> {
+        let holders = self.holders.lock().await;
+        if let Some(holder) = holders.get(session_id) {
+            holder.write_input(input)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     pub async fn is_active(&self, session_id: &str) -> bool {

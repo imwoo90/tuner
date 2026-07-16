@@ -43,6 +43,45 @@ impl AntigravityCli {
         self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
 
+    async fn run_in_pty_session(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        env: &HashMap<String, String>,
+        agy_ws: &Path,
+    ) -> Result<(String, String, std::process::ExitStatus), String> {
+        let was_running = {
+            let holders = self.sessions.holders.lock().await;
+            holders.contains_key(session_id)
+        };
+
+        self.ensure_interactive_session(session_id, agy_ws, env).await?;
+
+        if !was_running {
+            wait_for_pty_prompt(&self.sessions, session_id).await?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+
+        let resolved_brain_dir = events::resolve_brain_dir(agy_ws, Some(env));
+        let transcript_path = resolved_brain_dir.as_ref().map(|d| {
+            d.join(".system_generated").join("logs").join("transcript_full.jsonl")
+        });
+
+        let current_size = transcript_path.as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        let input_prompt = format!("{}\r", prompt);
+        self.sessions.write_to_session(session_id, &input_prompt).await?;
+
+        super::polling::wait_for_log_completion(&self.sessions, session_id, transcript_path, current_size).await?;
+
+        use std::os::unix::process::ExitStatusExt;
+        let status = std::process::ExitStatus::from_raw(0);
+        Ok((String::new(), String::new(), status))
+    }
+
     async fn run_oneshot(
         &self,
         cmd_args: &[String],
@@ -146,12 +185,12 @@ impl AgentProvider for AntigravityCli {
 
         crate::cli::antigravity::trust::trust_workspace_in_settings(&agy_ws, None);
 
-        if let Some(session_id) = resume_session {
-            self.ensure_interactive_session(session_id, &agy_ws, &env).await?;
-        }
-
-        let cmd_args = self.build_command(prompt, resume_session, continue_session);
-        let (stdout_str, stderr_str, status) = self.run_oneshot(&cmd_args, &env, &agy_ws).await?;
+        let (stdout_str, stderr_str, status) = if let Some(session_id) = resume_session {
+            self.run_in_pty_session(session_id, prompt, &env, &agy_ws).await?
+        } else {
+            let cmd_args = self.build_command(prompt, resume_session, continue_session);
+            self.run_oneshot(&cmd_args, &env, &agy_ws).await?
+        };
 
         let resolved_brain_dir = events::resolve_brain_dir(&agy_ws, Some(&env));
         let final_session_id = resolved_brain_dir
@@ -190,7 +229,7 @@ impl AgentProvider for AntigravityCli {
         let agy_ws = self.agy_workspace();
         let initial_size = events::resolve_brain_dir(&agy_ws, Some(&env))
             .map(|brain_dir| {
-                let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript.jsonl");
+                let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl");
                 std::fs::metadata(&transcript_path)
                     .map(|m| m.len())
                     .unwrap_or(0)
@@ -200,7 +239,7 @@ impl AgentProvider for AntigravityCli {
             self_arc.send(&prompt_string, resume_id.as_deref(), continue_session, workspace_path).await
         });
 
-        spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), initial_size);
+        super::polling::spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), initial_size);
 
         let stream = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|event| (event, rx))
@@ -209,60 +248,29 @@ impl AgentProvider for AntigravityCli {
     }
 }
 
-fn err_resp(msg: String) -> CliResponse {
-    CliResponse { session_id: None, result: msg.clone(), is_error: true, returncode: None, stderr: msg }
-}
-
-fn handle_oneshot_finish(
-    res: Result<Result<CliResponse, String>, tokio::task::JoinError>,
-    tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
-) {
-    match res {
-        Ok(Ok(resp)) => {
-            let _ = tx.send(StreamEvent::TextDelta(resp.result.clone()));
-            let _ = tx.send(StreamEvent::Result(resp));
-        }
-        Ok(Err(e)) => { let _ = tx.send(StreamEvent::Result(err_resp(e))); }
-        Err(e) => { let _ = tx.send(StreamEvent::Result(err_resp(format!("Join error: {}", e)))); }
-    }
-}
-
-fn spawn_log_polling(
-    mut oneshot_handle: tokio::task::JoinHandle<Result<CliResponse, String>>,
-    tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
-    agy_ws: PathBuf,
-    env: HashMap<String, String>,
-    initial_size: Option<u64>,
-) {
-    tokio::spawn(async move {
-        let mut prev_size = initial_size;
-        let mut active_path: Option<PathBuf> = None;
-        let mut parser = super::log_parser::AntigravityLogParser::new();
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
-        loop {
-            tokio::select! {
-                res = &mut oneshot_handle => {
-                    handle_oneshot_finish(res, &tx);
-                    break;
-                }
-                _ = interval.tick() => {
-                    if let Some(brain_dir) = events::resolve_brain_dir(&agy_ws, Some(&env)) {
-                        let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript.jsonl");
-                        if let Some(ref old_path) = active_path {
-                            if old_path != &transcript_path {
-                                prev_size = None;
-                                parser = super::log_parser::AntigravityLogParser::new();
-                            }
-                        }
-                        active_path = Some(transcript_path.clone());
-                        let (new_size, delta_text) = parser.parse_log_delta(&transcript_path, prev_size);
-                        prev_size = Some(new_size);
-                        if let Some(text) = delta_text {
-                            let _ = tx.send(StreamEvent::TextDelta(text));
-                        }
-                    }
-                }
+async fn wait_for_pty_prompt(
+    mgr: &super::session::SessionManager,
+    sid: &str,
+) -> Result<(), String> {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs() < 15 {
+        let (out, dead) = {
+            let mut hs = mgr.holders.lock().await;
+            if let Some(h) = hs.get_mut(sid) {
+                (h.output.lock().await.clone(), h.child.try_wait().ok().flatten().is_some())
+            } else {
+                break;
             }
+        };
+        let s = String::from_utf8_lossy(&out);
+        println!("🤖 [tuner] PTY Output so far: {:?}", s);
+        if s.contains("\r> ") || s.contains("\n> ") || dead {
+            return Ok(());
         }
-    });
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+    Err("Timeout waiting for interactive session initialization".to_string())
 }
+
+
+

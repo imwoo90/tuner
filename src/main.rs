@@ -123,7 +123,7 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
         .and_then(|p| p.parent())
         .and_then(|p| p.parent())
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("/home/wimvm/.ductor/workspace/projects/wooductor"));
+        .unwrap_or_else(|| std::path::PathBuf::from("/home/wimvm/tuner/workspace/scratch/tuner"));
 
     let unit_content = format!(
         "[Unit]\n\

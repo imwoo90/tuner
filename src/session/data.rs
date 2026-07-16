@@ -45,6 +45,7 @@ impl Default for SessionData {
             last_active: now,
             provider_sessions: std::collections::HashMap::new(),
             language: None,
+            last_progress_msg_id: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,
@@ -72,6 +73,8 @@ pub struct SessionData {
     pub provider_sessions: HashMap<String, ProviderSessionData>,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default)]
+    pub last_progress_msg_id: Option<i32>,
 
     // Legacy fields used for migration
     #[serde(skip_serializing, default)]
@@ -103,6 +106,7 @@ impl SessionData {
             last_active: now,
             provider_sessions: HashMap::new(),
             language: None,
+            last_progress_msg_id: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,

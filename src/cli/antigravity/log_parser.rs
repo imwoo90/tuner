@@ -117,12 +117,48 @@ fn get_friendly_name(t: &str) -> &str {
     }
 }
 
+fn parse_ask_question_tool(tc: &serde_json::Value) -> Option<crate::cli::AskQuestionData> {
+    let name = tc.get("name").and_then(|n| n.as_str()).unwrap_or("");
+    if name == "ask_question" {
+        if let Some(args) = tc.get("args") {
+            let questions_array = args.get("questions").and_then(|q| {
+                if q.is_array() {
+                    q.as_array().cloned()
+                } else {
+                    q.as_str()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                        .and_then(|v| v.as_array().cloned())
+                }
+            });
+            if let Some(questions) = questions_array {
+                if let Some(first_q) = questions.first() {
+                    let question = first_q.get("question").and_then(|q| q.as_str()).unwrap_or("").to_string();
+                    let options: Vec<String> = first_q.get("options")
+                        .and_then(|opts| opts.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    let is_multi_select = first_q.get("is_multi_select").and_then(|b| b.as_bool()).unwrap_or(false);
+                    if !question.is_empty() && !options.is_empty() {
+                        return Some(crate::cli::AskQuestionData {
+                            question,
+                            options,
+                            is_multi_select,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn process_entry(
     entry: &serde_json::Value,
     thinking_blocks: &mut Vec<String>,
     tool_calls: &mut Vec<String>,
     tool_completions: &mut Vec<String>,
     final_content: &mut Option<String>,
+    ask_question: &mut Option<crate::cli::AskQuestionData>,
 ) {
     let source = entry.get("source").and_then(|s| s.as_str());
     let etype = entry.get("type").and_then(|s| s.as_str());
@@ -137,6 +173,9 @@ fn process_entry(
             }
             if let Some(tcalls) = entry.get("tool_calls").and_then(|t| t.as_array()) {
                 for tc in tcalls {
+                    if let Some(ask) = parse_ask_question_tool(tc) {
+                        *ask_question = Some(ask);
+                    }
                     tool_calls.push(clean_tool_call_args(tc));
                 }
             }
@@ -147,8 +186,9 @@ fn process_entry(
             };
             if status == Some("DONE") && tool_calls_empty_or_missing {
                 if let Some(content) = entry.get("content").and_then(|c| c.as_str()) {
-                    if !content.trim().is_empty() {
-                        *final_content = Some(content.trim().to_string());
+                    let trimmed = content.trim();
+                    if !trimmed.is_empty() && !super::events::is_placeholder_content(trimmed) {
+                        *final_content = Some(trimmed.to_string());
                     }
                 }
             }
@@ -205,10 +245,10 @@ impl AntigravityLogParser {
         &mut self,
         transcript_path: &Path,
         prev_size: Option<u64>,
-    ) -> (u64, Option<String>) {
+    ) -> (u64, Option<String>, Option<crate::cli::AskQuestionData>) {
         let (new_content, new_size) = match get_new_content_string(transcript_path, prev_size) {
             Ok(res) => res,
-            Err(_) => return (prev_size.unwrap_or(0), None),
+            Err(_) => return (prev_size.unwrap_or(0), None, None),
         };
 
         let is_truncated = match prev_size {
@@ -220,18 +260,19 @@ impl AntigravityLogParser {
         }
 
         if new_content.is_empty() {
-            return (new_size, None);
+            return (new_size, None, None);
         }
 
         let entries = parse_entries(&new_content);
         if entries.is_empty() {
-            return (new_size, None);
+            return (new_size, None, None);
         }
 
         let mut thinking_blocks = Vec::new();
         let mut tool_calls = Vec::new();
         let mut tool_completions = Vec::new();
         let mut final_content = None;
+        let mut ask_question = None;
 
         for entry in &entries {
             process_entry(
@@ -240,6 +281,7 @@ impl AntigravityLogParser {
                 &mut tool_calls,
                 &mut tool_completions,
                 &mut final_content,
+                &mut ask_question,
             );
         }
 
@@ -256,6 +298,6 @@ impl AntigravityLogParser {
             final_content.as_deref(),
         );
 
-        (new_size, formatted)
+        (new_size, formatted, ask_question)
     }
 }

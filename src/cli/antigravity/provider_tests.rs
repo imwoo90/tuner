@@ -126,7 +126,7 @@ async fn test_send_prefers_transcript_over_stdout() {
         "status": "DONE",
         "content": "clean answer"
     });
-    std::fs::write(logs_dir.join("transcript.jsonl"), transcript_entry.to_string() + "\n").unwrap();
+    std::fs::write(logs_dir.join("transcript_full.jsonl"), transcript_entry.to_string() + "\n").unwrap();
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
