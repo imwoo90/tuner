@@ -105,7 +105,7 @@ async fn process_text(
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     let session_id = sess.get_session_id(&config.provider);
-    if cli.sessions.is_active(&session_id).await {
+    if cli.sessions.is_active(&session_id).await && cli.sessions.is_running(&session_id).await {
         let input_prompt = format!("{}\r", current_text);
         println!("🤖 [tuner] Feed active session {}: {:?}", session_id, input_prompt);
         let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
