@@ -15,6 +15,8 @@ pub mod reply;
 pub mod reply_tests;
 #[cfg(test)]
 pub mod handler_tests;
+#[cfg(test)]
+pub mod ask_abort_tests;
 pub mod commands;
 pub mod cron_selector;
 pub mod topic_cache;
