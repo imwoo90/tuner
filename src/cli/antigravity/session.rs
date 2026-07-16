@@ -163,7 +163,7 @@ pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
     pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
     pub(crate) active_asks: Mutex<std::collections::HashSet<String>>,
-    pub(crate) active_ask_options: Mutex<HashMap<String, Vec<String>>>,
+    pub(crate) active_ask_options: Mutex<HashMap<String, (i32, Vec<String>)>>,
 }
 
 impl Default for SessionManager {
@@ -218,19 +218,20 @@ impl SessionManager {
             asks.insert(session_id.to_string());
         } else {
             asks.remove(session_id);
-            let mut opts = self.active_ask_options.lock().await;
-            opts.remove(session_id);
+            self.active_ask_options.lock().await.remove(session_id);
         }
     }
 
-    pub async fn set_ask_options(&self, session_id: &str, options: Vec<String>) {
-        let mut opts = self.active_ask_options.lock().await;
-        opts.insert(session_id.to_string(), options);
+    pub async fn set_ask_data(&self, session_id: &str, msg_id: i32, options: Vec<String>) {
+        self.active_ask_options.lock().await.insert(session_id.to_string(), (msg_id, options));
     }
 
     pub async fn get_ask_options(&self, session_id: &str) -> Option<Vec<String>> {
-        let opts = self.active_ask_options.lock().await;
-        opts.get(session_id).cloned()
+        self.active_ask_options.lock().await.get(session_id).map(|(_, v)| v.clone())
+    }
+
+    pub async fn get_ask_msg_id(&self, session_id: &str) -> Option<i32> {
+        self.active_ask_options.lock().await.get(session_id).map(|(id, _)| *id)
     }
 
     pub async fn cleanup_expired(&self) {
@@ -301,18 +302,12 @@ impl SessionManager {
     }
 
     pub async fn is_active(&self, session_id: &str) -> bool {
-        let mut holders = self.holders.lock().await;
-        if let Some(holder) = holders.get_mut(session_id) {
-            match holder.child.try_wait() {
-                Ok(None) => true,
-                _ => {
-                    holders.remove(session_id);
-                    false
-                }
-            }
-        } else {
-            false
+        let mut h = self.holders.lock().await;
+        if let Some(holder) = h.get_mut(session_id) {
+            if holder.child.try_wait().map(|s| s.is_none()).unwrap_or(false) { return true; }
+            h.remove(session_id);
         }
+        false
     }
 }
 

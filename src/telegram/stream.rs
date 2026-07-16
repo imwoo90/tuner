@@ -81,7 +81,7 @@ async fn handle_stream_ask_question(
     ask: crate::cli::AskQuestionData,
     session_data: &crate::session::data::SessionData,
     config: &CliConfig,
-) -> Result<(), teloxide::RequestError> {
+) -> Result<i32, teloxide::RequestError> {
     let sess_id = session_data.get_session_id(&config.provider);
     let markup = if ask.is_multi_select {
         let initial_bitmap = "0".repeat(ask.options.len());
@@ -101,8 +101,8 @@ async fn handle_stream_ask_question(
     if let Some(tid) = thread_id {
         req = req.message_thread_id(tid);
     }
-    let _ = req.await;
-    Ok(())
+    let sent = req.await?;
+    Ok(sent.id.0)
 }
 
 fn clear_old_progress_reaction(last_mid: i32, chat_id: ChatId, tok: String) {
@@ -183,9 +183,11 @@ async fn process_stream_events(
             }
             StreamEvent::AskQuestion(ask) => {
                 let sess_id = session_data.get_session_id(&config.provider);
-                cli.sessions.set_ask_options(&sess_id, ask.options.clone()).await;
-                cli.sessions.set_ask_active(&sess_id, true).await;
-                let _ = handle_stream_ask_question(bot, chat_id, thread_id, ask, session_data, config).await;
+                let options = ask.options.clone();
+                if let Ok(msg_id) = handle_stream_ask_question(bot, chat_id, thread_id, ask, session_data, config).await {
+                    cli.sessions.set_ask_data(&sess_id, msg_id, options).await;
+                    cli.sessions.set_ask_active(&sess_id, true).await;
+                }
             }
             StreamEvent::Result(resp) => {
                 *last_text = resp.result.clone();

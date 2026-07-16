@@ -1,10 +1,8 @@
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
-use crate::cli::antigravity::AntigravityCli;
-use crate::cli::AgentProvider;
-use crate::session::manager::SessionManager;
-use crate::session::data::SessionData;
+use crate::cli::{antigravity::AntigravityCli, AgentProvider};
+use crate::session::{manager::SessionManager, data::SessionData};
 use std::sync::Arc;
 
 pub mod formatting;
@@ -30,12 +28,7 @@ pub use transport::TelegramTransport;
 pub mod typing;
 
 
-pub(crate) fn get_topic_id(msg: &Message) -> Option<i64> {
-    match &msg.kind {
-        teloxide::types::MessageKind::Common(c) if c.is_topic_message => msg.thread_id.map(|t| t as i64),
-        _ => None,
-    }
-}
+pub use reply::get_topic_id;
 
 pub use topic_cache::{BotInfo, TopicNameCache};
 
@@ -85,6 +78,8 @@ async fn handle_model_override(
 }
 
 async fn feed_active_session_if_running(
+    bot: &Bot,
+    chat_id: teloxide::types::ChatId,
     session_id: &str,
     current_text: &str,
     cli: &AntigravityCli,
@@ -92,6 +87,7 @@ async fn feed_active_session_if_running(
     if cli.sessions.is_active(session_id).await && cli.sessions.is_running(session_id).await {
         let mut input_prompt = format!("{}\r", current_text);
         if cli.sessions.is_ask_active(session_id).await {
+            let msg_id = cli.sessions.get_ask_msg_id(session_id).await;
             if let Some(opts) = cli.sessions.get_ask_options(session_id).await {
                 if let Some(idx) = formatting::find_best_option(current_text, &opts) {
                     input_prompt = if idx == 0 { "\r".to_string() } else { format!("{}\r", "j".repeat(idx)) };
@@ -99,6 +95,9 @@ async fn feed_active_session_if_running(
                 }
             }
             cli.sessions.set_ask_active(session_id, false).await;
+            if let Some(mid) = msg_id {
+                let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
+            }
         }
         println!("feed: {} {:?}", session_id, input_prompt);
         let _ = cli.sessions.write_to_session(session_id, &input_prompt).await;
@@ -137,7 +136,7 @@ async fn process_text(
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     let session_id = sess.get_session_id(&config.provider);
-    if feed_active_session_if_running(&session_id, current_text, cli).await? {
+    if feed_active_session_if_running(bot, msg.chat.id, &session_id, current_text, cli).await? {
         return Ok(());
     }
 
@@ -163,13 +162,12 @@ async fn handle_message_inner(
     if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id) {
         return Ok(());
     }
-    let ok = config.allowed_user_ids.contains(&from_id) && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
+    let ok = config.allowed_user_ids.contains(&from_id)
+        && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
     if ok {
-        let has_med = reply::has_media(&msg);
         let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref())
-            .replace("/teamwork_preview", "/teamwork-preview")
-            .replace("/grill_me", "/grill-me");
-        if !text.is_empty() || has_med {
+            .replace("/teamwork_preview", "/teamwork-preview").replace("/grill_me", "/grill-me");
+        if !text.is_empty() || reply::has_media(&msg) {
             process_text(&bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache).await?;
         }
     }
@@ -224,29 +222,25 @@ fn start_schedulers(
 }
 
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
-    let token = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
-    if token.is_empty() { return Err("No token".to_string()); }
-    let bot = Bot::new(token);
+    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
+    if tok.is_empty() { return Err("No token".to_string()); }
+    let bot = Bot::new(tok);
     let _ = commands::register_commands(&bot).await;
     let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     
     reply::spawn_restart_watcher(home.clone());
-    
     let topic_cache = Arc::new(TopicNameCache::new());
-    let sessions = Arc::new(build_sessions(std::path::PathBuf::from(&home).join(".tuner/sessions.json"), topic_cache.clone()));
+    let p = std::path::Path::new(&home).join(".tuner/sessions.json");
+    let sessions = Arc::new(build_sessions(p, topic_cache.clone()));
 
     reply::load_sessions_cache(&sessions, &topic_cache).await;
-    
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);
 
-    let bot_clone = bot.clone();
-    let sessions_clone = sessions.clone();
-    tokio::spawn(async move {
-        reply::send_startup_notification(bot_clone, sessions_clone).await;
-    });
+    let (b, s) = (bot.clone(), sessions.clone());
+    tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
 
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))

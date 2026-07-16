@@ -4,6 +4,13 @@ use teloxide::net::Download;
 use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
 
+pub fn get_topic_id(msg: &Message) -> Option<i64> {
+    match &msg.kind {
+        teloxide::types::MessageKind::Common(c) if c.is_topic_message => msg.thread_id.map(|t| t as i64),
+        _ => None,
+    }
+}
+
 pub(crate) fn strip_mention(text: &str, bot_username: Option<&str>) -> String {
     let u = match bot_username {
         Some(n) if !n.is_empty() => n,
@@ -228,19 +235,7 @@ pub(crate) fn prepend_reply_to_media(message: &Message, media_prompt: &str) -> S
 }
 
 fn find_last_active_session(sess_list: &[crate::session::data::SessionData]) -> Option<crate::session::data::SessionData> {
-    let mut last_active_sess: Option<crate::session::data::SessionData> = None;
-    for s in sess_list {
-        if s.transport == "tg" {
-            if let Some(ref current) = last_active_sess {
-                if s.last_active > current.last_active {
-                    last_active_sess = Some(s.clone());
-                }
-            } else {
-                last_active_sess = Some(s.clone());
-            }
-        }
-    }
-    last_active_sess
+    sess_list.iter().filter(|s| s.transport == "tg").max_by_key(|s| s.last_active.clone()).cloned()
 }
 
 pub(crate) async fn send_startup_notification(
