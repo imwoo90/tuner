@@ -42,36 +42,53 @@ async fn handle_lang_callback(
     }
 }
 
+async fn update_telegram_ask_ui(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    index: usize,
+    data: &str,
+) {
+    let mut chosen_text = format!("Option {}", index + 1);
+    if let Some(reply_markup) = msg.reply_markup() {
+        for row in &reply_markup.inline_keyboard {
+            for button in row {
+                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
+                    if cbd == data {
+                        chosen_text = button.text.clone();
+                    }
+                }
+            }
+        }
+    }
+    let new_text = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), chosen_text);
+    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&new_text);
+    let _ = bot.edit_message_text(msg.chat.id, msg.id, html_text)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await;
+}
+
 async fn handle_ask_answer_callback(
     bot: &teloxide::Bot,
     msg: &Message,
     data: &str,
     cli: &AntigravityCli,
 ) {
+    println!("🤖 [tuner] handle_ask_answer_callback: data = {}", data);
     let parts: Vec<&str> = data.split(':').collect();
     if parts.len() >= 3 {
         let session_id = parts[1];
         if let Ok(index) = parts[2].parse::<usize>() {
             let response_input = format!("{}\n", index + 1);
-            if let Ok(written) = cli.sessions.write_to_session(session_id, &response_input).await {
-                if written {
-                    let mut chosen_text = format!("Option {}", index + 1);
-                    if let Some(reply_markup) = msg.reply_markup() {
-                        for row in &reply_markup.inline_keyboard {
-                            for button in row {
-                                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
-                                    if cbd == data {
-                                        chosen_text = button.text.clone();
-                                    }
-                                }
-                            }
-                        }
+            println!("🤖 [tuner] Writing to session: id = {}, input = {:?}", session_id, response_input);
+            match cli.sessions.write_to_session(session_id, &response_input).await {
+                Ok(written) => {
+                    println!("🤖 [tuner] Write to session result: written = {}", written);
+                    if written {
+                        update_telegram_ask_ui(bot, msg, index, data).await;
                     }
-                    let new_text = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), chosen_text);
-                    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&new_text);
-                    let _ = bot.edit_message_text(msg.chat.id, msg.id, html_text)
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .await;
+                }
+                Err(e) => {
+                    eprintln!("❌ [tuner] Failed to write to session: {:?}", e);
                 }
             }
         }
