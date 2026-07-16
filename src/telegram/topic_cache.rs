@@ -38,3 +38,20 @@ impl TopicNameCache {
         None
     }
 }
+
+pub(crate) fn handle_forum_topic_events(msg: &teloxide::types::Message, cache: &TopicNameCache, chat_id: i64) -> bool {
+    let tid = match msg.thread_id { Some(t) => t as i64, None => return false };
+    match &msg.kind {
+        teloxide::types::MessageKind::ForumTopicCreated(c) => {
+            cache.insert(chat_id, tid, c.forum_topic_created.name.clone());
+            true
+        }
+        teloxide::types::MessageKind::ForumTopicEdited(e) => {
+            if let Some(ref name) = e.forum_topic_edited.name {
+                cache.insert(chat_id, tid, name.clone());
+            }
+            true
+        }
+        _ => false,
+    }
+}

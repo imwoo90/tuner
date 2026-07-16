@@ -104,24 +104,15 @@ async fn process_text(
     let mut prompt = build_reply_prompt(msg, current_text);
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
-    run_cli_stream(bot, msg, &prompt, &sess.get_session_id(&config.provider), cli, sessions, sess, config).await
-}
-
-fn handle_forum_topic_events(msg: &Message, cache: &TopicNameCache, chat_id: i64) -> bool {
-    let tid = match msg.thread_id { Some(t) => t as i64, None => return false };
-    match &msg.kind {
-        teloxide::types::MessageKind::ForumTopicCreated(c) => {
-            cache.insert(chat_id, tid, c.forum_topic_created.name.clone());
-            true
-        }
-        teloxide::types::MessageKind::ForumTopicEdited(e) => {
-            if let Some(ref name) = e.forum_topic_edited.name {
-                cache.insert(chat_id, tid, name.clone());
-            }
-            true
-        }
-        _ => false,
+    let session_id = sess.get_session_id(&config.provider);
+    if cli.sessions.is_active(&session_id).await {
+        let input_prompt = format!("{}\r", prompt);
+        println!("🤖 [tuner] Session is active. Writing custom input directly to session: id = {}, input = {:?}", session_id, input_prompt);
+        let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
+        return Ok(());
     }
+
+    run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions, sess, config).await
 }
 
 async fn handle_message_inner(
@@ -143,7 +134,7 @@ async fn handle_message_inner(
         return Ok(());
     }
 
-    if handle_forum_topic_events(&msg, &topic_cache, chat_id_raw) {
+    if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id_raw) {
         return Ok(());
     }
 
@@ -223,14 +214,11 @@ fn start_schedulers(
 }
 
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
-    let token = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-    if token.is_empty() { return Err("No Telegram token provided".to_string()); }
-
+    let token = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
+    if token.is_empty() { return Err("No token".to_string()); }
     let bot = Bot::new(token);
     let _ = commands::register_commands(&bot).await;
-
-    let me = bot.get_me().await.ok();
-    let bot_info = Arc::new(BotInfo { username: me.and_then(|m| m.user.username) });
+    let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
     
