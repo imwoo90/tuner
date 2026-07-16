@@ -136,6 +136,32 @@ fn set_progress_reaction(msg_id_val: i32, chat_id: ChatId, tok: String) {
     });
 }
 
+async fn handle_text_delta(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    delta: &str,
+    last_text: &mut String,
+    pub_msg_id: &mut Option<teloxide::types::MessageId>,
+    last_edit: &mut Instant,
+) -> Result<(), teloxide::RequestError> {
+    *last_text = delta.to_string();
+    if let Some(mid) = *pub_msg_id {
+        if last_edit.elapsed() >= Duration::from_secs(2) {
+            let _ = bot.edit_message_text(chat_id, mid, delta).await;
+            *last_edit = Instant::now();
+        }
+    } else {
+        let mut req = bot.send_message(chat_id, delta);
+        if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+        if let Ok(sent) = req.await {
+            *pub_msg_id = Some(sent.id);
+            *last_edit = Instant::now();
+        }
+    }
+    Ok(())
+}
+
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
@@ -146,30 +172,18 @@ async fn process_stream_events(
     last_text: &mut String,
     pub_msg_id: &mut Option<teloxide::types::MessageId>,
     last_session_id: &mut Option<String>,
+    cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let mut last_edit = Instant::now();
     use futures::StreamExt;
     while let Some(event) = stream.next().await {
         match event {
             StreamEvent::TextDelta(delta) => {
-                *last_text = delta.clone();
-                if let Some(mid) = *pub_msg_id {
-                    if Instant::now().duration_since(last_edit) >= Duration::from_secs(2) {
-                        let _ = bot.edit_message_text(chat_id, mid, &delta).await;
-                        last_edit = Instant::now();
-                    }
-                } else {
-                    let mut req = bot.send_message(chat_id, &delta);
-                    if let Some(tid) = thread_id {
-                        req = req.message_thread_id(tid);
-                    }
-                    if let Ok(sent) = req.await {
-                        *pub_msg_id = Some(sent.id);
-                        last_edit = Instant::now();
-                    }
-                }
+                handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?;
             }
             StreamEvent::AskQuestion(ask) => {
+                let sess_id = session_data.get_session_id(&config.provider);
+                cli.sessions.set_ask_active(&sess_id, true).await;
                 let _ = handle_stream_ask_question(bot, chat_id, thread_id, ask, session_data, config).await;
             }
             StreamEvent::Result(resp) => {
@@ -191,6 +205,7 @@ pub(crate) async fn consume_stream(
     sessions: &crate::session::manager::SessionManager,
     session_data: crate::session::data::SessionData,
     config: &CliConfig,
+    cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let mut last_session_id = None;
     let mut pub_msg_id = None;
@@ -215,6 +230,7 @@ pub(crate) async fn consume_stream(
         &mut last_text,
         &mut pub_msg_id,
         &mut last_session_id,
+        cli,
     ).await?;
 
     if let Some(mid) = pub_msg_id {

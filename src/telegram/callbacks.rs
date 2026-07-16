@@ -73,7 +73,6 @@ async fn handle_ask_answer_callback(
     data: &str,
     cli: &AntigravityCli,
 ) {
-    println!("🤖 [tuner] handle_ask_answer_callback: data = {}", data);
     let parts: Vec<&str> = data.split(':').collect();
     if parts.len() >= 3 {
         let session_id = parts[1];
@@ -83,17 +82,14 @@ async fn handle_ask_answer_callback(
             } else {
                 format!("{}\r", "j".repeat(index))
             };
-            println!("🤖 [tuner] Writing to session: id = {}, input = {:?}", session_id, response_input);
             match cli.sessions.write_to_session(session_id, &response_input).await {
                 Ok(written) => {
-                    println!("🤖 [tuner] Write to session result: written = {}", written);
                     if written {
+                        cli.sessions.set_ask_active(session_id, false).await;
                         update_telegram_ask_ui(bot, msg, index, data).await;
                     }
                 }
-                Err(e) => {
-                    eprintln!("❌ [tuner] Failed to write to session: {:?}", e);
-                }
+                Err(e) => eprintln!("err: {:?}", e),
             }
         }
     }
@@ -172,11 +168,10 @@ async fn handle_ask_submit_callback(
             keystrokes = ks;
             selected_options = opts;
         }
-        println!("🤖 [tuner] Submitting multi-select: id = {}, keystrokes = {:?}", session_id, keystrokes);
         match cli.sessions.write_to_session(session_id, &keystrokes).await {
             Ok(written) => {
-                println!("🤖 [tuner] Write to session result: written = {}", written);
                 if written {
+                    cli.sessions.set_ask_active(session_id, false).await;
                     let chosen_text = if selected_options.is_empty() {
                         "None".to_string()
                     } else {
@@ -189,9 +184,7 @@ async fn handle_ask_submit_callback(
                         .await;
                 }
             }
-            Err(e) => {
-                eprintln!("❌ [tuner] Failed to write to session: {:?}", e);
-            }
+            Err(e) => eprintln!("err: {:?}", e),
         }
     }
 }

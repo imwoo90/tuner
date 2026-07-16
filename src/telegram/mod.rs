@@ -57,7 +57,7 @@ async fn run_cli_stream(
     let stream_res = cli_clone.send_streaming(prompt, opt_sid, false, config.working_dir.clone()).await;
     match stream_res {
         Ok(s) => {
-            stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config).await?;
+            stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?;
         }
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
@@ -67,6 +67,25 @@ async fn run_cli_stream(
         }
     }
     Ok(())
+}
+
+async fn handle_model_override(
+    bot: &Bot,
+    msg: &Message,
+    mo: &str,
+    sess: &mut crate::session::data::SessionData,
+    sessions: &SessionManager,
+    empty: bool,
+) -> Result<bool, teloxide::RequestError> {
+    sess.model = mo.to_string();
+    let _ = sessions.update_session(sess, 0.0, 0).await;
+    if empty {
+        let mut r = bot.send_message(msg.chat.id, format!("Next message will use {}", mo));
+        if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
+        let _ = r.await;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 async fn process_text(
@@ -83,20 +102,14 @@ async fn process_text(
         return Ok(());
     }
 
-    let (model_override, current_text) = parse_model_directive(text);
-    let topic_id = get_topic_id(msg);
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
-    let mut model = config.model.as_deref().unwrap_or("antigravity-default").to_string();
-    if let Some(ref m) = model_override { model = m.clone(); }
+    let (m_over, current_text) = parse_model_directive(text);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
+    let mut m = config.model.clone().unwrap_or_else(|| "antigravity-default".to_string());
+    if let Some(ref mo) = m_over { m = mo.clone(); }
 
-    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &model).await.unwrap();
-    if let Some(ref m) = model_override {
-        sess.model = m.clone();
-        let _ = sessions.update_session(&sess, 0.0, 0).await;
-        if current_text.is_empty() {
-            let mut req = bot.send_message(msg.chat.id, format!("Next message will use {}", m));
-            if let Some(t) = msg.thread_id { req = req.message_thread_id(t); }
-            let _ = req.await;
+    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
+    if let Some(ref mo) = m_over {
+        if handle_model_override(bot, msg, mo, &mut sess, sessions, current_text.is_empty()).await? {
             return Ok(());
         }
     }
@@ -106,10 +119,15 @@ async fn process_text(
 
     let session_id = sess.get_session_id(&config.provider);
     if cli.sessions.is_active(&session_id).await && cli.sessions.is_running(&session_id).await {
-        let input_prompt = format!("{}\r", current_text);
-        println!("🤖 [tuner] Feed active session {}: {:?}", session_id, input_prompt);
-        let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
-        return Ok(());
+        if cli.sessions.is_ask_active(&session_id).await {
+            println!("aborting active ask: {}", session_id);
+            cli.sessions.terminate(&session_id).await;
+        } else {
+            let input_prompt = format!("{}\r", current_text);
+            println!("feed: {} {:?}", session_id, input_prompt);
+            let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
+            return Ok(());
+        }
     }
 
     run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions, sess, config).await
@@ -126,31 +144,20 @@ async fn handle_message_inner(
     bot_info: Arc<BotInfo>,
 ) -> Result<(), teloxide::RequestError> {
     let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
-    let chat_id_raw = msg.chat.id.0;
-    eprintln!("🤖 [tuner] Incoming message: from_id={}, chat_id={}", from_id, chat_id_raw);
-
-    if let Some(target_chat_id) = msg.migrate_to_chat_id() {
-        let _ = sessions.migrate_chat_id(chat_id_raw, target_chat_id.0).await;
+    let chat_id = msg.chat.id.0;
+    if let Some(to_chat) = msg.migrate_to_chat_id() {
+        let _ = sessions.migrate_chat_id(chat_id, to_chat.0).await;
         return Ok(());
     }
-
-    if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id_raw) {
+    if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id) {
         return Ok(());
     }
-
-    let ok = if msg.chat.is_group() || msg.chat.is_supergroup() {
-        config.allowed_group_ids.contains(&chat_id_raw) && config.allowed_user_ids.contains(&from_id)
-    } else {
-        config.allowed_user_ids.contains(&from_id)
-    };
+    let ok = config.allowed_user_ids.contains(&from_id) && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
     if ok {
         let has_med = reply::has_media(&msg);
-        let mut text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref());
-        if text.starts_with("/teamwork_preview") {
-            text = text.replacen("/teamwork_preview", "/teamwork-preview", 1);
-        } else if text.starts_with("/grill_me") {
-            text = text.replacen("/grill_me", "/grill-me", 1);
-        }
+        let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref())
+            .replace("/teamwork_preview", "/teamwork-preview")
+            .replace("/grill_me", "/grill-me");
         if !text.is_empty() || has_med {
             process_text(&bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache).await?;
         }

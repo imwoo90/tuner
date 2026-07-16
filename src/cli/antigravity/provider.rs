@@ -89,6 +89,7 @@ impl AntigravityCli {
         }.await;
 
         sessions.set_running(&sid_str, false).await;
+        sessions.set_ask_active(&sid_str, false).await;
         res
     }
 

@@ -162,6 +162,7 @@ fn spawn_drain_task(
 pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
     pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
+    pub(crate) active_asks: Mutex<std::collections::HashSet<String>>,
 }
 
 impl Default for SessionManager {
@@ -169,6 +170,7 @@ impl Default for SessionManager {
         Self {
             holders: Mutex::new(HashMap::new()),
             running_runs: Mutex::new(std::collections::HashSet::new()),
+            active_asks: Mutex::new(std::collections::HashSet::new()),
         }
     }
 }
@@ -208,6 +210,20 @@ impl SessionManager {
             runs.insert(session_id.to_string());
         } else {
             runs.remove(session_id);
+        }
+    }
+
+    pub async fn is_ask_active(&self, session_id: &str) -> bool {
+        let asks = self.active_asks.lock().await;
+        asks.contains(session_id)
+    }
+
+    pub async fn set_ask_active(&self, session_id: &str, active: bool) {
+        let mut asks = self.active_asks.lock().await;
+        if active {
+            asks.insert(session_id.to_string());
+        } else {
+            asks.remove(session_id);
         }
     }
 
