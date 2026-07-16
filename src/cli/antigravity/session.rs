@@ -163,6 +163,7 @@ pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
     pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
     pub(crate) active_asks: Mutex<std::collections::HashSet<String>>,
+    pub(crate) active_ask_options: Mutex<HashMap<String, Vec<String>>>,
 }
 
 impl Default for SessionManager {
@@ -171,26 +172,19 @@ impl Default for SessionManager {
             holders: Mutex::new(HashMap::new()),
             running_runs: Mutex::new(std::collections::HashSet::new()),
             active_asks: Mutex::new(std::collections::HashSet::new()),
+            active_ask_options: Mutex::new(HashMap::new()),
         }
     }
 }
 
 fn terminate_duplicates(
-    session_id: &str,
-    chat_id: Option<i64>,
-    topic_id: Option<i64>,
+    sid: &str,
+    cid: Option<i64>,
+    tid: Option<i64>,
     holders: &mut HashMap<String, SessionHolder>,
 ) {
-    if let Some(cid) = chat_id {
-        let mut keys_to_remove = Vec::new();
-        for (id, h) in holders.iter_mut() {
-            if id != session_id && h.chat_id == Some(cid) && h.topic_id == topic_id {
-                keys_to_remove.push(id.clone());
-            }
-        }
-        for id in keys_to_remove {
-            holders.remove(&id);
-        }
+    if let Some(c) = cid {
+        holders.retain(|id, h| id == sid || h.chat_id != Some(c) || h.topic_id != tid);
     }
 }
 
@@ -224,16 +218,26 @@ impl SessionManager {
             asks.insert(session_id.to_string());
         } else {
             asks.remove(session_id);
+            let mut opts = self.active_ask_options.lock().await;
+            opts.remove(session_id);
         }
     }
 
+    pub async fn set_ask_options(&self, session_id: &str, options: Vec<String>) {
+        let mut opts = self.active_ask_options.lock().await;
+        opts.insert(session_id.to_string(), options);
+    }
+
+    pub async fn get_ask_options(&self, session_id: &str) -> Option<Vec<String>> {
+        let opts = self.active_ask_options.lock().await;
+        opts.get(session_id).cloned()
+    }
+
     pub async fn cleanup_expired(&self) {
-        let mut holders = self.holders.lock().await;
         let now = Instant::now();
-        holders.retain(|_, h| {
-            let is_dead = h.child.try_wait().map(|s| s.is_some()).unwrap_or(true);
-            let is_fresh = now.duration_since(h.last_active) < std::time::Duration::from_secs(86400);
-            !is_dead && is_fresh
+        self.holders.lock().await.retain(|_, h| {
+            h.child.try_wait().map(|s| s.is_none()).unwrap_or(false)
+                && now.duration_since(h.last_active) < std::time::Duration::from_secs(86400)
         });
     }
 
@@ -251,27 +255,17 @@ impl SessionManager {
         let topic_id = env.get("TUNER_TOPIC_ID").and_then(|s| s.parse::<i64>().ok());
 
         let mut holders = self.holders.lock().await;
-        let is_running = if let Some(holder) = holders.get_mut(session_id) {
-            match holder.child.try_wait() {
-                Ok(None) => true,
-                _ => false,
-            }
-        } else {
-            false
-        };
+        let is_running = holders.get_mut(session_id)
+            .map(|h| h.child.try_wait().map(|s| s.is_none()).unwrap_or(false))
+            .unwrap_or(false);
 
         if is_running {
-            // Terminate any other old sessions for the same chat/topic
             terminate_duplicates(session_id, chat_id, topic_id, &mut holders);
-            if let Some(holder) = holders.get_mut(session_id) {
-                holder.last_active = Instant::now();
-            }
+            if let Some(h) = holders.get_mut(session_id) { h.last_active = Instant::now(); }
             return Ok(());
-        } else {
-            holders.remove(session_id);
         }
+        holders.remove(session_id);
 
-        // Terminate any old sessions for the same chat/topic before spawning the new one
         terminate_duplicates(session_id, chat_id, topic_id, &mut holders);
 
         let holder = spawn_session(workspace, cmd_name, cmd_args, env)?;
@@ -286,17 +280,9 @@ impl SessionManager {
 
     pub async fn abort(&self, chat_id: i64, topic_id: Option<i64>) -> usize {
         let mut holders = self.holders.lock().await;
-        let mut to_remove = Vec::new();
-        for (id, holder) in holders.iter() {
-            if holder.chat_id == Some(chat_id) && holder.topic_id == topic_id {
-                to_remove.push(id.clone());
-            }
-        }
-        let count = to_remove.len();
-        for id in to_remove {
-            holders.remove(&id);
-        }
-        count
+        let prev_len = holders.len();
+        holders.retain(|_, h| h.chat_id != Some(chat_id) || h.topic_id != topic_id);
+        prev_len - holders.len()
     }
 
     pub async fn terminate_all(&self) {

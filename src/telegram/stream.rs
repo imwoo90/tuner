@@ -183,6 +183,7 @@ async fn process_stream_events(
             }
             StreamEvent::AskQuestion(ask) => {
                 let sess_id = session_data.get_session_id(&config.provider);
+                cli.sessions.set_ask_options(&sess_id, ask.options.clone()).await;
                 cli.sessions.set_ask_active(&sess_id, true).await;
                 let _ = handle_stream_ask_question(bot, chat_id, thread_id, ask, session_data, config).await;
             }

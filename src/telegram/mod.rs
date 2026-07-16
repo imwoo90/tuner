@@ -50,22 +50,16 @@ async fn run_cli_stream(
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-    let _guard = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-    let opt_sid = (!sid.is_empty()).then_some(sid);
-    let mut cli_clone = (*cli).clone();
-    if !sess.model.is_empty() {
-        cli_clone.config.model = Some(sess.model.clone());
-    }
-    let stream_res = cli_clone.send_streaming(prompt, opt_sid, false, config.working_dir.clone()).await;
-    match stream_res {
-        Ok(s) => {
-            stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?;
-        }
+    let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
+    let mut cc = cli.clone();
+    if !sess.model.is_empty() { cc.config.model = Some(sess.model.clone()); }
+    match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
+        Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?,
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
-            let mut req = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
-            if let Some(t) = msg.thread_id { req = req.message_thread_id(t); }
-            let _ = req.await;
+            let mut r = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
+            if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
+            let _ = r.await;
         }
     }
     Ok(())
@@ -85,6 +79,29 @@ async fn handle_model_override(
         let mut r = bot.send_message(msg.chat.id, format!("Next message will use {}", mo));
         if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
         let _ = r.await;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+async fn feed_active_session_if_running(
+    session_id: &str,
+    current_text: &str,
+    cli: &AntigravityCli,
+) -> Result<bool, teloxide::RequestError> {
+    if cli.sessions.is_active(session_id).await && cli.sessions.is_running(session_id).await {
+        let mut input_prompt = format!("{}\r", current_text);
+        if cli.sessions.is_ask_active(session_id).await {
+            if let Some(opts) = cli.sessions.get_ask_options(session_id).await {
+                if let Some(idx) = formatting::find_best_option(current_text, &opts) {
+                    input_prompt = if idx == 0 { "\r".to_string() } else { format!("{}\r", "j".repeat(idx)) };
+                    println!("matched option {}: {:?}", idx, opts[idx]);
+                }
+            }
+            cli.sessions.set_ask_active(session_id, false).await;
+        }
+        println!("feed: {} {:?}", session_id, input_prompt);
+        let _ = cli.sessions.write_to_session(session_id, &input_prompt).await;
         return Ok(true);
     }
     Ok(false)
@@ -120,13 +137,7 @@ async fn process_text(
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     let session_id = sess.get_session_id(&config.provider);
-    if cli.sessions.is_active(&session_id).await && cli.sessions.is_running(&session_id).await {
-        let input_prompt = format!("{}\r", current_text);
-        println!("feed: {} {:?}", session_id, input_prompt);
-        let _ = cli.sessions.write_to_session(&session_id, &input_prompt).await;
-        if cli.sessions.is_ask_active(&session_id).await {
-            cli.sessions.set_ask_active(&session_id, false).await;
-        }
+    if feed_active_session_if_running(&session_id, current_text, cli).await? {
         return Ok(());
     }
 
@@ -179,24 +190,16 @@ pub(crate) async fn handle_message(
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
     
-    let active_lang = if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-        sess.language.unwrap_or_else(|| config.language.clone().unwrap_or_else(|| "en".to_string()))
-    } else {
-        config.language.clone().unwrap_or_else(|| "en".to_string())
-    };
+    let active_lang = sessions.resolve_session(&key, &config.provider, default_model).await
+        .map(|(s, _)| s.language)
+        .ok().flatten()
+        .or_else(|| config.language.clone())
+        .unwrap_or_else(|| "en".to_string());
 
-    if cfg!(test) {
-        crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-            handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
-        }).await
-    } else {
-        tokio::spawn(async move {
-            let _ = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-                handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
-            }).await;
-        });
-        Ok(())
-    }
+    let fut = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+        handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
+    });
+    if cfg!(test) { fut.await } else { tokio::spawn(fut); Ok(()) }
 }
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
