@@ -191,9 +191,12 @@ pub(crate) async fn handle_message(
         config.language.clone().unwrap_or_else(|| "en".to_string())
     };
 
-    crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-        handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
-    }).await
+    tokio::spawn(async move {
+        let _ = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+            handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
+        }).await;
+    });
+    Ok(())
 }
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
