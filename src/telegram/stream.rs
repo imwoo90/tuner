@@ -56,6 +56,24 @@ pub(crate) async fn handle_stream_result(
     }
     Ok(last_session_id)
 }
+pub(crate) fn build_multi_select_keyboard(
+    sess_id: &str,
+    options: &[String],
+    bitmap: &str,
+) -> teloxide::types::InlineKeyboardMarkup {
+    let mut keyboard = Vec::new();
+    for (i, opt) in options.iter().enumerate() {
+        let is_checked = bitmap.chars().nth(i).unwrap_or('0') == '1';
+        let prefix = if is_checked { "✅ " } else { "⬜ " };
+        let button_text = format!("{}{}", prefix, opt);
+        let callback_data = format!("ask_mul:{}:{}:{}", sess_id, i, bitmap);
+        keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(button_text, callback_data)]);
+    }
+    let submit_callback = format!("ask_sub:{}:{}", sess_id, bitmap);
+    keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback("완료 (Submit)", submit_callback)]);
+    teloxide::types::InlineKeyboardMarkup::new(keyboard)
+}
+
 async fn handle_stream_ask_question(
     bot: &Bot,
     chat_id: ChatId,
@@ -64,13 +82,18 @@ async fn handle_stream_ask_question(
     session_data: &crate::session::data::SessionData,
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
-    let mut keyboard = Vec::new();
     let sess_id = session_data.get_session_id(&config.provider);
-    for (i, opt) in ask.options.iter().enumerate() {
-        let callback_data = format!("ask_ans:{}:{}", sess_id, i);
-        keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(opt, callback_data)]);
-    }
-    let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
+    let markup = if ask.is_multi_select {
+        let initial_bitmap = "0".repeat(ask.options.len());
+        build_multi_select_keyboard(&sess_id, &ask.options, &initial_bitmap)
+    } else {
+        let mut keyboard = Vec::new();
+        for (i, opt) in ask.options.iter().enumerate() {
+            let callback_data = format!("ask_ans:{}:{}", sess_id, i);
+            keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(opt, callback_data)]);
+        }
+        teloxide::types::InlineKeyboardMarkup::new(keyboard)
+    };
     let html_question = formatting::markdown_to_telegram_html(&ask.question);
     let mut req = bot.send_message(chat_id, html_question)
         .parse_mode(teloxide::types::ParseMode::Html)

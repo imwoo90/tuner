@@ -1,4 +1,3 @@
-//! # Telegram Bot
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -108,19 +107,16 @@ async fn process_text(
     run_cli_stream(bot, msg, &prompt, &sess.get_session_id(&config.provider), cli, sessions, sess, config).await
 }
 
-fn handle_forum_topic_events(msg: &Message, topic_cache: &TopicNameCache, chat_id: i64) -> bool {
+fn handle_forum_topic_events(msg: &Message, cache: &TopicNameCache, chat_id: i64) -> bool {
+    let tid = match msg.thread_id { Some(t) => t as i64, None => return false };
     match &msg.kind {
         teloxide::types::MessageKind::ForumTopicCreated(c) => {
-            if let Some(tid) = msg.thread_id {
-                topic_cache.insert(chat_id, tid as i64, c.forum_topic_created.name.clone());
-            }
+            cache.insert(chat_id, tid, c.forum_topic_created.name.clone());
             true
         }
         teloxide::types::MessageKind::ForumTopicEdited(e) => {
-            if let Some(tid) = msg.thread_id {
-                if let Some(ref name) = e.forum_topic_edited.name {
-                    topic_cache.insert(chat_id, tid as i64, name.clone());
-                }
+            if let Some(ref name) = e.forum_topic_edited.name {
+                cache.insert(chat_id, tid, name.clone());
             }
             true
         }
@@ -191,12 +187,18 @@ pub(crate) async fn handle_message(
         config.language.clone().unwrap_or_else(|| "en".to_string())
     };
 
-    tokio::spawn(async move {
-        let _ = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+    if cfg!(test) {
+        crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
             handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
-        }).await;
-    });
-    Ok(())
+        }).await
+    } else {
+        tokio::spawn(async move {
+            let _ = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+                handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
+            }).await;
+        });
+        Ok(())
+    }
 }
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
