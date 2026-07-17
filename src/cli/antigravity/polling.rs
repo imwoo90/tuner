@@ -78,14 +78,19 @@ async fn poll_loop_async(
     let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(5));
     parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
 
+    let mut fs_rx_closed = false;
     loop {
         tokio::select! {
             res = &mut oneshot_handle => {
                 handle_oneshot_finish(res, &tx);
                 break;
             }
-            _ = fs_rx.recv() => {
-                parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
+            res = fs_rx.recv(), if !fs_rx_closed => {
+                if res.is_some() {
+                    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
+                } else {
+                    fs_rx_closed = true;
+                }
             }
             _ = fallback.tick() => {
                 parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
@@ -172,12 +177,17 @@ pub(crate) async fn wait_for_log_completion(
     let _watcher = setup_path_watcher(transcript_path.as_ref(), tx);
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
 
+    let mut rx_closed = false;
     while start.elapsed() < timeout {
         if let Some(()) = check_completion_step(sessions, session_id, transcript_path.as_ref(), &mut current_size).await? {
             return Ok(());
         }
         tokio::select! {
-            _ = rx.recv() => {}
+            res = rx.recv(), if !rx_closed => {
+                if res.is_none() {
+                    rx_closed = true;
+                }
+            }
             _ = interval.tick() => {}
         }
     }

@@ -85,22 +85,6 @@ async fn handle_model_override(
 
 
 
-fn generate_uuid() -> String {
-    use rand::RngCore;
-    let mut bytes = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-    )
-}
-
 async fn process_text(
     bot: &Bot,
     msg: &Message,
@@ -126,12 +110,7 @@ async fn process_text(
     let mut prompt = build_reply_prompt(msg, current_text);
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
-    let mut session_id = sess.get_session_id(&config.provider);
-    if session_id.is_empty() {
-        session_id = generate_uuid();
-        sess.set_session_id(&config.provider, &session_id);
-        let _ = sessions.preserve_session_identity(&sess).await;
-    }
+    let session_id = sess.get_session_id(&config.provider);
     history::log_telegram_message(&config.working_dir, &session_id, "user", Some(msg.id.0), text, true, None);
     if ask_helpers::feed_active_session_if_running(bot, msg, &session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
