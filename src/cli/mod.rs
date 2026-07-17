@@ -30,7 +30,7 @@ pub struct AskQuestionData {
 pub enum StreamEvent {
     TextDelta(String),
     Result(CliResponse),
-    AskQuestion(AskQuestionData),
+    AskQuestion(Vec<AskQuestionData>),
 }
 
 #[async_trait]

@@ -8,6 +8,11 @@ use crate::config::CliConfig;
 use crate::session::manager::SessionManager;
 use crate::cron::manager::CronManager;
 use crate::cli::antigravity::AntigravityCli;
+use super::ask_callbacks::{
+    handle_ask_answer_callback, handle_ask_submit_callback,
+    handle_ask_write_callback, handle_ask_prev_callback
+};
+use super::multi_select::handle_ask_multi_callback;
 
 async fn handle_model_callback(
     bot: &teloxide::Bot,
@@ -42,153 +47,6 @@ async fn handle_lang_callback(
     }
 }
 
-async fn update_telegram_ask_ui(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    index: usize,
-    data: &str,
-) {
-    let mut chosen_text = format!("Option {}", index + 1);
-    if let Some(reply_markup) = msg.reply_markup() {
-        for row in &reply_markup.inline_keyboard {
-            for button in row {
-                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
-                    if cbd == data {
-                        chosen_text = button.text.clone();
-                    }
-                }
-            }
-        }
-    }
-    let new_text = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), chosen_text);
-    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&new_text);
-    let _ = bot.edit_message_text(msg.chat.id, msg.id, html_text)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .await;
-}
-
-async fn handle_ask_answer_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    data: &str,
-    cli: &AntigravityCli,
-) {
-    let parts: Vec<&str> = data.split(':').collect();
-    if parts.len() >= 3 {
-        let session_id = parts[1];
-        if let Ok(index) = parts[2].parse::<usize>() {
-            let response_input = if index == 0 {
-                "\r".to_string()
-            } else {
-                format!("{}\r", "j".repeat(index))
-            };
-            match cli.sessions.write_to_session(session_id, &response_input).await {
-                Ok(written) => {
-                    if written {
-                        cli.sessions.set_ask_active(session_id, false).await;
-                        update_telegram_ask_ui(bot, msg, index, data).await;
-                    }
-                }
-                Err(e) => eprintln!("err: {:?}", e),
-            }
-        }
-    }
-}
-
-async fn handle_ask_multi_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    data: &str,
-) {
-    let parts: Vec<&str> = data.split(':').collect();
-    if parts.len() >= 4 {
-        let session_id = parts[1];
-        if let Ok(index) = parts[2].parse::<usize>() {
-            let bitmap = parts[3];
-            let new_bitmap: String = bitmap.chars().enumerate().map(|(i, c)| {
-                if i == index { if c == '1' { '0' } else { '1' } } else { c }
-            }).collect();
-            if let Some(reply_markup) = msg.reply_markup() {
-                let mut options = Vec::new();
-                let rows_count = reply_markup.inline_keyboard.len();
-                if rows_count > 1 {
-                    for row in &reply_markup.inline_keyboard[..rows_count - 1] {
-                        if let Some(btn) = row.first() {
-                            options.push(btn.text.trim_start_matches(|c: char| c == '✅' || c == '⬜' || c.is_whitespace()).to_string());
-                        }
-                    }
-                }
-                let new_markup = super::stream::build_multi_select_keyboard(session_id, &options, &new_bitmap);
-                let _ = bot.edit_message_reply_markup(msg.chat.id, msg.id)
-                    .reply_markup(new_markup)
-                    .await;
-            }
-        }
-    }
-}
-
-fn get_multiselect_keystrokes_and_options(
-    reply_markup: &teloxide::types::InlineKeyboardMarkup,
-    bitmap: &str,
-) -> (String, Vec<String>) {
-    let mut keystrokes = String::new();
-    let mut selected_options = Vec::new();
-    let rows_count = reply_markup.inline_keyboard.len();
-    if rows_count > 1 {
-        let mut last_selected_index = 0;
-        for (i, char_val) in bitmap.chars().enumerate() {
-            if char_val == '1' {
-                keystrokes.push_str(&"j".repeat(i - last_selected_index));
-                keystrokes.push(' ');
-                last_selected_index = i;
-                if let Some(btn) = reply_markup.inline_keyboard.get(i).and_then(|r| r.first()) {
-                    selected_options.push(btn.text.trim_start_matches(|c: char| c == '✅' || c == '⬜' || c.is_whitespace()).to_string());
-                }
-            }
-        }
-    }
-    keystrokes.push('\r');
-    (keystrokes, selected_options)
-}
-
-async fn handle_ask_submit_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    data: &str,
-    cli: &AntigravityCli,
-) {
-    let parts: Vec<&str> = data.split(':').collect();
-    if parts.len() >= 3 {
-        let session_id = parts[1];
-        let bitmap = parts[2];
-        let mut keystrokes = "\r".to_string();
-        let mut selected_options = Vec::new();
-        if let Some(reply_markup) = msg.reply_markup() {
-            let (ks, opts) = get_multiselect_keystrokes_and_options(reply_markup, bitmap);
-            keystrokes = ks;
-            selected_options = opts;
-        }
-        match cli.sessions.write_to_session(session_id, &keystrokes).await {
-            Ok(written) => {
-                if written {
-                    cli.sessions.set_ask_active(session_id, false).await;
-                    let chosen_text = if selected_options.is_empty() {
-                        "None".to_string()
-                    } else {
-                        selected_options.join(", ")
-                    };
-                    let new_text = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), chosen_text);
-                    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&new_text);
-                    let _ = bot.edit_message_text(msg.chat.id, msg.id, html_text)
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .await;
-                }
-            }
-            Err(e) => eprintln!("err: {:?}", e),
-        }
-    }
-}
-
 async fn handle_callback_query_inner(
     bot: teloxide::Bot,
     q: teloxide::types::CallbackQuery,
@@ -207,11 +65,15 @@ async fn handle_callback_query_inner(
             } else if d.starts_with("crn:") {
                 let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
             } else if d.starts_with("ask_ans:") {
-                handle_ask_answer_callback(&bot, msg, d, &cli).await;
+                handle_ask_answer_callback(&bot, msg, d, &cli, &sessions, &config).await;
             } else if d.starts_with("ask_mul:") {
-                handle_ask_multi_callback(&bot, msg, d).await;
+                handle_ask_multi_callback(&bot, msg, d, &cli.sessions).await;
             } else if d.starts_with("ask_sub:") {
-                handle_ask_submit_callback(&bot, msg, d, &cli).await;
+                handle_ask_submit_callback(&bot, msg, d, &cli, &sessions, &config).await;
+            } else if d.starts_with("ask_write:") {
+                handle_ask_write_callback(&bot, msg, d, &cli).await;
+            } else if d.starts_with("ask_prev:") {
+                handle_ask_prev_callback(&bot, msg, d, &cli, &sessions, &config).await;
             }
         }
         let _ = bot.answer_callback_query(q.id).await;
@@ -227,16 +89,5 @@ pub(crate) async fn handle_callback_query(
     cron: std::sync::Arc<CronManager>,
     cli: std::sync::Arc<AntigravityCli>,
 ) -> Result<(), teloxide::RequestError> {
-    let mut active_lang = config.language.clone().unwrap_or_else(|| "en".to_string());
-    if let Some(ref msg) = q.message {
-        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-        let dm = config.model.as_deref().unwrap_or("antigravity-default");
-        if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-            active_lang = sess.language.unwrap_or_else(|| config.language.clone().unwrap_or_else(|| "en".to_string()));
-        }
-    }
-
-    crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-        handle_callback_query_inner(bot, q, config, sessions, cron, cli).await
-    }).await
+    handle_callback_query_inner(bot, q, config, sessions, cron, cli).await
 }

@@ -15,6 +15,8 @@ pub mod session_tests;
 pub mod provider;
 #[cfg(test)]
 pub mod provider_tests;
+pub mod pty_spawner;
+pub mod log_helpers;
 pub mod log_parser;
 pub mod polling;
 pub mod discovery;

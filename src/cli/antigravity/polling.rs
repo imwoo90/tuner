@@ -184,6 +184,34 @@ pub(crate) async fn wait_for_log_completion(
     Err("Timed out waiting for completion".to_string())
 }
 
+fn is_completion_entry(line: &str) -> bool {
+    if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+        let source = entry.get("source").and_then(|s| s.as_str());
+        let etype = entry.get("type").and_then(|s| s.as_str());
+        let status = entry.get("status").and_then(|s| s.as_str());
+        let tool_calls_empty = match entry.get("tool_calls") {
+            None => true,
+            Some(serde_json::Value::Array(arr)) => arr.is_empty(),
+            _ => false,
+        };
+        let has_interactive_tool = match entry.get("tool_calls") {
+            Some(serde_json::Value::Array(arr)) => {
+                arr.iter().any(|tc| {
+                    let name = tc.get("name").and_then(|n| n.as_str());
+                    name == Some("ask_question") || name == Some("ask_permission")
+                })
+            }
+            _ => false,
+        };
+        source == Some("MODEL")
+            && etype == Some("PLANNER_RESPONSE")
+            && status == Some("DONE")
+            && (tool_calls_empty || has_interactive_tool)
+    } else {
+        false
+    }
+}
+
 fn check_log_completion_in_file(path: &std::path::Path, current_size: u64) -> Result<Option<u64>, String> {
     if let Ok(metadata) = std::fs::metadata(path) {
         let file_size = metadata.len();
@@ -192,24 +220,8 @@ fn check_log_completion_in_file(path: &std::path::Path, current_size: u64) -> Re
                 let mut parser_pos = 0;
                 for line in content.lines() {
                     let bytes_len = line.len() + 1;
-                    if parser_pos >= current_size {
-                        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                            let source = entry.get("source").and_then(|s| s.as_str());
-                            let etype = entry.get("type").and_then(|s| s.as_str());
-                            let status = entry.get("status").and_then(|s| s.as_str());
-                            let tool_calls_empty = match entry.get("tool_calls") {
-                                None => true,
-                                Some(serde_json::Value::Array(arr)) => arr.is_empty(),
-                                _ => false,
-                            };
-                            if source == Some("MODEL")
-                                && etype == Some("PLANNER_RESPONSE")
-                                && status == Some("DONE")
-                                && tool_calls_empty
-                            {
-                                return Ok(None);
-                            }
-                        }
+                    if parser_pos >= current_size && is_completion_entry(line) {
+                        return Ok(None);
                     }
                     parser_pos += bytes_len as u64;
                 }

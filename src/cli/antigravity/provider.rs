@@ -89,7 +89,9 @@ impl AntigravityCli {
         }.await;
 
         sessions.set_running(&sid_str, false).await;
-        sessions.set_ask_active(&sid_str, false).await;
+        if !sessions.is_active(&sid_str).await {
+            sessions.set_ask_active(&sid_str, false).await;
+        }
         res
     }
 
@@ -113,36 +115,27 @@ impl AntigravityCli {
         let child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
 
-        let task_id = if self.config.process_label.starts_with("task:") {
-            Some(self.config.process_label["task:".len()..].to_string())
-        } else {
-            None
-        };
+        let task_id = self.config.process_label.strip_prefix("task:").map(|s| s.to_string());
 
-        if let Some(ref tid) = task_id {
-            if let Some(pid) = child.id() {
-                if let Some(registry) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
-                    registry.register(tid.clone(), pid).await;
-                }
+        if let (Some(tid), Some(pid)) = (&task_id, child.id()) {
+            if let Some(r) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
+                r.register(tid.clone(), pid).await;
             }
         }
 
-        let timeout_dur = tokio::time::Duration::from_secs(300);
-        let res = match tokio::time::timeout(timeout_dur, child.wait_with_output()).await {
-            Ok(Ok(output)) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                Ok((stdout, stderr, output.status))
-            }
+        let res = match tokio::time::timeout(tokio::time::Duration::from_secs(300), child.wait_with_output()).await {
+            Ok(Ok(o)) => Ok((
+                String::from_utf8_lossy(&o.stdout).into(),
+                String::from_utf8_lossy(&o.stderr).into(),
+                o.status,
+            )),
             Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
-            Err(_) => {
-                Err("Command timed out after 300 seconds".to_string())
-            }
+            Err(_) => Err("Command timed out after 300 seconds".to_string()),
         };
 
         if let Some(ref tid) = task_id {
-            if let Some(registry) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
-                registry.unregister(tid).await;
+            if let Some(r) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
+                r.unregister(tid).await;
             }
         }
 

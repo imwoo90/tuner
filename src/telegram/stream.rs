@@ -3,6 +3,7 @@ use crate::config::CliConfig;
 use crate::cli::StreamEvent;
 use std::time::{Instant, Duration};
 use super::formatting;
+use super::multi_select::build_multi_select_keyboard;
 
 pub(crate) async fn handle_stream_result(
     bot: &Bot,
@@ -56,23 +57,7 @@ pub(crate) async fn handle_stream_result(
     }
     Ok(last_session_id)
 }
-pub(crate) fn build_multi_select_keyboard(
-    sess_id: &str,
-    options: &[String],
-    bitmap: &str,
-) -> teloxide::types::InlineKeyboardMarkup {
-    let mut keyboard = Vec::new();
-    for (i, opt) in options.iter().enumerate() {
-        let is_checked = bitmap.chars().nth(i).unwrap_or('0') == '1';
-        let prefix = if is_checked { "✅ " } else { "⬜ " };
-        let button_text = format!("{}{}", prefix, opt);
-        let callback_data = format!("ask_mul:{}:{}:{}", sess_id, i, bitmap);
-        keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(button_text, callback_data)]);
-    }
-    let submit_callback = format!("ask_sub:{}:{}", sess_id, bitmap);
-    keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback("완료 (Submit)", submit_callback)]);
-    teloxide::types::InlineKeyboardMarkup::new(keyboard)
-}
+
 
 async fn handle_stream_ask_question(
     bot: &Bot,
@@ -85,7 +70,7 @@ async fn handle_stream_ask_question(
     let sess_id = session_data.get_session_id(&config.provider);
     let markup = if ask.is_multi_select {
         let initial_bitmap = "0".repeat(ask.options.len());
-        build_multi_select_keyboard(&sess_id, &ask.options, &initial_bitmap)
+        build_multi_select_keyboard(&sess_id, &ask.options, &initial_bitmap, false)
     } else {
         let mut keyboard = Vec::new();
         for (i, opt) in ask.options.iter().enumerate() {
@@ -162,6 +147,38 @@ async fn handle_text_delta(
     Ok(())
 }
 
+async fn handle_ask_question_event(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    ask: Vec<crate::cli::AskQuestionData>,
+    session_data: &crate::session::data::SessionData,
+    config: &CliConfig,
+    cli: &crate::cli::antigravity::AntigravityCli,
+) -> Result<(), teloxide::RequestError> {
+    if !ask.is_empty() {
+        let sess_id = session_data.get_session_id(&config.provider);
+        let first_question = ask[0].clone();
+        if let Ok(msg_id) = handle_stream_ask_question(bot, chat_id, thread_id, first_question.clone(), session_data, config).await {
+            let initial_bitmap = if first_question.is_multi_select {
+                "0".repeat(first_question.options.len())
+            } else {
+                String::new()
+            };
+            let state = crate::cli::antigravity::session::AskState {
+                msg_id,
+                questions: ask,
+                current_index: 0,
+                answers: Vec::new(),
+                current_bitmap: initial_bitmap,
+                waiting_for_write_in: false,
+            };
+            cli.sessions.set_ask_state(&sess_id, state).await;
+        }
+    }
+    Ok(())
+}
+
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
@@ -182,12 +199,7 @@ async fn process_stream_events(
                 handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?;
             }
             StreamEvent::AskQuestion(ask) => {
-                let sess_id = session_data.get_session_id(&config.provider);
-                let options = ask.options.clone();
-                if let Ok(msg_id) = handle_stream_ask_question(bot, chat_id, thread_id, ask, session_data, config).await {
-                    cli.sessions.set_ask_data(&sess_id, msg_id, options).await;
-                    cli.sessions.set_ask_active(&sess_id, true).await;
-                }
+                handle_ask_question_event(bot, chat_id, thread_id, ask, session_data, config, cli).await?;
             }
             StreamEvent::Result(resp) => {
                 *last_text = resp.result.clone();
@@ -252,3 +264,4 @@ pub(crate) async fn consume_stream(
     }
     Ok(())
 }
+

@@ -22,6 +22,10 @@ pub mod stream;
 pub mod transport;
 pub mod lang;
 pub mod callbacks;
+pub mod ask_callbacks;
+pub mod ask_helpers;
+pub mod multi_select;
+pub mod runner;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
@@ -32,7 +36,7 @@ pub use reply::get_topic_id;
 
 pub use topic_cache::{BotInfo, TopicNameCache};
 
-async fn run_cli_stream(
+pub(crate) async fn run_cli_stream(
     bot: &Bot,
     msg: &Message,
     prompt: &str,
@@ -77,48 +81,19 @@ async fn handle_model_override(
     Ok(false)
 }
 
-async fn feed_active_session_if_running(
-    bot: &Bot,
-    chat_id: teloxide::types::ChatId,
-    session_id: &str,
-    current_text: &str,
-    cli: &AntigravityCli,
-) -> Result<bool, teloxide::RequestError> {
-    if cli.sessions.is_active(session_id).await && cli.sessions.is_running(session_id).await {
-        let mut input_prompt = format!("{}\r", current_text);
-        if cli.sessions.is_ask_active(session_id).await {
-            let msg_id = cli.sessions.get_ask_msg_id(session_id).await;
-            if let Some(opts) = cli.sessions.get_ask_options(session_id).await {
-                if let Some(idx) = formatting::find_best_option(current_text, &opts) {
-                    input_prompt = if idx == 0 { "\r".to_string() } else { format!("{}\r", "j".repeat(idx)) };
-                    println!("matched option {}: {:?}", idx, opts[idx]);
-                }
-            }
-            cli.sessions.set_ask_active(session_id, false).await;
-            if let Some(mid) = msg_id {
-                let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
-            }
-        }
-        println!("feed: {} {:?}", session_id, input_prompt);
-        let _ = cli.sessions.write_to_session(session_id, &input_prompt).await;
-        return Ok(true);
-    }
-    Ok(false)
-}
+
 
 async fn process_text(
     bot: &Bot,
     msg: &Message,
     text: &str,
     config: &CliConfig,
-    sessions: &SessionManager,
+    sessions: &std::sync::Arc<SessionManager>,
     cli: &AntigravityCli,
     cron_manager: &crate::cron::manager::CronManager,
     topic_cache: &TopicNameCache,
 ) -> Result<(), teloxide::RequestError> {
-    if commands::handle_commands(bot, msg, text, config, sessions, cli, cron_manager, topic_cache).await? {
-        return Ok(());
-    }
+    if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, cron_manager, topic_cache).await? { return Ok(()); }
 
     let (m_over, current_text) = parse_model_directive(text);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
@@ -127,20 +102,16 @@ async fn process_text(
 
     let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
     if let Some(ref mo) = m_over {
-        if handle_model_override(bot, msg, mo, &mut sess, sessions, current_text.is_empty()).await? {
-            return Ok(());
-        }
+        if handle_model_override(bot, msg, mo, &mut sess, sessions.as_ref(), current_text.is_empty()).await? { return Ok(()); }
     }
 
     let mut prompt = build_reply_prompt(msg, current_text);
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     let session_id = sess.get_session_id(&config.provider);
-    if feed_active_session_if_running(bot, msg.chat.id, &session_id, current_text, cli).await? {
-        return Ok(());
-    }
+    if ask_helpers::feed_active_session_if_running(bot, msg, &session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
-    run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions, sess, config).await
+    run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions.as_ref(), sess, config).await
 }
 
 async fn handle_message_inner(
@@ -200,54 +171,4 @@ pub(crate) async fn handle_message(
     if cfg!(test) { fut.await } else { tokio::spawn(fut); Ok(()) }
 }
 
-fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
-    SessionManager::new(path, 30, 4, false, "UTC".to_string(), None)
-        .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
-}
-fn start_schedulers(
-    bot: Bot,
-    cfg: Arc<CliConfig>,
-    sess: Arc<SessionManager>,
-    cli: Arc<AntigravityCli>,
-    home: &str,
-) -> Arc<crate::cron::manager::CronManager> {
-    let bus = Arc::new(crate::bus::bus::MessageBus::new());
-    bus.register_transport(Arc::new(TelegramTransport::new(bot.clone())));
-    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
-    let cron = Arc::new(crate::cron::manager::CronManager::new(std::path::PathBuf::from(home).join(".tuner/cron_jobs.json")));
-    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli, bus)).start();
-    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
-    tokio::spawn(async move { clean.start().await; });
-    cron
-}
-
-pub async fn run_bot(config: CliConfig) -> Result<(), String> {
-    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
-    if tok.is_empty() { return Err("No token".to_string()); }
-    let bot = Bot::new(tok);
-    let _ = commands::register_commands(&bot).await;
-    let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });
-    let config_arc = Arc::new(config);
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
-    
-    reply::spawn_restart_watcher(home.clone());
-    let topic_cache = Arc::new(TopicNameCache::new());
-    let p = std::path::Path::new(&home).join(".tuner/sessions.json");
-    let sessions = Arc::new(build_sessions(p, topic_cache.clone()));
-
-    reply::load_sessions_cache(&sessions, &topic_cache).await;
-    let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
-    let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);
-
-    let (b, s) = (bot.clone(), sessions.clone());
-    tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
-
-    let handler = dptree::entry()
-        .branch(Update::filter_message().endpoint(handle_message))
-        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
-
-    Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info])
-        .build().dispatch().await;
-    Ok(())
-}
+pub use runner::run_bot;
