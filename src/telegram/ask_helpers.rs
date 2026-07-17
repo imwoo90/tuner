@@ -5,8 +5,9 @@ use crate::session::data::SessionData;
 use crate::config::CliConfig;
 use crate::cli::antigravity::session::AskState;
 use std::sync::Arc;
+use super::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
 
-fn find_write_in_index(options: &[String]) -> usize {
+pub(crate) fn find_write_in_index(options: &[String]) -> usize {
     for (i, opt) in options.iter().enumerate() {
         let lower = opt.to_lowercase();
         if lower.contains("write-in") || lower.contains("직접 입력") {
@@ -14,6 +15,74 @@ fn find_write_in_index(options: &[String]) -> usize {
         }
     }
     options.len()
+}
+
+fn determine_input_mode(
+    current_text: &str,
+    q: &crate::cli::AskQuestionData,
+    waiting_for_write_in: bool,
+) -> (String, bool) {
+    let mut ip = String::new();
+    let mut is_write_in = false;
+    if waiting_for_write_in {
+        is_write_in = true;
+    } else if let Some(i) = super::formatting::find_best_option(current_text, &q.options) {
+        let opt = &q.options[i];
+        if opt.to_lowercase().contains("write-in") || opt.contains("직접 입력") {
+            is_write_in = true;
+        } else {
+            ip = format!("{}", i + 1);
+        }
+    } else {
+        is_write_in = true;
+    }
+    (ip, is_write_in)
+}
+
+async fn send_write_in_input(
+    sid: &str,
+    current_text: &str,
+    w_idx: usize,
+    prev_text: &str,
+    is_multi_select: bool,
+    cli: &AntigravityCli,
+) -> String {
+    let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    
+    if !prev_text.is_empty() {
+        let backspaces = "\x7F".repeat(prev_text.len());
+        let _ = cli.sessions.write_to_session(sid, &backspaces).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    }
+    
+    let ip = format!("{}\r", current_text);
+    let _ = cli.sessions.write_to_session(sid, &ip).await;
+    if is_multi_select {
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        let _ = cli.sessions.write_to_session(sid, "\r").await;
+    }
+    ip
+}
+
+async fn send_predefined_input_with_clear(
+    sid: &str,
+    ip: &str,
+    w_idx: usize,
+    prev_text: &str,
+    options_len: usize,
+    cli: &AntigravityCli,
+) {
+    if !prev_text.is_empty() && w_idx < options_len {
+        let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        let backspaces = "\x7F".repeat(prev_text.len());
+        let _ = cli.sessions.write_to_session(sid, &format!("{}\r", backspaces)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        let _ = cli.sessions.write_to_session(sid, "\x1B[D").await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    }
+    let _ = cli.sessions.write_to_session(sid, ip).await;
 }
 
 async fn determine_and_send_input(
@@ -25,31 +94,16 @@ async fn determine_and_send_input(
     let mut ip = String::new();
     let mut is_write_in = false;
     if let Some(q) = state.questions.get(state.current_index) {
+        let (det_ip, det_is_write_in) = determine_input_mode(current_text, q, state.waiting_for_write_in);
+        ip = det_ip;
+        is_write_in = det_is_write_in;
         let w_idx = find_write_in_index(&q.options);
-        if state.waiting_for_write_in {
-            is_write_in = true;
-        } else if let Some(i) = super::formatting::find_best_option(current_text, &q.options) {
-            let opt = &q.options[i];
-            if opt.to_lowercase().contains("write-in") || opt.contains("직접 입력") {
-                is_write_in = true;
-            } else {
-                ip = format!("{}", i + 1);
-            }
-        } else {
-            is_write_in = true;
-        }
-        
+        let prev_text = state.answers.get(state.current_index).cloned().unwrap_or_default();
+
         if is_write_in {
-            let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
-            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-            ip = format!("{}\r", current_text);
-            let _ = cli.sessions.write_to_session(sid, &ip).await;
-            if q.is_multi_select {
-                tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-                let _ = cli.sessions.write_to_session(sid, "\r").await;
-            }
+            ip = send_write_in_input(sid, current_text, w_idx, &prev_text, q.is_multi_select, cli).await;
         } else {
-            let _ = cli.sessions.write_to_session(sid, &ip).await;
+            send_predefined_input_with_clear(sid, &ip, w_idx, &prev_text, q.options.len(), cli).await;
         }
     }
     (ip, is_write_in)
@@ -90,15 +144,16 @@ async fn advance_ask_state(
         state.waiting_for_write_in = false;
         cli.sessions.set_ask_state(sid, state).await;
         if let Some(mid) = msg_id {
-            let markup = super::ask_callbacks::build_ask_keyboard_helper(sid, &nq, &bitmap, true);
+            let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
             update_question_ui(bot, chat_id, mid, &nq, markup).await;
         }
     } else {
+        cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
         if let Some(mid) = msg_id {
             let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
         }
-        super::ask_callbacks::spawn_cli_stream_in_background(
+        super::ask_process::spawn_cli_stream_in_background(
             bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone(),
         );
     }
@@ -111,7 +166,7 @@ async fn handle_ask_input(
     session_id: &str,
     current_text: &str,
     cli: &AntigravityCli,
-    state: AskState,
+    mut state: AskState,
     sessions: &Arc<SessionManager>,
     sess: SessionData,
     config: &CliConfig,
@@ -119,6 +174,14 @@ async fn handle_ask_input(
     let msg_id = Some(state.msg_id);
     let (ip, is_write_in) = determine_and_send_input(session_id, current_text, cli, &state).await;
     
+    if state.current_index < state.answers.len() {
+        if is_write_in {
+            state.answers[state.current_index] = current_text.to_string();
+        } else {
+            state.answers[state.current_index] = String::new();
+        }
+    }
+
     if let Some(mid) = msg_id {
         if let Some(q) = state.questions.get(state.current_index) {
             let txt = format!("{}\n\n(Selected: **{}**)", q.question, current_text);
@@ -161,4 +224,33 @@ pub(crate) async fn feed_active_session_if_running(
         }
     }
     Ok(false)
+}
+
+pub(crate) fn build_ask_keyboard_helper(
+    sid: &str,
+    nq: &crate::cli::AskQuestionData,
+    bitmap: &str,
+    show_prev: bool,
+) -> teloxide::types::InlineKeyboardMarkup {
+    if nq.is_multi_select {
+        build_multi_select_keyboard(sid, &nq.options, bitmap, show_prev)
+    } else {
+        build_single_select_keyboard(sid, &nq.options, show_prev)
+    }
+}
+
+pub(crate) async fn update_telegram_ask_ui(bot: &teloxide::Bot, msg: &Message, idx: usize, data: &str) {
+    let mut chosen = format!("Option {}", idx + 1);
+    if let Some(rm) = msg.reply_markup() {
+        for r in &rm.inline_keyboard {
+            for b in r {
+                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &b.kind {
+                    if cbd == data { chosen = b.text.clone(); }
+                }
+            }
+        }
+    }
+    let txt = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), chosen);
+    let html = super::formatting::markdown_to_telegram_html(&txt);
+    let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).await;
 }

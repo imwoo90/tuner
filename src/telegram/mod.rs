@@ -9,6 +9,7 @@ pub mod formatting;
 #[cfg(test)]
 pub mod formatting_tests;
 pub mod reply;
+pub mod history;
 #[cfg(test)]
 pub mod reply_tests;
 #[cfg(test)]
@@ -24,6 +25,7 @@ pub mod lang;
 pub mod callbacks;
 pub mod ask_callbacks;
 pub mod ask_helpers;
+pub mod ask_process;
 pub mod multi_select;
 pub mod runner;
 
@@ -109,6 +111,7 @@ async fn process_text(
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
     let session_id = sess.get_session_id(&config.provider);
+    history::log_telegram_message(&config.working_dir, &session_id, "user", Some(msg.id.0), text, true, None);
     if ask_helpers::feed_active_session_if_running(bot, msg, &session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
     run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions.as_ref(), sess, config).await

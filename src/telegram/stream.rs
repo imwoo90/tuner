@@ -3,7 +3,63 @@ use crate::config::CliConfig;
 use crate::cli::StreamEvent;
 use std::time::{Instant, Duration};
 use super::formatting;
-use super::multi_select::build_multi_select_keyboard;
+
+
+async fn send_single_chunk(
+    bot: &Bot,
+    chat_id: ChatId,
+    msg_id: Option<teloxide::types::MessageId>,
+    thread_id: Option<i32>,
+    chunk: &str,
+    is_first: bool,
+) -> Result<teloxide::types::Message, teloxide::RequestError> {
+    if let Some(mid) = msg_id {
+        if is_first {
+            bot.edit_message_text(chat_id, mid, chunk)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await
+        } else {
+            let mut req = bot.send_message(chat_id, chunk)
+                .parse_mode(teloxide::types::ParseMode::Html);
+            if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+            req.await
+        }
+    } else {
+        let mut req = bot.send_message(chat_id, chunk)
+            .parse_mode(teloxide::types::ParseMode::Html);
+        if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+        req.await
+    }
+}
+
+async fn send_chunks_to_telegram(
+    bot: &Bot,
+    chat_id: ChatId,
+    msg_id: Option<teloxide::types::MessageId>,
+    thread_id: Option<i32>,
+    chunks: &[String],
+) -> (bool, Option<String>, Option<i32>) {
+    let mut current_msg_id = msg_id;
+    let mut final_success = true;
+    let mut final_error = None;
+    let mut sent_msg_id = None;
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        match send_single_chunk(bot, chat_id, current_msg_id, thread_id, chunk, i == 0).await {
+            Ok(sent) => {
+                if current_msg_id.is_none() && i == 0 {
+                    current_msg_id = Some(sent.id);
+                }
+                sent_msg_id = Some(sent.id.0);
+            }
+            Err(e) => {
+                final_success = false;
+                final_error = Some(e.to_string());
+            }
+        }
+    }
+    (final_success, final_error, sent_msg_id)
+}
 
 pub(crate) async fn handle_stream_result(
     bot: &Bot,
@@ -11,6 +67,7 @@ pub(crate) async fn handle_stream_result(
     msg_id: Option<teloxide::types::MessageId>,
     thread_id: Option<i32>,
     resp: crate::cli::CliResponse,
+    config: &CliConfig,
 ) -> Result<Option<String>, teloxide::RequestError> {
     let mut last_session_id = None;
     if let Some(ref sid) = resp.session_id {
@@ -27,68 +84,23 @@ pub(crate) async fn handle_stream_result(
     let html_text = formatting::markdown_to_telegram_html(&raw_text);
     let chunks = formatting::split_html_message(&html_text, 4000);
 
-    let mut current_msg_id = msg_id;
-    for (i, chunk) in chunks.iter().enumerate() {
-        if let Some(mid) = current_msg_id {
-            if i == 0 {
-                let _ = bot.edit_message_text(chat_id, mid, chunk)
-                    .parse_mode(teloxide::types::ParseMode::Html)
-                    .await;
-            } else {
-                let mut req = bot.send_message(chat_id, chunk)
-                    .parse_mode(teloxide::types::ParseMode::Html);
-                if let Some(tid) = thread_id {
-                    req = req.message_thread_id(tid);
-                }
-                let _ = req.await;
-            }
-        } else {
-            let mut req = bot.send_message(chat_id, chunk)
-                .parse_mode(teloxide::types::ParseMode::Html);
-            if let Some(tid) = thread_id {
-                req = req.message_thread_id(tid);
-            }
-            if let Ok(sent) = req.await {
-                if i == 0 {
-                    current_msg_id = Some(sent.id);
-                }
-            }
-        }
+    let (final_success, final_error, sent_msg_id) =
+        send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
+
+    if let Some(ref sid) = last_session_id {
+        super::history::log_telegram_message(
+            &config.working_dir,
+            sid,
+            "bot",
+            sent_msg_id,
+            &raw_text,
+            final_success,
+            final_error.as_deref(),
+        );
     }
     Ok(last_session_id)
 }
 
-
-async fn handle_stream_ask_question(
-    bot: &Bot,
-    chat_id: ChatId,
-    thread_id: Option<i32>,
-    ask: crate::cli::AskQuestionData,
-    session_data: &crate::session::data::SessionData,
-    config: &CliConfig,
-) -> Result<i32, teloxide::RequestError> {
-    let sess_id = session_data.get_session_id(&config.provider);
-    let markup = if ask.is_multi_select {
-        let initial_bitmap = "0".repeat(ask.options.len());
-        build_multi_select_keyboard(&sess_id, &ask.options, &initial_bitmap, false)
-    } else {
-        let mut keyboard = Vec::new();
-        for (i, opt) in ask.options.iter().enumerate() {
-            let callback_data = format!("ask_ans:{}:{}", sess_id, i);
-            keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(opt, callback_data)]);
-        }
-        teloxide::types::InlineKeyboardMarkup::new(keyboard)
-    };
-    let html_question = formatting::markdown_to_telegram_html(&ask.question);
-    let mut req = bot.send_message(chat_id, html_question)
-        .parse_mode(teloxide::types::ParseMode::Html)
-        .reply_markup(markup);
-    if let Some(tid) = thread_id {
-        req = req.message_thread_id(tid);
-    }
-    let sent = req.await?;
-    Ok(sent.id.0)
-}
 
 fn clear_old_progress_reaction(last_mid: i32, chat_id: ChatId, tok: String) {
     tokio::spawn(async move {
@@ -147,38 +159,6 @@ async fn handle_text_delta(
     Ok(())
 }
 
-async fn handle_ask_question_event(
-    bot: &Bot,
-    chat_id: ChatId,
-    thread_id: Option<i32>,
-    ask: Vec<crate::cli::AskQuestionData>,
-    session_data: &crate::session::data::SessionData,
-    config: &CliConfig,
-    cli: &crate::cli::antigravity::AntigravityCli,
-) -> Result<(), teloxide::RequestError> {
-    if !ask.is_empty() {
-        let sess_id = session_data.get_session_id(&config.provider);
-        let first_question = ask[0].clone();
-        if let Ok(msg_id) = handle_stream_ask_question(bot, chat_id, thread_id, first_question.clone(), session_data, config).await {
-            let initial_bitmap = if first_question.is_multi_select {
-                "0".repeat(first_question.options.len())
-            } else {
-                String::new()
-            };
-            let state = crate::cli::antigravity::session::AskState {
-                msg_id,
-                questions: ask,
-                current_index: 0,
-                answers: Vec::new(),
-                current_bitmap: initial_bitmap,
-                waiting_for_write_in: false,
-            };
-            cli.sessions.set_ask_state(&sess_id, state).await;
-        }
-    }
-    Ok(())
-}
-
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
@@ -199,11 +179,11 @@ async fn process_stream_events(
                 handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?;
             }
             StreamEvent::AskQuestion(ask) => {
-                handle_ask_question_event(bot, chat_id, thread_id, ask, session_data, config, cli).await?;
+                super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, session_data, config, cli).await?;
             }
             StreamEvent::Result(resp) => {
                 *last_text = resp.result.clone();
-                if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_msg_id, thread_id, resp).await {
+                if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_msg_id, thread_id, resp, config).await {
                     *last_session_id = Some(sid);
                 }
             }
