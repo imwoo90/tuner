@@ -196,3 +196,34 @@ pub(crate) async fn handle_message(
 }
 
 pub use runner::run_bot;
+
+#[cfg(test)]
+mod local_tests {
+    use super::generate_uuid;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_generate_uuid_format() {
+        let uuid = generate_uuid();
+        assert_eq!(uuid.len(), 36);
+        assert_eq!(&uuid[8..9], "-");
+        assert_eq!(&uuid[13..14], "-");
+        assert_eq!(&uuid[18..19], "-");
+        assert_eq!(&uuid[23..24], "-");
+        assert_eq!(&uuid[14..15], "4");
+        let variant_char = uuid.chars().nth(19).unwrap();
+        assert!(
+            variant_char == '8' || variant_char == '9' || variant_char == 'a' || variant_char == 'b',
+            "Invalid variant char: {}", variant_char
+        );
+    }
+
+    #[test]
+    fn test_generate_uuid_uniqueness() {
+        let mut set = HashSet::new();
+        for _ in 0..100 {
+            let uuid = generate_uuid();
+            assert!(set.insert(uuid), "Duplicate UUID detected!");
+        }
+    }
+}
