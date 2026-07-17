@@ -96,6 +96,7 @@ pub(crate) fn get_multiselect_keystrokes_and_options(
 ) -> (String, Vec<String>) {
     let mut selected = Vec::new();
     let mut keystrokes = String::new();
+    let mut checked_indices = Vec::new();
 
     for row in &reply_markup.inline_keyboard {
         for button in row {
@@ -106,12 +107,22 @@ pub(crate) fn get_multiselect_keystrokes_and_options(
                         let opt_name = button.text.trim_start_matches("✅ ").trim_start_matches("⬜ ").to_string();
                         if is_checked {
                             selected.push(opt_name);
-                            keystrokes.push_str(&format!("{}", opt_index + 1));
+                            checked_indices.push(opt_index);
                         }
                     }
                 }
             }
         }
+    }
+
+    checked_indices.sort_unstable();
+
+    let mut last_idx = 0;
+    for &idx in &checked_indices {
+        let diff = idx - last_idx;
+        keystrokes.push_str(&"j".repeat(diff));
+        keystrokes.push(' ');
+        last_idx = idx;
     }
     keystrokes.push('\r');
     (keystrokes, selected)
