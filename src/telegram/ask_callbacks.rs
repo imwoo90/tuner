@@ -200,7 +200,7 @@ pub(crate) async fn handle_ask_prev_callback(
     let Some(sid) = data.split(':').nth(1) else { return; };
     if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
         if state.current_index > 0 {
-            let key = if state.questions[state.current_index].is_multi_select { "\x1B[D" } else { "\x1B" };
+            let key = "\x1B[D";
             state.current_index -= 1;
             let prev_q = state.questions[state.current_index].clone();
             let bitmap = prev_q.is_multi_select.then(|| "0".repeat(prev_q.options.len())).unwrap_or_default();
