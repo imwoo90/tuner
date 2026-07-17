@@ -29,6 +29,17 @@ impl AntigravityCli {
 
     async fn ensure_interactive_session(&self, session_id: &str, _workspace: &Path, env: &HashMap<String, String>) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
+        let brain_dir = events::agy_state_root(Some(env)).join("brain").join(session_id);
+        if !brain_dir.exists() {
+            let _ = std::fs::create_dir_all(&brain_dir);
+            let _ = Command::new("git")
+                .arg("init")
+                .current_dir(&brain_dir)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .await;
+        }
         let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
         if self.config.permission_mode == "bypassPermissions" { args.push("--dangerously-skip-permissions".into()); }
         args.extend(vec!["--prompt-interactive".into(), "".into()]);
@@ -136,21 +147,7 @@ impl AntigravityCli {
             .unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
 
-    async fn handle_session_transition(
-        &self,
-        resume: Option<&str>,
-        final_id: Option<&str>,
-        ws: &Path,
-        env: &HashMap<String, String>,
-    ) -> Result<(), String> {
-        if let Some(fid) = final_id {
-            if resume.filter(|&r| r != fid).is_some() {
-                self.sessions.terminate(resume.unwrap()).await;
-            }
-            self.ensure_interactive_session(fid, ws, env).await?;
-        }
-        Ok(())
-    }
+
 }
 
 #[async_trait]
@@ -191,7 +188,11 @@ impl AgentProvider for AntigravityCli {
 
         let result_text = self.resolve_result_text(&agy_ws, &env, &stdout_str, resolved_brain_dir.as_deref());
 
-        self.handle_session_transition(resume_session, final_session_id.as_deref(), &agy_ws, &env).await?;
+        if resume_session.is_none() {
+            if let Some(ref fid) = final_session_id {
+                self.ensure_interactive_session(fid, &agy_ws, &env).await?;
+            }
+        }
 
         let is_error = !status.success();
         Ok(CliResponse {
@@ -237,25 +238,18 @@ impl AgentProvider for AntigravityCli {
     }
 }
 
-async fn wait_for_pty_prompt(
-    mgr: &super::session::SessionManager,
-    sid: &str,
-) -> Result<(), String> {
+async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < 15 {
-        let (out, dead) = {
-            let mut hs = mgr.holders.lock().await;
-            if let Some(h) = hs.get_mut(sid) {
-                (h.output.lock().await.clone(), h.child.try_wait().ok().flatten().is_some())
-            } else {
-                break;
-            }
-        };
+        let mut hs = mgr.holders.lock().await;
+        let h = hs.get_mut(sid).ok_or("No holder")?;
+        let out = h.output.lock().await.clone();
+        let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
-        println!("🤖 [tuner] PTY Output so far: {:?}", s);
         if s.contains("\r> ") || s.contains("\n> ") || s.contains("\u{1b}[?1049h") || s.contains("\u{1b}[?25l") || dead {
             return Ok(());
         }
+        drop(hs);
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
     Err("Timeout waiting for interactive session initialization".to_string())
