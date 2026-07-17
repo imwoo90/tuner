@@ -10,7 +10,8 @@ use crate::cron::manager::CronManager;
 use crate::cli::antigravity::AntigravityCli;
 use super::ask_callbacks::{
     handle_ask_answer_callback, handle_ask_submit_callback,
-    handle_ask_write_callback, handle_ask_prev_callback
+    handle_ask_write_callback, handle_ask_prev_callback,
+    handle_ask_skip_callback
 };
 use super::multi_select::handle_ask_multi_callback;
 
@@ -74,6 +75,8 @@ async fn handle_callback_query_inner(
                 handle_ask_write_callback(&bot, msg, d, &cli).await;
             } else if d.starts_with("ask_prev:") {
                 handle_ask_prev_callback(&bot, msg, d, &cli, &sessions, &config).await;
+            } else if d.starts_with("ask_skip:") {
+                handle_ask_skip_callback(&bot, msg, d, &cli, &sessions, &config).await;
             }
         }
         let _ = bot.answer_callback_query(q.id).await;

@@ -20,10 +20,14 @@ pub(crate) fn build_single_select_keyboard(
         keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(opt, callback_data)]);
     }
     if show_prev {
-        keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(
-            "⬅️ 이전 질문 (Prev)",
-            format!("ask_prev:{}", sess_id),
-        )]);
+        keyboard.push(vec![
+            teloxide::types::InlineKeyboardButton::callback("⬅️ 이전 질문 (Prev)", format!("ask_prev:{}", sess_id)),
+            teloxide::types::InlineKeyboardButton::callback("⏭️ 건너뛰기 (Skip)", format!("ask_skip:{}", sess_id)),
+        ]);
+    } else {
+        keyboard.push(vec![
+            teloxide::types::InlineKeyboardButton::callback("⏭️ 건너뛰기 (Skip)", format!("ask_skip:{}", sess_id)),
+        ]);
     }
     teloxide::types::InlineKeyboardMarkup::new(keyboard)
 }
@@ -80,10 +84,14 @@ pub(crate) fn build_multi_select_keyboard(
         ),
     ]);
     if show_prev {
-        keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(
-            "⬅️ 이전 질문 (Prev)",
-            format!("ask_prev:{}", sess_id),
-        )]);
+        keyboard.push(vec![
+            teloxide::types::InlineKeyboardButton::callback("⬅️ 이전 질문 (Prev)", format!("ask_prev:{}", sess_id)),
+            teloxide::types::InlineKeyboardButton::callback("⏭️ 건너뛰기 (Skip)", format!("ask_skip:{}", sess_id)),
+        ]);
+    } else {
+        keyboard.push(vec![
+            teloxide::types::InlineKeyboardButton::callback("⏭️ 건너뛰기 (Skip)", format!("ask_skip:{}", sess_id)),
+        ]);
     }
     teloxide::types::InlineKeyboardMarkup::new(keyboard)
 }

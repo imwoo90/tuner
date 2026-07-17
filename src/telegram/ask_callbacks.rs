@@ -6,6 +6,8 @@ use crate::cli::antigravity::session::AskState;
 use super::multi_select::get_multiselect_keystrokes_and_options;
 use super::ask_process::{
     process_answer, process_submit,
+    clear_previous_write_in_if_any, advance_ask_index_or_finish,
+    spawn_cli_stream_in_background,
 };
 use super::ask_helpers::build_ask_keyboard_helper;
 
@@ -156,5 +158,62 @@ pub(crate) async fn handle_ask_prev_callback(
                 .reply_markup(markup)
                 .await;
         }
+    }
+}
+
+pub(crate) async fn process_skip(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    sid: &str,
+    cli: &AntigravityCli,
+    sessions: &std::sync::Arc<SessionManager>,
+    sess: crate::session::data::SessionData,
+    config: &CliConfig,
+) -> Result<(), teloxide::RequestError> {
+    if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
+        super::history::log_telegram_message(
+            &config.working_dir,
+            sid,
+            "user",
+            Some(msg.id.0),
+            "Clicked [Skip] Button",
+            true,
+            None,
+        );
+
+        clear_previous_write_in_if_any(sid, cli, &state, true).await;
+        let _ = cli.sessions.write_to_session(sid, "\x1B").await;
+
+        if state.current_index < state.answers.len() {
+            state.answers[state.current_index] = "User Skipped".to_string();
+        }
+
+        if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
+            let txt = format!("{}\n\n(Selected: **User Skipped**)", msg.text().unwrap_or(""));
+            let html = super::formatting::markdown_to_telegram_html(&txt);
+            let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await;
+            spawn_cli_stream_in_background(
+                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn handle_ask_skip_callback(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    data: &str,
+    cli: &AntigravityCli,
+    sessions: &std::sync::Arc<SessionManager>,
+    config: &CliConfig,
+) {
+    let Some(sid) = data.split(':').nth(1) else { return; };
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let dm = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+        let _ = process_skip(bot, msg, sid, cli, sessions, sess, config).await;
     }
 }

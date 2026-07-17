@@ -24,7 +24,7 @@ pub(crate) fn spawn_cli_stream_in_background(
     });
 }
 
-async fn clear_previous_write_in_if_any(
+pub(crate) async fn clear_previous_write_in_if_any(
     sid: &str,
     cli: &AntigravityCli,
     state: &crate::cli::antigravity::session::AskState,
