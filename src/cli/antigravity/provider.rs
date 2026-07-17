@@ -257,7 +257,7 @@ async fn wait_for_pty_prompt(
         };
         let s = String::from_utf8_lossy(&out);
         println!("🤖 [tuner] PTY Output so far: {:?}", s);
-        if s.contains("\r> ") || s.contains("\n> ") || dead {
+        if s.contains("\r> ") || s.contains("\n> ") || s.contains("\u{1b}[?1049h") || s.contains("\u{1b}[?25l") || dead {
             return Ok(());
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
