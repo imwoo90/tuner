@@ -17,29 +17,20 @@ use tokio::process::Command;
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
-        let mut add = |k: &str, v: String| { env.insert(k.into(), v); };
+        let mut add = |k: &str, v: String| env.insert(k.into(), v);
         add("TUNER_AGENT_NAME", "main".into());
         add("TUNER_CHAT_ID", self.config.chat_id.to_string());
-        if let Some(tid) = self.config.topic_id {
-            add("TUNER_TOPIC_ID", tid.to_string());
-        }
+        if let Some(tid) = self.config.topic_id { add("TUNER_TOPIC_ID", tid.to_string()); }
         add("TUNER_TRANSPORT", self.config.transport.clone());
         add("TUNER_HOME", "/home/wimvm/.tuner".into());
         add("TUNER_SHARED_MEMORY_PATH", "/home/wimvm/.tuner/SHAREDMEMORY.md".into());
         env
     }
 
-    async fn ensure_interactive_session(
-        &self,
-        session_id: &str,
-        _workspace: &Path,
-        env: &HashMap<String, String>,
-    ) -> Result<(), String> {
+    async fn ensure_interactive_session(&self, session_id: &str, _workspace: &Path, env: &HashMap<String, String>) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
         let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
-        if self.config.permission_mode == "bypassPermissions" {
-            args.push("--dangerously-skip-permissions".into());
-        }
+        if self.config.permission_mode == "bypassPermissions" { args.push("--dangerously-skip-permissions".into()); }
         args.extend(vec!["--prompt-interactive".into(), "".into()]);
         self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
@@ -68,10 +59,8 @@ impl AntigravityCli {
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
 
-            let resolved_brain_dir = events::resolve_brain_dir(agy_ws, Some(env));
-            let transcript_path = resolved_brain_dir.as_ref().map(|d| {
-                d.join(".system_generated").join("logs").join("transcript_full.jsonl")
-            });
+            let brain_dir = events::agy_state_root(Some(env)).join("brain").join(session_id);
+            let transcript_path = Some(brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl"));
 
             let current_size = transcript_path.as_ref()
                 .and_then(|p| std::fs::metadata(p).ok())
@@ -185,11 +174,20 @@ impl AgentProvider for AntigravityCli {
             self.run_oneshot(&cmd_args, &env, &agy_ws).await?
         };
 
-        let resolved_brain_dir = events::resolve_brain_dir(&agy_ws, Some(&env));
-        let final_session_id = resolved_brain_dir
-            .as_ref()
-            .and_then(|d| d.file_name())
-            .map(|name| name.to_string_lossy().to_string());
+        let final_session_id = if let Some(sid) = resume_session {
+            Some(sid.to_string())
+        } else {
+            events::resolve_brain_dir(&agy_ws, Some(&env))
+                .as_ref()
+                .and_then(|d| d.file_name())
+                .map(|name| name.to_string_lossy().to_string())
+        };
+
+        let resolved_brain_dir = if let Some(ref sid) = final_session_id {
+            Some(events::agy_state_root(Some(&env)).join("brain").join(sid))
+        } else {
+            events::resolve_brain_dir(&agy_ws, Some(&env))
+        };
 
         let result_text = self.resolve_result_text(&agy_ws, &env, &stdout_str, resolved_brain_dir.as_deref());
 
@@ -219,20 +217,21 @@ impl AgentProvider for AntigravityCli {
         let workspace_path = workspace.clone();
 
         let env = self.build_env();
-        let agy_ws = self.agy_workspace();
-        let initial_size = events::resolve_brain_dir(&agy_ws, Some(&env))
-            .map(|brain_dir| {
-                let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl");
-                std::fs::metadata(&transcript_path)
-                    .map(|m| m.len())
-                    .unwrap_or(0)
-            });
+        let initial_size = if let Some(ref sid) = resume_id {
+            let brain_dir = events::agy_state_root(Some(&env)).join("brain").join(sid);
+            let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl");
+            std::fs::metadata(&transcript_path)
+                .map(|m| m.len())
+                .unwrap_or(0)
+        } else {
+            0
+        };
 
         let oneshot_handle = tokio::spawn(async move {
             self_arc.send(&prompt_string, resume_id.as_deref(), continue_session, workspace_path).await
         });
 
-        super::polling::spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), initial_size);
+        super::polling::spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), Some(initial_size));
 
         let stream = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|event| (event, rx))

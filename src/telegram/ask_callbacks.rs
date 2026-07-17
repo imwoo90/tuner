@@ -75,10 +75,25 @@ pub(crate) async fn handle_ask_submit_callback(
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };
     let Some(bitmap) = data.split(':').nth(2) else { return; };
+    let mut prev_ans = String::new();
+    let mut full_options = Vec::new();
+    if let Some(state) = cli.sessions.get_ask_state(sid).await {
+        if let Some(ans) = state.answers.get(state.current_index) {
+            prev_ans = ans.clone();
+        }
+        if let Some(q) = state.questions.get(state.current_index) {
+            full_options = q.options.clone();
+        }
+    }
     let mut ks = "\r".to_string();
     let mut opts = Vec::new();
     if let Some(rm) = msg.reply_markup() {
-        let (k, o) = get_multiselect_keystrokes_and_options(rm, bitmap);
+        let options_to_use = if full_options.is_empty() {
+            super::multi_select::extract_options_from_markup(rm)
+        } else {
+            full_options
+        };
+        let (k, o) = get_multiselect_keystrokes_and_options(rm, bitmap, &prev_ans, &options_to_use);
         ks = k;
         opts = o;
     }
@@ -128,7 +143,7 @@ pub(crate) async fn handle_ask_prev_callback(
             let key = "\x1B[D";
             state.current_index -= 1;
             let prev_q = state.questions[state.current_index].clone();
-            let bitmap = prev_q.is_multi_select.then(|| "0".repeat(prev_q.options.len())).unwrap_or_default();
+            let bitmap = super::multi_select::get_bitmap_for_question(&prev_q, &state.answers, state.current_index);
             state.current_bitmap = bitmap.clone();
             state.waiting_for_write_in = false;
             let show_prev = state.current_index > 0;

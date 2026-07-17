@@ -118,10 +118,14 @@ pub fn resolve_brain_dir(
     let root = agy_state_root(env);
     let brain_root = root.join("brain");
 
-    if let Some(conv_id) = conv_id_for_cwd(&root, working_dir) {
-        let candidate = brain_root.join(conv_id);
-        if candidate.is_dir() {
-            return Some(candidate);
+    let is_tuner = env.map(|e| e.contains_key("TUNER_CHAT_ID")).unwrap_or(false);
+
+    if !is_tuner {
+        if let Some(conv_id) = conv_id_for_cwd(&root, working_dir) {
+            let candidate = brain_root.join(conv_id);
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
         }
     }
     newest_brain_dir(&brain_root)

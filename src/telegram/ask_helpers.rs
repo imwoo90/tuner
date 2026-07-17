@@ -73,7 +73,7 @@ async fn send_predefined_input_with_clear(
     options_len: usize,
     cli: &AntigravityCli,
 ) {
-    if !prev_text.is_empty() && w_idx < options_len {
+    if !prev_text.is_empty() && w_idx <= options_len {
         let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
         let backspaces = "\x7F".repeat(prev_text.len());
@@ -139,7 +139,7 @@ async fn advance_ask_state(
     if state.current_index + 1 < state.questions.len() {
         state.current_index += 1;
         let nq = state.questions[state.current_index].clone();
-        let bitmap = nq.is_multi_select.then(|| "0".repeat(nq.options.len())).unwrap_or_default();
+        let bitmap = super::multi_select::get_bitmap_for_question(&nq, &state.answers, state.current_index);
         state.current_bitmap = bitmap.clone();
         state.waiting_for_write_in = false;
         cli.sessions.set_ask_state(sid, state).await;

@@ -37,7 +37,7 @@ async fn clear_previous_write_in_if_any(
     if !prev_text.is_empty() {
         if let Some(q) = state.questions.get(state.current_index) {
             let w_idx = find_write_in_index(&q.options);
-            if w_idx < q.options.len() {
+            if w_idx <= q.options.len() {
                 // 1. Select Write-in
                 let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
                 tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;

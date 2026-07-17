@@ -159,7 +159,7 @@ impl SessionManager {
             for c in input.chars() {
                 let s = c.to_string();
                 holder.write_input(&s)?;
-                tokio::time::sleep(tokio::time::Duration::from_millis(40)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
             Ok(true)
         } else {

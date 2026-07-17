@@ -28,6 +28,33 @@ pub(crate) fn build_single_select_keyboard(
     teloxide::types::InlineKeyboardMarkup::new(keyboard)
 }
 
+pub(crate) fn get_bitmap_for_question(
+    q: &crate::cli::AskQuestionData,
+    answers: &[String],
+    index: usize,
+) -> String {
+    if !q.is_multi_select {
+        return String::new();
+    }
+    if let Some(ans) = answers.get(index) {
+        if ans.is_empty() {
+            return "0".repeat(q.options.len());
+        }
+        let parts: Vec<&str> = ans.split(", ").map(|s| s.trim()).collect();
+        let mut bm = String::new();
+        for opt in &q.options {
+            if parts.contains(&opt.as_str()) {
+                bm.push('1');
+            } else {
+                bm.push('0');
+            }
+        }
+        bm
+    } else {
+        "0".repeat(q.options.len())
+    }
+}
+
 pub(crate) fn build_multi_select_keyboard(
     sess_id: &str,
     options: &[String],
@@ -90,13 +117,48 @@ pub(crate) async fn handle_ask_multi_callback(
     }
 }
 
+pub(crate) fn extract_options_from_markup(reply_markup: &teloxide::types::InlineKeyboardMarkup) -> Vec<String> {
+    let mut options = Vec::new();
+    for row in &reply_markup.inline_keyboard {
+        for button in row {
+            if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
+                if cbd.starts_with("ask_mul:") {
+                    let opt_name = button.text.trim_start_matches("✅ ").trim_start_matches("⬜ ").to_string();
+                    options.push(opt_name);
+                }
+            }
+        }
+    }
+    options
+}
+
+fn build_prev_bitmap(prev_ans: &str, options: &[String]) -> String {
+    if prev_ans.is_empty() {
+        return "0".repeat(options.len());
+    }
+    let parts: Vec<&str> = prev_ans.split(", ").map(|s| s.trim()).collect();
+    let mut bm = String::new();
+    for opt in options {
+        if parts.contains(&opt.as_str()) {
+            bm.push('1');
+        } else {
+            bm.push('0');
+        }
+    }
+    bm
+}
+
 pub(crate) fn get_multiselect_keystrokes_and_options(
     reply_markup: &teloxide::types::InlineKeyboardMarkup,
     bitmap: &str,
+    prev_ans: &str,
+    full_options: &[String],
 ) -> (String, Vec<String>) {
     let mut selected = Vec::new();
     let mut keystrokes = String::new();
     let mut checked_indices = Vec::new();
+
+    let prev_bitmap = build_prev_bitmap(prev_ans, full_options);
 
     for row in &reply_markup.inline_keyboard {
         for button in row {
@@ -104,9 +166,12 @@ pub(crate) fn get_multiselect_keystrokes_and_options(
                 if cbd.starts_with("ask_mul:") {
                     if let Some(opt_index) = cbd.split(':').nth(2).and_then(|s| s.parse::<usize>().ok()) {
                         let is_checked = bitmap.chars().nth(opt_index).unwrap_or('0') == '1';
+                        let was_checked = prev_bitmap.chars().nth(opt_index).unwrap_or('0') == '1';
                         let opt_name = button.text.trim_start_matches("✅ ").trim_start_matches("⬜ ").to_string();
                         if is_checked {
                             selected.push(opt_name);
+                        }
+                        if is_checked != was_checked {
                             checked_indices.push(opt_index);
                         }
                     }
