@@ -29,17 +29,6 @@ impl AntigravityCli {
 
     async fn ensure_interactive_session(&self, session_id: &str, _workspace: &Path, env: &HashMap<String, String>) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
-        let brain_dir = events::agy_state_root(Some(env)).join("brain").join(session_id);
-        if !brain_dir.exists() {
-            let _ = std::fs::create_dir_all(&brain_dir);
-            let _ = Command::new("git")
-                .arg("init")
-                .current_dir(&brain_dir)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .await;
-        }
         let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
         if self.config.permission_mode == "bypassPermissions" { args.push("--dangerously-skip-permissions".into()); }
         args.extend(vec!["--prompt-interactive".into(), "".into()]);

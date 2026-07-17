@@ -204,37 +204,3 @@ async fn test_send_automatically_trusts_workspace() {
     let expected = workspace.canonicalize().unwrap().to_string_lossy().to_string();
     assert!(workspaces.iter().any(|v| v.as_str() == Some(&expected)));
 }
-
-#[tokio::test]
-async fn test_ensure_interactive_session_precreates_brain_and_git_init() {
-    let _guard = ENV_MUTEX.lock().unwrap();
-    let temp_dir = tempfile::tempdir().unwrap();
-    
-    // Create a mock script that exits immediately
-    write_mock_script(temp_dir.path(), "#!/bin/sh\necho '{\"result\":\"ok\"}'\n");
-    
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
-    path_env = format!("{}:{}", temp_dir.path().to_string_lossy(), path_env);
-    unsafe {
-        std::env::set_var("PATH", path_env);
-        std::env::set_var("HOME", temp_dir.path().to_string_lossy().to_string());
-    }
-
-    let config = CliConfig {
-        provider: "antigravity".to_string(),
-        working_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
-    let cli = AntigravityCli::new(config);
-    let workspace = temp_dir.path().to_path_buf();
-    
-    let test_session_id = "test-session-uuid-12345";
-    
-    // Trigger send with resume_session = Some(test_session_id)
-    let _ = cli.send("hi", Some(test_session_id), false, workspace).await;
-
-    // Verify that the brain directory was pre-created and git init was run
-    let brain_dir = temp_dir.path().join(".gemini").join("antigravity-cli").join("brain").join(test_session_id);
-    let git_dir = brain_dir.join(".git");
-    assert!(git_dir.exists(), "Brain directory .git was not created at {:?}", git_dir);
-}
