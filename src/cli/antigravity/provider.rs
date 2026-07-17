@@ -217,21 +217,18 @@ impl AgentProvider for AntigravityCli {
         let workspace_path = workspace.clone();
 
         let env = self.build_env();
-        let initial_size = if let Some(ref sid) = resume_id {
-            let brain_dir = events::agy_state_root(Some(&env)).join("brain").join(sid);
-            let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl");
-            std::fs::metadata(&transcript_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        let initial_size = resume_id.as_ref().map(|sid| {
+            let p = events::agy_state_root(Some(&env)).join("brain").join(sid)
+                .join(".system_generated/logs/transcript_full.jsonl");
+            std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
+        }).unwrap_or(0);
 
+        let rid = resume_id.clone();
         let oneshot_handle = tokio::spawn(async move {
-            self_arc.send(&prompt_string, resume_id.as_deref(), continue_session, workspace_path).await
+            self_arc.send(&prompt_string, rid.as_deref(), continue_session, workspace_path).await
         });
 
-        super::polling::spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), Some(initial_size));
+        super::polling::spawn_log_polling(oneshot_handle, tx, self.agy_workspace(), self.build_env(), Some(initial_size), resume_id);
 
         let stream = futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|event| (event, rx))

@@ -33,8 +33,15 @@ fn parse_and_stream(
     p_size: &mut Option<u64>,
     parser: &mut super::log_parser::AntigravityLogParser,
     tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
+    session_id: Option<&str>,
 ) {
-    if let Some(bd) = super::events::resolve_brain_dir(ws, Some(env)) {
+    let bd_opt = if let Some(sid) = session_id {
+        Some(super::events::agy_state_root(Some(env)).join("brain").join(sid))
+    } else {
+        super::events::resolve_brain_dir(ws, Some(env))
+    };
+
+    if let Some(bd) = bd_opt {
         let tp = bd.join(".system_generated").join("logs").join("transcript_full.jsonl");
         if act_path.is_some() && Some(&tp) != act_path.as_ref() {
             *p_size = None;
@@ -54,6 +61,7 @@ async fn poll_loop_async(
     agy_ws: PathBuf,
     env: HashMap<String, String>,
     initial_size: Option<u64>,
+    session_id: Option<String>,
 ) {
     let mut prev_size = initial_size;
     let mut active_path = None;
@@ -76,7 +84,7 @@ async fn poll_loop_async(
     }
 
     let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(5));
-    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
+    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
 
     let mut fs_rx_closed = false;
     loop {
@@ -87,13 +95,13 @@ async fn poll_loop_async(
             }
             res = fs_rx.recv(), if !fs_rx_closed => {
                 if res.is_some() {
-                    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
+                    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
                 } else {
                     fs_rx_closed = true;
                 }
             }
             _ = fallback.tick() => {
-                parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx);
+                parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
             }
         }
     }
@@ -106,8 +114,9 @@ pub(crate) fn spawn_log_polling(
     agy_ws: PathBuf,
     env: HashMap<String, String>,
     initial_size: Option<u64>,
+    session_id: Option<String>,
 ) {
-    tokio::spawn(poll_loop_async(oneshot_handle, tx, agy_ws, env, initial_size));
+    tokio::spawn(poll_loop_async(oneshot_handle, tx, agy_ws, env, initial_size, session_id));
 }
 
 fn setup_path_watcher(
