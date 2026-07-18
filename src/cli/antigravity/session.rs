@@ -156,10 +156,14 @@ impl SessionManager {
     pub async fn write_to_session(&self, session_id: &str, input: &str) -> Result<bool, String> {
         let holders = self.holders.lock().await;
         if let Some(holder) = holders.get(session_id) {
-            for c in input.chars() {
-                let s = c.to_string();
-                holder.write_input(&s)?;
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if input.starts_with('\x1b') {
+                holder.write_input(input)?;
+            } else {
+                for c in input.chars() {
+                    let s = c.to_string();
+                    holder.write_input(&s)?;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
             Ok(true)
         } else {

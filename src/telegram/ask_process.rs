@@ -2,7 +2,7 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::session::manager::SessionManager;
-use super::multi_select::build_multi_select_keyboard;
+use super::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
 use super::ask_helpers::find_write_in_index;
 
 
@@ -212,12 +212,7 @@ pub(crate) async fn handle_stream_ask_question(
         let initial_bitmap = "0".repeat(ask.options.len());
         build_multi_select_keyboard(&sess_id, &ask.options, &initial_bitmap, false)
     } else {
-        let mut keyboard = Vec::new();
-        for (i, opt) in ask.options.iter().enumerate() {
-            let callback_data = format!("ask_ans:{}:{}", sess_id, i);
-            keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(opt, callback_data)]);
-        }
-        teloxide::types::InlineKeyboardMarkup::new(keyboard)
+        build_single_select_keyboard(&sess_id, &ask.options, false)
     };
     let html_question = super::formatting::markdown_to_telegram_html(&ask.question);
     let mut req = bot.send_message(chat_id, html_question)
