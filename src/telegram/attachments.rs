@@ -39,10 +39,13 @@ pub(crate) async fn send_file_attachments(
     raw_text: &str,
     config: &CliConfig,
 ) {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home_path = PathBuf::from(&home);
     let allowed_roots = vec![
         config.working_dir.clone(),
-        PathBuf::from("/home/wimvm/.tuner"),
-        PathBuf::from("/home/wimvm/tuner"),
+        home_path.join(".tuner"),
+        home_path.join("tuner"),
+        home_path.join(".gemini/antigravity-cli"),
     ];
     let file_paths = extract_file_paths(raw_text, &allowed_roots);
     for path in file_paths {
