@@ -33,7 +33,9 @@ fn start_schedulers(
 
 pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
-    if tok.is_empty() { return Err("No token".to_string()); }
+    if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
+        return Err("Telegram token is not configured. Please run tuner --setup or configure it manually in ~/.tuner/config/config.json".to_string());
+    }
     let bot = Bot::new(tok);
     let _ = commands::register_commands(&bot).await;
     let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });

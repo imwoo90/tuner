@@ -117,6 +117,24 @@ async fn process_text(
     run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions.as_ref(), sess, config).await
 }
 
+fn auto_register_owner(from_id: i64) {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let path = std::path::PathBuf::from(&home).join(".tuner/config/config.json");
+    if let Ok(c) = std::fs::read_to_string(&path) {
+        if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&c) {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("allowed_user_ids".to_string(), serde_json::json!([from_id]));
+                if let Ok(pretty) = serde_json::to_string_pretty(&val) {
+                    if std::fs::write(&path, pretty).is_ok() {
+                        let restart = std::path::PathBuf::from(&home).join(".tuner/restart-requested");
+                        let _ = std::fs::write(restart, "");
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn handle_message_inner(
     bot: Bot,
     msg: Message,
@@ -136,8 +154,16 @@ async fn handle_message_inner(
     if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id) {
         return Ok(());
     }
-    let ok = config.allowed_user_ids.contains(&from_id)
-        && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
+    let mut ok = config.allowed_user_ids.contains(&from_id);
+
+    if !ok && from_id != 0 && config.allowed_user_ids.is_empty() {
+        println!("🤖 [tuner] First-time owner auto-registered! Telegram User ID: {}. Restarting...", from_id);
+        let _ = bot.send_message(msg.chat.id, "🤖 Owner registered successfully! Restarting tuner daemon...").await;
+        auto_register_owner(from_id);
+        std::process::exit(0);
+    }
+
+    ok = ok && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
     if ok {
         let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref())
             .replace("/teamwork_preview", "/teamwork-preview").replace("/grill_me", "/grill-me");
