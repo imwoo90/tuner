@@ -74,7 +74,9 @@ journalctl --user -u tuner.service -f
 
 ## ⚙️ Configuration (`config.json`)
 
-The default configuration file is loaded from `~/.tuner/config.json`. Below is the supported JSON schema:
+On the first run of the `tuner` daemon, a default configuration template is automatically initialized and written to `~/.tuner/config/config.json`. 
+
+You can then customize this configuration to fit your environment (such as setting your `telegram_token` and `allowed_user_ids`). The supported JSON schema is as follows:
 
 ```json
 {
