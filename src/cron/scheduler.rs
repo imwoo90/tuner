@@ -209,6 +209,9 @@ impl CronScheduler {
         }
 
         let mut jc = (*self.config).clone();
+        jc.chat_id = job.chat_id;
+        jc.topic_id = job.topic_id;
+        jc.transport = job.transport.clone();
         if let Some(m) = &job.model { jc.model = Some(m.clone()); }
         if let Some(p) = &job.provider { jc.provider = p.clone(); }
         if !job.cli_parameters.is_empty() {

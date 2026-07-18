@@ -52,6 +52,8 @@ pub(crate) async fn run_cli_stream(
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let mut cc = cli.clone();
+    cc.config.chat_id = msg.chat.id.0;
+    cc.config.topic_id = msg.thread_id.map(|t| t as i64);
     if !sess.model.is_empty() { cc.config.model = Some(sess.model.clone()); }
     match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
         Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?,
@@ -164,7 +166,11 @@ async fn handle_message_inner(
         std::process::exit(0);
     }
 
-    ok = ok && (!msg.chat.is_group() && !msg.chat.is_supergroup() || config.allowed_group_ids.contains(&chat_id));
+    let is_group = msg.chat.is_group() || msg.chat.is_supergroup();
+    if ok && is_group && !config.allowed_group_ids.contains(&chat_id) {
+        eprintln!("⚠️ [tuner] Unauthorized group ID: {}", chat_id);
+    }
+    ok = ok && (!is_group || config.allowed_group_ids.contains(&chat_id));
     if ok {
         let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref())
             .replace("/teamwork_preview", "/teamwork-preview").replace("/grill_me", "/grill-me");
