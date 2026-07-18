@@ -112,53 +112,24 @@ async fn main() -> Result<(), String> {
 
 fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let token = std::env::var("TELEGRAM_TOKEN")
-        .unwrap_or_else(|_| config.telegram_token.clone());
-        
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
-        
-    let project_root = current_exe
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
+    let token = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let project_root = current_exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-
+    let path_env = std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
     let unit_content = format!(
-        "[Unit]\n\
-         Description=Tuner - Telegram Bot Daemon for Antigravity CLI\n\
-         After=network.target\n\n\
-         [Service]\n\
-         Type=simple\n\
-         WorkingDirectory={}\n\
-         ExecStart={}\n\
-         Environment=\"TELEGRAM_TOKEN={}\"\n\
-         Environment=\"HOME={}\"\n\
-         Restart=always\n\
-         RestartSec=10\n\n\
-         [Install]\n\
-         WantedBy=default.target\n",
-        project_root.to_string_lossy(),
-        current_exe.to_string_lossy(),
-        token,
-        home
+        "[Unit]\nDescription=Tuner Bot\nAfter=network.target\n\n[Service]\nType=simple\n\
+         WorkingDirectory={}\nExecStart={}\nEnvironment=\"TELEGRAM_TOKEN={}\"\n\
+         Environment=\"HOME={}\"\nEnvironment=\"PATH={}\"\nRestart=always\nRestartSec=10\n\n\
+         [Install]\nWantedBy=default.target\n",
+        project_root.to_string_lossy(), current_exe.to_string_lossy(), token, home, path_env
     );
-
-    let systemd_dir = std::path::PathBuf::from(&home)
-        .join(".config")
-        .join("systemd")
-        .join("user");
-        
-    std::fs::create_dir_all(&systemd_dir)
-        .map_err(|e| format!("Failed to create systemd user directory: {}", e))?;
-        
+    let systemd_dir = std::path::PathBuf::from(&home).join(".config/systemd/user");
+    std::fs::create_dir_all(&systemd_dir).map_err(|e| e.to_string())?;
     let service_file = systemd_dir.join("tuner.service");
-    std::fs::write(&service_file, unit_content)
-        .map_err(|e| format!("Failed to write tuner.service: {}", e))?;
-
+    std::fs::write(&service_file, unit_content).map_err(|e| e.to_string())?;
     println!("🤖 [tuner] Installed successfully to {:?}", service_file);
     println!("💡 Run: systemctl --user daemon-reload && systemctl --user restart tuner");
-    
     Ok(())
 }
