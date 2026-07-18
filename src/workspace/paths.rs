@@ -177,7 +177,7 @@ pub fn resolve_paths(
     let home = tuner_home
         .or_else(|| std::env::var("TUNER_HOME").ok().map(PathBuf::from))
         .unwrap_or_else(|| {
-            let base = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+            let base = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
             PathBuf::from(base).join(".tuner")
         });
 

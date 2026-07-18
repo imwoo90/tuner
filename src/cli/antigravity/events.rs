@@ -54,7 +54,7 @@ pub fn agy_state_root(env: Option<&HashMap<String, String>>) -> PathBuf {
     } else {
         std::env::var("HOME")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/home/wimvm"))
+            .unwrap_or_else(|_| PathBuf::from("."))
     };
 
     base.join(".gemini").join("antigravity-cli")

@@ -15,7 +15,7 @@ pub fn trust_workspace_in_settings(workspace: &Path, home_override: Option<PathB
     let home = match home_override {
         Some(path) => path,
         None => {
-            let home_str = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+            let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
             PathBuf::from(home_str)
         }
     };

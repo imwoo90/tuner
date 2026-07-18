@@ -74,7 +74,7 @@ pub mod matrix_concurrency_tests;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
     let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None);
     workspace::init::init_workspace(&paths)?;
@@ -111,7 +111,7 @@ async fn main() -> Result<(), String> {
 }
 
 fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let token = std::env::var("TELEGRAM_TOKEN")
         .unwrap_or_else(|_| config.telegram_token.clone());
         
@@ -123,7 +123,7 @@ fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
         .and_then(|p| p.parent())
         .and_then(|p| p.parent())
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("/home/wimvm/tuner/workspace/scratch/tuner"));
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
 
     let unit_content = format!(
         "[Unit]\n\

@@ -43,7 +43,7 @@ pub fn is_under(child: &Path, parent: &Path) -> bool {
 
 pub fn cli_skill_dirs(enabled_providers: &HashSet<String>) -> HashMap<String, PathBuf> {
     let mut dirs = HashMap::new();
-    let home_str = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home = Path::new(&home_str);
 
     if enabled_providers.contains("claude") {

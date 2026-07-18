@@ -177,7 +177,7 @@ fn test_prefers_userprofile_then_home() {
 fn test_falls_back_to_user_home() {
     let env = HashMap::new();
     let state_root = agy_state_root(Some(&env));
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let expected = PathBuf::from(home)
         .join(".gemini")
         .join("antigravity-cli");

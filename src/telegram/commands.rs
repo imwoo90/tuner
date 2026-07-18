@@ -202,7 +202,7 @@ async fn handle_memory_command(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), teloxide::RequestError> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let memory_path = std::path::PathBuf::from(home).join(".tuner/workspace/memory_system/MAINMEMORY.md");
     let content = std::fs::read_to_string(memory_path)
         .unwrap_or_else(|_| t!("bot.memory_empty"));

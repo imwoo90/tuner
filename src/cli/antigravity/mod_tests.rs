@@ -119,7 +119,7 @@ fn test_antigravity_dotted_workspace_mapped_to_symlink() {
 
 #[test]
 fn test_antigravity_plain_workspace_unchanged() {
-    let plain = PathBuf::from("/home/wimvm/projects/plain_test");
+    let plain = PathBuf::from("/home/user/projects/plain_test");
 
     let config = CliConfig {
         provider: "antigravity".to_string(),

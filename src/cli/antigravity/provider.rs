@@ -22,8 +22,11 @@ impl AntigravityCli {
         add("TUNER_CHAT_ID", self.config.chat_id.to_string());
         if let Some(tid) = self.config.topic_id { add("TUNER_TOPIC_ID", tid.to_string()); }
         add("TUNER_TRANSPORT", self.config.transport.clone());
-        add("TUNER_HOME", "/home/wimvm/.tuner".into());
-        add("TUNER_SHARED_MEMORY_PATH", "/home/wimvm/.tuner/SHAREDMEMORY.md".into());
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
+        let shared_memory_path = tuner_home.join("SHAREDMEMORY.md");
+        add("TUNER_HOME", tuner_home.to_string_lossy().into());
+        add("TUNER_SHARED_MEMORY_PATH", shared_memory_path.to_string_lossy().into());
         env
     }
 

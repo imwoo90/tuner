@@ -38,7 +38,7 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     let _ = commands::register_commands(&bot).await;
     let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });
     let config_arc = Arc::new(config);
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     
     reply::spawn_restart_watcher(home.clone());
     let topic_cache = Arc::new(TopicNameCache::new());
