@@ -87,6 +87,8 @@ pub(crate) async fn handle_stream_result(
     let (final_success, final_error, sent_msg_id) =
         send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
 
+    let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, &raw_text, config).await;
+
     if let Some(ref sid) = last_session_id {
         super::history::log_telegram_message(
             &config.working_dir,

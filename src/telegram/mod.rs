@@ -28,6 +28,7 @@ pub mod ask_helpers;
 pub mod ask_process;
 pub mod multi_select;
 pub mod runner;
+pub mod attachments;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
