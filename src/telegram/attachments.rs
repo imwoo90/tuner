@@ -39,7 +39,7 @@ pub(crate) async fn send_file_attachments(
     raw_text: &str,
     config: &CliConfig,
 ) {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/wimvm".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home_path = PathBuf::from(&home);
     let allowed_roots = vec![
         config.working_dir.clone(),
