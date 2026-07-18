@@ -132,6 +132,13 @@ mod tests {
     }
 
     #[test]
+    fn test_blockquote_expandable_with_code() {
+        let input = ">! ```rust\nfn main() {}\n```";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "<blockquote expandable><pre><code class=\"language-rust\">fn main() {}\n</code></pre></blockquote>");
+    }
+
+    #[test]
     fn test_consecutive_blockquotes_grouped() {
         let input = "> line 1\n>! line 2\n> line 3";
         let html = markdown_to_telegram_html(input);
