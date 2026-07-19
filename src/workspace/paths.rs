@@ -24,13 +24,18 @@ impl DuctorPaths {
         }
     }
 
+    /// Profile home directory: `~/.tuner/profiles/<profile_name>/` or fallback to `~/.tuner/`
+    pub fn profile_home(&self) -> PathBuf {
+        if let Some(ref p) = self.profile {
+            self.tuner_home.join("profiles").join(p)
+        } else {
+            self.tuner_home.clone()
+        }
+    }
+
     /// Resolve a profile-specific path.
     fn profile_join(&self, filename: &str) -> PathBuf {
-        if let Some(ref p) = self.profile {
-            self.tuner_home.join("profiles").join(p).join(filename)
-        } else {
-            self.tuner_home.join(filename)
-        }
+        self.profile_home().join(filename)
     }
 
     /// User agent workspace directory

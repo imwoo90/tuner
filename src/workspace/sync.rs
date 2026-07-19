@@ -79,7 +79,7 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
     let _ = crate::workspace::skills::sync_bundled_skills(paths, false);
 
     if paths.home_defaults.is_dir() {
-        walk_and_copy(&paths.home_defaults, &paths.tuner_home, &paths.home_defaults)?;
+        walk_and_copy(&paths.home_defaults, &paths.profile_home(), &paths.home_defaults)?;
     }
 
     create_workspace_directories(paths);
