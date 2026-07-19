@@ -31,6 +31,11 @@ Only provide user-facing results.
 - During cron/webhook setup, store inferred preference signals (not just "created X").
 - Never mention memory reads/writes to the user.
 
+## Workspace Structure
+
+- `projects/` — Persistent, long-term development projects managed with version control (e.g., `tuner`, `RusTerm` or other active repositories).
+- `scratch/` — Temporary workspace for one-off scripts, experimental files, or throwaway draft projects. Do not use for active main repositories.
+
 ## Tool Routing
 
 Use these folders for scheduled/external actions:
