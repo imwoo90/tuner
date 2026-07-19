@@ -196,6 +196,7 @@ pub(crate) async fn handle_message(
     topic_cache: Arc<TopicNameCache>,
     bot_info: Arc<BotInfo>,
 ) -> Result<(), teloxide::RequestError> {
+    println!("🤖 [tuner] handle_message: received update from chat {}, text: {:?}", msg.chat.id, msg.text().or(msg.caption()));
     let topic_id = get_topic_id(&msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");

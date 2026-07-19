@@ -35,7 +35,10 @@ fn start_schedulers(
 pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
     if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
-        return Err("Telegram token is not configured. Please run tuner --setup or configure it manually in ~/.tuner/config/config.json".to_string());
+        eprintln!("❌ [tuner] Profile '{}' Telegram token is not configured or is placeholder. Worker will sleep to prevent tight restart loop.", paths.profile.as_deref().unwrap_or("default"));
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+        }
     }
     let bot = Bot::new(tok);
     let _ = commands::register_commands(&bot).await;

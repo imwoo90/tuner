@@ -124,6 +124,7 @@ async fn spawn_worker(current_exe: &std::path::Path, name: &str) -> Result<tokio
     tokio::process::Command::new(current_exe)
         .arg("--worker")
         .arg(name)
+        .env_remove("TELEGRAM_TOKEN")
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| format!("Failed to spawn worker '{}': {}", name, e))
@@ -201,9 +202,17 @@ async fn run_master_mode(config: config::CliConfig) -> Result<(), String> {
 fn override_profile_config(config: &mut config::CliConfig, profile_name: &str, paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
     let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
         .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
-    config.telegram_token = profile_cfg.telegram_token.clone();
-    config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
-    config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+    if !profile_cfg.telegram_token.is_empty() && profile_cfg.telegram_token != "YOUR_BOT_TOKEN_HERE" && !profile_cfg.telegram_token.starts_with("YOUR_") {
+        config.telegram_token = profile_cfg.telegram_token.clone();
+    } else if profile_name != "default" {
+        config.telegram_token = String::new();
+    }
+    if !profile_cfg.allowed_user_ids.is_empty() && profile_cfg.allowed_user_ids != vec![123456789] {
+        config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
+    }
+    if !profile_cfg.allowed_group_ids.is_empty() && profile_cfg.allowed_group_ids != vec![-1001234567890] {
+        config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+    }
     config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
     if let Some(ref m) = profile_cfg.model {
         config.model = Some(m.clone());
