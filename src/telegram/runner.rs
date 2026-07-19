@@ -8,6 +8,7 @@ use super::commands;
 use super::reply;
 use super::callbacks;
 use super::handle_message;
+use crate::workspace::paths::DuctorPaths;
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
     SessionManager::new(path, 0, 4, false, "UTC".to_string(), None)
@@ -19,19 +20,19 @@ fn start_schedulers(
     cfg: Arc<CliConfig>,
     sess: Arc<SessionManager>,
     cli: Arc<AntigravityCli>,
-    home: &str,
+    paths: DuctorPaths,
 ) -> Arc<crate::cron::manager::CronManager> {
     let bus = Arc::new(crate::bus::bus::MessageBus::new());
     bus.register_transport(Arc::new(super::transport::TelegramTransport::new(bot.clone())));
     Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
-    let cron = Arc::new(crate::cron::manager::CronManager::new(std::path::PathBuf::from(home).join(".tuner/cron_jobs.json")));
+    let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
     Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli, bus)).start();
     let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
     tokio::spawn(async move { clean.start().await; });
     cron
 }
 
-pub async fn run_bot(config: CliConfig) -> Result<(), String> {
+pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
     if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
         return Err("Telegram token is not configured. Please run tuner --setup or configure it manually in ~/.tuner/config/config.json".to_string());
@@ -44,12 +45,12 @@ pub async fn run_bot(config: CliConfig) -> Result<(), String> {
     
     reply::spawn_restart_watcher(home.clone());
     let topic_cache = Arc::new(TopicNameCache::new());
-    let p = std::path::Path::new(&home).join(".tuner/sessions.json");
+    let p = paths.sessions_path();
     let sessions = Arc::new(build_sessions(p, topic_cache.clone()));
 
     reply::load_sessions_cache(&sessions, &topic_cache).await;
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
-    let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), &home);
+    let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), paths.clone());
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });

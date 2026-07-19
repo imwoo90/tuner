@@ -47,6 +47,7 @@ pub fn make_paths() -> DuctorPaths {
         PathBuf::from("/tmp/ductor_home"),
         PathBuf::from("/tmp/home_defaults"),
         PathBuf::from("/tmp/framework_root"),
+        None,
     )
 }
 

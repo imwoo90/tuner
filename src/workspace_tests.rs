@@ -45,7 +45,7 @@ mod tests {
         let home = PathBuf::from("/home/user/.tuner");
         let fw = PathBuf::from("/opt/ductor");
         let hd = fw.join("workspace");
-        let paths = DuctorPaths::new(home, hd, fw);
+        let paths = DuctorPaths::new(home, hd, fw, None);
 
         assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/workspace"));
         assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
@@ -54,11 +54,24 @@ mod tests {
     }
 
     #[test]
+    fn test_workspace_paths_properties_with_profile() {
+        let home = PathBuf::from("/home/user/.tuner");
+        let fw = PathBuf::from("/opt/ductor");
+        let hd = fw.join("workspace");
+        let paths = DuctorPaths::new(home, hd, fw, Some("my-profile".to_string()));
+
+        assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/profiles/my-profile/workspace"));
+        assert_eq!(paths.sessions_path(), PathBuf::from("/home/user/.tuner/profiles/my-profile/sessions.json"));
+        assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json")); // global
+    }
+
+    #[test]
     fn test_resolve_paths_explicit() {
         let _paths = resolve_paths(
             Some(PathBuf::from("/h")),
             Some(PathBuf::from("/f")),
             Some(PathBuf::from("/d")),
+            None,
         );
     }
 
@@ -72,6 +85,7 @@ mod tests {
             tmp.path().join("home"),
             fw.join("workspace"),
             fw,
+            None,
         );
 
         init_workspace(&paths).unwrap();
@@ -87,6 +101,7 @@ mod tests {
             tmp.path().join("home"),
             fw.join("workspace"),
             fw,
+            None,
         );
 
         inject_runtime_environment(&paths, Some("sandbox")).unwrap();
@@ -97,7 +112,7 @@ mod tests {
         unsafe { std::env::set_var("TUNER_TEST_MODE", "1"); }
         let home = PathBuf::from("/h");
         let fw = PathBuf::from("/f");
-        let paths = DuctorPaths::new(home.clone(), fw.join("w"), fw);
+        let paths = DuctorPaths::new(home.clone(), fw.join("w"), fw, None);
         let selector = RulesSelector::new(paths);
         assert_eq!(selector.get_variant_suffix(), "claude-only");
     }
@@ -144,6 +159,7 @@ mod tests {
             tmp.path().join("home"),
             tmp.path().join("fw").join("workspace"),
             tmp.path().join("fw"),
+            None,
         );
 
         sync_skills(&paths, false).unwrap();
@@ -156,6 +172,7 @@ mod tests {
             tmp.path().join("home"),
             tmp.path().join("fw").join("workspace"),
             tmp.path().join("fw"),
+            None,
         );
 
         cleanup_ductor_links(&paths).unwrap();

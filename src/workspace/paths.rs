@@ -10,21 +10,32 @@ pub struct DuctorPaths {
     pub tuner_home: PathBuf,
     pub home_defaults: PathBuf,
     pub framework_root: PathBuf,
+    pub profile: Option<String>,
 }
 
 impl DuctorPaths {
     /// Create a new DuctorPaths instance.
-    pub fn new(tuner_home: PathBuf, home_defaults: PathBuf, framework_root: PathBuf) -> Self {
+    pub fn new(tuner_home: PathBuf, home_defaults: PathBuf, framework_root: PathBuf, profile: Option<String>) -> Self {
         Self {
             tuner_home,
             home_defaults,
             framework_root,
+            profile,
         }
     }
 
-    /// User agent workspace directory: `~/.tuner/workspace`
+    /// Resolve a profile-specific path.
+    fn profile_join(&self, filename: &str) -> PathBuf {
+        if let Some(ref p) = self.profile {
+            self.tuner_home.join("profiles").join(p).join(filename)
+        } else {
+            self.tuner_home.join(filename)
+        }
+    }
+
+    /// User agent workspace directory
     pub fn workspace(&self) -> PathBuf {
-        self.tuner_home.join("workspace")
+        self.profile_join("workspace")
     }
 
     /// Configuration directory: `~/.tuner/config`
@@ -37,19 +48,19 @@ impl DuctorPaths {
         self.config_dir().join("config.json")
     }
 
-    /// Sessions path: `~/.tuner/sessions.json`
+    /// Sessions path
     pub fn sessions_path(&self) -> PathBuf {
-        self.tuner_home.join("sessions.json")
+        self.profile_join("sessions.json")
     }
 
-    /// Cron jobs path: `~/.tuner/cron_jobs.json`
+    /// Cron jobs path
     pub fn cron_jobs_path(&self) -> PathBuf {
-        self.tuner_home.join("cron_jobs.json")
+        self.profile_join("cron_jobs.json")
     }
 
-    /// Webhooks path: `~/.tuner/webhooks.json`
+    /// Webhooks path
     pub fn webhooks_path(&self) -> PathBuf {
-        self.tuner_home.join("webhooks.json")
+        self.profile_join("webhooks.json")
     }
 
     /// Logs directory: `~/.tuner/logs`
@@ -107,29 +118,29 @@ impl DuctorPaths {
         self.workspace().join("tasks")
     }
 
-    /// Tasks registry path: `~/.tuner/tasks.json`
+    /// Tasks registry path
     pub fn tasks_registry_path(&self) -> PathBuf {
-        self.tuner_home.join("tasks.json")
+        self.profile_join("tasks.json")
     }
 
-    /// Chat activity path: `~/.tuner/chat_activity.json`
+    /// Chat activity path
     pub fn chat_activity_path(&self) -> PathBuf {
-        self.tuner_home.join("chat_activity.json")
+        self.profile_join("chat_activity.json")
     }
 
-    /// Named sessions path: `~/.tuner/named_sessions.json`
+    /// Named sessions path
     pub fn named_sessions_path(&self) -> PathBuf {
-        self.tuner_home.join("named_sessions.json")
+        self.profile_join("named_sessions.json")
     }
 
-    /// Startup state path: `~/.tuner/startup_state.json`
+    /// Startup state path
     pub fn startup_state_path(&self) -> PathBuf {
-        self.tuner_home.join("startup_state.json")
+        self.profile_join("startup_state.json")
     }
 
-    /// Inflight turns path: `~/.tuner/inflight_turns.json`
+    /// Inflight turns path
     pub fn inflight_turns_path(&self) -> PathBuf {
-        self.tuner_home.join("inflight_turns.json")
+        self.profile_join("inflight_turns.json")
     }
 
     /// User-managed environment file: `~/.tuner/.env`
@@ -173,6 +184,7 @@ pub fn resolve_paths(
     tuner_home: Option<PathBuf>,
     framework_root: Option<PathBuf>,
     home_defaults: Option<PathBuf>,
+    profile: Option<String>,
 ) -> DuctorPaths {
     let home = tuner_home
         .or_else(|| std::env::var("TUNER_HOME").ok().map(PathBuf::from))
@@ -189,5 +201,5 @@ pub fn resolve_paths(
         .or_else(|| std::env::var("TUNER_HOME_DEFAULTS").ok().map(PathBuf::from))
         .unwrap_or_else(|| root.join("_home_defaults"));
 
-    DuctorPaths::new(home, defaults, root)
+    DuctorPaths::new(home, defaults, root, profile)
 }

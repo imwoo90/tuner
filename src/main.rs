@@ -14,6 +14,7 @@ pub mod tasks;
 pub mod i18n;
 pub mod messenger;
 pub mod supervisor;
+pub mod setup;
 
 
 #[cfg(test)]
@@ -110,114 +111,158 @@ fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String>
 
     let install_sys = prompt_input("Do you want to install tuner as a systemd user service? (y/n): ")?;
     if install_sys.to_lowercase().starts_with('y') {
-        install_systemd_service(&config)?;
+        setup::install_systemd_service(&config)?;
     }
     
     println!("🎉 Setup complete! Please start the tuner bot and send a message (e.g. /start) to register as owner.");
     Ok(())
 }
 
-fn load_env_file(path: &std::path::Path) -> Result<(), String> {
-    if !path.is_file() {
-        return Ok(());
+// load_env_file moved to config module
+
+async fn spawn_worker(current_exe: &std::path::Path, name: &str) -> Result<tokio::process::Child, String> {
+    tokio::process::Command::new(current_exe)
+        .arg("--worker")
+        .arg(name)
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| format!("Failed to spawn worker '{}': {}", name, e))
+}
+
+async fn check_restart_marker(marker: &std::path::Path, workers: &mut [(String, tokio::process::Child)]) {
+    if marker.exists() {
+        let _ = std::fs::remove_file(marker);
+        println!("🤖 [tuner] Master detected restart request. Terminating all workers...");
+        for (name, child) in workers.iter_mut() {
+            println!("🤖 [tuner] Killing worker: {}", name);
+            let _ = child.kill().await;
+        }
+        std::process::exit(42);
     }
-    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let line_to_parse = if trimmed.starts_with("export ") {
-            trimmed["export ".len()..].trim()
-        } else {
-            trimmed
-        };
-        if let Some(pos) = line_to_parse.find('=') {
-            let key = line_to_parse[..pos].trim();
-            let mut val = line_to_parse[pos + 1..].trim().to_string();
-            if (val.starts_with('"') && val.ends_with('"')) || (val.starts_with('\'') && val.ends_with('\'')) {
-                if val.len() >= 2 {
-                    val = val[1..val.len() - 1].to_string();
+}
+
+async fn monitor_workers(workers: &mut [(String, tokio::process::Child)], current_exe: &std::path::Path) -> Result<(), String> {
+    let mut exit_requested = None;
+    for (name, child) in workers.iter_mut() {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                println!("🤖 [tuner] Worker '{}' exited with status: {}", name, status);
+                if let Some(code) = status.code() {
+                    if code == 42 {
+                        exit_requested = Some(name.clone());
+                        break;
+                    }
                 }
+                println!("🤖 [tuner] Restarting worker: {}", name);
+                *child = spawn_worker(current_exe, name).await?;
             }
-            if !key.is_empty() && std::env::var(key).is_err() {
-                unsafe { std::env::set_var(key, val); }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("🤖 [tuner] Error checking status of worker '{}': {}", name, e);
             }
         }
+    }
+
+    if let Some(ref requester) = exit_requested {
+        println!("🤖 [tuner] Worker '{}' requested restart. Exiting master...", requester);
+        for (name, child) in workers.iter_mut() {
+            if name != requester {
+                let _ = child.kill().await;
+            }
+        }
+        std::process::exit(42);
+    }
+    Ok(())
+}
+
+async fn run_master_mode(config: config::CliConfig) -> Result<(), String> {
+    println!("🤖 [tuner] Starting in Master Mode (Supervisor)...");
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
+
+    let mut workers = Vec::new();
+    for profile in &config.profiles {
+        println!("🤖 [tuner] Spawning worker for profile: {}", profile.name);
+        let child = spawn_worker(&current_exe, &profile.name).await?;
+        workers.push((profile.name.clone(), child));
+    }
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+
+    loop {
+        interval.tick().await;
+        check_restart_marker(&marker, &mut workers).await;
+        monitor_workers(&mut workers, &current_exe).await?;
+    }
+}
+
+fn override_profile_config(config: &mut config::CliConfig, profile_name: &str, paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
+    let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
+        .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
+    config.telegram_token = profile_cfg.telegram_token.clone();
+    config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
+    config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+    config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
+    if let Some(ref m) = profile_cfg.model {
+        config.model = Some(m.clone());
+    }
+    if let Some(ref p) = profile_cfg.system_prompt {
+        config.system_prompt = Some(p.clone());
+    }
+    if let Some(ref p) = profile_cfg.append_system_prompt {
+        config.append_system_prompt = Some(p.clone());
+    }
+    if let Some(ref l) = profile_cfg.language {
+        config.language = Some(l.clone());
     }
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
-    let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None);
-
     let args: Vec<String> = std::env::args().collect();
+    let worker_profile = args.iter().position(|arg| arg == "--worker")
+        .and_then(|pos| args.get(pos + 1).cloned());
+
+    let tuner_home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string())).join(".tuner");
+    let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None, worker_profile.clone());
+
     if args.contains(&"--setup".to_string()) {
         return run_setup_wizard(&paths);
     }
 
-    let _ = load_env_file(&paths.env_file());
+    let _ = setup::load_env_file(&paths.env_file());
     workspace::init::init_workspace(&paths)?;
 
     let mut config = config::CliConfig::load_from_file(&paths.config_path())?;
     config.working_dir = paths.workspace().clone();
 
+    if let Some(ref profile_name) = worker_profile {
+        override_profile_config(&mut config, profile_name, &paths)?;
+    }
+
     let startup_lang = config.language.as_deref().unwrap_or("en");
     i18n::init(startup_lang);
 
     if args.contains(&"--install-systemd".to_string()) {
-        return install_systemd_service(&config);
+        return setup::install_systemd_service(&config);
     }
     if args.contains(&"--supervisor".to_string()) {
         let current_exe = std::env::current_exe()
             .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
-        let filtered_args: Vec<String> = args
-            .into_iter()
-            .skip(1)
-            .filter(|arg| arg != "--supervisor")
-            .collect();
+        let filtered_args: Vec<String> = args.into_iter().skip(1).filter(|arg| arg != "--supervisor").collect();
         let supervisor = supervisor::Supervisor::with_args(current_exe, filtered_args);
         return supervisor.run().await;
     }
 
-    println!("🤖 [tuner] Loading config from: {:?}", paths.config_path());
-    println!("🤖 [tuner] Starting Telegram bot...");
-    telegram::run_bot(config).await?;
-    
-    Ok(())
-}
-
-fn install_systemd_service(config: &config::CliConfig) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let project_root = current_exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-    let path_env = std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
-
-    let token_line = if let Ok(tok) = std::env::var("TELEGRAM_TOKEN") {
-        format!("Environment=\"TELEGRAM_TOKEN={}\"\n", tok)
-    } else if !config.telegram_token.is_empty() && config.telegram_token != "YOUR_BOT_TOKEN_HERE" {
-        format!("Environment=\"TELEGRAM_TOKEN={}\"\n", config.telegram_token)
+    if let Some(ref p) = worker_profile {
+        println!("🤖 [tuner] Starting Telegram bot worker for '{}'...", p);
+        telegram::run_bot(config, paths).await
     } else {
-        String::new()
-    };
-
-    let unit_content = format!(
-        "[Unit]\nDescription=Tuner Bot\nAfter=network.target\n\n[Service]\nType=simple\n\
-         WorkingDirectory={}\nExecStart={}\n{}Environment=\"HOME={}\"\nEnvironment=\"PATH={}\"\n\
-         Restart=always\nRestartSec=10\n\n\
-         [Install]\nWantedBy=default.target\n",
-        project_root.to_string_lossy(), current_exe.to_string_lossy(), token_line, home, path_env
-    );
-    let systemd_dir = std::path::PathBuf::from(&home).join(".config/systemd/user");
-    std::fs::create_dir_all(&systemd_dir).map_err(|e| e.to_string())?;
-    let service_file = systemd_dir.join("tuner.service");
-    std::fs::write(&service_file, unit_content).map_err(|e| e.to_string())?;
-    println!("🤖 [tuner] Installed successfully to {:?}", service_file);
-    println!("💡 Run: systemctl --user daemon-reload && systemctl --user restart tuner");
-    Ok(())
+        run_master_mode(config).await
+    }
 }
+
+// install_systemd_service moved to config module

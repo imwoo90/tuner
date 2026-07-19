@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
@@ -31,6 +31,7 @@ pub struct CliConfig {
     pub api: ApiConfig,
     pub matrix: MatrixConfig,
     pub language: Option<String>,
+    pub profiles: Vec<ProfileConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -161,6 +162,37 @@ impl Default for CliConfig {
             api: ApiConfig::default(),
             matrix: MatrixConfig::default(),
             language: None,
+            profiles: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ProfileConfig {
+    pub name: String,
+    pub telegram_token: String,
+    pub allowed_user_ids: Vec<i64>,
+    pub allowed_group_ids: Vec<i64>,
+    pub working_dir: Option<PathBuf>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
+    pub append_system_prompt: Option<String>,
+    pub language: Option<String>,
+}
+
+impl Default for ProfileConfig {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            telegram_token: String::new(),
+            allowed_user_ids: Vec::new(),
+            allowed_group_ids: Vec::new(),
+            working_dir: None,
+            model: None,
+            system_prompt: None,
+            append_system_prompt: None,
+            language: None,
         }
     }
 }
@@ -168,7 +200,22 @@ impl Default for CliConfig {
 impl CliConfig {
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&content).map_err(|e| e.to_string())
+        let mut cfg: Self = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        if cfg.profiles.is_empty() {
+            let default_profile = ProfileConfig {
+                name: "default".to_string(),
+                telegram_token: cfg.telegram_token.clone(),
+                allowed_user_ids: cfg.allowed_user_ids.clone(),
+                allowed_group_ids: cfg.allowed_group_ids.clone(),
+                working_dir: Some(cfg.working_dir.clone()),
+                model: cfg.model.clone(),
+                system_prompt: cfg.system_prompt.clone(),
+                append_system_prompt: cfg.append_system_prompt.clone(),
+                language: cfg.language.clone(),
+            };
+            cfg.profiles.push(default_profile);
+        }
+        Ok(cfg)
     }
 }
 
@@ -215,5 +262,35 @@ mod tests {
         assert_eq!(config.matrix.user_id, "@bot:custom.homeserver");
         assert_eq!(config.matrix.allowed_rooms, vec!["!room:custom.homeserver"]);
         assert_eq!(config.matrix.store_path, ".matrix"); // defaulted
+    }
+
+    #[test]
+    fn test_load_from_file_parses_profiles_array() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.json");
+        let json = r#"{
+            "profiles": [
+                {
+                    "name": "inmyung",
+                    "telegram_token": "token1",
+                    "allowed_user_ids": [111]
+                },
+                {
+                    "name": "seojin",
+                    "telegram_token": "token2",
+                    "allowed_user_ids": [222]
+                }
+            ]
+        }"#;
+        std::fs::write(&config_path, json).unwrap();
+
+        let config = CliConfig::load_from_file(&config_path).unwrap();
+        assert_eq!(config.profiles.len(), 2);
+        assert_eq!(config.profiles[0].name, "inmyung");
+        assert_eq!(config.profiles[0].telegram_token, "token1");
+        assert_eq!(config.profiles[0].allowed_user_ids, vec![111]);
+        assert_eq!(config.profiles[1].name, "seojin");
+        assert_eq!(config.profiles[1].telegram_token, "token2");
+        assert_eq!(config.profiles[1].allowed_user_ids, vec![222]);
     }
 }
