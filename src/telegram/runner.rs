@@ -32,17 +32,32 @@ fn start_schedulers(
     cron
 }
 
-pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
-    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
+async fn init_telegram_bot(tok: String, profile: Option<String>) -> (Bot, Arc<BotInfo>) {
     if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
-        eprintln!("❌ [tuner] Profile '{}' Telegram token is not configured or is placeholder. Worker will sleep to prevent tight restart loop.", paths.profile.as_deref().unwrap_or("default"));
+        eprintln!("❌ [tuner] Profile '{}' Telegram token is not configured or is placeholder. Worker will sleep to prevent tight restart loop.", profile.as_deref().unwrap_or("default"));
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
         }
     }
     let bot = Bot::new(tok);
+    match bot.get_me().await {
+        Ok(me) => {
+            let bot_info = Arc::new(BotInfo { username: me.user.username });
+            (bot, bot_info)
+        }
+        Err(e) => {
+            eprintln!("❌ [tuner] Profile '{}' failed to validate Telegram token: {}. Worker will sleep to prevent tight restart loop.", profile.as_deref().unwrap_or("default"), e);
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+            }
+        }
+    }
+}
+
+pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
+    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
+    let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;
     let _ = commands::register_commands(&bot).await;
-    let bot_info = Arc::new(BotInfo { username: bot.get_me().await.ok().and_then(|m| m.user.username) });
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     
