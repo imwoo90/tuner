@@ -10,7 +10,7 @@ use super::callbacks;
 use super::handle_message;
 
 fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
-    SessionManager::new(path, 30, 4, false, "UTC".to_string(), None)
+    SessionManager::new(path, 0, 4, false, "UTC".to_string(), None)
         .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
 }
 
