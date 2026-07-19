@@ -138,7 +138,7 @@ async fn handle_upgrade_confirm(
 
     match crate::upgrade::get_latest_release().await {
         Ok(release) => {
-            if let Some(asset) = release.assets.iter().find(|a| a.name.contains("linux")) {
+            if let Some(asset) = release.assets.iter().find(|a| a.name.ends_with(".tar.gz")) {
                 match crate::upgrade::perform_upgrade(&asset.browser_download_url).await {
                     Ok(()) => {
                         let success_text = format!(

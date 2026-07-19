@@ -53,7 +53,7 @@ pub(crate) async fn handle_upgrade_command(
             let current = env!("CARGO_PKG_VERSION");
             let latest = release.tag_name.trim_start_matches('v');
             if crate::upgrade::is_newer_version(current, latest) {
-                if release.assets.iter().any(|a| a.name.contains("linux")) {
+                if release.assets.iter().any(|a| a.name.ends_with(".tar.gz")) {
                     let has_body = release.body.as_ref().map(|b| !b.is_empty()).unwrap_or(false);
                     let markup = build_upgrade_keyboard(&release.tag_name, latest, has_body);
                     let header = crate::t!("upgrade.available_header");

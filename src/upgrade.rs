@@ -78,50 +78,84 @@ pub fn is_newer_version(current: &str, latest: &str) -> bool {
     false
 }
 
-pub async fn perform_upgrade(url: &str) -> Result<(), String> {
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
-    let parent_dir = exe_path.parent().ok_or("Failed to get executable directory")?;
-    let tmp_path = parent_dir.join(format!(".tuner.tmp.{}", rand::random::<u32>()));
-
+async fn download_archive(url: &str, dest: &Path) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .user_agent("tuner-updater")
         .build()
         .map_err(|e| e.to_string())?;
-
-    let mut res = client.get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to send download request: {}", e))?;
-
+    let mut res = client.get(url).send().await.map_err(|e| format!("Download req failed: {}", e))?;
     if !res.status().is_success() {
-        return Err(format!("Download request failed with status: {}", res.status()));
+        return Err(format!("Download failed status: {}", res.status()));
     }
-
-    let mut tmp_file = tokio::fs::File::create(&tmp_path)
-        .await
-        .map_err(|e| format!("Failed to create temporary update file: {}", e))?;
-
-    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Error while downloading chunk: {}", e))? {
-        tokio::io::AsyncWriteExt::write_all(&mut tmp_file, &chunk)
-            .await
-            .map_err(|e| format!("Failed to write binary chunk: {}", e))?;
+    let mut tmp_file = tokio::fs::File::create(dest).await.map_err(|e| format!("Create temp archive failed: {}", e))?;
+    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Download error: {}", e))? {
+        tokio::io::AsyncWriteExt::write_all(&mut tmp_file, &chunk).await.map_err(|e| format!("Write failed: {}", e))?;
     }
     tokio::io::AsyncWriteExt::flush(&mut tmp_file).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn unpack_archive(archive_path: &Path, dest_path: &Path) -> Result<(), String> {
+    let archive_cloned = archive_path.to_path_buf();
+    let dest_cloned = dest_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let file = std::fs::File::open(&archive_cloned).map_err(|e| format!("Open archive failed: {}", e))?;
+        let tar = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(tar);
+        std::fs::create_dir_all(&dest_cloned).map_err(|e| format!("Create dir failed: {}", e))?;
+        archive.unpack(&dest_cloned).map_err(|e| format!("Unpack failed: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Join error: {}", e))?
+}
+
+pub async fn perform_upgrade(url: &str) -> Result<(), String> {
+    let exe_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
+    let parent_dir = exe_path.parent().ok_or("No exe parent dir")?;
+    let r = rand::random::<u32>();
+    let tmp_archive = parent_dir.join(format!(".tuner.archive.{}", r));
+    let tmp_unpack_dir = parent_dir.join(format!(".tuner.unpack.{}", r));
+
+    if let Err(e) = download_archive(url, &tmp_archive).await {
+        let _ = std::fs::remove_file(&tmp_archive);
+        return Err(e);
+    }
+
+    if let Err(e) = unpack_archive(&tmp_archive, &tmp_unpack_dir).await {
+        let _ = std::fs::remove_file(&tmp_archive);
+        let _ = std::fs::remove_dir_all(&tmp_unpack_dir);
+        return Err(e);
+    }
+
+    let ext_root = tmp_unpack_dir.join("tuner-linux-amd64");
+    let new_binary = ext_root.join("tuner");
+    let new_defaults = ext_root.join("_home_defaults");
+
+    if !new_binary.is_file() {
+        let _ = std::fs::remove_file(&tmp_archive);
+        let _ = std::fs::remove_dir_all(&tmp_unpack_dir);
+        return Err("Package missing tuner binary".to_string());
+    }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to make download executable: {}", e))?;
+        let _ = std::fs::set_permissions(&new_binary, std::fs::Permissions::from_mode(0o755));
     }
 
-    if let Err(e) = std::fs::rename(&tmp_path, &exe_path) {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(format!("Failed to replace executable binary: {}", e));
+    let bin_ok = std::fs::rename(&new_binary, &exe_path);
+    if bin_ok.is_ok() && new_defaults.is_dir() {
+        let target_defaults = parent_dir.join("_home_defaults");
+        if target_defaults.exists() {
+            let _ = std::fs::remove_dir_all(&target_defaults);
+        }
+        let _ = std::fs::rename(&new_defaults, &target_defaults);
     }
 
-    Ok(())
+    let _ = std::fs::remove_file(&tmp_archive);
+    let _ = std::fs::remove_dir_all(&tmp_unpack_dir);
+    bin_ok.map_err(|e| format!("Replace binary failed: {}", e))
 }
 
 pub async fn run_cli_upgrade() -> Result<(), String> {
@@ -138,8 +172,8 @@ pub async fn run_cli_upgrade() -> Result<(), String> {
 
     if is_newer_version(current, latest) {
         println!("New version available: {} (current: {})", latest, current);
-        let asset = release.assets.iter().find(|a| a.name.contains("linux"))
-            .ok_or("Could not find a valid release asset for Linux.")?;
+        let asset = release.assets.iter().find(|a| a.name.ends_with(".tar.gz"))
+            .ok_or("Could not find a valid release package (.tar.gz) for Linux.")?;
         
         println!("Downloading update from {}...", asset.browser_download_url);
         perform_upgrade(&asset.browser_download_url).await?;

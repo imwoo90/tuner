@@ -18,6 +18,8 @@ html-escape = "0.2"
 cron = "0.12"
 filetime = "0.2"
 toml = "0.8"
+flate2 = "1.0"
+tar = "0.4"
 
 axum = { version = "0.7", features = ["ws", "multipart"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
