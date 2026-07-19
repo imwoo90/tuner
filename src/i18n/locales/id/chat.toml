@@ -452,6 +452,7 @@ async_task_received = "📥 **Tugas async diterima** dari `{sender}`\nSesi: `{se
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
+session_init_prompt = "Silakan mulai percakapan baru. Balas dengan 'Sesi baru telah dimulai. Bagaimana saya bisa membantu Anda hari ini?' dan tunggu."
 status = """\
 🤖 [tuner] Status Report
 

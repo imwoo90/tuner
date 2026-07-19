@@ -453,6 +453,7 @@ async_task_received = "📥 **Tarefa assíncrona recebida** de `{sender}`\nSess�
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
+session_init_prompt = "Por favor, inicie uma nova conversa. Responda com 'Uma nova sessão foi iniciada. Como posso ajudar você hoje?' e aguarde."
 status = """\
 🤖 [tuner] Status Report
 

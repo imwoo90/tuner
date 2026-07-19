@@ -139,8 +139,8 @@ async fn handle_session_control_commands(
         }
         let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
         let model = config.model.as_deref().unwrap_or("antigravity-default");
-        let _ = sessions.reset_provider_session(&key, &config.provider, model).await;
-        let _ = send_reply(bot, msg, t!("bot.new_session")).await;
+        let mut sess = sessions.reset_provider_session(&key, &config.provider, model).await.unwrap();
+        let _ = crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await;
         return Ok(true);
     }
     if cmd == "/stop" {

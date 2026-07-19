@@ -52,7 +52,7 @@ async fn test_telegram_command_new() {
     handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
-    assert_eq!(s_after.get_session_id("antigravity"), "");
+    assert_eq!(s_after.get_session_id("antigravity"), "mock-session-123");
 }
 
 #[tokio::test]
@@ -141,7 +141,7 @@ async fn test_telegram_command_reset_alias() {
     handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
-    assert_eq!(s_after.get_session_id("antigravity"), "");
+    assert_eq!(s_after.get_session_id("antigravity"), "mock-session-123");
 }
 
 #[tokio::test]
@@ -161,7 +161,7 @@ async fn test_telegram_command_new_with_topicname() {
     handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
-    assert_eq!(s_after.get_session_id("antigravity"), "");
+    assert_eq!(s_after.get_session_id("antigravity"), "mock-session-123");
 }
 
 #[tokio::test]

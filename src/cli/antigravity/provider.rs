@@ -45,11 +45,6 @@ impl AntigravityCli {
         env: &HashMap<String, String>,
         agy_ws: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
-        let was_running = {
-            let holders = self.sessions.holders.lock().await;
-            holders.contains_key(session_id)
-        };
-
         let sessions = self.sessions.clone();
         let sid_str = session_id.to_string();
         sessions.set_running(&sid_str, true).await;
@@ -57,27 +52,27 @@ impl AntigravityCli {
         let res = async {
             self.ensure_interactive_session(session_id, agy_ws, env).await?;
 
-            if !was_running {
+            let needs_init = self.sessions.holders.lock().await
+                .get_mut(session_id)
+                .map(|h| { let u = !h.initialized; h.initialized = true; u })
+                .unwrap_or(false);
+
+            if needs_init {
                 wait_for_pty_prompt(&self.sessions, session_id).await?;
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
 
-            let brain_dir = events::agy_state_root(Some(env)).join("brain").join(session_id);
-            let transcript_path = Some(brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl"));
-
-            let current_size = transcript_path.as_ref()
-                .and_then(|p| std::fs::metadata(p).ok())
-                .map(|m| m.len())
-                .unwrap_or(0);
+            let p = events::agy_state_root(Some(env)).join("brain").join(session_id)
+                .join(".system_generated/logs/transcript_full.jsonl");
+            let sz = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
 
             let input_prompt = format!("{}\r", prompt);
             self.sessions.write_to_session(session_id, &input_prompt).await?;
 
-            super::polling::wait_for_log_completion(&self.sessions, session_id, transcript_path, current_size).await?;
+            super::polling::wait_for_log_completion(&self.sessions, session_id, Some(p), sz).await?;
 
             use std::os::unix::process::ExitStatusExt;
-            let status = std::process::ExitStatus::from_raw(0);
-            Ok((String::new(), String::new(), status))
+            Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))
         }.await;
 
         sessions.set_running(&sid_str, false).await;
@@ -238,7 +233,7 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         let out = h.output.lock().await.clone();
         let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
-        if s.contains("\r> ") || s.contains("\n> ") || s.contains("\u{1b}[?1049h") || s.contains("\u{1b}[?25l") || dead {
+        if s.contains("\r> ") || s.contains("\n> ") || s.contains("\u{1b}[?25h") || dead {
             return Ok(());
         }
         drop(hs);

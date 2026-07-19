@@ -382,6 +382,7 @@ async_task_received = "📥 **비동기 작업 수신됨** (발신자: `{sender}
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
+session_init_prompt = "새로운 대화를 시작합니다. '새로운 세션이 시작되었습니다. 무엇을 도와드릴까요?' 라고 대답해 주세요."
 status = """\
 🤖 [tuner] 상태 리포트
 

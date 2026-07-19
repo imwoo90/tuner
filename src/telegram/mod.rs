@@ -9,6 +9,7 @@ pub mod formatting;
 #[cfg(test)]
 pub mod formatting_tests;
 pub mod reply;
+pub mod session_init;
 pub mod history;
 #[cfg(test)]
 pub mod reply_tests;
@@ -110,14 +111,18 @@ async fn process_text(
         if handle_model_override(bot, msg, mo, &mut sess, sessions.as_ref(), current_text.is_empty()).await? { return Ok(()); }
     }
 
+    let active_session_id = session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await?;
+    if active_session_id.is_empty() {
+        return Ok(());
+    }
+
     let mut prompt = build_reply_prompt(msg, current_text);
     let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
 
-    let session_id = sess.get_session_id(&config.provider);
-    history::log_telegram_message(&config.working_dir, &session_id, "user", Some(msg.id.0), text, true, None);
-    if ask_helpers::feed_active_session_if_running(bot, msg, &session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
+    history::log_telegram_message(&config.working_dir, &active_session_id, "user", Some(msg.id.0), text, true, None);
+    if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
-    run_cli_stream(bot, msg, &prompt, &session_id, cli, sessions.as_ref(), sess, config).await
+    run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await
 }
 
 fn auto_register_owner(from_id: i64) {

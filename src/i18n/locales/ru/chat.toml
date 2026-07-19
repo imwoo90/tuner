@@ -453,6 +453,7 @@ async_task_received = "📥 **Async-задача получена** от `{sende
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
+session_init_prompt = "Пожалуйста, начните новый разговор. Ответьте фразой 'Начался новый сеанс. Чем я могу помочь вам сегодня?' и подождите."
 status = """\
 🤖 [tuner] Status Report
 

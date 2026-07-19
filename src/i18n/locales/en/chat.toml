@@ -454,6 +454,7 @@ async_task_received = "📥 **Async task received** from `{sender}`\nSession: `{
 
 # -- Bot commands & user-facing Telegram strings from commands.rs ---------------
 [bot]
+session_init_prompt = "Please start a new conversation. Print 'A new session has started. How can I help you today?' and wait."
 status = """\
 🤖 [tuner] Status Report
 

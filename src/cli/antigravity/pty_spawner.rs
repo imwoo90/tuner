@@ -19,6 +19,7 @@ pub struct SessionHolder {
     pub topic_id: Option<i64>,
     pub master_fd: std::os::unix::io::RawFd,
     pub output: std::sync::Arc<Mutex<Vec<u8>>>,
+    pub initialized: bool,
 }
 
 impl Drop for SessionHolder {
@@ -114,6 +115,7 @@ pub fn spawn_session(
         topic_id,
         master_fd: master_dup,
         output,
+        initialized: false,
     })
 }
 
