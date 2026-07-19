@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CliConfig {
     pub provider: String,
@@ -34,7 +34,7 @@ pub struct CliConfig {
     pub profiles: Vec<ProfileConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MatrixConfig {
     pub homeserver: String,
@@ -62,7 +62,7 @@ impl Default for MatrixConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WebhookConfig {
     pub enabled: bool,
@@ -86,7 +86,7 @@ impl Default for WebhookConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ApiConfig {
     pub enabled: bool,
@@ -110,7 +110,7 @@ impl Default for ApiConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HeartbeatConfig {
     pub enabled: bool,
@@ -217,80 +217,47 @@ impl CliConfig {
         }
         Ok(cfg)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_load_from_file_parses_json_with_defaults() {
-        let dir = tempdir().unwrap();
-        let config_path = dir.path().join("config.json");
-        let json = r#"{
-            "provider": "antigravity",
-            "telegram_token": "123:abc",
-            "allowed_user_ids": [456],
-            "allowed_group_ids": [-789]
-        }"#;
-        std::fs::write(&config_path, json).unwrap();
-
-        let config = CliConfig::load_from_file(&config_path).unwrap();
-        assert_eq!(config.provider, "antigravity");
-        assert_eq!(config.telegram_token, "123:abc");
-        assert_eq!(config.allowed_user_ids, vec![456]);
-        assert_eq!(config.allowed_group_ids, vec![-789]);
-        assert_eq!(config.working_dir, PathBuf::from(".")); // defaulted
-    }
-
-    #[test]
-    fn test_load_from_file_parses_matrix_config() {
-        let dir = tempdir().unwrap();
-        let config_path = dir.path().join("config.json");
-        let json = r#"{
-            "matrix": {
-                "homeserver": "https://custom.homeserver",
-                "user_id": "@bot:custom.homeserver",
-                "allowed_rooms": ["!room:custom.homeserver"]
-            }
-        }"#;
-        std::fs::write(&config_path, json).unwrap();
-
-        let config = CliConfig::load_from_file(&config_path).unwrap();
-        assert_eq!(config.matrix.homeserver, "https://custom.homeserver");
-        assert_eq!(config.matrix.user_id, "@bot:custom.homeserver");
-        assert_eq!(config.matrix.allowed_rooms, vec!["!room:custom.homeserver"]);
-        assert_eq!(config.matrix.store_path, ".matrix"); // defaulted
-    }
-
-    #[test]
-    fn test_load_from_file_parses_profiles_array() {
-        let dir = tempdir().unwrap();
-        let config_path = dir.path().join("config.json");
-        let json = r#"{
-            "profiles": [
-                {
-                    "name": "inmyung",
-                    "telegram_token": "token1",
-                    "allowed_user_ids": [111]
-                },
-                {
-                    "name": "seojin",
-                    "telegram_token": "token2",
-                    "allowed_user_ids": [222]
+    pub fn merge_profile_file(&mut self, path: &Path) -> Result<(), String> {
+        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let mut overrides: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        
+        if let Some(obj) = overrides.as_object_mut() {
+            if let Some(tok) = obj.get("telegram_token").and_then(|t| t.as_str()) {
+                if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
+                    obj.remove("telegram_token");
                 }
-            ]
-        }"#;
-        std::fs::write(&config_path, json).unwrap();
+            }
+            if let Some(ids) = obj.get("allowed_user_ids").and_then(|i| i.as_array()) {
+                if ids.len() == 1 && ids[0] == serde_json::Value::Number(123456789.into()) {
+                    obj.remove("allowed_user_ids");
+                }
+            }
+            if let Some(ids) = obj.get("allowed_group_ids").and_then(|i| i.as_array()) {
+                if ids.len() == 1 && ids[0] == serde_json::Value::Number((-1001234567890i64).into()) {
+                    obj.remove("allowed_group_ids");
+                }
+            }
+        }
 
-        let config = CliConfig::load_from_file(&config_path).unwrap();
-        assert_eq!(config.profiles.len(), 2);
-        assert_eq!(config.profiles[0].name, "inmyung");
-        assert_eq!(config.profiles[0].telegram_token, "token1");
-        assert_eq!(config.profiles[0].allowed_user_ids, vec![111]);
-        assert_eq!(config.profiles[1].name, "seojin");
-        assert_eq!(config.profiles[1].telegram_token, "token2");
-        assert_eq!(config.profiles[1].allowed_user_ids, vec![222]);
+        let mut base_val = serde_json::to_value(&self).map_err(|e| e.to_string())?;
+        merge_json_values(&mut base_val, overrides);
+        
+        *self = serde_json::from_value(base_val).map_err(|e| e.to_string())?;
+        Ok(())
     }
 }
+
+fn merge_json_values(base: &mut serde_json::Value, overrides: serde_json::Value) {
+    if let (Some(base_obj), Some(over_obj)) = (base.as_object_mut(), overrides.as_object()) {
+        for (k, v) in over_obj {
+            if v.is_object() && base_obj.contains_key(k) && base_obj[k].is_object() {
+                merge_json_values(&mut base_obj[k], v.clone());
+            } else if !v.is_null() {
+                base_obj.insert(k.clone(), v.clone());
+            }
+        }
+    }
+}
+
+

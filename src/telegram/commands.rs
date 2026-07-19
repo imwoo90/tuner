@@ -26,6 +26,7 @@ async fn handle_info_commands(
     text: &str,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
     if text == "/status" {
         let agy_status = match std::process::Command::new("agy").arg("--version").output() {
@@ -35,7 +36,7 @@ async fn handle_info_commands(
             }
             Err(_) => t!("bot.diagnose_not_found"),
         };
-        let session_count = sessions.load().map(|m| m.len()).unwrap_or(0);
+        let session_count = cli.sessions.active_count().await;
         let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
             t!("bot.diagnose_token_set")
         } else {
@@ -71,7 +72,7 @@ pub(crate) async fn handle_commands(
     cron_manager: &crate::cron::manager::CronManager,
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
-    if handle_info_commands(bot, msg, text, config, sessions).await? {
+    if handle_info_commands(bot, msg, text, config, sessions, cli).await? {
         return Ok(true);
     }
     if text.starts_with("/new") || text.starts_with("/reset") || text == "/stop" || text == "/stop_all" || text == "/abort" {

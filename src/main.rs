@@ -21,6 +21,9 @@ pub mod setup;
 pub mod telegram_tests;
 
 #[cfg(test)]
+pub mod config_tests;
+
+#[cfg(test)]
 pub mod supervisor_tests;
 
 #[cfg(test)]
@@ -250,6 +253,10 @@ async fn main() -> Result<(), String> {
 
     if let Some(ref profile_name) = worker_profile {
         override_profile_config(&mut config, profile_name, &paths)?;
+        let profile_config_path = paths.profile_home().join("config").join("config.json");
+        if profile_config_path.is_file() {
+            config.merge_profile_file(&profile_config_path)?;
+        }
     }
 
     let startup_lang = config.language.as_deref().unwrap_or("en");

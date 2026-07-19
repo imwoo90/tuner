@@ -85,7 +85,7 @@ mod tests {
             tmp.path().join("home"),
             fw.join("workspace"),
             fw,
-            None,
+            Some("default".to_string()),
         );
 
         init_workspace(&paths).unwrap();
@@ -101,7 +101,7 @@ mod tests {
             tmp.path().join("home"),
             fw.join("workspace"),
             fw,
-            None,
+            Some("default".to_string()),
         );
 
         inject_runtime_environment(&paths, Some("sandbox")).unwrap();
@@ -159,7 +159,7 @@ mod tests {
             tmp.path().join("home"),
             tmp.path().join("fw").join("workspace"),
             tmp.path().join("fw"),
-            None,
+            Some("default".to_string()),
         );
 
         sync_skills(&paths, false).unwrap();
@@ -172,7 +172,7 @@ mod tests {
             tmp.path().join("home"),
             tmp.path().join("fw").join("workspace"),
             tmp.path().join("fw"),
-            None,
+            Some("default".to_string()),
         );
 
         cleanup_ductor_links(&paths).unwrap();

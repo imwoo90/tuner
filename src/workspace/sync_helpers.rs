@@ -189,30 +189,25 @@ pub fn smart_merge_config(paths: &DuctorPaths) -> Result<(), String> {
         if let Ok(pretty) = serde_json::to_string_pretty(&defaults) {
             let _ = std::fs::write(&config_path, pretty);
         }
+    }
+    Ok(())
+}
+
+pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
+    let example_path = paths.home_defaults.join("config").join("config.json");
+    if !example_path.is_file() {
         return Ok(());
     }
+    let defaults_content = std::fs::read_to_string(&example_path).map_err(|e| e.to_string())?;
+    let defaults: serde_json::Value = serde_json::from_str(&defaults_content).map_err(|e| e.to_string())?;
 
-    let config_content = match std::fs::read_to_string(&config_path) {
-        Ok(c) => c,
-        Err(_) => return Ok(()),
-    };
-    let mut config_val: serde_json::Value = match serde_json::from_str(&config_content) {
-        Ok(v) => v,
-        Err(_) => return Ok(()),
-    };
-
-    if let (Some(def_obj), Some(conf_obj)) = (defaults.as_object(), config_val.as_object_mut()) {
-        let mut modified = false;
-        for (k, v) in def_obj {
-            if !conf_obj.contains_key(k) {
-                conf_obj.insert(k.clone(), v.clone());
-                modified = true;
-            }
+    let config_path = paths.profile_home().join("config").join("config.json");
+    if !config_path.is_file() {
+        if let Some(parent) = config_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
-        if modified {
-            if let Ok(pretty) = serde_json::to_string_pretty(&config_val) {
-                let _ = std::fs::write(&config_path, pretty);
-            }
+        if let Ok(pretty) = serde_json::to_string_pretty(&defaults) {
+            let _ = std::fs::write(&config_path, pretty);
         }
     }
     Ok(())

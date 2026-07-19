@@ -27,15 +27,10 @@
     "group_mention_only": false,
     "profiles": [
         {
-            "name": "default",
-            "telegram_token": "YOUR_BOT_TOKEN_HERE",
-            "allowed_user_ids": [123456789]
+            "name": "default"
         },
         {
-            "name": "wife",
-            "telegram_token": "YOUR_WIFE_BOT_TOKEN_HERE",
-            "allowed_user_ids": [987654321],
-            "language": "ko"
+            "name": "wife"
         }
     ],
     "matrix": {

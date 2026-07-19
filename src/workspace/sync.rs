@@ -64,11 +64,16 @@ fn create_workspace_directories(paths: &DuctorPaths) {
         }
     }
     let _ = std::fs::create_dir_all(paths.config_dir());
-    let _ = std::fs::create_dir_all(paths.logs_dir());
 }
 
 /// Initializes the workspace directory structure and configurations.
 pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
+    if paths.profile.is_none() {
+        let _ = std::fs::create_dir_all(paths.config_dir());
+        let _ = smart_merge_config(paths);
+        return Ok(());
+    }
+
     migrate_legacy_data(paths);
 
     let old_tasks = paths.workspace().join("tasks");
@@ -86,6 +91,8 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
 
     let selector = crate::workspace::rules::RulesSelector::new(paths.clone());
     let _ = selector.deploy_rules();
+
+    let _ = crate::workspace::sync_helpers::smart_merge_profile_config(paths);
 
     let _ = ensure_task_rule_files(&paths.cron_tasks_dir());
     let _ = sync_rule_files(&paths.workspace());

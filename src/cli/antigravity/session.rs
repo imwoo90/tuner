@@ -53,6 +53,11 @@ impl SessionManager {
         Self::default()
     }
 
+    pub async fn active_count(&self) -> usize {
+        let holders = self.holders.lock().await;
+        holders.len()
+    }
+
     pub async fn is_running(&self, session_id: &str) -> bool {
         let runs = self.running_runs.lock().await;
         runs.contains(session_id)
