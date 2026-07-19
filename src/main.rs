@@ -15,13 +15,16 @@ pub mod i18n;
 pub mod messenger;
 pub mod supervisor;
 pub mod setup;
-
+pub mod upgrade;
 
 #[cfg(test)]
 pub mod telegram_tests;
 
 #[cfg(test)]
 pub mod config_tests;
+
+#[cfg(test)]
+pub mod upgrade_tests;
 
 #[cfg(test)]
 pub mod supervisor_tests;
@@ -202,39 +205,44 @@ async fn run_master_mode(config: config::CliConfig) -> Result<(), String> {
     }
 }
 
-fn override_profile_config(config: &mut config::CliConfig, profile_name: &str, paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
-    let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
-        .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
-    if !profile_cfg.telegram_token.is_empty() && profile_cfg.telegram_token != "YOUR_BOT_TOKEN_HERE" && !profile_cfg.telegram_token.starts_with("YOUR_") {
-        config.telegram_token = profile_cfg.telegram_token.clone();
-    } else if profile_name != "default" {
-        config.telegram_token = String::new();
+
+
+async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+        println!("tuner {}", env!("CARGO_PKG_VERSION"));
+        return Ok(Some(()));
     }
-    if !profile_cfg.allowed_user_ids.is_empty() && profile_cfg.allowed_user_ids != vec![123456789] {
-        config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
+    if args.contains(&"--upgrade".to_string()) {
+        upgrade::run_cli_upgrade().await?;
+        return Ok(Some(()));
     }
-    if !profile_cfg.allowed_group_ids.is_empty() && profile_cfg.allowed_group_ids != vec![-1001234567890] {
-        config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+    Ok(None)
+}
+
+async fn handle_daemon_mode(args: &[String], config: &config::CliConfig) -> Result<Option<()>, String> {
+    if args.contains(&"--install-systemd".to_string()) {
+        setup::install_systemd_service(config)?;
+        return Ok(Some(()));
     }
-    config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
-    if let Some(ref m) = profile_cfg.model {
-        config.model = Some(m.clone());
+    if args.contains(&"--supervisor".to_string()) {
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
+        let filtered_args: Vec<String> = args.iter().cloned().skip(1).filter(|arg| arg != "--supervisor").collect();
+        let supervisor = supervisor::Supervisor::with_args(current_exe, filtered_args);
+        supervisor.run().await?;
+        return Ok(Some(()));
     }
-    if let Some(ref p) = profile_cfg.system_prompt {
-        config.system_prompt = Some(p.clone());
-    }
-    if let Some(ref p) = profile_cfg.append_system_prompt {
-        config.append_system_prompt = Some(p.clone());
-    }
-    if let Some(ref l) = profile_cfg.language {
-        config.language = Some(l.clone());
-    }
-    Ok(())
+    Ok(None)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
+
+    if let Some(()) = handle_early_args(&args).await? {
+        return Ok(());
+    }
+
     let worker_profile = args.iter().position(|arg| arg == "--worker")
         .and_then(|pos| args.get(pos + 1).cloned());
 
@@ -252,7 +260,7 @@ async fn main() -> Result<(), String> {
     config.working_dir = paths.workspace().clone();
 
     if let Some(ref profile_name) = worker_profile {
-        override_profile_config(&mut config, profile_name, &paths)?;
+        setup::override_profile_config(&mut config, profile_name, &paths)?;
         let profile_config_path = paths.profile_home().join("config").join("config.json");
         if profile_config_path.is_file() {
             config.merge_profile_file(&profile_config_path)?;
@@ -262,15 +270,8 @@ async fn main() -> Result<(), String> {
     let startup_lang = config.language.as_deref().unwrap_or("en");
     i18n::init(startup_lang);
 
-    if args.contains(&"--install-systemd".to_string()) {
-        return setup::install_systemd_service(&config);
-    }
-    if args.contains(&"--supervisor".to_string()) {
-        let current_exe = std::env::current_exe()
-            .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
-        let filtered_args: Vec<String> = args.into_iter().skip(1).filter(|arg| arg != "--supervisor").collect();
-        let supervisor = supervisor::Supervisor::with_args(current_exe, filtered_args);
-        return supervisor.run().await;
+    if let Some(()) = handle_daemon_mode(&args, &config).await? {
+        return Ok(());
     }
 
     if let Some(ref p) = worker_profile {

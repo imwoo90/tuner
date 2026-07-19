@@ -63,3 +63,37 @@ pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
     println!("💡 Run: systemctl --user daemon-reload && systemctl --user restart tuner");
     Ok(())
 }
+
+pub fn override_profile_config(
+    config: &mut CliConfig,
+    profile_name: &str,
+    paths: &crate::workspace::paths::DuctorPaths,
+) -> Result<(), String> {
+    let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
+        .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
+    if !profile_cfg.telegram_token.is_empty() && profile_cfg.telegram_token != "YOUR_BOT_TOKEN_HERE" && !profile_cfg.telegram_token.starts_with("YOUR_") {
+        config.telegram_token = profile_cfg.telegram_token.clone();
+    } else if profile_name != "default" {
+        config.telegram_token = String::new();
+    }
+    if !profile_cfg.allowed_user_ids.is_empty() && profile_cfg.allowed_user_ids != vec![123456789] {
+        config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
+    }
+    if !profile_cfg.allowed_group_ids.is_empty() && profile_cfg.allowed_group_ids != vec![-1001234567890] {
+        config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+    }
+    config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
+    if let Some(ref m) = profile_cfg.model {
+        config.model = Some(m.clone());
+    }
+    if let Some(ref p) = profile_cfg.system_prompt {
+        config.system_prompt = Some(p.clone());
+    }
+    if let Some(ref p) = profile_cfg.append_system_prompt {
+        config.append_system_prompt = Some(p.clone());
+    }
+    if let Some(ref l) = profile_cfg.language {
+        config.language = Some(l.clone());
+    }
+    Ok(())
+}

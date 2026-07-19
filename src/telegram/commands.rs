@@ -96,6 +96,10 @@ pub(crate) async fn handle_commands(
         let _ = handle_cron_command(bot, msg, cron_manager).await;
         return Ok(true);
     }
+    if text == "/upgrade" {
+        let _ = super::upgrade::handle_upgrade_command(bot, msg).await;
+        return Ok(true);
+    }
     Ok(false)
 }
 
@@ -113,6 +117,8 @@ async fn handle_cron_command(
     }
     Ok(())
 }
+
+
 
 async fn handle_session_control_commands(
     bot: &Bot,
@@ -237,6 +243,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("goal", "Launch long-running thorough task"),
         ("learn", "Record learning or behavior correction"),
         ("teamwork_preview", "Launch collaborative multi-agent simulation"),
+        ("upgrade", "Check for updates and perform self-upgrade"),
     ];
     list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
         command: c.to_string(),
