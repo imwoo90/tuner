@@ -55,10 +55,14 @@ jobs:
         if: steps.check_tag.outputs.exists == 'false'
         run: cargo build --release
 
-      - name: Rename binary for release
+      - name: Prepare distribution files
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          mv target/release/tuner target/release/tuner-linux-amd64
+          cp target/release/tuner target/release/tuner-linux-amd64
+          mkdir -p dist/tuner-linux-amd64
+          cp target/release/tuner dist/tuner-linux-amd64/
+          cp -r _home_defaults dist/tuner-linux-amd64/
+          tar -czf dist/tuner-linux-amd64.tar.gz -C dist tuner-linux-amd64
 
       - name: Create GitHub Release and Upload Assets
         if: steps.check_tag.outputs.exists == 'false'
@@ -68,6 +72,8 @@ jobs:
           name: Release v${{ steps.get_version.outputs.version }}
           draft: false
           prerelease: false
-          files: target/release/tuner-linux-amd64
+          files: |
+            target/release/tuner-linux-amd64
+            dist/tuner-linux-amd64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
