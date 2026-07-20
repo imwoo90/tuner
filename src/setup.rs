@@ -1,8 +1,13 @@
 //! # Wizard and Service Installer Module
 //!
-//! Coordinates the terminal-based interactive setup wizard for initial bot configuration.
-//! Generates default workspace parameters, manages systemd user services, and installs
-//! process runner scripts.
+//! ## Overview
+//! Operates the wizard setup CLI prompt. Installs systemd user services.
+//!
+//! ## Collaboration Graph
+//! - Invoked via `--setup` or `--install-systemd` flags.
+//!
+//! ## Search Tags
+//! #wizard-installer, #systemd-setup, #env-loader
 
 use crate::config::CliConfig;
 use std::path::Path;

@@ -1,7 +1,17 @@
 //! # Main Message Ingress Dispatcher
 //!
-//! Routes raw incoming Telegram updates (text, documents, photo groups, callback queries)
-//! into their respective commands, interactive answers, or streaming pipelines.
+//! ## Overview
+//! The central routing entry point for incoming Telegram updates. Parses messages, extracts media group
+//! attachments, routes callback queries, and executes command or chat stream pipelines.
+//!
+//! ## Collaboration Graph
+//! - Binds directly to the Teloxide listener event loop.
+//! - Dispatches commands to [`super::commands::handle_commands`].
+//! - Routes callbacks to [`super::callbacks::handle_callback_query`].
+//! - Downloads photos/files via [`super::reply::download_telegram_media`].
+//!
+//! ## Search Tags
+//! #ingress-handler, #telegram-dispatcher, #event-router, #media-downloads
 
 use std::sync::Arc;
 use teloxide::prelude::*;

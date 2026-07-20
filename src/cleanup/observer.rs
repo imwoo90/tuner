@@ -1,7 +1,13 @@
-//! # File Cleanup Observer
+//! # Storage Purging Observer
 //!
-//! This module monitors and cleans up old temporary media and output files,
-//! recursively pruning empty directories.
+//! ## Overview
+//! Periodically purges stale files from media and session history folders.
+//!
+//! ## Collaboration Graph
+//! - Ticked by background scheduling timers in the main application loop.
+//!
+//! ## Search Tags
+//! #purger, #disk-maintenance, #retention-policy
 
 use std::fs;
 use std::path::{Path, PathBuf};

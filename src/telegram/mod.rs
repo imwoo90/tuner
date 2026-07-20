@@ -1,7 +1,20 @@
-//! # Telegram Interface and Bot Supervisor
+//! # Telegram Bot Interface Module (index.md)
 //!
-//! Coordinates all incoming Telegram message traffic, command dispatching, inline keyboard callbacks,
-//! session managers, and rich message formatting adapters. Translates raw HTML/Markdown replies.
+//! ## Overview
+//! Handles ingress message updates, routes commands, coordinates PTY streaming output delivery,
+//! and manages UI elements (inline keyboards, callbacks).
+//!
+//! ## Module Components
+//! - [`commands`]: Handles slash commands (`/start`, `/model`, `/new`, `/abort`).
+//! - [`callbacks`]: Handles interactive menu callback buttons clicks.
+//! - [`stream`]: Debounces and streams raw stdout/stderr from CLI PTYs to Telegram.
+//! - [`reply`]: Standardizes media downloads and prepends reply histories to prompt streams.
+//! - [`transport`]: Adapts internal message envelopes to Teloxide API calls.
+//! - [`attachments`]: Downloads files/photos and places them in the workspace.
+//! - [`topic_cache`]: Maps topic names to IDs for topic auto-creation.
+//!
+//! ## Search Tags
+//! #telegram-bot, #message-routing, #pty-streaming, #inline-keyboards, #chat-commands
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

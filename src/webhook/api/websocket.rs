@@ -1,6 +1,13 @@
-//! # WebSocket Handshake and Router
+//! # WebSocket Connection Negotiator
 //!
-//! Handles upgrade, in-band auth, and sequential message execution for direct API sessions.
+//! ## Overview
+//! Upgrades HTTP requests to WebSocket connections, validating tokens and establishing channel links.
+//!
+//! ## Collaboration Graph
+//! - Invokes [`session_loop::run_session_loop`](super::session_loop::run_session_loop) on handshake success.
+//!
+//! ## Search Tags
+//! #websocket-upgrade, #channel-negotiator, #connection-handshake
 
 use crate::webhook::api::handshake::perform_handshake;
 use crate::webhook::api::server::ApiServerState;

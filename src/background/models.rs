@@ -1,7 +1,13 @@
-//! # Background Execution Shared Data Structs
+//! # Background Execution Models
 //!
-//! Defines target instructions, execution boundaries, thread configurations, and result types
-//! representing active background runs in the system.
+//! ## Overview
+//! Defines parameter structures for registering background tasks and tracking output payloads.
+//!
+//! ## Collaboration Graph
+//! - Loaded by [`BackgroundObserver`](super::observer::BackgroundObserver) to marshal inputs.
+//!
+//! ## Search Tags
+//! #task-models, #task-submit, #execution-result
 
 #[derive(Clone, Debug)]
 pub struct BackgroundSubmit {

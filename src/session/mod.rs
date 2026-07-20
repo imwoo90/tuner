@@ -1,7 +1,17 @@
-//! # Session Lifecycle Management
+//! # Session Lifecycle Management (index.md)
 //!
-//! This module coordinates session data, storage key representations, and JSON-based
-//! persistence for messaging interface sessions.
+//! ## Overview
+//! Manages message histories, workspace initializations, and key resolution for active user/group chat threads.
+//!
+//! ## Module Components
+//! - [`key`]: Represents unique session identifiers matching chat/topic mappings.
+//! - [`data`]: In-memory and serialized structure of active session data.
+//! - [`manager`]: Resolves, loads, updates, and resets sessions.
+//! - [`freshness`]: Inspects session age, inactivity timeouts, and triggers daily resets.
+//! - [`named`]: Maintains session-to-alias maps.
+//!
+//! ## Search Tags
+//! #session-lifecycle, #session-manager, #timezone-reset, #alias-resolver
 
 pub mod key;
 pub mod data;

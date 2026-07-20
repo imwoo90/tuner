@@ -1,7 +1,15 @@
-//! # Background Observer
+//! # Background Observer Registry
 //!
-//! Manages fire-and-forget background execution of AI agent provider commands.
-//! Implements a task registry, chat task limits, and drop-guard based aborted status reporting.
+//! ## Overview
+//! Tracks and manages all in-flight background tasks, enforcing execution limits per chat,
+//! timing out long-running tasks, and reporting cancellations.
+//!
+//! ## Collaboration Graph
+//! - Spawns asynchronous tasks via tokio join handles.
+//! - Interacts with [`MessageBus`](crate::bus::bus::MessageBus) to broadcast task output.
+//!
+//! ## Search Tags
+//! #task-registry, #drop-guard, #concurrency-limits, #timeout-tracker
 
 pub use super::models::{BackgroundResult, BackgroundResultStatus, BackgroundSubmit};
 use crate::cli::AgentProvider;

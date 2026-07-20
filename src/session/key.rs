@@ -1,7 +1,15 @@
-//! # Transport-Agnostic Composite Session Key
+//! # Session Storage Key Identifier
 //!
-//! This module defines [`SessionKey`] which represents a composite session identifier
-//! containing the transport mechanism, chat identifier, and optional topic/channel identifier.
+//! ## Overview
+//! Defines the [`SessionKey`] representation. Matches Telegram chat/topic ID mappings or webhook channels
+//! to guarantee strict separation of concurrent workspaces.
+//!
+//! ## Collaboration Graph
+//! - Constructed inside message routers (e.g. [`process_text_with_files`](crate::telegram::process_text_with_files)).
+//! - Used by [`SessionManager`](super::manager::SessionManager) as hash keys.
+//!
+//! ## Search Tags
+//! #session-keys, #telegram-keys, #webhook-keys, #key-serialization
 
 use std::str::FromStr;
 

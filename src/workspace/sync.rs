@@ -1,7 +1,13 @@
-//! # Filesystem Synchronization
+//! # Workspace Folder Synchronizer
 //!
-//! Handles creating directory layouts, deploying framework-managed files (Zone 2),
-//! seeding defaults (Zone 3), merging user config, rule sync, and watcher loops.
+//! ## Overview
+//! Initializes workspace layout folders (cron_tasks, telegram_files, skills) and mounts rules profiles.
+//!
+//! ## Collaboration Graph
+//! - Invoked during application initialization in [`main.rs`](crate::main.rs).
+//!
+//! ## Search Tags
+//! #workspace-init, #profile-copy, #environment-setup
 
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_rule_files_recursive, walk_and_copy};

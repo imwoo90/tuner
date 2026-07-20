@@ -1,7 +1,14 @@
-//! # Session Freshness Evaluation
+//! # Session Freshness Checker
 //!
-//! This module encapsulates check logic for session idle timeouts
-//! and daily timezone-based expiration resets.
+//! ## Overview
+//! Implements logical rules to verify if an active session is still fresh, checking inactivity timeouts,
+//! max message limits, and daily user-timezone resets.
+//!
+//! ## Collaboration Graph
+//! - Called by [`SessionManager::is_fresh`](super::manager::SessionManager::is_fresh) on new message ingress.
+//!
+//! ## Search Tags
+//! #session-freshness, #timeout-inactivity, #daily-resets, #timezone-calculator
 
 use chrono::{DateTime, Utc, Duration, LocalResult, TimeZone};
 use chrono_tz::Tz;

@@ -1,7 +1,19 @@
 //! # Cron Task Registry and State Manager
 //!
-//! Manages the collection of configured cron jobs, persistence of scheduler parameters,
-//! and maps scheduled tasks to background executions.
+//! ## Overview
+//! Handles loading, saving, registering, and tracking execution states of [`CronJob`] definitions.
+//! Employs asynchronous mutex locks to prevent race conditions during JSON file persistence.
+//!
+//! ## Collaboration Graph
+//! - Reads/writes local json files representing scheduled configurations.
+//! - Consulted by [`super::scheduler::CronScheduler`] to reload jobs when changes are detected on disk.
+//!
+//! ## Key Structures
+//! - [`CronJob`]: State representation containing schedule, provider, timezone, models, and execution logs.
+//! - [`CronManager`]: Service coordinator handling persistence and access locks.
+//!
+//! ## Search Tags
+//! #cron-registry, #job-persistence, #state-lock, #cron-jobs
 
 use std::fs;
 use std::path::PathBuf;

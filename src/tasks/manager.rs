@@ -1,7 +1,14 @@
 //! # Task Queue Supervisor and Executor
 //!
-//! Tracks active tasks, manages thread resources, handles task execution priorities,
-//! and forwards execution output to registering observers.
+//! ## Overview
+//! Coordinates task enqueueing, priority checks, and forwards stdout logs to subscribing channels.
+//!
+//! ## Collaboration Graph
+//! - Reads task status from [`TaskRegistry`](super::registry::TaskRegistry).
+//! - Submits task execution processes to [`ProcessRegistry`](super::runner::ProcessRegistry).
+//!
+//! ## Search Tags
+//! #task-queue, #priority-scheduler, #log-forwarder
 
 use std::sync::Arc;
 use anyhow::{anyhow, Result};

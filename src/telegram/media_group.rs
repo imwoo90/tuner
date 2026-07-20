@@ -1,7 +1,14 @@
 //! # Media Group Debouncer and Attachment Aggregator
 //!
-//! Collects clustered media files (images, files, documents) sent in rapid succession
-//! via Telegram's media groups, debouncing them into single cohesive events with multiple files.
+//! ## Overview
+//! Collects clustered media files sent in rapid succession via Telegram's media groups,
+//! debouncing them into single cohesive events with multiple files.
+//!
+//! ## Collaboration Graph
+//! - Called inside the primary ingress event handler to group file IDs before download.
+//!
+//! ## Search Tags
+//! #media-group, #debouncing, #attachment-aggregator
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

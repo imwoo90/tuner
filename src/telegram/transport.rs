@@ -1,7 +1,15 @@
 //! # Telegram Message Transport Adapter
 //!
-//! Implements a transport bridge translating standard background message envelopes into Telegram API calls.
-//! Supports text formatting, quiet hour queues, and error recovery.
+//! ## Overview
+//! Bridges standard background task output envelopes to Teloxide API calls. Supports text splitting,
+//! quiet hour queuing, and forum topic routing.
+//!
+//! ## Collaboration Graph
+//! - Registers as an observer on the central [`MessageBus`](crate::bus::bus::MessageBus).
+//! - Feeds output strings through [`splitting::split_html_message`](super::formatting::splitting::split_html_message).
+//!
+//! ## Search Tags
+//! #transport-adapter, #message-bus, #quiet-hour-queue, #topic-routing
 
 use teloxide::prelude::*;
 use crate::bus::bus::Transport;

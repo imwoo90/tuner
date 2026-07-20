@@ -1,6 +1,14 @@
-//! # Webhook Observer
+//! # Webhook Activity Observer
 //!
-//! Registers the observer to the message bus, runs file-change loops, and runs tasks.
+//! ## Overview
+//! Monitors active webhook connection pools, tracking task durations, checking quiet hours,
+//! and reporting offline triggers.
+//!
+//! ## Collaboration Graph
+//! - Observes websocket connections inside [`SessionLoop`](super::api::session_loop).
+//!
+//! ## Search Tags
+//! #activity-monitor, #quiet-hour-check, #task-durations
 
 use crate::bus::adapters::WebhookResult;
 use crate::bus::observers_wire::WebhookObserverTrait;

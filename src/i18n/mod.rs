@@ -1,8 +1,14 @@
-//! # Internationalization (i18n) Module
+//! # Internationalization (i18n) Module (index.md)
 //!
-//! Provides thread-safe, read-only translation lookups across multiple locales.
-//! Loads all translations into a static registry to avoid request-level overrides
-//! and race conditions in concurrent environments.
+//! ## Overview
+//! Loads TOML catalogs into static catalogs for thread-safe translation lookup.
+//!
+//! ## Module Components
+//! - [`loader`]: Loads and flattens translations from TOML folders.
+//! - [`check`]: Audits translation catalog completeness.
+//!
+//! ## Search Tags
+//! #i18n-module, #translation-store, #locale-selector, #macro-lookup
 
 pub mod loader;
 pub mod check;

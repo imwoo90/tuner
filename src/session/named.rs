@@ -1,7 +1,15 @@
 //! # Named Session Registry and Alias Resolver
 //!
-//! Allows assigning human-readable names (aliases) to active session IDs. Enables resuming
-//! or managing specific workspaces easily via mnemonic keys.
+//! ## Overview
+//! Resolves human-readable session aliases to raw UUID session strings. Enables resumes
+//! and diagnostics via user-friendly mnemonic names.
+//!
+//! ## Collaboration Graph
+//! - Saves aliases mappings under configuration paths.
+//! - Consulted by Telegram command routing controllers during session switching.
+//!
+//! ## Search Tags
+//! #session-aliases, #name-resolver, #alias-mapping
 
 use std::collections::HashMap;
 use std::fs;

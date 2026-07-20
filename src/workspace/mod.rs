@@ -1,7 +1,16 @@
-//! # Workspace Module
+//! # Workspace Structure and Rules Manager (index.md)
 //!
-//! Provides features for workspace paths, initialization, rules selection/sync,
-//! and skill directory synchronization.
+//! ## Overview
+//! Establishes workspace directories, rule settings, and custom skills synchronizers.
+//!
+//! ## Module Components
+//! - [`paths`]: Translates profile configs to workspace directories.
+//! - [`rules`]: Resolves GEMINI.md/CLAUDE.md/AGENTS.md rule templates.
+//! - [`sync`]: Initializes folders and clones rule parameters.
+//! - [`skills`]: Scans and mounts custom skills.
+//!
+//! ## Search Tags
+//! #workspace-setup, #rule-selector, #skill-sync, #profile-paths
 
 pub mod paths;
 pub mod rules;

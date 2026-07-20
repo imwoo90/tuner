@@ -1,7 +1,15 @@
-//! # Session Data Models
+//! # Session Data Structure Models
 //!
-//! This module defines the raw data structures persisted in `sessions.json`
-//! including metrics for different providers and migration paths for legacy entries.
+//! ## Overview
+//! Defines the [`SessionData`] struct capturing runtime state, provider, models, and history counts
+//! for active messaging streams.
+//!
+//! ## Collaboration Graph
+//! - Persisted by [`SessionManager`](super::manager::SessionManager).
+//! - Loaded/updated dynamically as CLI streams write output chunks.
+//!
+//! ## Search Tags
+//! #session-data, #model-override, #session-history, #metadata
 
 use std::collections::HashMap;
 use chrono::Utc;

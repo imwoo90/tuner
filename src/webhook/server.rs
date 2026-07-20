@@ -1,6 +1,14 @@
 //! # HTTP Ingress Ingress Port Listener
 //!
-//! Binds HTTP listener ports, coordinates grace shutdown signals, and handles requests using the Axum engine.
+//! ## Overview
+//! Configures and boots the Axum web service. Handles graceful termination and manages active connection pools.
+//!
+//! ## Collaboration Graph
+//! - Main startup controller booted by daemon profiles.
+//! - Binds routes declared in [`super::api::server::ApiServer::start`].
+//!
+//! ## Search Tags
+//! #axum-listener, #graceful-shutdown, #web-server
 
 use crate::webhook::auth::RateLimiter;
 use crate::webhook::manager::WebhookManager;

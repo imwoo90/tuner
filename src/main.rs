@@ -1,8 +1,15 @@
-//! # Tuner Daemon Application Entry Point
+//! # Tuner Daemon Application Entry Point (main.rs)
 //!
-//! This is the main orchestrator for the `tuner` daemon. It handles daemon supervisor mode,
-//! worker spawns, restart markers, systemd initialization, CLI arguments, and launches
-//! either the supervisor master thread or individual profile worker tasks.
+//! ## Overview
+//! The primary boot orchestrator for the `tuner` service. Operates as a supervisor master
+//! spawning individual profile workers or as a worker managing bots.
+//!
+//! ## Application Architecture
+//! - **Master Mode**: Supervises child profile workers, restarting them on failure, and checks restart markers.
+//! - **Worker Mode**: Runs the bot event loop, schedules cron tasks, and starts webhook ports.
+//!
+//! ## Search Tags
+//! #main-entry, #master-mode, #worker-mode, #process-supervisor
 
 pub mod cli;
 pub mod config;

@@ -1,7 +1,15 @@
-//! # Configuration Layer for Tuner Daemon
+//! # Config Loader and User Validator
 //!
-//! Handles JSON-based configurations, profile overrides, loading environment variables
-//! from local settings, systemd integration checks, and validation of user credentials.
+//! ## Overview
+//! Manages loading and merging JSON configurations. Registers telegram credentials
+//! and allowed roots boundary parameters.
+//!
+//! ## Collaboration Graph
+//! - Loaded during wizard setup and worker initialization.
+//! - Configures [`SessionManager`](crate::session::manager::SessionManager) parameters.
+//!
+//! ## Search Tags
+//! #config-loader, #json-config, #profile-merger
 
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};

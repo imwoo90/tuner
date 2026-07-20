@@ -1,7 +1,13 @@
-//! # CLI Providers Module
+//! # Command Line Agent Providers (index.md)
 //!
-//! This module defines the abstraction layer for integrating various AI Agent CLI tools.
-//! It includes the core trait [`AgentProvider`] and data types [`CliResponse`] and [`StreamEvent`].
+//! ## Overview
+//! Wraps and controls executing agent CLI executables (`agy`).
+//!
+//! ## Module Components
+//! - [`antigravity`]: Spawns PTYs, monitors stderr, logs events, and handles safety boundaries.
+//!
+//! ## Search Tags
+//! #cli-provider, #agent-executor, #pty-terminal
 
 pub mod antigravity;
 

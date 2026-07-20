@@ -1,7 +1,16 @@
 //! # Session Manager with JSON Persistence
 //!
-//! This module manages the lifecycle, freshness check, reset, and storage of sessions.
-//! It supports legacy keys migration and user timezone daily resets.
+//! ## Overview
+//! Manages active sessions list and coordinates JSON-based persistence to disk. Resolves session keys,
+//! handles timezone-based daily resets, and checks session freshness.
+//!
+//! ## Collaboration Graph
+//! - Works directly with [`super::key::SessionKey`] and [`super::data::SessionData`].
+//! - Called by Telegram [`runner`](crate::telegram::runner) and Webhook server controllers to resolve active streams.
+//! - Integrates with [`TopicNameResolver`] to name session workspaces.
+//!
+//! ## Search Tags
+//! #session-registry, #json-persistence, #session-resolving, #freshness-check
 
 use std::collections::HashMap;
 use std::fs;

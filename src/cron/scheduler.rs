@@ -1,7 +1,20 @@
 //! # Cron Engine Event Loop
 //!
-//! Runs the tick timer polling cron schedules. Spawns tasks when trigger conditions are met
-//! and logs execution statistics.
+//! ## Overview
+//! Continuously polls active cron jobs, evaluates timezone-adjusted upcoming runs, checks quiet hours,
+//! and triggers background agent runs via [`AntigravityCli`].
+//!
+//! ## Collaboration Graph
+//! - Ticked by [`CronScheduler::start`] event loop spawning background monitoring threads.
+//! - Queries [`super::manager::CronManager`] to retrieve active [`CronJob`] structures.
+//! - Utilizes [`AntigravityCli`] to run prompt instructions.
+//! - Dispatches results as envelopes to the central [`MessageBus`](crate::bus::bus::MessageBus).
+//!
+//! ## Key Types
+//! - [`CronScheduler`]: Controller holding configuration, client bindings, message bus adapters, and quiet-hour status.
+//!
+//! ## Search Tags
+//! #cron-engine, #tick-loop, #quiet-hours, #task-spawner, #time-evaluator
 
 use std::collections::HashMap;
 use std::sync::Arc;

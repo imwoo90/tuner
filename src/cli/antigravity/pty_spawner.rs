@@ -1,7 +1,13 @@
-//! # PTY Process Spawner and Session Binder
+//! # PTY Process Spawner
 //!
-//! Spawns background command operations in a pseudo-terminal (PTY) wrapper. Manages safe
-//! stdin/stdout redirection and signal propagation.
+//! ## Overview
+//! Spawns process targets wrapped in standard Unix pseudo-terminals (PTY). Manages raw I/O descriptors.
+//!
+//! ## Collaboration Graph
+//! - Invoked by [`AntigravityCli`](super::AntigravityCli) to boot interactive agent loops.
+//!
+//! ## Search Tags
+//! #pty-descriptor, #process-fork, #unix-io
 
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::pty::openpty;

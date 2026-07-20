@@ -1,7 +1,14 @@
-//! # Remote Session Execution Loop
+//! # Remote Session WebSocket Loop
 //!
+//! ## Overview
 //! Coordinates bidirectional command streams, handling remote terminal standard I/O channels over
 //! websocket sockets.
+//!
+//! ## Collaboration Graph
+//! - Translates WebSocket frames to stdin/stdout channels for active [`SessionKey`](crate::session::key::SessionKey)s.
+//!
+//! ## Search Tags
+//! #websocket-loop, #remote-stdin, #full-duplex-stream
 
 use crate::webhook::api::crypto::E2ESession;
 use crate::webhook::api::server::ApiServerState;

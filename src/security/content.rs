@@ -1,7 +1,13 @@
-//! # Content Safety and Prompt Filter Engine
+//! # Content Safety and Password Filter
 //!
-//! Inspects prompt payloads and output text blocks against security rules, blocking credential leakage,
-//! sensitive files exposure, or hazardous commands.
+//! ## Overview
+//! Evaluates text payloads against block patterns to prevent leakage of credentials or keys.
+//!
+//! ## Collaboration Graph
+//! - Inspects outgoing message envelopes before dispatching.
+//!
+//! ## Search Tags
+//! #credential-filter, #regex-leak, #data-safety
 
 use std::sync::OnceLock;
 use regex::{Regex, RegexBuilder};

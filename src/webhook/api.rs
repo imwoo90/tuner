@@ -1,7 +1,14 @@
-//! # Webhook API Routes Declarations
+//! # Webhook API Handler Declarations
 //!
-//! Declares router paths, handlers, and endpoints for public web services like handshake registers,
-//! task submissions, and file access.
+//! ## Overview
+//! Registers and maps Axum paths to handshake protocols, WebSocket event loops, task registers,
+//! and asset file endpoints.
+//!
+//! ## Collaboration Graph
+//! - Composes route routers loaded by [`super::server::WebhookServer::start`].
+//!
+//! ## Search Tags
+//! #api-router, #webhook-endpoints, #service-registry
 
 pub mod crypto;
 pub mod files;

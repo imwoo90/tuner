@@ -1,7 +1,15 @@
-//! # Matrix Network Messaging Adapter
+//! # Matrix protocol Bridge (index.md)
 //!
-//! Implements communication adapters for the Matrix protocol. Resolves room IDs, synchronizes state,
-//! handles connection sessions, and formats incoming/outgoing envelopes.
+//! ## Overview
+//! Connects the local message bus to Matrix networks. Handles encryption, credentials, and state sync.
+//!
+//! ## Module Components
+//! - [`bot`]: Long-polling loop receiving events.
+//! - [`transport`]: Transmits message envelopes to Matrix room APIs.
+//! - [`credentials`]: Restores access tokens.
+//!
+//! ## Search Tags
+//! #matrix-bridge, #matrix-transport, #token-restore
 
 pub mod id_map;
 pub mod formatting;

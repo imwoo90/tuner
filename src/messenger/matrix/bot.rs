@@ -1,7 +1,14 @@
-//! # Matrix Client Listener and Event Router
+//! # Matrix Client event Listener
 //!
-//! Establishes long-polling sync loops with Matrix homeservers. Parses incoming events and dispatches
-//! them to the central message bus.
+//! ## Overview
+//! Listens to Matrix events, parses incoming commands, and dispatches them to the central message bus.
+//!
+//! ## Collaboration Graph
+//! - Synchronizes room states via reqwest client.
+//! - Routes commands to [`AntigravityCli`].
+//!
+//! ## Search Tags
+//! #matrix-bot, #polling-sync, #message-ingress
 
 use std::sync::Arc;
 use std::path::Path;

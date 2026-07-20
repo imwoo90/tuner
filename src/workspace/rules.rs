@@ -1,7 +1,13 @@
-//! # Rules Selector
+//! # Workspace Rule Profile Selector
 //!
-//! Scans and deploys variant-specific rule files (CLAUDE.md, AGENTS.md, GEMINI.md)
-//! based on the authentication status of active CLI providers.
+//! ## Overview
+//! Parses custom user profiles and determines corresponding CLAUDE.md/GEMINI.md/AGENTS.md configurations.
+//!
+//! ## Collaboration Graph
+//! - Called by [`init_workspace`](super::sync::init_workspace) to sync rule configurations.
+//!
+//! ## Search Tags
+//! #rule-profiles, #markdown-rules, #profile-mapping
 
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::rules_check::{check_antigravity, check_claude, check_codex, check_gemini};

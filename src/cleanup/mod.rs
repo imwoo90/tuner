@@ -1,5 +1,12 @@
-//! # File Cleanup Module
+//! # Temporary Storage Cleanup Module (index.md)
 //!
-//! This module manages periodic cleanup of old files in system output and temporary media folders.
+//! ## Overview
+//! Cleans stale files, old history files, and orphaned processes periodically.
+//!
+//! ## Module Components
+//! - [`observer`]: Monitors storage usage and purges items exceeding retention limits.
+//!
+//! ## Search Tags
+//! #cleaner, #temp-cleanup, #retention-limits
 
 pub mod observer;

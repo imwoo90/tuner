@@ -1,5 +1,13 @@
-//! Supervisor module to manage the lifecycle of a child process.
-//! Implements auto-restart on exit code 42 and exponential backoff for crashes.
+//! # Subprocess Worker Supervisor
+//!
+//! ## Overview
+//! Monitors child subprocesses, restarts workers on failure, and handles termination signals.
+//!
+//! ## Collaboration Graph
+//! - Instantiated by master daemon mode to manage child worker targets.
+//!
+//! ## Search Tags
+//! #supervisor, #subprocess-runner, #signal-propagator
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

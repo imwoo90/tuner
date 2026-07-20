@@ -1,7 +1,13 @@
-//! # Safety Path Validation Module
+//! # Path Traversal Sandbox Validator
 //!
-//! Handles validation of file paths to prevent traversal and access outside
-//! of allowed directories.
+//! ## Overview
+//! Inspects path targets, resolving links to verify they lie inside authorized roots.
+//!
+//! ## Collaboration Graph
+//! - Called by Webhook file servers and Cron managers before reading/writing files.
+//!
+//! ## Search Tags
+//! #directory-sandbox, #link-resolution, #security-bounds
 
 use std::path::{Path, PathBuf};
 use std::fs;

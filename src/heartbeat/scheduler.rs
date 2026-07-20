@@ -1,8 +1,13 @@
-//! # Heartbeat Scheduler Runtime
+//! # Heartbeat Telemetry Loop
 //!
-//! This module coordinates the periodic background check loop.
-//! It uses CliConfig settings to determine intervals, quiet hours,
-//! and evaluates cooldown conditions before executing the agy CLI.
+//! ## Overview
+//! Ticks periodically to log daemon health status and telemetry parameters.
+//!
+//! ## Collaboration Graph
+//! - Spawns tick routines during master/worker boot cycles.
+//!
+//! ## Search Tags
+//! #heartbeat-loop, #telemetry-logger, #daemon-health
 
 use std::sync::Arc;
 use chrono::{DateTime, NaiveTime, Utc};

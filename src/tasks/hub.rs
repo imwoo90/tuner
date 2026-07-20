@@ -1,7 +1,13 @@
-//! TaskHub central coordinator for background tasks
+//! # Task Callback and Interactivity Hub
 //!
-//! Handles task submission, priority-based concurrency enforcement, question
-//! forwarding, session resumption, outcome collection, and result callbacks.
+//! ## Overview
+//! Manages bidirectional communication with executing tasks. Routes interactive answers back to tasks.
+//!
+//! ## Collaboration Graph
+//! - Used by [`CronScheduler`](crate::cron::scheduler::CronScheduler) and Telegram callback routers.
+//!
+//! ## Search Tags
+//! #callback-hub, #interactivity-manager, #stdout-channels
 
 use std::collections::HashMap;
 use std::path::PathBuf;

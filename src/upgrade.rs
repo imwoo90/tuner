@@ -1,7 +1,14 @@
 //! # Self-Upgrade and Release Version Control
 //!
-//! Coordinates checking for GitHub release versions, downloading binaries, verifying checksums,
+//! ## Overview
+//! Manages checking for GitHub release versions, downloading binaries, verifying checksums,
 //! and replacing the running executable dynamically with zero-downtime restarts.
+//!
+//! ## Collaboration Graph
+//! - Invoked via `--upgrade` CLI flag or Telegram update commands.
+//!
+//! ## Search Tags
+//! #binary-upgrade, #github-releases, #checksum-verifier
 
 use serde::Deserialize;
 use std::path::Path;

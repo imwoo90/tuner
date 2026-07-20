@@ -1,6 +1,14 @@
-//! Task execution engine
+//! # DAG Task Execution Engine
 //!
-//! Handles running tasks, resolving dependencies, invoking CLI providers, and processing outcomes.
+//! ## Overview
+//! Resolves task dependencies, builds topological run sequences, and executes tasks concurrently.
+//!
+//! ## Collaboration Graph
+//! - Loads task dependencies from [`TaskRegistry`](super::registry::TaskRegistry).
+//! - Executes individual items via [`ProcessRegistry`](super::runner::ProcessRegistry).
+//!
+//! ## Search Tags
+//! #dag-execution, #concurrency-runner, #topological-sort
 
 use std::sync::Arc;
 use anyhow::{anyhow, Result};

@@ -1,7 +1,16 @@
-//! # Antigravity CLI Provider
+//! # Antigravity CLI Driver (index.md)
 //!
-//! This module implements the provider for controlling and interacting with the Google Antigravity CLI (`agy`).
-//! It supports the dotted-workspace bypass mechanism ([`AntigravityCli::agy_workspace`]) and the parameter builder ([`AntigravityCli::build_command`]).
+//! ## Overview
+//! Controls the `agy` executable, parsing real-time logs, managing pseudo-terminals (PTY),
+//! and validating workspace security rules.
+//!
+//! ## Module Components
+//! - [`pty_spawner`]: Spawns subprocesses inside PTY descriptors.
+//! - [`log_parser`]: Extracts event frames from active log streams.
+//! - [`trust`]: Auto-merges trust directories.
+//!
+//! ## Search Tags
+//! #antigravity-driver, #pty-spawner, #log-extractor, #workspace-trust
 
 use crate::config::CliConfig;
 use std::path::PathBuf;

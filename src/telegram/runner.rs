@@ -1,7 +1,15 @@
 //! # Telegram Bot Event Loop Runner
 //!
-//! Initiates the long-polling Telegram bot listener using Teloxide. Boots session manager locks
-//! and registers the main dispatcher routing pipeline.
+//! ## Overview
+//! Connects to the Telegram Bot API and starts long-polling listener using Teloxide. Coordinates
+//! session caches, message queues, and worker status.
+//!
+//! ## Collaboration Graph
+//! - Entry point loaded by the main application launcher [`main.rs`](crate::main.rs).
+//! - Spawns typing status guards during processing.
+//!
+//! ## Search Tags
+//! #polling-loop, #bot-initializer, #teloxide-runner
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

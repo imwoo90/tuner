@@ -1,7 +1,16 @@
-//! # Tasks Module
+//! # DAG Automation Tasks Module (index.md)
 //!
-//! Handles background task registration, persistent state tracking,
-//! prioritization/scheduler execution constraints, and host run coordination.
+//! ## Overview
+//! Manages task registries, task tracking databases, execution priorities, and runs dependency DAGs.
+//!
+//! ## Module Components
+//! - [`registry`]: Registers and loads executable automation tasks.
+//! - [`engine`]: Runs dependency DAG trees in execution sequence.
+//! - [`runner`]: Runs process executors and tracks process PIDs.
+//! - [`hub`]: Orchestrates callback channels for tasks.
+//!
+//! ## Search Tags
+//! #dag-scheduler, #task-registry, #execution-engine, #dag-runner
 
 pub mod models;
 pub mod registry;

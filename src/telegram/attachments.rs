@@ -1,7 +1,14 @@
 //! # Attachment Downloader and Storage Manager
 //!
-//! Inspects incoming Telegram messages for files, voice memos, and images. Initiates download via
-//! Telegram Bot API and writes them safely into the workspace storage directory.
+//! ## Overview
+//! Checks incoming Telegram messages for files, images, or audio clips. Downloads them via HTTP
+//! and stores them inside the workspace's `telegram_files/` directory.
+//!
+//! ## Collaboration Graph
+//! - Integrates with [`process_text_with_files`](super::process_text_with_files) to inject paths into agent inputs.
+//!
+//! ## Search Tags
+//! #attachment-downloads, #media-storage, #file-receiver
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

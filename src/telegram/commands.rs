@@ -1,7 +1,16 @@
-//! # Telegram Commands Controller
+//! # Telegram Slash Commands Controller
 //!
-//! Parses and handles telegram slash commands (e.g. `/start`, `/model`, `/new`, `/abort`, `/diagnose`).
-//! Performs access control checks before routing actions.
+//! ## Overview
+//! Parses and handles Telegram slash commands (e.g. `/model`, `/new`, `/abort`, `/diagnose`, `/cron`).
+//! Validates permissions and updates active workspace states.
+//!
+//! ## Collaboration Graph
+//! - Called by [`process_text_with_files`](super::process_text_with_files) at early check cycles.
+//! - Instructs [`SessionManager`](crate::session::manager::SessionManager) to reset or resolve sessions.
+//! - Interacts with [`CronManager`](crate::cron::manager::CronManager) to toggle scheduled jobs.
+//!
+//! ## Search Tags
+//! #chat-commands, #access-control, #session-management, #command-parser
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

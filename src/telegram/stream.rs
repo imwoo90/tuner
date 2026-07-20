@@ -1,7 +1,16 @@
 //! # Streaming Output Consumer for Telegram Chat
 //!
-//! Consumes streaming events from running agent CLI PTY processes. Debounces text chunks
+//! ## Overview
+//! Consumes character/event streams from active agent CLI PTY processes. Debounces text chunks
 //! to minimize Telegram message update rate-limiting and renders real-time outputs.
+//!
+//! ## Collaboration Graph
+//! - Receives stdout streams from [`AntigravityCli`](crate::cli::antigravity::AntigravityCli).
+//! - Edits active Telegram messages dynamically using Teloxide.
+//! - Feeds final execution status updates back to the session manager.
+//!
+//! ## Search Tags
+//! #streaming-consumer, #debouncer, #rate-limiting, #message-updates
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

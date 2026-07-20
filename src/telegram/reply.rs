@@ -1,7 +1,15 @@
 //! # Chat Reply and Prompt Context Builder
 //!
-//! Builds context-rich prompt inputs by appending reply histories, extracting file references,
-//! downloading media attachments, and cleaning up mentions.
+//! ## Overview
+//! Constructs context-rich prompts by parsing reply histories, removing bot mentions,
+//! downloading media attachments, and injecting system hints.
+//!
+//! ## Collaboration Graph
+//! - Builds payloads before calling [`runner`](crate::telegram::runner) streams.
+//! - Resolves parent messages to inject prompt-context buffers.
+//!
+//! ## Search Tags
+//! #prompt-builder, #reply-history, #media-downloader, #mention-filter
 
 use teloxide::types::Message;
 use teloxide::net::Download;
