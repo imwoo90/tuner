@@ -3,6 +3,10 @@
 //! This module handles updating the `settings.json` file for Google Antigravity CLI,
 //! automatically adding new workspaces to the list of `trustedWorkspaces`.
 
+//! 
+//! ## Search Tags
+//! #trust
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

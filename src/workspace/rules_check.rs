@@ -2,6 +2,10 @@
 //!
 //! Helper functions to check authentication status of different providers.
 
+//! 
+//! ## Search Tags
+//! #rules-check
+
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::rules::{AuthResult, AuthStatus};
 use std::path::{Path, PathBuf};

@@ -3,6 +3,10 @@
 //! Compares translated locale files against the English source of truth to identify
 //! missing keys, extra keys, and mismatched formatting placeholders.
 
+//! 
+//! ## Search Tags
+//! #check
+
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 

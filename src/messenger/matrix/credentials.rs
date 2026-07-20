@@ -3,6 +3,10 @@
 //! Handles encryption keys, access tokens, homeserver URLs, and room association caches for the
 //! Matrix interface.
 
+//! 
+//! ## Search Tags
+//! #credentials
+
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;

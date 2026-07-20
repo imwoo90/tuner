@@ -1,7 +1,15 @@
 //! # Interactive Ask and Question Handler Process
 //!
+//! ## Overview
 //! Orchestrates the interactive answer submission flow for agent prompts (`ask_question`).
 //! Feeds responses back to background execution PTY streams and handles state transitions.
+//!
+//! ## Collaboration Graph
+//! - Interacts with [`super::ask_helpers`] to submit input.
+//! - Used by [`super::handler::handle_message`] to route new messages.
+//!
+//! ## Search Tags
+//! #ask-process, #user-input, #pty-feedback
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

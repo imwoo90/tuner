@@ -3,6 +3,10 @@
 //! Handles wiring up background observers (heartbeat, cron, background, webhooks) to
 //! submit their output results automatically to the `MessageBus`.
 
+//! 
+//! ## Search Tags
+//! #observers-wire
+
 use std::sync::Arc;
 use async_trait::async_trait;
 use super::bus::MessageBus;

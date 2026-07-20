@@ -1,7 +1,15 @@
 //! # Telegram Typing Status Indicator Guard
 //!
+//! ## Overview
 //! Periodically sends the "typing..." chat action to Telegram while an agent is generating code
 //! or executing background tasks. Dropped automatically when execution ends.
+//!
+//! ## Collaboration Graph
+//! - Spawned during PTY execution streams.
+//! - Binds directly to the Teloxide client handle.
+//!
+//! ## Search Tags
+//! #typing-indicator, #status-guard, #user-feedback
 
 use std::time::Duration;
 use tokio::task::JoinHandle;

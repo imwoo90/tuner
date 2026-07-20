@@ -1,7 +1,15 @@
 //! # Interactive Prompt Question Callback Router
 //!
+//! ## Overview
 //! Routes button click interactions resulting from agent `ask_question` dialogs. Maps choice
 //! coordinates back to active execution flows.
+//!
+//! ## Collaboration Graph
+//! - Receives callbacks from [`super::callbacks`].
+//! - Integrates with [`super::ask_helpers`] to unlock execution.
+//!
+//! ## Search Tags
+//! #ask-callbacks, #interactive-dialogs, #button-mapping
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

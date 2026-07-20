@@ -2,6 +2,10 @@
 //!
 //! Provides structures and algorithms to build, validate, and schedule task dependency graphs.
 
+//! 
+//! ## Search Tags
+//! #dag
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::{anyhow, Result};
 

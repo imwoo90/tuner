@@ -2,6 +2,10 @@
 //!
 //! Synchronizes custom agent skill folders between tuner and CLI providers.
 
+//! 
+//! ## Search Tags
+//! #skills
+
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::skills_helpers::{
     clean_broken_links, clean_invalid_workspace_skill_links, cli_skill_dirs, create_dir_link,

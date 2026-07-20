@@ -2,6 +2,10 @@
 //!
 //! SINGLE SOURCE OF TRUTH for all workspace and configuration paths in tuner.
 
+//! 
+//! ## Search Tags
+//! #paths
+
 use std::path::PathBuf;
 
 /// Immutable paths resolved for the workspace layout.

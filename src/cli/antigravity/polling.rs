@@ -3,6 +3,10 @@
 //! This module spawns background tasks to poll the transcript log
 //! of active Antigravity CLI sessions and feed streaming progress.
 
+//! 
+//! ## Search Tags
+//! #polling
+
 use crate::cli::{CliResponse, StreamEvent};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

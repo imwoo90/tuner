@@ -3,6 +3,10 @@
 //! Provides conversion functions to map various domain events and results
 //! (e.g., CronResult, BackgroundResult, InterAgentResult, TaskResult) into unified `Envelope` models.
 
+//! 
+//! ## Search Tags
+//! #adapters
+
 use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use crate::background::models::{BackgroundResult, BackgroundResultStatus};
 

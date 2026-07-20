@@ -3,6 +3,10 @@
 //! Automatically determines and updates the internationalization language locale context for
 //! specific Telegram chat threads based on configuration and commands.
 
+//! 
+//! ## Search Tags
+//! #lang
+
 use teloxide::prelude::*;
 use teloxide::types::Message;
 use crate::config::CliConfig;

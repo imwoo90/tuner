@@ -2,6 +2,10 @@
 //!
 //! Implements delete, cleanup_old, cleanup_finished, and cleanup_orphans for TaskRegistry.
 
+//! 
+//! ## Search Tags
+//! #cleanup
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;

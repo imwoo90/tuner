@@ -3,6 +3,10 @@
 //! Provides utilities to index, parse YAML metadata fronts, create symlinks, and synchronize
 //! skill directories in the workspace.
 
+//! 
+//! ## Search Tags
+//! #skills-helpers
+
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 

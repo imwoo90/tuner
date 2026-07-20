@@ -3,6 +3,10 @@
 //! Handles locating locale files, parsing TOML translations, flattening structures,
 //! and doing placeholder substitution.
 
+//! 
+//! ## Search Tags
+//! #loader
+
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 

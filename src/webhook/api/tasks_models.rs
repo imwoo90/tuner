@@ -2,6 +2,10 @@
 //!
 //! Defines JSON serialization interfaces for task requests, responses, status tracking, and error payloads.
 
+//! 
+//! ## Search Tags
+//! #tasks-models
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]

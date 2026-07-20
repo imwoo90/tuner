@@ -11,6 +11,10 @@
 //! - [`bus`]: Core MessageBus dispatching unicast/broadcast events.
 //! - [`observers_wire`]: Hooks connecting background observer runtimes.
 
+//! 
+//! ## Search Tags
+//! #mod
+
 pub mod envelope;
 pub mod adapters;
 pub mod lock_pool;

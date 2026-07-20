@@ -3,6 +3,10 @@
 //! Provides a lock management system (`LockPool`) that tracks active asynchronous locks
 //! mapped by chat and topic keys. Supports automatic eviction of idle locks when size limits are exceeded.
 
+//! 
+//! ## Search Tags
+//! #lock-pool
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use tokio::sync::Mutex as TokioMutex;

@@ -4,6 +4,10 @@
 //! ConversationMiddleware by preventing duplicate processing, tracking
 //! in-flight message tasks, and cancelling queued work on /stop.
 
+//! 
+//! ## Search Tags
+//! #message-queue
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 use tokio::task::JoinHandle;

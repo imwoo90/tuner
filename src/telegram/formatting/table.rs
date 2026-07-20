@@ -3,6 +3,10 @@
 //! Extracts markdown pipe-tables, parses their columns and alignment rules, and formats them
 //! into fixed-width monospace layouts wrapped in pre/code blocks for clean grid presentation.
 
+//! 
+//! ## Search Tags
+//! #table
+
 use regex::Regex;
 
 fn parse_table_row(line: &str) -> Vec<String> {

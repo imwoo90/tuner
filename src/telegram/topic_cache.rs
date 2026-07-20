@@ -1,7 +1,15 @@
 //! # Forum Topic Metadata Cache
 //!
+//! ## Overview
 //! Manages a local cache mapping Telegram forum topic names to IDs. Accelerates message routing
-//! in multi-topic workspace environments without querying the API repeatedly.
+//! in multi-topic workspace environments.
+//!
+//! ## Collaboration Graph
+//! - Queried by [`super::handler::handle_message`] to associate topics with paths.
+//! - Pre-populated from active thread metadata during startup.
+//!
+//! ## Search Tags
+//! #topic-cache, #forum-topics, #metadata-cache
 
 use std::sync::Mutex;
 use std::collections::HashMap;

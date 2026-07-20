@@ -3,6 +3,10 @@
 //! This module contains utilities for processing the JSON responses and real-time transcript logs of the Google Antigravity CLI.
 //! It supports one-shot response extraction ([`parse_antigravity_json`]) and transcript extraction ([`read_transcript_answer`]).
 
+//! 
+//! ## Search Tags
+//! #events
+
 pub fn parse_antigravity_json(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

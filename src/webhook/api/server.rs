@@ -2,6 +2,10 @@
 //!
 //! Composes Axum application routes, sets rate limits, registers websocket services, and binds to ports.
 
+//! 
+//! ## Search Tags
+//! #server
+
 use crate::webhook::api::files::{handle_file_download, handle_file_upload};
 use crate::webhook::api::websocket::{handle_health, handle_websocket};
 use axum::{Router, extract::DefaultBodyLimit, routing::get, routing::post};

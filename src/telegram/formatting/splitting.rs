@@ -3,6 +3,10 @@
 //! Splits long reply payloads exceeding Telegram's 4096-character API limit. Automatically
 //! balances opened and closed HTML markup tags across split message parts.
 
+//! 
+//! ## Search Tags
+//! #splitting
+
 use regex::Regex;
 
 fn split_at_char_limit(s: &str, char_limit: usize) -> (&str, &str) {

@@ -2,6 +2,10 @@
 //!
 //! Manages loading, saving, and updating registered webhooks dynamically with JSON persistence.
 
+//! 
+//! ## Search Tags
+//! #manager
+
 use crate::webhook::models::WebhookEntry;
 use serde_json::Value;
 use std::path::PathBuf;

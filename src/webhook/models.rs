@@ -2,6 +2,10 @@
 //!
 //! Defines the data structures and templates for webhook registration.
 
+//! 
+//! ## Search Tags
+//! #models
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

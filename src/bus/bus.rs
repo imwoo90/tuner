@@ -4,6 +4,10 @@
 //! executing prompt injection, and delivering messages to registered transports (e.g. Telegram, Matrix).
 //! Handles cascading transport fallback and error resilience.
 
+//! 
+//! ## Search Tags
+//! #bus
+
 use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use super::envelope::{Envelope, LockMode, DeliveryMode};

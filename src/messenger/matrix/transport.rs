@@ -3,6 +3,10 @@
 //! Translates standard message envelopes into Matrix events (m.text, m.notice, etc.) and transmits
 //! them using reqwest endpoints.
 
+//! 
+//! ## Search Tags
+//! #transport
+
 use async_trait::async_trait;
 use crate::bus::bus::Transport;
 use crate::bus::envelope::{Envelope, Origin};

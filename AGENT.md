@@ -50,6 +50,20 @@ When writing new features, always follow these TDD cycles:
 
 For AI Agents traversing this repository:
 1.  **Entry Points**: Start with `AGENT.md` (this file) and `PROJECT.md` to understand the system architecture, goals, and compilation rules.
-2.  **Module Indexing**: Every directory is a Rust module with a `mod.rs` file acting as the `index.md`. Read the module-level documentation (`//!`) at the top of `mod.rs` to understand the architecture, data flow, and submodules.
-3.  **Graph Traversal**: Follow the intra-doc links (e.g. `[SessionManager]`) or references in code comments to jump between components. Rustdoc verifies these links compile-time, ensuring a reliable knowledge graph.
-4.  **Verification**: Execute `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` to verify that all relationships resolve successfully.
+2.  **Module Indexing**: Every directory is a Rust module with a `mod.rs` file acting as the `index.md` directory catalog. Read the module-level documentation (`//!`) at the top of `mod.rs` to understand the architecture, data flow, and submodules.
+3.  **Graph Traversal**: Follow compile-checked intra-doc links (e.g. `[SessionManager]`) or references in code comments to jump between components. Rustdoc verifies these links compile-time, forming a type-safe knowledge graph.
+4.  **Search Indexing**: Find semantic concepts by searching/grepping for hashtags (e.g. `#cron-scheduler`, `#session-registry`) defined in the `Search Tags` section of files.
+5.  **Verification**: Execute `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` to verify that all relationships resolve successfully.
+
+---
+
+## 5. Merging Karpathy's LLM Wiki Concept with Tuner Codebase
+
+This project merges **Andrej Karpathy's LLM Wiki pattern** with the **"Code as Documentation"** philosophy:
+- **Compounding Wiki**: The Rust doc comments (`//!` and `///`) embedded directly inside the code represent a live, interlinked Wiki that sits alongside the implementation.
+- **Self-Documenting Code**: When writing new code or modifying existing files, the agent is responsible for updating the corresponding file-level headers and index files (`mod.rs`). The wiki grows richer as the codebase evolves.
+- **Build Lint Enforcement**: `build.rs` compiles and verifies:
+  - Every production `.rs` file has a `//!` header of at least 100 characters.
+  - Every production `.rs` file must contain a `//! ## Search Tags` section with at least one hashtag (`#tag-name`).
+  - This ensures the codebase never decays into undocumented traditional code.
+

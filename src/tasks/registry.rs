@@ -3,6 +3,10 @@
 //! Implements atomic JSON load/save operations, stale task state recovery,
 //! and seeding task workspaces with markdown configs.
 
+//! 
+//! ## Search Tags
+//! #registry
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

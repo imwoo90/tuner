@@ -3,6 +3,10 @@
 //! Controls sending user-typing states to Matrix rooms while commands or tasks are actively running
 //! to improve user experience feedback.
 
+//! 
+//! ## Search Tags
+//! #typing
+
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use matrix_sdk::{Client, ruma::OwnedRoomId, ruma::RoomId};

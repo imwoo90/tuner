@@ -3,6 +3,10 @@
 //! Manages ECDH/AES-GCM key exchanges and signature verification to guarantee message integrity
 //! across web APIs.
 
+//! 
+//! ## Search Tags
+//! #crypto
+
 use base64::Engine;
 use crypto_box::aead::Aead;
 use crypto_box::{PublicKey, SalsaBox, SecretKey};

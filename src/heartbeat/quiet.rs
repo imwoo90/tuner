@@ -3,6 +3,10 @@
 //! This module implements local timezone calculations for quiet hours and
 //! parsing logic for suppressing empty heartbeat alert tokens.
 
+//! 
+//! ## Search Tags
+//! #quiet
+
 use chrono::{NaiveTime, DateTime, Timelike};
 use chrono_tz::Tz;
 

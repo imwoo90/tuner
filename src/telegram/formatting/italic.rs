@@ -3,6 +3,10 @@
 //! Normalizes markdown italic syntax (asterisks and underscores) to prevent unbalanced tags.
 //! Standardizes them into HTML elements compatible with Teloxide output formatting rules.
 
+//! 
+//! ## Search Tags
+//! #italic
+
 fn is_whitespace_or_punct(c: char, delim: char) -> bool {
     c.is_whitespace() || (c.is_ascii_punctuation() && c != delim)
 }

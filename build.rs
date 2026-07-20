@@ -112,6 +112,23 @@ fn check_file(path: &Path) -> Result<(), String> {
                 module_doc_len
             ));
         }
+
+        let joined_docs = module_docs.join("\n");
+        let has_search_tags = joined_docs.to_lowercase().contains("search tags");
+        if !has_search_tags {
+            return Err(format!(
+                "error: File {:?} is missing a 'Search Tags' section in its module/file level documentation comment (//!). Every production source file must contain a 'Search Tags' header to support semantic search indexing.",
+                path
+            ));
+        }
+
+        let has_hashtag = joined_docs.contains('#');
+        if !has_hashtag {
+            return Err(format!(
+                "error: File {:?} is missing hashtag references ('#') in its 'Search Tags' section. Every production source file must define at least one search tag (e.g. '#tag-name').",
+                path
+            ));
+        }
     }
 
     // 4. Check function character size (max 2,000 physical characters)

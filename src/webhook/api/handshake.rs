@@ -3,6 +3,10 @@
 //! Handles registration sequence, key exchange negotiation, and authorization checks for external
 //! worker registration.
 
+//! 
+//! ## Search Tags
+//! #handshake
+
 use crate::webhook::api::crypto::E2ESession;
 use axum::extract::ws::Message;
 use futures::sink::SinkExt;

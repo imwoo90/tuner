@@ -2,6 +2,10 @@
 //!
 //! Struct definitions for task submissions, persisted entries, results, and priorities.
 
+//! 
+//! ## Search Tags
+//! #models
+
 use serde::{Deserialize, Serialize};
 
 /// Allowed task priority levels

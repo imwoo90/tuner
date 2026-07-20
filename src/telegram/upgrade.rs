@@ -3,6 +3,10 @@
 //! Implements command handlers allowing users to check, download, and initiate self-upgrades
 //! directly via Telegram inline keyboards and chat prompts.
 
+//! 
+//! ## Search Tags
+//! #upgrade
+
 use teloxide::prelude::*;
 
 async fn send_reply(

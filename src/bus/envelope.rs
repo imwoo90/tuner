@@ -3,6 +3,10 @@
 //! Defines the `Envelope` structure and its associated enums (`Origin`, `DeliveryMode`, `LockMode`).
 //! Envelopes encapsulate message data, routing metadata, and execution status for delivery across the message bus.
 
+//! 
+//! ## Search Tags
+//! #envelope
+
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 

@@ -3,6 +3,10 @@
 //! This module implements dynamic discovery of models from the `agy models` CLI command.
 //! It executes the CLI with a timeout and parses the stdout stream.
 
+//! 
+//! ## Search Tags
+//! #discovery
+
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;

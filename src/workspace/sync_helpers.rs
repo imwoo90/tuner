@@ -2,6 +2,10 @@
 //!
 //! Internal implementation helpers for walk_and_copy, sync_group, and smart_merge.
 
+//! 
+//! ## Search Tags
+//! #sync-helpers
+
 use crate::workspace::paths::DuctorPaths;
 use std::path::Path;
 

@@ -2,6 +2,10 @@
 //!
 //! Provides unique, deterministic, collision-resistant 64-bit ID mapping.
 
+//! 
+//! ## Search Tags
+//! #id-map
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

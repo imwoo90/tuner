@@ -4,6 +4,10 @@
 //! It handles non-echoing PTY spawning, non-blocking asynchronous output draining,
 //! and automatic resource cleanup to prevent zombie processes.
 
+//! 
+//! ## Search Tags
+//! #session
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;

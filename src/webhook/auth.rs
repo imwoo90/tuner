@@ -2,6 +2,10 @@
 //!
 //! Handles bearer tokens, HMAC signature verification, and sliding-window rate limiting.
 
+//! 
+//! ## Search Tags
+//! #auth
+
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use sha1::Sha1;

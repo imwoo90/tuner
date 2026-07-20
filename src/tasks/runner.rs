@@ -2,6 +2,10 @@
 //!
 //! Manages active subprocess registrations, signaling, and exit code classification.
 
+//! 
+//! ## Search Tags
+//! #runner
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;

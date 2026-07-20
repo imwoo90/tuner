@@ -1,7 +1,19 @@
-//! # Telegram HTML Formatting and Message Splitting
+//! # Telegram HTML Formatting and Message Splitting (index.md)
 //!
+//! ## Overview
 //! This module converts Markdown formatting to Telegram-compatible HTML tags
 //! and splits long messages safely without breaking HTML tag pairs.
+//!
+//! ## Module Components
+//! - [`helpers`]: Converts Markdown syntax (links, code blocks) to HTML.
+//! - [`splitting`]: Truncates and chunk payloads to comply with API character limits.
+//! - [`italic`]: Standardizes italic markdown syntax.
+//! - [`blockquotes`]: Groups blockquote lines into tags.
+//! - [`table`]: Formats pipe-tables into monospace blocks.
+//! - [`buttons`]: Strips internal button tags.
+//!
+//! ## Search Tags
+//! #formatting-index, #markdown-to-html, #message-splitting, #ui-formatting
 
 pub mod helpers;
 pub mod splitting;

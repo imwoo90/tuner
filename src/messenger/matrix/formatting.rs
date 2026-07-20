@@ -2,6 +2,10 @@
 //!
 //! Handles basic formatting tags and body splitting at 60k bytes.
 
+//! 
+//! ## Search Tags
+//! #formatting
+
 use regex::Regex;
 
 /// Remove `[button:...]` markers from text.

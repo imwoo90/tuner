@@ -1,7 +1,15 @@
 //! # Telegram Callback Query Router and Event Handler
 //!
+//! ## Overview
 //! Handles user interaction callbacks triggered from inline keyboard buttons, routing
 //! confirmation clicks, option selections, and cancellation events.
+//!
+//! ## Collaboration Graph
+//! - Receives events from Teloxide bot loop.
+//! - Feeds selection choices to [`super::ask_callbacks`].
+//!
+//! ## Search Tags
+//! #callback-router, #inline-keyboards, #button-clicks
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

@@ -3,6 +3,10 @@
 //! A developer CLI tool designed to run in git pre-commit hooks or CI. Audits i18n TOML files
 //! to identify missing keys, placeholder discrepancies, or broken formatting.
 
+//! 
+//! ## Search Tags
+//! #i18n-check
+
 #[path = "../i18n/mod.rs"]
 pub mod i18n;
 

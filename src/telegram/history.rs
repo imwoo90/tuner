@@ -1,7 +1,15 @@
 //! # Telegram Chat History logger
 //!
+//! ## Overview
 //! Manages persistent logging of message histories (role, sender, content, thread details)
 //! into jsonl files for trace audits, session resume context, and debugging.
+//!
+//! ## Collaboration Graph
+//! - Log entries saved under workspace directories.
+//! - Consulted during session initialization to restore history context.
+//!
+//! ## Search Tags
+//! #history-logger, #trace-auditing, #jsonl-logs
 
 use std::path::Path;
 use std::fs::{OpenOptions, create_dir_all};

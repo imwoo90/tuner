@@ -1,7 +1,15 @@
 //! # Interactive Multi-Select UI Component
 //!
+//! ## Overview
 //! Renders checklists and multi-select inline keyboard grids in Telegram. Tracks individual option
 //! toggle states in memory before submission.
+//!
+//! ## Collaboration Graph
+//! - Rendered via Teloxide keyboard markups.
+//! - Tracks option state changes before confirming.
+//!
+//! ## Search Tags
+//! #multi-select, #checklists, #ui-keyboard
 
 use teloxide::prelude::*;
 

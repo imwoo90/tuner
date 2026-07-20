@@ -3,6 +3,10 @@
 //! Parses JSON lines and trace outputs written by agent CLI operations. Emits parsed structured
 //! event frames for streaming to messaging interfaces.
 
+//! 
+//! ## Search Tags
+//! #log-parser
+
 use std::path::Path;
 use super::log_helpers::{
     get_new_content_string, parse_entries, parse_ask_question_tool, clean_tool_call_args,

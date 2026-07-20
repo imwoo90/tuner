@@ -2,6 +2,10 @@
 //!
 //! Implements routes and payload DTOs for creating, listing, cancelling, deleting, and resuming tasks.
 
+//! 
+//! ## Search Tags
+//! #tasks
+
 use axum::{
     extract::{Query, State},
     http::{StatusCode, HeaderMap},

@@ -3,6 +3,10 @@
 //! Parses and strips inline dynamic buttons (`[button:Label]`) embedded by agents in their replies.
 //! Prevents exposing raw callback payload structures to standard messaging clients.
 
+//! 
+//! ## Search Tags
+//! #buttons
+
 use regex::{Regex, Captures};
 
 fn mask_code(text: &str, saved: &mut Vec<String>) -> String {

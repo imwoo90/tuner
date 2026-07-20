@@ -4,6 +4,10 @@
 //! managing execution environment propagation, PTY session lifecycle hooks,
 //! and response transcript extraction.
 
+//! 
+//! ## Search Tags
+//! #provider
+
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::{AgentProvider, CliResponse, StreamEvent};
 use crate::cli::antigravity::events;

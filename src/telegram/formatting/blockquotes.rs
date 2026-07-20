@@ -3,6 +3,10 @@
 //! Identifies blockquote markers (`>`) in Markdown output and groups consecutive blockquote lines
 //! into clean HTML tag block structures acceptable by the Telegram Bot API client.
 
+//! 
+//! ## Search Tags
+//! #blockquotes
+
 pub fn convert_blockquotes(text: &str) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut result = Vec::new();

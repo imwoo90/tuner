@@ -3,6 +3,10 @@
 //! This module analyzes agy CLI process exit status and stderr streams
 //! to offer clear, actionable restoration guidelines to the user.
 
+//! 
+//! ## Search Tags
+//! #error-parser
+
 /// Analyze the process exit code and stderr to generate user-friendly troubleshooting suggestions.
 pub fn parse_cli_error(stderr: &str, returncode: i32) -> String {
     let lower_stderr = stderr.to_lowercase();

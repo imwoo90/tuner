@@ -3,6 +3,10 @@
 //! Provides shared utilities and regex logic to parse placeholders, process code blocks,
 //! handle specific HTML entity encodings, and strip interactive UI features before delivery.
 
+//! 
+//! ## Search Tags
+//! #helpers
+
 use regex::{Regex, Captures};
 
 const SENTINEL: char = '\x00';

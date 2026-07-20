@@ -2,6 +2,10 @@
 //!
 //! Handles file sanitization, path verification, downloading, and uploading.
 
+//! 
+//! ## Search Tags
+//! #files
+
 use crate::webhook::api::server::ApiServerState;
 use axum::{
     Json,
