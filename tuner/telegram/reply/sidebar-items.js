@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_reply_prompt","download_and_inject_media_hint","download_telegram_media","find_last_active_session","get_media_file_id_and_ext","get_topic_id","has_media","load_sessions_cache","parse_model_directive","prepend_reply_to_media","resolve_session_model","send_startup_notification","strip_mention"]};

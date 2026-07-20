@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DOMAINS"],"fn":["build_report","compare_domain","format_domain_detail","format_locale_detail","format_matrix","format_report","load_domain","placeholders","run_checker"],"struct":["DomainReport","LocaleReport","PlaceholderMismatch","Report"]};

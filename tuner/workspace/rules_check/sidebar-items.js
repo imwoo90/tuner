@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_antigravity","check_antigravity_cli_logged_in","check_claude","check_claude_cli_logged_in","check_codex","check_gemini","config_has_gemini_key","find_gemini_cli","gemini_settings_auth","get_home_dir","get_mtime","read_dotenv_has_gemini_keys"]};

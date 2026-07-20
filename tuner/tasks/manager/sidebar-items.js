@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TASK_PROMPT_SUFFIX"],"fn":["check_resumable","forward_question","make_reminder_prompt","resume_task","submit_task","update_inflight_entry"]};

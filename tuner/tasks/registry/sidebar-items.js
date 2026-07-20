@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PROMPT_PREVIEW_LEN","TASK_RULES"],"fn":["get_adj","make_entry","seed_folder_helper","seed_task_folder"],"struct":["RegistryData","TaskRegistry"]};

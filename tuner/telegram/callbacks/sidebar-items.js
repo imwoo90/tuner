@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_callback_query","handle_callback_query_inner","handle_lang_callback","handle_model_callback","handle_upgrade_callback","handle_upgrade_changelog","handle_upgrade_confirm"]};

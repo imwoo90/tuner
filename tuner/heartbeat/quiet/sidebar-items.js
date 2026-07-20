@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["is_within_quiet_hours","should_suppress_heartbeat"]};

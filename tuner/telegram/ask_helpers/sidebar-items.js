@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["advance_ask_state","build_ask_keyboard_helper","determine_and_send_input","determine_input_mode","feed_active_session_if_running","find_write_in_index","handle_ask_input","send_predefined_input_with_clear","send_write_in_input","update_question_ui","update_telegram_ask_ui"]};

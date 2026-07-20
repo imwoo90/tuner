@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["download_archive","get_latest_release","is_dev_install","is_newer_version","perform_upgrade","run_cli_upgrade","unpack_archive"],"struct":["GithubAsset","GithubRelease"]};

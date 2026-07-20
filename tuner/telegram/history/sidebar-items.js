@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["log_telegram_message"],"struct":["TelegramHistoryEntry"]};

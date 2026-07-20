@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["data","freshness","key","manager","named"]};

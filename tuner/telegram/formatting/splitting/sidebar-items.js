@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_closing_tags","get_tag_name","has_text_content","process_token","split_at_char_limit","split_html_message","split_oversized_token","tokenize_html","update_tags_and_len"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_bot_commands","handle_commands","handle_cron_command","handle_info_commands","handle_memory_command","handle_model_command","handle_session_control_commands","register_commands","send_reply"]};

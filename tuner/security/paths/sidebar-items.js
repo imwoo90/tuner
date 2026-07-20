@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PathValidationError"],"fn":["is_path_safe","resolve_path","validate_file_path"]};

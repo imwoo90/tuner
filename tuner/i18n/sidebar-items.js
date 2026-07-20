@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ACTIVE_LANG"],"fn":["get_active_language","get_language","get_registry","get_store","init","set_language","t","t_cmd","t_plural","t_rich"],"mod":["check","loader"],"static":["GLOBAL_ACTIVE_LANG","LANGUAGES","REGISTRY","TASK_ACTIVE_LANG"]};

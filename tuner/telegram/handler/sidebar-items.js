@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["auto_register_owner","handle_media_group_message","handle_message","handle_message_inner","handle_pure_text_message","handle_single_media_message","route_media_message","validate_and_auth_message"]};

@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["tuner",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"tuner/background/models/enum.BackgroundResultStatus.html\" title=\"enum tuner::background::models::BackgroundResultStatus\">BackgroundResultStatus</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"tuner/bus/envelope/enum.DeliveryMode.html\" title=\"enum tuner::bus::envelope::DeliveryMode\">DeliveryMode</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"tuner/bus/envelope/enum.LockMode.html\" title=\"enum tuner::bus::envelope::LockMode\">LockMode</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"tuner/bus/envelope/enum.Origin.html\" title=\"enum tuner::bus::envelope::Origin\">Origin</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"tuner/workspace/rules/enum.AuthStatus.html\" title=\"enum tuner::workspace::rules::AuthStatus\">AuthStatus</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1441]}

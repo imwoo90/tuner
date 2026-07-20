@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["bot","credentials","formatting","id_map","message_queue","transport","typing"]};

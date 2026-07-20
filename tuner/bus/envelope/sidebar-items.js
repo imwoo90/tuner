@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DeliveryMode","LockMode","Origin"],"struct":["Envelope"]};

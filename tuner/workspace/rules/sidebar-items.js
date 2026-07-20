@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AuthStatus"],"fn":["find_rules_templates","remove_files_recursively"],"struct":["AuthResult","RulesSelector"]};

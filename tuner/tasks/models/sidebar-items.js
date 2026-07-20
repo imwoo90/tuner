@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_PRIORITY","TASK_PRIORITIES"],"fn":["default_parent_agent","default_priority","default_status","deserialize_priority","normalise_priority"],"struct":["TaskEntry","TaskResult","TaskSubmit","TasksConfig"]};

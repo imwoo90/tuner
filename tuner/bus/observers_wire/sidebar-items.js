@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ObserverManager"],"trait":["CronObserverTrait","HeartbeatObserverTrait","WebhookObserverTrait"]};

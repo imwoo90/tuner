@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["append_taskmemory","classify_task_response","deliver_result","make_err_res"],"static":["GLOBAL_PROCESS_REGISTRY"],"struct":["ProcessRegistry"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_ask_answer_callback","handle_ask_prev_callback","handle_ask_skip_callback","handle_ask_submit_callback","handle_ask_write_callback","handle_write_in_transition","process_skip"]};

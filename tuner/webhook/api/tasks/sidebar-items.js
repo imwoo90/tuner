@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_auth","handle_task_ask_parent","handle_task_cancel","handle_task_create","handle_task_delete","handle_task_list","handle_task_resume"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["from_background_result","from_cron_result","from_heartbeat","from_interagent_result","from_task_question","from_task_result","from_user_message","from_webhook_cron_result","from_webhook_wake"],"struct":["InterAgentResult","TaskResult","WebhookResult"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_upload_response","handle_file_download","handle_file_upload","is_image_path","parse_file_refs","parse_multipart","prepare_destination","sanitize_filename","verify_bearer"],"struct":["UploadedFile"]};

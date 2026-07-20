@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_auth_ok","perform_handshake","send_reject","validate_auth_msg"]};

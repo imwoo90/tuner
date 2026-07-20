@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["advance_ask_index_or_finish","clear_previous_write_in_if_any","handle_ask_question_event","handle_stream_ask_question","log_ask_question_result","process_answer","process_submit","spawn_cli_stream_in_background"]};

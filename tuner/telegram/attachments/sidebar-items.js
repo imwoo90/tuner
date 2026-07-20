@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_file_paths","send_file_attachments"]};
