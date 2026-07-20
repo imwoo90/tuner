@@ -1,4 +1,7 @@
-//! Matrix bot client coordinator.
+//! # Matrix Client Listener and Event Router
+//!
+//! Establishes long-polling sync loops with Matrix homeservers. Parses incoming events and dispatches
+//! them to the central message bus.
 
 use std::sync::Arc;
 use std::path::Path;

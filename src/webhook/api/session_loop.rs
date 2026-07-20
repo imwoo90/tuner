@@ -1,6 +1,7 @@
-//! # WebSocket Session Loop
+//! # Remote Session Execution Loop
 //!
-//! Handles decrypted message routing.
+//! Coordinates bidirectional command streams, handling remote terminal standard I/O channels over
+//! websocket sockets.
 
 use crate::webhook::api::crypto::E2ESession;
 use crate::webhook::api::server::ApiServerState;

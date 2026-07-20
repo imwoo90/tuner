@@ -1,7 +1,7 @@
-//! # Telegram Keyboard Multi-Select Helper Module
+//! # Interactive Multi-Select UI Component
 //!
-//! This module provides utilities to build multi-select and single-select inline keyboards,
-//! parse multi-select callback data, and translate selections into terminal keystrokes.
+//! Renders checklists and multi-select inline keyboard grids in Telegram. Tracks individual option
+//! toggle states in memory before submission.
 
 use teloxide::prelude::*;
 

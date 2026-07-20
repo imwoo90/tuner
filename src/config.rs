@@ -1,3 +1,8 @@
+//! # Configuration Layer for Tuner Daemon
+//!
+//! Handles JSON-based configurations, profile overrides, loading environment variables
+//! from local settings, systemd integration checks, and validation of user credentials.
+
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 

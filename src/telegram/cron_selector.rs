@@ -1,3 +1,8 @@
+//! # Cron Task Configuration Selector for Telegram UI
+//!
+//! Renders interactive inline menus to configure, enable, or disable cron tasks directly
+//! from chat messages. Translates menu choices into scheduler commands.
+
 use teloxide::prelude::*;
 use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId};
 

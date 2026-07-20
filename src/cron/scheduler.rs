@@ -1,3 +1,8 @@
+//! # Cron Engine Event Loop
+//!
+//! Runs the tick timer polling cron schedules. Spawns tasks when trigger conditions are met
+//! and logs execution statistics.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;

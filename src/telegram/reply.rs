@@ -1,3 +1,7 @@
+//! # Chat Reply and Prompt Context Builder
+//!
+//! Builds context-rich prompt inputs by appending reply histories, extracting file references,
+//! downloading media attachments, and cleaning up mentions.
 
 use teloxide::types::Message;
 use teloxide::net::Download;

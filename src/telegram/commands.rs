@@ -1,7 +1,7 @@
-//! # Telegram Bot Commands
+//! # Telegram Commands Controller
 //!
-//! This module handles commands sent to the Telegram bot, such as
-//! /help, /status, /restart, /new, /abort, and /model.
+//! Parses and handles telegram slash commands (e.g. `/start`, `/model`, `/new`, `/abort`, `/diagnose`).
+//! Performs access control checks before routing actions.
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

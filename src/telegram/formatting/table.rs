@@ -1,6 +1,7 @@
-//! # Markdown Table Conversion Helper
+//! # Markdown Table Formatter and Parser
 //!
-//! Submodule for extracting, parsing, and formatting markdown tables.
+//! Extracts markdown pipe-tables, parses their columns and alignment rules, and formats them
+//! into fixed-width monospace layouts wrapped in pre/code blocks for clean grid presentation.
 
 use regex::Regex;
 

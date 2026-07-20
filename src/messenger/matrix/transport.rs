@@ -1,6 +1,7 @@
-//! Matrix delivery adapter for the MessageBus.
+//! # Matrix Message Sending Transport
 //!
-//! Translates Envelope instances into Matrix messages.
+//! Translates standard message envelopes into Matrix events (m.text, m.notice, etc.) and transmits
+//! them using reqwest endpoints.
 
 use async_trait::async_trait;
 use crate::bus::bus::Transport;

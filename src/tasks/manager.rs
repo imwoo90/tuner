@@ -1,6 +1,7 @@
-//! Task manager operations
+//! # Task Queue Supervisor and Executor
 //!
-//! Implements submission, resumption, and question forwarding for TaskHub.
+//! Tracks active tasks, manages thread resources, handles task execution priorities,
+//! and forwards execution output to registering observers.
 
 use std::sync::Arc;
 use anyhow::{anyhow, Result};

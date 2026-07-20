@@ -1,3 +1,8 @@
+//! # Named Session Registry and Alias Resolver
+//!
+//! Allows assigning human-readable names (aliases) to active session IDs. Enables resuming
+//! or managing specific workspaces easily via mnemonic keys.
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;

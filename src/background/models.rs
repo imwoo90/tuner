@@ -1,6 +1,7 @@
-//! # Background Models
+//! # Background Execution Shared Data Structs
 //!
-//! Type definitions for background execution submissions and results.
+//! Defines target instructions, execution boundaries, thread configurations, and result types
+//! representing active background runs in the system.
 
 #[derive(Clone, Debug)]
 pub struct BackgroundSubmit {

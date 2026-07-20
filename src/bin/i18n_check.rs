@@ -1,6 +1,7 @@
-//! # i18n Checker CLI Utility
+//! # Internationalization Syntax Validator Tool
 //!
-//! A command-line wrapper to execute translation completeness checks.
+//! A developer CLI tool designed to run in git pre-commit hooks or CI. Audits i18n TOML files
+//! to identify missing keys, placeholder discrepancies, or broken formatting.
 
 #[path = "../i18n/mod.rs"]
 pub mod i18n;

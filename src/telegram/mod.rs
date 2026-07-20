@@ -1,3 +1,7 @@
+//! # Telegram Interface and Bot Supervisor
+//!
+//! Coordinates all incoming Telegram message traffic, command dispatching, inline keyboard callbacks,
+//! session managers, and rich message formatting adapters. Translates raw HTML/Markdown replies.
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

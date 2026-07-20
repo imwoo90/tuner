@@ -1,7 +1,7 @@
-//! # Telegram Typing and Reaction Guard
+//! # Telegram Typing Status Indicator Guard
 //!
-//! Provides RAII guard to periodically trigger typing indicator
-//! and set/clear message reactions on Telegram.
+//! Periodically sends the "typing..." chat action to Telegram while an agent is generating code
+//! or executing background tasks. Dropped automatically when execution ends.
 
 use std::time::Duration;
 use tokio::task::JoinHandle;

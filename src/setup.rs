@@ -1,3 +1,9 @@
+//! # Wizard and Service Installer Module
+//!
+//! Coordinates the terminal-based interactive setup wizard for initial bot configuration.
+//! Generates default workspace parameters, manages systemd user services, and installs
+//! process runner scripts.
+
 use crate::config::CliConfig;
 use std::path::Path;
 

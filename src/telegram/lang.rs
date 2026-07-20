@@ -1,3 +1,8 @@
+//! # Chat Thread Locale Detector and Switcher
+//!
+//! Automatically determines and updates the internationalization language locale context for
+//! specific Telegram chat threads based on configuration and commands.
+
 use teloxide::prelude::*;
 use teloxide::types::Message;
 use crate::config::CliConfig;

@@ -1,6 +1,7 @@
-//! # Dynamic Button Stripping Helper
+//! # Inline Callback Buttons Filter
 //!
-//! Submodule for stripping `[button:Label]` dynamic buttons from output text.
+//! Parses and strips inline dynamic buttons (`[button:Label]`) embedded by agents in their replies.
+//! Prevents exposing raw callback payload structures to standard messaging clients.
 
 use regex::{Regex, Captures};
 

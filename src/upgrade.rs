@@ -1,3 +1,8 @@
+//! # Self-Upgrade and Release Version Control
+//!
+//! Coordinates checking for GitHub release versions, downloading binaries, verifying checksums,
+//! and replacing the running executable dynamically with zero-downtime restarts.
+
 use serde::Deserialize;
 use std::path::Path;
 

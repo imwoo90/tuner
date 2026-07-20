@@ -1,6 +1,7 @@
-//! # Direct API Server
+//! # Webhook API Routes Declarations
 //!
-//! Exposes E2E encrypted API and WebSocket servers.
+//! Declares router paths, handlers, and endpoints for public web services like handshake registers,
+//! task submissions, and file access.
 
 pub mod crypto;
 pub mod files;

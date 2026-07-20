@@ -1,6 +1,7 @@
-//! # WebSocket Handshake
+//! # Webhook Connection Handshake Protocol
 //!
-//! Handles in-band authentication handshake for direct API sessions.
+//! Handles registration sequence, key exchange negotiation, and authorization checks for external
+//! worker registration.
 
 use crate::webhook::api::crypto::E2ESession;
 use axum::extract::ws::Message;

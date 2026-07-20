@@ -1,6 +1,7 @@
-//! # Background Test Utilities
+//! # Test Harness and Mocks for Background Module
 //!
-//! Helper structures and functions for background execution tests.
+//! Provides fake task providers, command runners, and callback catchers to simulate asynchronous
+//! agent runs during integration testing.
 
 use crate::background::observer::BackgroundSubmit;
 use crate::cli::{AgentProvider, CliResponse, StreamEvent};

@@ -1,6 +1,7 @@
-//! Matrix client and transport submodule.
+//! # Matrix Network Messaging Adapter
 //!
-//! Complies with the Code as Documentation policy.
+//! Implements communication adapters for the Matrix protocol. Resolves room IDs, synchronizes state,
+//! handles connection sessions, and formats incoming/outgoing envelopes.
 
 pub mod id_map;
 pub mod formatting;

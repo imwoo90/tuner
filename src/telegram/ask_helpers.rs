@@ -1,3 +1,8 @@
+//! # Ask-Question Execution Helper Utilities
+//!
+//! Provides utilities to query active sessions, feed user input to PTY stdin channels,
+//! and clean up prompt-waiting locks upon resolution.
+
 use teloxide::prelude::*;
 use crate::cli::antigravity::AntigravityCli;
 use crate::session::manager::SessionManager;

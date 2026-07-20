@@ -1,4 +1,7 @@
-//! RAII MatrixTypingGuard keep-alive.
+//! # Matrix Typing Status Guard
+//!
+//! Controls sending user-typing states to Matrix rooms while commands or tasks are actively running
+//! to improve user experience feedback.
 
 use std::time::Duration;
 use tokio::task::JoinHandle;

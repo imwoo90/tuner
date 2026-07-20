@@ -1,3 +1,8 @@
+//! # Forum Topic Metadata Cache
+//!
+//! Manages a local cache mapping Telegram forum topic names to IDs. Accelerates message routing
+//! in multi-topic workspace environments without querying the API repeatedly.
+
 use std::sync::Mutex;
 use std::collections::HashMap;
 

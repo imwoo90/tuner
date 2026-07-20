@@ -1,6 +1,7 @@
-//! # Skill Sync Helpers
+//! # Custom Skills Directory Link Resolver
 //!
-//! Internal implementation helpers for skills sync, copies, links, and config.
+//! Provides utilities to index, parse YAML metadata fronts, create symlinks, and synchronize
+//! skill directories in the workspace.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

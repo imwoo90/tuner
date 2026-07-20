@@ -1,6 +1,7 @@
-//! # Blockquotes Conversion Helper
+//! # Markdown Blockquote Parser and Converter
 //!
-//! Submodule for wrapping consecutive blockquote lines in blockquote tags.
+//! Identifies blockquote markers (`>`) in Markdown output and groups consecutive blockquote lines
+//! into clean HTML tag block structures acceptable by the Telegram Bot API client.
 
 pub fn convert_blockquotes(text: &str) -> String {
     let lines: Vec<&str> = text.split('\n').collect();

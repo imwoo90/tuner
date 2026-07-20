@@ -1,3 +1,8 @@
+//! # Streaming Output Consumer for Telegram Chat
+//!
+//! Consumes streaming events from running agent CLI PTY processes. Debounces text chunks
+//! to minimize Telegram message update rate-limiting and renders real-time outputs.
+
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::StreamEvent;

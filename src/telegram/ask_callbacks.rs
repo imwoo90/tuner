@@ -1,3 +1,8 @@
+//! # Interactive Prompt Question Callback Router
+//!
+//! Routes button click interactions resulting from agent `ask_question` dialogs. Maps choice
+//! coordinates back to active execution flows.
+
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;

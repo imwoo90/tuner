@@ -1,3 +1,8 @@
+//! # Media Group Debouncer and Attachment Aggregator
+//!
+//! Collects clustered media files (images, files, documents) sent in rapid succession
+//! via Telegram's media groups, debouncing them into single cohesive events with multiple files.
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

@@ -1,6 +1,6 @@
-//! # API Server Struct
+//! # API Ingress Router Configuration
 //!
-//! Implements the main ApiServer container and setters.
+//! Composes Axum application routes, sets rate limits, registers websocket services, and binds to ports.
 
 use crate::webhook::api::files::{handle_file_download, handle_file_upload};
 use crate::webhook::api::websocket::{handle_health, handle_websocket};

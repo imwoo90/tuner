@@ -1,3 +1,8 @@
+//! # Telegram Bot Event Loop Runner
+//!
+//! Initiates the long-polling Telegram bot listener using Teloxide. Boots session manager locks
+//! and registers the main dispatcher routing pipeline.
+
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;

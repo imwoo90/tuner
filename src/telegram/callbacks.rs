@@ -1,7 +1,7 @@
-//! # Telegram Callback Query Handlers
+//! # Telegram Callback Query Router and Event Handler
 //!
-//! This module handles inline keyboard callback queries, such as
-//! model switching, language selection, cron execution, and interactive responses.
+//! Handles user interaction callbacks triggered from inline keyboard buttons, routing
+//! confirmation clicks, option selections, and cancellation events.
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

@@ -1,3 +1,9 @@
+//! # Tuner Daemon Application Entry Point
+//!
+//! This is the main orchestrator for the `tuner` daemon. It handles daemon supervisor mode,
+//! worker spawns, restart markers, systemd initialization, CLI arguments, and launches
+//! either the supervisor master thread or individual profile worker tasks.
+
 pub mod cli;
 pub mod config;
 pub mod telegram;

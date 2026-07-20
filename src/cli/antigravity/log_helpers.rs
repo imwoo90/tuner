@@ -1,3 +1,8 @@
+//! # Log Helper Utilities for Agent Outputs
+//!
+//! Provides diagnostic utilities to extract raw text blocks from active session log directories,
+//! helping inspect model trace buffers and parser state.
+
 use std::path::Path;
 
 pub fn read_new_bytes(path: &Path, start_pos: u64) -> Result<(Vec<u8>, u64), String> {

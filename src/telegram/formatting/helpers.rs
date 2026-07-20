@@ -1,6 +1,7 @@
-//! # Formatting Helpers
+//! # Telegram Formatting Common Helpers
 //!
-//! Submodule for Markdown conversions, blockquotes, tables, and button stripping.
+//! Provides shared utilities and regex logic to parse placeholders, process code blocks,
+//! handle specific HTML entity encodings, and strip interactive UI features before delivery.
 
 use regex::{Regex, Captures};
 

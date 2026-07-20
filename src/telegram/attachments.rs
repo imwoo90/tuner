@@ -1,8 +1,7 @@
-//! # Telegram File Attachments Handler
+//! # Attachment Downloader and Storage Manager
 //!
-//! Scans bot responses for `file://` links, validates their safety
-//! against allowed directory roots, and automatically sends them
-//! as Telegram document attachments.
+//! Inspects incoming Telegram messages for files, voice memos, and images. Initiates download via
+//! Telegram Bot API and writes them safely into the workspace storage directory.
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;

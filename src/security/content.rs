@@ -1,3 +1,8 @@
+//! # Content Safety and Prompt Filter Engine
+//!
+//! Inspects prompt payloads and output text blocks against security rules, blocking credential leakage,
+//! sensitive files exposure, or hazardous commands.
+
 use std::sync::OnceLock;
 use regex::{Regex, RegexBuilder};
 

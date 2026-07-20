@@ -1,3 +1,8 @@
+//! # Main Message Ingress Dispatcher
+//!
+//! Routes raw incoming Telegram updates (text, documents, photo groups, callback queries)
+//! into their respective commands, interactive answers, or streaming pipelines.
+
 use std::sync::Arc;
 use teloxide::prelude::*;
 use crate::config::CliConfig;

@@ -1,6 +1,6 @@
-//! # Webhook HTTP Server
+//! # HTTP Ingress Ingress Port Listener
 //!
-//! Axum-based HTTP server for webhooks.
+//! Binds HTTP listener ports, coordinates grace shutdown signals, and handles requests using the Axum engine.
 
 use crate::webhook::auth::RateLimiter;
 use crate::webhook::manager::WebhookManager;

@@ -1,4 +1,7 @@
-//! Telegram delivery adapter for the MessageBus.
+//! # Telegram Message Transport Adapter
+//!
+//! Implements a transport bridge translating standard background message envelopes into Telegram API calls.
+//! Supports text formatting, quiet hour queues, and error recovery.
 
 use teloxide::prelude::*;
 use crate::bus::bus::Transport;

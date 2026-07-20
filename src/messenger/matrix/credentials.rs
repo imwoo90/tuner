@@ -1,4 +1,7 @@
-//! Credentials loading, saving, and login management for the Matrix client.
+//! # Matrix Connection Credentials Manager
+//!
+//! Handles encryption keys, access tokens, homeserver URLs, and room association caches for the
+//! Matrix interface.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;

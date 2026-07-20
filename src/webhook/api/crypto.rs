@@ -1,6 +1,7 @@
-//! # E2E Encryption Session
+//! # Webhook Payload Encryption and Signing Keys
 //!
-//! Ephemeral XSalsa20-Poly1305 Curve25519 cryptography.
+//! Manages ECDH/AES-GCM key exchanges and signature verification to guarantee message integrity
+//! across web APIs.
 
 use base64::Engine;
 use crypto_box::aead::Aead;

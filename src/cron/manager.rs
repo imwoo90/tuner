@@ -1,3 +1,8 @@
+//! # Cron Task Registry and State Manager
+//!
+//! Manages the collection of configured cron jobs, persistence of scheduler parameters,
+//! and maps scheduled tasks to background executions.
+
 use std::fs;
 use std::path::PathBuf;
 use chrono::Utc;

@@ -1,3 +1,8 @@
+//! # Interactive Ask and Question Handler Process
+//!
+//! Orchestrates the interactive answer submission flow for agent prompts (`ask_question`).
+//! Feeds responses back to background execution PTY streams and handles state transitions.
+
 use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
