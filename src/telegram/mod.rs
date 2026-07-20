@@ -16,7 +16,15 @@ pub mod reply_tests;
 #[cfg(test)]
 pub mod handler_tests;
 #[cfg(test)]
+pub mod media_tests;
+#[cfg(test)]
+pub mod forum_tests;
+#[cfg(test)]
 pub mod ask_abort_tests;
+#[cfg(test)]
+pub mod test_helpers;
+#[cfg(test)]
+pub static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod commands;
 pub mod cron_selector;
 pub mod topic_cache;
@@ -30,6 +38,7 @@ pub mod ask_process;
 pub mod multi_select;
 pub mod runner;
 pub mod attachments;
+pub mod media_group;
 pub mod upgrade;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
@@ -90,10 +99,30 @@ async fn handle_model_override(
 
 
 
-async fn process_text(
+fn inject_pre_downloaded_files(prompt: &mut String, files: &[String]) {
+    if !files.is_empty() {
+        let mut media_hint = String::new();
+        if files.len() == 1 {
+            media_hint = format!(
+                "[SYSTEM HINT] The user attached a file. You can read/view it by calling `view_file` at path: `{}`\n\n",
+                files[0]
+            );
+        } else {
+            media_hint.push_str("[SYSTEM HINT] The user attached multiple files. You can view them at:\n");
+            for f in files {
+                media_hint.push_str(&format!("- `{}`\n", f));
+            }
+            media_hint.push_str("\n");
+        }
+        *prompt = format!("{}{}", media_hint, prompt);
+    }
+}
+
+pub(crate) async fn process_text_with_files(
     bot: &Bot,
     msg: &Message,
     text: &str,
+    pre_downloaded_files: &[String],
     config: &CliConfig,
     sessions: &std::sync::Arc<SessionManager>,
     cli: &AntigravityCli,
@@ -118,7 +147,7 @@ async fn process_text(
     }
 
     let mut prompt = build_reply_prompt(msg, current_text);
-    let _ = reply::download_and_inject_media_hint(bot, msg, &config.working_dir, &mut prompt).await;
+    inject_pre_downloaded_files(&mut prompt, pre_downloaded_files);
 
     history::log_telegram_message(&config.working_dir, &active_session_id, "user", Some(msg.id.0), text, true, None);
     if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
@@ -126,92 +155,27 @@ async fn process_text(
     run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await
 }
 
-fn auto_register_owner(from_id: i64) {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let path = std::path::PathBuf::from(&home).join(".tuner/config/config.json");
-    if let Ok(c) = std::fs::read_to_string(&path) {
-        if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&c) {
-            if let Some(obj) = val.as_object_mut() {
-                obj.insert("allowed_user_ids".to_string(), serde_json::json!([from_id]));
-                if let Ok(pretty) = serde_json::to_string_pretty(&val) {
-                    if std::fs::write(&path, pretty).is_ok() {
-                        let restart = std::path::PathBuf::from(&home).join(".tuner/restart-requested");
-                        let _ = std::fs::write(restart, "");
-                    }
-                }
-            }
+async fn process_text(
+    bot: &Bot,
+    msg: &Message,
+    text: &str,
+    config: &CliConfig,
+    sessions: &std::sync::Arc<SessionManager>,
+    cli: &AntigravityCli,
+    cron_manager: &crate::cron::manager::CronManager,
+    topic_cache: &TopicNameCache,
+) -> Result<(), teloxide::RequestError> {
+    let mut files = Vec::new();
+    if reply::has_media(msg) {
+        let dest_dir = config.working_dir.join("telegram_files");
+        if let Ok(Some(f)) = reply::download_telegram_media(bot, msg, &dest_dir).await {
+            files.push(f);
         }
     }
+    process_text_with_files(bot, msg, text, &files, config, sessions, cli, cron_manager, topic_cache).await
 }
 
-async fn handle_message_inner(
-    bot: Bot,
-    msg: Message,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
-    cli: Arc<AntigravityCli>,
-    cron_manager: Arc<crate::cron::manager::CronManager>,
-    topic_cache: Arc<TopicNameCache>,
-    bot_info: Arc<BotInfo>,
-) -> Result<(), teloxide::RequestError> {
-    let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
-    let chat_id = msg.chat.id.0;
-    if let Some(to_chat) = msg.migrate_to_chat_id() {
-        let _ = sessions.migrate_chat_id(chat_id, to_chat.0).await;
-        return Ok(());
-    }
-    if topic_cache::handle_forum_topic_events(&msg, &topic_cache, chat_id) {
-        return Ok(());
-    }
-    let mut ok = config.allowed_user_ids.contains(&from_id);
-
-    if !ok && from_id != 0 && config.allowed_user_ids.is_empty() {
-        println!("🤖 [tuner] First-time owner auto-registered! Telegram User ID: {}. Restarting...", from_id);
-        let _ = bot.send_message(msg.chat.id, "🤖 Owner registered successfully! Restarting tuner daemon...").await;
-        auto_register_owner(from_id);
-        std::process::exit(0);
-    }
-
-    let is_group = msg.chat.is_group() || msg.chat.is_supergroup();
-    if ok && is_group && !config.allowed_group_ids.contains(&chat_id) {
-        eprintln!("⚠️ [tuner] Unauthorized group ID: {}", chat_id);
-    }
-    ok = ok && (!is_group || config.allowed_group_ids.contains(&chat_id));
-    if ok {
-        let text = reply::strip_mention(msg.text().or(msg.caption()).unwrap_or(""), bot_info.username.as_deref())
-            .replace("/teamwork_preview", "/teamwork-preview").replace("/grill_me", "/grill-me");
-        if !text.is_empty() || reply::has_media(&msg) {
-            process_text(&bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache).await?;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) async fn handle_message(
-    bot: Bot,
-    msg: Message,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
-    cli: Arc<AntigravityCli>,
-    cron_manager: Arc<crate::cron::manager::CronManager>,
-    topic_cache: Arc<TopicNameCache>,
-    bot_info: Arc<BotInfo>,
-) -> Result<(), teloxide::RequestError> {
-    println!("🤖 [tuner] handle_message: received update from chat {}, text: {:?}", msg.chat.id, msg.text().or(msg.caption()));
-    let topic_id = get_topic_id(&msg);
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    
-    let active_lang = sessions.resolve_session(&key, &config.provider, default_model).await
-        .map(|(s, _)| s.language)
-        .ok().flatten()
-        .or_else(|| config.language.clone())
-        .unwrap_or_else(|| "en".to_string());
-
-    let fut = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-        handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info).await
-    });
-    if cfg!(test) { fut.await } else { tokio::spawn(fut); Ok(()) }
-}
+pub mod handler;
+pub(crate) use handler::handle_message;
 
 pub use runner::run_bot;

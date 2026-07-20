@@ -81,20 +81,6 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, &str) {
     (None, t)
 }
 
-pub(crate) fn spawn_restart_watcher(home: String) {
-    tokio::spawn(async move {
-        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
-        loop {
-            interval.tick().await;
-            if marker.exists() {
-                let _ = std::fs::remove_file(&marker);
-                println!("🤖 [tuner] Restart requested via marker. Exiting...");
-                std::process::exit(42);
-            }
-        }
-    });
-}
 
 pub(crate) async fn load_sessions_cache(
     sessions: &crate::session::manager::SessionManager,
@@ -150,6 +136,12 @@ pub(crate) async fn download_telegram_media(
     message: &Message,
     dest_dir: &std::path::Path,
 ) -> Result<Option<String>, String> {
+    if cfg!(test) {
+        let ext = get_media_file_id_and_ext(message)
+            .map(|(_, e)| e)
+            .unwrap_or_else(|| "jpg".to_string());
+        return Ok(Some(format!("telegram_files/mock_media_{}.{}", message.id.0, ext)));
+    }
     let (file_id, ext) = match get_media_file_id_and_ext(message) {
         Some(res) => res,
         None => return Ok(None),

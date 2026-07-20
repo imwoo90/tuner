@@ -46,6 +46,7 @@ impl Default for SessionData {
             provider_sessions: std::collections::HashMap::new(),
             language: None,
             last_progress_msg_id: None,
+            pending_attachments: Vec::new(),
             session_id: None,
             message_count: None,
             total_cost_usd: None,
@@ -75,6 +76,8 @@ pub struct SessionData {
     pub language: Option<String>,
     #[serde(default)]
     pub last_progress_msg_id: Option<i32>,
+    #[serde(default)]
+    pub pending_attachments: Vec<String>,
 
     // Legacy fields used for migration
     #[serde(skip_serializing, default)]
@@ -107,6 +110,7 @@ impl SessionData {
             provider_sessions: HashMap::new(),
             language: None,
             last_progress_msg_id: None,
+            pending_attachments: Vec::new(),
             session_id: None,
             message_count: None,
             total_cost_usd: None,

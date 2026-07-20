@@ -150,6 +150,7 @@ impl SessionManager {
         current.provider = session.provider.clone();
         current.model = session.model.clone();
         current.language = session.language.clone();
+        current.pending_attachments = session.pending_attachments.clone();
         if session.topic_name.is_some() && current.topic_name.is_none() {
             current.topic_name = session.topic_name.clone();
         }

@@ -54,6 +54,21 @@ async fn init_telegram_bot(tok: String, profile: Option<String>) -> (Bot, Arc<Bo
     }
 }
 
+fn spawn_restart_watcher(home: String) {
+    tokio::spawn(async move {
+        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+        loop {
+            interval.tick().await;
+            if marker.exists() {
+                let _ = std::fs::remove_file(&marker);
+                println!("🤖 [tuner] Restart requested via marker. Exiting...");
+                std::process::exit(42);
+            }
+        }
+    });
+}
+
 pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
     let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;
@@ -61,7 +76,7 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
     let config_arc = Arc::new(config);
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     
-    reply::spawn_restart_watcher(home.clone());
+    spawn_restart_watcher(home.clone());
     let topic_cache = Arc::new(TopicNameCache::new());
     let p = paths.sessions_path();
     let sessions = Arc::new(build_sessions(p, topic_cache.clone()));
@@ -69,6 +84,7 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
     reply::load_sessions_cache(&sessions, &topic_cache).await;
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
     let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), paths.clone());
+    let media_group_manager = Arc::new(super::media_group::MediaGroupManager::new());
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
@@ -78,7 +94,7 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
         .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info])
+        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager])
         .build().dispatch().await;
     Ok(())
 }

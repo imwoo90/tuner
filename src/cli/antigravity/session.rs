@@ -167,7 +167,12 @@ impl SessionManager {
                 for c in input.chars() {
                     let s = c.to_string();
                     holder.write_input(&s)?;
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    let delay = if cfg!(test) {
+                        tokio::time::Duration::from_millis(1)
+                    } else {
+                        tokio::time::Duration::from_millis(100)
+                    };
+                    tokio::time::sleep(delay).await;
                 }
             }
             Ok(true)
