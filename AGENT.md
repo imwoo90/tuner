@@ -52,10 +52,8 @@ For AI Agents traversing this repository:
 1.  **Entry Points**: Start with `AGENT.md` (this file) and `PROJECT.md` (if available) to understand the system architecture, goals, and compilation rules.
 2.  **Module Indexing**: Every directory is a Rust module with a `mod.rs` file acting as the `index.md` directory catalog. Read the module-level documentation (`//!`) at the top of `mod.rs` to understand the architecture, data flow, and submodules.
 3.  **Graph Traversal via Rustdoc**: Follow compile-checked intra-doc links (e.g. `[MyStruct]`) to jump between types and files. Rustdoc verifies these links at compile-time, forming a type-safe, zero-maintenance knowledge graph.
-4.  **API Symbol Search Tool**: Run the workspace documentation search tool to search for specific structs, enums, functions, or modules along with their doc comments without scanning the whole codebase:
-    `python3 tools/doc_search.py <query>`
-5.  **JSON AST Graph Query**: If using a nightly compiler, you can query the entire crate's documentation AST as a JSON file using `cargo rustdoc --lib -- -Z unstable-options --output-format json`.
-6.  **Verification**: Execute `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` to verify that all relationships and intra-doc links resolve successfully.
+4.  **JSON AST Graph Query**: Generate the crate's documentation AST using `cargo +nightly rustdoc --bin <crate> -- -Z unstable-options --output-format json`. Query specific items from `target/doc/<crate>.json` via standard inline commands (e.g., `python3 -c "import json; d=json.load(open('target/doc/<crate>.json')); ..."`).
+5.  **Verification**: Execute `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` to verify that all relationships and intra-doc links resolve successfully.
 
 
 ---
