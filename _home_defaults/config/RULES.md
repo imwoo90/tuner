@@ -17,11 +17,11 @@ Edit only when the user asks for behavior changes.
 
 - `provider`: `antigravity`
 - `model`: default model id
-  - Available:
-    - `Gemini 3.5 Flash (High)` - Fast, highly capable agentic model (recommended)
-    - `Gemini 3.5 Pro (High)` - Most capable reasoning model
-    - `Gemini 3.5 Flash (Low)` - Fast, low rate limit/cost model
-    - `Gemini 3.5 Pro (Low)` - Capable reasoning, low rate limit/cost model
+    - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model (recommended)
+    - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Compatibility flash model
+    - `gemini-3.1-pro` (effort: `high` | `low`) - Capable reasoning model
+    - `claude-sonnet-4-6` - Claude reasoning model
+- `effort`: reasoning effort level (`high`, `medium`, `low`) for compatible models
 - `permission_mode`: CLI permission behavior
 
 ### Time and Scheduling

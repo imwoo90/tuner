@@ -74,6 +74,13 @@ impl AntigravityCli {
             }
         }
 
+        if let Some(ref effort) = self.config.effort {
+            if !effort.is_empty() {
+                cmd.push("--effort".to_string());
+                cmd.push(effort.clone());
+            }
+        }
+
         if let Some(session_id) = resume_session {
             cmd.push("--conversation".to_string());
             cmd.push(session_id.to_string());

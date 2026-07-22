@@ -22,6 +22,10 @@ use super::ask_callbacks::{
     handle_ask_skip_callback
 };
 use super::multi_select::handle_ask_multi_callback;
+use super::callbacks_effort::{
+    handle_model_base_callback, handle_model_effort_callback,
+    handle_standalone_effort_callback
+};
 
 async fn handle_model_callback(
     bot: &teloxide::Bot,
@@ -34,6 +38,7 @@ async fn handle_model_callback(
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
         s.model = model.to_string();
+        s.effort = None;
         let _ = sessions.update_session(&s, 0.0, 0).await;
         let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = model)).await;
     }
@@ -56,6 +61,44 @@ async fn handle_lang_callback(
     }
 }
 
+async fn handle_options_and_upgrade_callbacks(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    d: &str,
+    sessions: &SessionManager,
+    config: &CliConfig,
+    cli: &AntigravityCli,
+) -> Result<bool, teloxide::RequestError> {
+    if let Some(m) = d.strip_prefix("model:") {
+        handle_model_callback(bot, msg, m, sessions, config).await;
+        return Ok(true);
+    }
+    if let Some(m) = d.strip_prefix("model_base:") {
+        handle_model_base_callback(bot, msg, m, sessions, config, cli).await;
+        return Ok(true);
+    }
+    if d.starts_with("model_effort:") {
+        let parts: Vec<&str> = d.splitn(3, ':').collect();
+        if parts.len() == 3 {
+            handle_model_effort_callback(bot, msg, parts[1], parts[2], sessions, config).await;
+        }
+        return Ok(true);
+    }
+    if let Some(e) = d.strip_prefix("effort:") {
+        handle_standalone_effort_callback(bot, msg, e, sessions, config).await;
+        return Ok(true);
+    }
+    if let Some(m) = d.strip_prefix("lang:") {
+        handle_lang_callback(bot, msg, m, sessions, config).await;
+        return Ok(true);
+    }
+    if d.starts_with("upg:") {
+        let _ = handle_upgrade_callback(bot, msg, d).await;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 async fn handle_callback_query_inner(
     bot: teloxide::Bot,
     q: teloxide::types::CallbackQuery,
@@ -67,10 +110,8 @@ async fn handle_callback_query_inner(
     use teloxide::prelude::*;
     if let Some(ref d) = q.data {
         if let Some(ref msg) = q.message {
-            if let Some(m) = d.strip_prefix("model:") {
-                handle_model_callback(&bot, msg, m, &sessions, &config).await;
-            } else if let Some(m) = d.strip_prefix("lang:") {
-                handle_lang_callback(&bot, msg, m, &sessions, &config).await;
+            if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
+                // Handled
             } else if d.starts_with("crn:") {
                 let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
             } else if d.starts_with("ask_ans:") {
@@ -85,8 +126,6 @@ async fn handle_callback_query_inner(
                 handle_ask_prev_callback(&bot, msg, d, &cli, &sessions, &config).await;
             } else if d.starts_with("ask_skip:") {
                 handle_ask_skip_callback(&bot, msg, d, &cli, &sessions, &config).await;
-            } else if d.starts_with("upg:") {
-                let _ = handle_upgrade_callback(&bot, msg, d).await;
             }
         }
         let _ = bot.answer_callback_query(q.id).await;

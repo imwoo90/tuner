@@ -68,29 +68,69 @@ pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
     }
 }
 
-pub(crate) fn has_media(message: &Message) -> bool {
-    message.photo().is_some()
-        || message.document().is_some()
-        || message.voice().is_some()
-        || message.audio().is_some()
-        || message.video().is_some()
-        || message.video_note().is_some()
-        || message.sticker().is_some()
+pub(crate) use super::media::{has_media, download_telegram_media, download_and_inject_media_hint, prepend_reply_to_media};
+
+fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
+    let mut remaining_text = "";
+    let mut count = 0;
+    for (i, ch) in rest.char_indices() {
+        if ch.is_whitespace() {
+            if i > 0 && !rest.as_bytes()[i-1].is_ascii_whitespace() {
+                count += 1;
+                if count == consumed_tokens {
+                    remaining_text = rest[i..].trim();
+                    break;
+                }
+            }
+        }
+    }
+    if count < consumed_tokens {
+        ""
+    } else {
+        remaining_text
+    }
 }
 
-pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, &str) {
+pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<String>, &str) {
     let t = text.trim();
     if let Some(r) = t.strip_prefix("@model ") {
-        let p: Vec<&str> = r.splitn(2, ' ').collect();
-        return (Some(p[0].to_string()), p.get(1).unwrap_or(&"").trim());
+        let rest = r.trim();
+        let parts: Vec<&str> = rest.split_whitespace().collect();
+        if !parts.is_empty() {
+            let mut model_name = parts[0].to_string();
+            let mut effort = None;
+            let mut consumed_tokens = 1;
+            
+            if parts.len() >= 3 && parts[1] == "--effort" {
+                effort = Some(parts[2].to_string());
+                consumed_tokens = 3;
+            } else if parts.len() >= 2 && (parts[1] == "high" || parts[1] == "medium" || parts[1] == "low") {
+                effort = Some(parts[1].to_string());
+                consumed_tokens = 2;
+            }
+
+            if model_name.ends_with("-high") {
+                effort = Some("high".to_string());
+                model_name = model_name[..model_name.len() - 5].to_string();
+            } else if model_name.ends_with("-medium") {
+                effort = Some("medium".to_string());
+                model_name = model_name[..model_name.len() - 7].to_string();
+            } else if model_name.ends_with("-low") {
+                effort = Some("low".to_string());
+                model_name = model_name[..model_name.len() - 4].to_string();
+            }
+            
+            let remaining_text = get_remaining_prompt(rest, consumed_tokens);
+            return (Some(model_name), effort, remaining_text);
+        }
     } else if t.starts_with('@') {
         let dir = t.split_whitespace().next().unwrap_or("");
         let m = &dir[1..];
         if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
-            return (Some(m.to_string()), t[dir.len()..].trim());
+            return (Some(m.to_string()), None, t[dir.len()..].trim());
         }
     }
-    (None, t)
+    (None, None, t)
 }
 
 
@@ -116,127 +156,19 @@ pub(crate) async fn resolve_session_model(
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
+        let eff = sess.effort.as_ref().or(config.effort.as_ref());
+        if let Some(eff_str) = eff {
+            if !eff_str.is_empty() {
+                return format!("{} (effort: {})", sess.model, eff_str);
+            }
+        }
         sess.model
     } else {
         default_model.to_string()
     }
 }
 
-fn get_media_file_id_and_ext(message: &Message) -> Option<(String, String)> {
-    if let Some(photo) = message.photo() {
-        if let Some(best_size) = photo.last() {
-            return Some((best_size.file.id.clone(), "jpg".to_string()));
-        }
-    } else if let Some(doc) = message.document() {
-        let ext = doc.file_name.as_ref()
-            .and_then(|name| name.split('.').last())
-            .unwrap_or("bin")
-            .to_string();
-        return Some((doc.file.id.clone(), ext));
-    } else if let Some(voice) = message.voice() {
-        return Some((voice.file.id.clone(), "ogg".to_string()));
-    } else if let Some(audio) = message.audio() {
-        return Some((audio.file.id.clone(), "mp3".to_string()));
-    } else if let Some(video) = message.video() {
-        return Some((video.file.id.clone(), "mp4".to_string()));
-    }
-    None
-}
 
-pub(crate) async fn download_telegram_media(
-    bot: &teloxide::Bot,
-    message: &Message,
-    dest_dir: &std::path::Path,
-) -> Result<Option<String>, String> {
-    if cfg!(test) {
-        let ext = get_media_file_id_and_ext(message)
-            .map(|(_, e)| e)
-            .unwrap_or_else(|| "jpg".to_string());
-        return Ok(Some(format!("telegram_files/mock_media_{}.{}", message.id.0, ext)));
-    }
-    let (file_id, ext) = match get_media_file_id_and_ext(message) {
-        Some(res) => res,
-        None => return Ok(None),
-    };
-
-    let file = bot.get_file(file_id).await.map_err(|e| e.to_string())?;
-    tokio::fs::create_dir_all(dest_dir).await.map_err(|e| e.to_string())?;
-
-    let filename = format!("media_{}_{}.{}", message.chat.id, message.id, ext);
-    let dest_path = dest_dir.join(&filename);
-
-    let mut dest_file = tokio::fs::File::create(&dest_path).await.map_err(|e| e.to_string())?;
-    bot.download_file(&file.path, &mut dest_file).await.map_err(|e| e.to_string())?;
-
-    Ok(Some(format!("telegram_files/{}", filename)))
-}
-
-pub(crate) async fn download_and_inject_media_hint(
-    bot: &teloxide::Bot,
-    message: &Message,
-    working_dir: &std::path::Path,
-    prompt: &mut String,
-) -> Result<(), String> {
-    if has_media(message) {
-        let dest_dir = working_dir.join("telegram_files");
-        match download_telegram_media(bot, message, &dest_dir).await {
-            Ok(Some(relative_path)) => {
-                let media_hint = format!(
-                    "[SYSTEM HINT] The user attached a file. You can read/view it by calling `view_file` at path: `{}`\n\n",
-                    relative_path
-                );
-                *prompt = format!("{}{}", media_hint, prompt);
-            }
-            Ok(None) => {}
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn prepend_reply_to_media(message: &Message, media_prompt: &str) -> String {
-    let cited = if let Some(replied) = message.reply_to_message() {
-        replied.text().or(replied.caption()).map(|s| s.trim())
-    } else {
-        None
-    };
-
-    match cited {
-        None => media_prompt.to_string(),
-        Some("") => media_prompt.to_string(),
-        Some(text) => {
-            let quoted = text
-                .lines()
-                .map(|line| format!("> {}", line))
-                .collect::<Vec<String>>()
-                .join("\n");
-            
-            let base_type = if message.photo().is_some() {
-                "an image"
-            } else if message.document().is_some() {
-                "a document"
-            } else if message.voice().is_some() {
-                "a voice message"
-            } else if message.audio().is_some() {
-                "an audio file"
-            } else if message.video().is_some() {
-                "a video"
-            } else if message.video_note().is_some() {
-                "a video note"
-            } else if message.sticker().is_some() {
-                "a sticker"
-            } else {
-                "a media file"
-            };
-            let media_type = format!("{} (the attached file below).", base_type);
-
-            format!(
-                "The user is replying to this quoted message:\n{}\n\nTheir reply is {}\n\n{}",
-                quoted, media_type, media_prompt
-            )
-        }
-    }
-}
 
 fn find_last_active_session(sess_list: &[crate::session::data::SessionData]) -> Option<crate::session::data::SessionData> {
     sess_list.iter().filter(|s| s.transport == "tg").max_by_key(|s| s.last_active.clone()).cloned()

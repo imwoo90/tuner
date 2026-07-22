@@ -31,6 +31,8 @@ pub mod history;
 #[cfg(test)]
 pub mod reply_tests;
 #[cfg(test)]
+pub mod reply_tests_extra;
+#[cfg(test)]
 pub mod handler_tests;
 #[cfg(test)]
 pub mod media_tests;
@@ -83,6 +85,11 @@ pub(crate) async fn run_cli_stream(
     cc.config.chat_id = msg.chat.id.0;
     cc.config.topic_id = msg.thread_id.map(|t| t as i64);
     if !sess.model.is_empty() { cc.config.model = Some(sess.model.clone()); }
+    if let Some(ref effort) = sess.effort {
+        if !effort.is_empty() {
+            cc.config.effort = Some(effort.clone());
+        }
+    }
     match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
         Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?,
         Err(e) => {
@@ -99,14 +106,21 @@ async fn handle_model_override(
     bot: &Bot,
     msg: &Message,
     mo: &str,
+    eff: Option<&str>,
     sess: &mut crate::session::data::SessionData,
     sessions: &SessionManager,
     empty: bool,
 ) -> Result<bool, teloxide::RequestError> {
     sess.model = mo.to_string();
+    sess.effort = eff.map(|s| s.to_string());
     let _ = sessions.update_session(sess, 0.0, 0).await;
     if empty {
-        let mut r = bot.send_message(msg.chat.id, format!("Next message will use {}", mo));
+        let display = if let Some(e) = eff {
+            format!("{} (effort: {})", mo, e)
+        } else {
+            mo.to_string()
+        };
+        let mut r = bot.send_message(msg.chat.id, format!("Next message will use {}", display));
         if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
         let _ = r.await;
         return Ok(true);
@@ -148,14 +162,14 @@ pub(crate) async fn process_text_with_files(
 ) -> Result<(), teloxide::RequestError> {
     if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, cron_manager, topic_cache).await? { return Ok(()); }
 
-    let (m_over, current_text) = parse_model_directive(text);
+    let (m_over, eff_over, current_text) = parse_model_directive(text);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
     let mut m = config.model.clone().unwrap_or_else(|| "antigravity-default".to_string());
     if let Some(ref mo) = m_over { m = mo.clone(); }
 
     let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
     if let Some(ref mo) = m_over {
-        if handle_model_override(bot, msg, mo, &mut sess, sessions.as_ref(), current_text.is_empty()).await? { return Ok(()); }
+        if handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions.as_ref(), current_text.is_empty()).await? { return Ok(()); }
     }
 
     let active_session_id = session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await?;
@@ -192,6 +206,9 @@ async fn process_text(
     process_text_with_files(bot, msg, text, &files, config, sessions, cli, cron_manager, topic_cache).await
 }
 
+pub mod callbacks_effort;
+pub mod media;
+pub mod commands_model;
 pub mod handler;
 pub(crate) use handler::handle_message;
 

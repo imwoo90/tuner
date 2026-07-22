@@ -7,10 +7,10 @@ Scripts for managing incoming HTTP webhook endpoints.
 **When creating a webhook in `cron_task` mode, you MUST ask:**
 
 1. **Which model?**
-   - `Gemini 3.5 Flash (High)` - Fast, highly capable agentic model (recommended)
-   - `Gemini 3.5 Pro (High)` - Most capable reasoning model
-   - `Gemini 3.5 Flash (Low)` - Fast, low rate limit/cost model
-   - `Gemini 3.5 Pro (Low)` - Capable reasoning, low rate limit/cost model
+   - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model (recommended)
+   - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Flash model
+   - `gemini-3.1-pro` (effort: `high` | `low`) - Reasoning model
+   - `claude-sonnet-4-6` - Claude reasoning model
 
 2. **Should this webhook respect quiet hours?**
    - Ask: "Should this webhook skip execution during specific hours (e.g., at night)?"
@@ -56,7 +56,7 @@ Request validation order:
 
 ## Commands
 
-- `python3 tools/webhook_tools/webhook_add.py --mode cron_task --provider antigravity --model "Gemini 3.5 Flash (High)" --name "AlertHandler" "Task description..."`
+- `python3 tools/webhook_tools/webhook_add.py --mode cron_task --provider antigravity --model "gemini-3.6-flash" --effort "high" --name "AlertHandler" "Task description..."`
 - `python3 tools/webhook_tools/webhook_list.py`
 - `python3 tools/webhook_tools/webhook_remove.py HOOK_ID`
 - `python3 tools/webhook_tools/webhook_rotate.py HOOK_ID`

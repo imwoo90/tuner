@@ -9,10 +9,10 @@ For cron tool commands (add/edit/remove/list), see `tools/cron_tools/CLAUDE.md`.
 
 1. **Which model?** (`--model <name>`)
    - Options:
-     - `Gemini 3.5 Flash (High)` - Fast, highly capable agentic model (recommended)
-     - `Gemini 3.5 Pro (High)` - Most capable reasoning model
-     - `Gemini 3.5 Flash (Low)` - Fast, low rate limit/cost model
-     - `Gemini 3.5 Pro (Low)` - Capable reasoning, low rate limit/cost model
+     - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model (recommended)
+     - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Flash model
+     - `gemini-3.1-pro` (effort: `high` | `low`) - reasoning model
+     - `claude-sonnet-4-6` - Claude reasoning model
    - Default if user doesn't specify: Use global config model
 
 **YOU MUST present these options to the user and wait for their answers BEFORE calling cron_add.py!**
@@ -28,10 +28,10 @@ User: "Create a cron job to check weather every 3 minutes"
 You: "I'll create a cron job to check weather every 3 minutes. Let me configure the execution:
 
 **Model**: Which Antigravity model should execute this task?
-   - `Gemini 3.5 Flash (High)` (fast, highly capable - recommended)
-   - `Gemini 3.5 Pro (High)` (most capable reasoning model)
-   - `Gemini 3.5 Flash (Low)` (low rate limit/cost model)
-   - `Gemini 3.5 Pro (Low)` (low rate limit/cost reasoning model)
+   - `gemini-3.6-flash` (effort: `high` - recommended)
+   - `gemini-3.5-flash` (effort: `high`)
+   - `gemini-3.1-pro` (effort: `high`)
+   - `claude-sonnet-4-6`
 
 Please specify your choice, or I'll use the global config default."
 

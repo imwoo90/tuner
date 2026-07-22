@@ -7,22 +7,22 @@
 mod tests {
     use crate::cli::antigravity::discovery::{parse_models, discover_models};
 
-    const SAMPLE_OUTPUT: &str = "Gemini 3.5 Flash (Medium)\nGemini 3.1 Pro (High)\nClaude Opus 4.6 (Thinking)\n";
+    const SAMPLE_OUTPUT: &str = "gemini-3.6-flash-high\ngemini-3.1-pro-low\nclaude-sonnet-4-6\n";
 
     #[test]
     fn test_parse_models_keeps_display_names() {
         let parsed = parse_models(SAMPLE_OUTPUT);
         assert_eq!(parsed.len(), 3);
-        assert_eq!(parsed[0], "Gemini 3.5 Flash (Medium)");
-        assert_eq!(parsed[1], "Gemini 3.1 Pro (High)");
-        assert_eq!(parsed[2], "Claude Opus 4.6 (Thinking)");
+        assert_eq!(parsed[0], "gemini-3.6-flash-high");
+        assert_eq!(parsed[1], "gemini-3.1-pro-low");
+        assert_eq!(parsed[2], "claude-sonnet-4-6");
     }
 
     #[test]
     fn test_parse_models_skips_blank_lines() {
-        let parsed = parse_models("\nGemini 3.5 Flash (Medium)\n\n");
+        let parsed = parse_models("\ngemini-3.6-flash-high\n\n");
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0], "Gemini 3.5 Flash (Medium)");
+        assert_eq!(parsed[0], "gemini-3.6-flash-high");
     }
 
     #[test]

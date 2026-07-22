@@ -16,6 +16,7 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::t;
+use super::commands_model::{handle_model_command, handle_effort_command};
 
 async fn send_reply(
     bot: &Bot,
@@ -90,6 +91,11 @@ pub(crate) async fn handle_commands(
     if text.starts_with("/model") {
         let args = text["/model".len()..].trim();
         let _ = handle_model_command(bot, msg, args, config, sessions, cli).await;
+        return Ok(true);
+    }
+    if text.starts_with("/effort") {
+        let args = text["/effort".len()..].trim();
+        let _ = handle_effort_command(bot, msg, args, config, sessions).await;
         return Ok(true);
     }
     if text.starts_with("/lang") {
@@ -172,46 +178,7 @@ async fn handle_session_control_commands(
     Ok(false)
 }
 
-async fn handle_model_command(
-    bot: &Bot,
-    msg: &Message,
-    args: &str,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-) -> Result<(), teloxide::RequestError> {
-    let topic_id = crate::telegram::get_topic_id(msg);
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
-    if args.is_empty() {
-        let mut models = cli.discover_models().await;
-        if models.is_empty() {
-            models = vec![
-                "claude-3-5-sonnet".to_string(),
-                "gemini-1.5-pro".to_string(),
-                "antigravity-default".to_string(),
-            ];
-        }
-        let mut keyboard = Vec::new();
-        for m in &models {
-            keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(m, format!("model:{}", m))]);
-        }
-        let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
-        let mut req = bot.send_message(msg.chat.id, t!("bot.model_select_header"));
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
-        }
-        let _ = req.reply_markup(markup).await;
-    } else {
-        let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-        let (mut sess, _) = sessions.resolve_session(&key, &config.provider, default_model).await.unwrap();
-        sess.model = args.to_string();
-        let _ = sessions.update_session(&sess, 0.0, 0).await;
-        
-        let status_msg = t!("bot.model_switch_success", model = args);
-        let _ = send_reply(bot, msg, status_msg).await;
-    }
-    Ok(())
-}
+
 
 
 async fn handle_memory_command(
@@ -243,6 +210,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("stop", "Cancel active CLI processes in chat"),
         ("abort", "Forcefully stop all running workers"),
         ("model", "Select or change active AI model"),
+        ("effort", "Select or change reasoning effort (low|medium|high)"),
         ("lang", "Change active language for this session"),
         ("status", "Show bot status and diagnostics report"),
         ("memory", "Print workspace MAINMEMORY.md contents"),

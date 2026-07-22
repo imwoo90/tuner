@@ -49,6 +49,7 @@ impl Default for SessionData {
             topic_name: None,
             provider: default_provider(),
             model: default_model(),
+            effort: None,
             created_at: now.clone(),
             last_active: now,
             provider_sessions: std::collections::HashMap::new(),
@@ -74,6 +75,8 @@ pub struct SessionData {
     pub provider: String,
     #[serde(default = "default_model")]
     pub model: String,
+    #[serde(default)]
+    pub effort: Option<String>,
     #[serde(default = "default_now_iso")]
     pub created_at: String,
     #[serde(default = "default_now_iso")]
@@ -113,6 +116,7 @@ impl SessionData {
             topic_name: None,
             provider,
             model,
+            effort: None,
             created_at: now.clone(),
             last_active: now,
             provider_sessions: HashMap::new(),
