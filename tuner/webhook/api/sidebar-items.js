@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["crypto","files","handshake","server","session_loop","tasks","tasks_models","websocket"]};
+window.SIDEBAR_ITEMS = {"mod":["crypto","files","handshake","server","session_loop","websocket"]};

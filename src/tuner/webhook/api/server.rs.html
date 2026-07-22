@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>            &gt;,
 <a href=#32 id=32 data-nosnippet>32</a>        &gt;,
 <a href=#33 id=33 data-nosnippet>33</a>    &gt;,
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub </span>task_hub: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">crate</span>::tasks::TaskHub&gt;&gt;,
+<a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a>}
 <a href=#36 id=36 data-nosnippet>36</a>
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub struct </span>ApiServer {
@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>                active_state_getter: <span class="prelude-val">None</span>,
 <a href=#56 id=56 data-nosnippet>56</a>                next_conn_id: <span class="number">0</span>,
 <a href=#57 id=57 data-nosnippet>57</a>                active_ws: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-<a href=#58 id=58 data-nosnippet>58</a>                task_hub: <span class="prelude-val">None</span>,
+<a href=#58 id=58 data-nosnippet>58</a>
 <a href=#59 id=59 data-nosnippet>59</a>            })),
 <a href=#60 id=60 data-nosnippet>60</a>            shutdown_tx: std::sync::Mutex::new(<span class="prelude-val">None</span>),
 <a href=#61 id=61 data-nosnippet>61</a>        }
@@ -98,57 +98,49 @@
 <a href=#98 id=98 data-nosnippet>98</a>        <span class="self">self</span>.state.lock().unwrap().active_state_getter = <span class="prelude-val">Some</span>(getter);
 <a href=#99 id=99 data-nosnippet>99</a>    }
 <a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">pub fn </span>set_task_hub(<span class="kw-2">&amp;</span><span class="self">self</span>, hub: Arc&lt;<span class="kw">crate</span>::tasks::TaskHub&gt;) {
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="self">self</span>.state.lock().unwrap().task_hub = <span class="prelude-val">Some</span>(hub);
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">pub async fn </span>start(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str, port: u16) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>(tx, rx) = tokio::sync::oneshot::channel::&lt;()&gt;();
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw-2">*</span><span class="self">self</span>.shutdown_tx.lock().unwrap() = <span class="prelude-val">Some</span>(tx);
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let </span>app = Router::new()
-<a href=#110 id=110 data-nosnippet>110</a>            .route(<span class="string">"/health"</span>, get(handle_health))
-<a href=#111 id=111 data-nosnippet>111</a>            .route(<span class="string">"/ws"</span>, get(handle_websocket))
-<a href=#112 id=112 data-nosnippet>112</a>            .route(<span class="string">"/files"</span>, get(handle_file_download))
-<a href=#113 id=113 data-nosnippet>113</a>            .route(<span class="string">"/upload"</span>, post(handle_file_upload))
-<a href=#114 id=114 data-nosnippet>114</a>            .route(<span class="string">"/tasks/create"</span>, post(<span class="kw">crate</span>::webhook::api::tasks::handle_task_create))
-<a href=#115 id=115 data-nosnippet>115</a>            .route(<span class="string">"/tasks/resume"</span>, post(<span class="kw">crate</span>::webhook::api::tasks::handle_task_resume))
-<a href=#116 id=116 data-nosnippet>116</a>            .route(<span class="string">"/tasks/ask_parent"</span>, post(<span class="kw">crate</span>::webhook::api::tasks::handle_task_ask_parent))
-<a href=#117 id=117 data-nosnippet>117</a>            .route(<span class="string">"/tasks/list"</span>, get(<span class="kw">crate</span>::webhook::api::tasks::handle_task_list))
-<a href=#118 id=118 data-nosnippet>118</a>            .route(<span class="string">"/tasks/cancel"</span>, post(<span class="kw">crate</span>::webhook::api::tasks::handle_task_cancel))
-<a href=#119 id=119 data-nosnippet>119</a>            .route(<span class="string">"/tasks/delete"</span>, post(<span class="kw">crate</span>::webhook::api::tasks::handle_task_delete))
-<a href=#120 id=120 data-nosnippet>120</a>            .layer(DefaultBodyLimit::max(<span class="number">50 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
-<a href=#121 id=121 data-nosnippet>121</a>            .with_state(<span class="self">self</span>.state.clone());
-<a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span>addr = <span class="macro">format!</span>(<span class="string">"{}:{}"</span>, host, port);
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr)
-<a href=#125 id=125 data-nosnippet>125</a>            .<span class="kw">await
-<a href=#126 id=126 data-nosnippet>126</a>            </span>.map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span>server_future = axum::serve(listener, app).with_graceful_shutdown(<span class="kw">async move </span>{
-<a href=#129 id=129 data-nosnippet>129</a>            <span class="kw">let _ </span>= rx.<span class="kw">await</span>;
-<a href=#130 id=130 data-nosnippet>130</a>        });
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>        tokio::spawn(<span class="kw">async move </span>{
-<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = server_future.<span class="kw">await </span>{
-<a href=#134 id=134 data-nosnippet>134</a>                <span class="macro">eprintln!</span>(<span class="string">"API Axum server error: {}"</span>, e);
-<a href=#135 id=135 data-nosnippet>135</a>            }
-<a href=#136 id=136 data-nosnippet>136</a>        });
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="prelude-val">Ok</span>(())
-<a href=#139 id=139 data-nosnippet>139</a>    }
-<a href=#140 id=140 data-nosnippet>140</a>
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">pub async fn </span>stop(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tx) = <span class="self">self</span>.shutdown_tx.lock().unwrap().take() {
-<a href=#143 id=143 data-nosnippet>143</a>            <span class="kw">let _ </span>= tx.send(());
-<a href=#144 id=144 data-nosnippet>144</a>        }
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span>active = {
-<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">let </span>s = <span class="self">self</span>.state.lock().unwrap();
-<a href=#147 id=147 data-nosnippet>147</a>            s.active_ws.lock().unwrap().clone()
-<a href=#148 id=148 data-nosnippet>148</a>        };
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">for </span>(<span class="kw">_</span>, ws_tx) <span class="kw">in </span>active {
-<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">let _ </span>= ws_tx.send(axum::extract::ws::Message::Close(<span class="prelude-val">None</span>));
-<a href=#151 id=151 data-nosnippet>151</a>        }
-<a href=#152 id=152 data-nosnippet>152</a>    }
-<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#101 id=101 data-nosnippet>101</a>
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">pub async fn </span>start(<span class="kw-2">&amp;</span><span class="self">self</span>, host: <span class="kw-2">&amp;</span>str, port: u16) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span>(tx, rx) = tokio::sync::oneshot::channel::&lt;()&gt;();
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw-2">*</span><span class="self">self</span>.shutdown_tx.lock().unwrap() = <span class="prelude-val">Some</span>(tx);
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>app = Router::new()
+<a href=#107 id=107 data-nosnippet>107</a>            .route(<span class="string">"/health"</span>, get(handle_health))
+<a href=#108 id=108 data-nosnippet>108</a>            .route(<span class="string">"/ws"</span>, get(handle_websocket))
+<a href=#109 id=109 data-nosnippet>109</a>            .route(<span class="string">"/files"</span>, get(handle_file_download))
+<a href=#110 id=110 data-nosnippet>110</a>            .route(<span class="string">"/upload"</span>, post(handle_file_upload))
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a>            .layer(DefaultBodyLimit::max(<span class="number">50 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
+<a href=#113 id=113 data-nosnippet>113</a>            .with_state(<span class="self">self</span>.state.clone());
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>addr = <span class="macro">format!</span>(<span class="string">"{}:{}"</span>, host, port);
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>listener = tokio::net::TcpListener::bind(<span class="kw-2">&amp;</span>addr)
+<a href=#117 id=117 data-nosnippet>117</a>            .<span class="kw">await
+<a href=#118 id=118 data-nosnippet>118</a>            </span>.map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>server_future = axum::serve(listener, app).with_graceful_shutdown(<span class="kw">async move </span>{
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">let _ </span>= rx.<span class="kw">await</span>;
+<a href=#122 id=122 data-nosnippet>122</a>        });
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>        tokio::spawn(<span class="kw">async move </span>{
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = server_future.<span class="kw">await </span>{
+<a href=#126 id=126 data-nosnippet>126</a>                <span class="macro">eprintln!</span>(<span class="string">"API Axum server error: {}"</span>, e);
+<a href=#127 id=127 data-nosnippet>127</a>            }
+<a href=#128 id=128 data-nosnippet>128</a>        });
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="prelude-val">Ok</span>(())
+<a href=#131 id=131 data-nosnippet>131</a>    }
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">pub async fn </span>stop(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tx) = <span class="self">self</span>.shutdown_tx.lock().unwrap().take() {
+<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">let _ </span>= tx.send(());
+<a href=#136 id=136 data-nosnippet>136</a>        }
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>active = {
+<a href=#138 id=138 data-nosnippet>138</a>            <span class="kw">let </span>s = <span class="self">self</span>.state.lock().unwrap();
+<a href=#139 id=139 data-nosnippet>139</a>            s.active_ws.lock().unwrap().clone()
+<a href=#140 id=140 data-nosnippet>140</a>        };
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">for </span>(<span class="kw">_</span>, ws_tx) <span class="kw">in </span>active {
+<a href=#142 id=142 data-nosnippet>142</a>            <span class="kw">let _ </span>= ws_tx.send(axum::extract::ws::Message::Close(<span class="prelude-val">None</span>));
+<a href=#143 id=143 data-nosnippet>143</a>        }
+<a href=#144 id=144 data-nosnippet>144</a>    }
+<a href=#145 id=145 data-nosnippet>145</a>}
 </code></pre></div></section></main></body></html>

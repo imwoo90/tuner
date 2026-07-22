@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["StandardResponse","TaskAskParentRequest","TaskAskParentResponse","TaskCancelRequest","TaskCreateRequest","TaskCreateResponse","TaskDeleteRequest","TaskListQuery","TaskResumeRequest"]};
