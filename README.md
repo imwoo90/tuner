@@ -3,21 +3,18 @@
 [![Rust Compile & Test](https://github.com/imwoo90/tuner/actions/workflows/rust.yml/badge.svg)](https://github.com/imwoo90/tuner/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`tuner` is a Rust-based **Agent Supervisor and Automation Runtime** for the Antigravity ecosystem, replacing the legacy Python `ductor_for_agy` service.
-
-It manages the execution of the Antigravity CLI (`agy`), providing multi-platform messaging integration (Telegram, Matrix), webhook reception, background task supervision, and multi-language localized sessions.
+It manages the execution of the Antigravity CLI (`agy`), providing modular messenger integrations (Telegram/extensible layout), webhook reception, PTY session supervision, and multi-language localized sessions.
 
 ---
 
 ## 🔑 Key Features
 
-- **Multi-Platform Messenger Integration**: Native support for Telegram and Matrix protocols. Chat with AI agents and control background runs directly using interactive UI components.
+- **Extensible Messenger Integration**: Symmetrical messenger transport layout (`src/messenger/telegram/`) ready for multi-protocol extensions. Out-of-the-box native support for Telegram bot APIs.
 - **Interactive Inline Keyboard Loops (`ask_question`)**: Converts agent `ask_question` prompts into real-time Telegram Inline Keyboards. Supports direct write-in text responses without extra confirmation, and seamless `Prev` option navigation via ANSI arrow key sequence (`\x1B[D`) injection to PTY stdin.
 - **Automatic Media Ingestion & Multimodal Support**: Automatically downloads incoming Telegram images/documents into workspace `telegram_files/` and injects `view_file` prompt hints for native LLM multimodal analysis.
 - **Session & Chat Persistence**: Structured JSON-based session storage tracks per-topic message history, LLM model state, token usage, and cumulative API costs (USD).
 - **Webhook & API Servers (Axum)**: Features a robust Axum-based async web server with HMAC-SHA256 signature verification, Bearer Token authentication, and built-in Rate Limiting.
-- **Background Task Management**: Launches long-running agent tasks in virtual PTY sessions. Supports real-time stdout/stderr streaming, log redirection, and execution timeout constraints.
-- **DAG Task Runner**: Analyzes and schedules task dependency graphs (DAG) inside the workspace, allowing parallel/sequential execution on the host machine.
+- **PTY Session Supervision**: Launches agent CLI processes in stateful virtual PTY sessions, supporting real-time stdout/stderr interception, interactive stdin injection, and timeout protection.
 - **Workspace & Skill Initialization**: Automatically synchronizes workspace rules (`CLAUDE.md`, `GEMINI.md`, `AGENTS.md`) and symlinks custom skill directories on startup.
 - **Cron Job Scheduler**: Manages periodic check-ins, telemetry reporting, and scheduled tasks. Respects configurable system-wide Quiet Hours constraints.
 - **Dynamic Localization (i18n)**: Out-of-the-box support for 9 languages (including English as default and Korean). Chat language can be changed dynamically on a per-session basis via the `/lang` slash command.
@@ -30,12 +27,12 @@ It manages the execution of the Antigravity CLI (`agy`), providing multi-platfor
 
 - `src/cli/antigravity`: Wraps `agy` CLI execution, spawns PTYs, streams stderr/stdout events, and discovers available models.
 - `src/session`: Manages session keys, state serialization, cumulative costs/tokens, and daily resets.
-- `src/telegram`: Telegram bot event handler, message parser, interactive inline keyboard generator, and Markdown-to-HTML parser.
+- `src/messenger/telegram`: Telegram bot event handler, message parser, interactive inline keyboard generator, and Markdown-to-HTML parser.
 - `src/background`: PTY executor wrapping spawned CLI processes with safe async cancellation and SIGKILL cleanup.
 - `src/security`: Content filtering, path traversal protection, and allowed root constraints.
-- `src/webhook` & `src/tasks`: Axum API endpoints and task registry DAG coordinator.
+- `src/webhook`: Axum webhook ingress endpoint server.
 - `src/i18n`: TOML localization file loader and translation macros.
-- `src/messenger/matrix`: Matrix client SDK integration and room event routing.
+- `src/messenger/mod.rs` & `src/bus`: Handles multi-messenger transport layout and internal event routing.
 
 ---
 
@@ -46,8 +43,8 @@ Below is the end-to-end asynchronous event flow between Telegram, the System Bus
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Telegram / Matrix)
-    participant Bot as Messenger Bot (src/telegram)
+    actor User as User (Telegram)
+    participant Bot as Messenger Bot (src/messenger/telegram)
     participant Session as Session Manager (src/session)
     participant Bus as System Event Bus (src/bus)
     participant PTY as CLI PTY Runner (src/cli/antigravity)
@@ -132,13 +129,7 @@ You can then customize this configuration to fit your environment. The supported
   "model": "gemini-3.6-flash",
   "effort": "high",
   "language": "en",
-  "timezone": "Asia/Seoul",
-  "matrix": {
-    "homeserver_url": "https://matrix.org",
-    "username": "@tuner_bot:matrix.org",
-    "password": "YOUR_MATRIX_PASSWORD",
-    "room_whitelist": ["!room_id:matrix.org"]
-  }
+  "timezone": "Asia/Seoul"
 }
 ```
 
@@ -169,7 +160,7 @@ Type `/` in your Telegram chat to trigger autocomplete and descriptions. Below i
 
 ## 🧪 Testing
 
-`tuner` features an extensive test suite verifying 470+ test cases to ensure stability:
+`tuner` features an extensive test suite verifying 380+ test cases to ensure stability:
 
 ```bash
 # Run all unit and integration tests
