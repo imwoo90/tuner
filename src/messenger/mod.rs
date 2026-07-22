@@ -1,13 +1,12 @@
 //! # Cross-Platform Messenger Adapter (index.md)
 //!
 //! ## Overview
-//! Bridges standard message bus envelopes to alternative messaging networks like Matrix.
+//! Bridges standard message bus envelopes to alternative messaging networks like Telegram.
 //!
 //! ## Module Components
-//! - [`matrix`]: Full Matrix client transport implementing event synchronizers.
+//! - [`telegram`]: Full Telegram client transport.
 //!
 //! ## Search Tags
-//! #messenger-adapter, #matrix-adapter, #chat-bridge
+//! #messenger-adapter, #telegram-adapter, #chat-bridge
 
-pub mod matrix;
 pub mod telegram;
