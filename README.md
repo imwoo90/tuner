@@ -3,9 +3,9 @@
 [![Rust Compile & Test](https://github.com/imwoo90/tuner/actions/workflows/rust.yml/badge.svg)](https://github.com/imwoo90/tuner/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`tuner` is a Rust-based **Agent Supervisor and Automation Runtime** for the Antigravity ecosystem. Built from the ground up, it replaces the legacy Python `ductor_for_agy` service to deliver high performance, safety, and strict compile-time check limits.
+`tuner` is a Rust-based **Agent Supervisor and Automation Runtime** for the Antigravity ecosystem, replacing the legacy Python `ductor_for_agy` service.
 
-It manages and monitors the execution of the Antigravity CLI (`agy`), providing multi-platform messaging integration (Telegram, Matrix), webhook reception, background task supervision, and multi-language localized sessions.
+It manages the execution of the Antigravity CLI (`agy`), providing multi-platform messaging integration (Telegram, Matrix), webhook reception, background task supervision, and multi-language localized sessions.
 
 ---
 
@@ -121,7 +121,7 @@ journalctl --user -u tuner.service -f
 
 On the first run of the `tuner` daemon, a default configuration template is automatically initialized and written to `~/.tuner/config/config.json`. 
 
-You can then customize this configuration to fit your environment (such as setting your `telegram_token` and `allowed_user_ids`). The supported JSON schema is as follows:
+You can then customize this configuration to fit your environment. The supported JSON schema is as follows:
 
 ```json
 {
@@ -129,7 +129,8 @@ You can then customize this configuration to fit your environment (such as setti
   "allowed_user_ids": [123456789],
   "allowed_group_ids": [-100123456789],
   "provider": "antigravity",
-  "model": "gemini-3.5-flash",
+  "model": "gemini-3.6-flash",
+  "effort": "high",
   "language": "en",
   "timezone": "Asia/Seoul",
   "matrix": {
@@ -152,6 +153,7 @@ Type `/` in your Telegram chat to trigger autocomplete and descriptions. Below i
 | `/new` \| `/reset` | Clear the current conversation and start a fresh session. |
 | `/status` | Generate bot health reports, agy CLI installation info, and active session model. |
 | `/model` | Toggle the active LLM model for the current topic via an inline selector. |
+| `/effort` | Select the reasoning effort level (high, medium, low) for the current LLM model. |
 | `/lang` | Select the active session language (English, Korean, etc.) via an inline keyboard. |
 | `/memory` | Output the current content of the workspace `MAINMEMORY.md` file. |
 | `/stop` | Gracefully cancel active agent CLI processes running in the current chat topic. |
@@ -167,7 +169,7 @@ Type `/` in your Telegram chat to trigger autocomplete and descriptions. Below i
 
 ## 🧪 Testing
 
-`tuner` features an extensive test suite verifying 460+ assertions to ensure stability:
+`tuner` features an extensive test suite verifying 470+ test cases to ensure stability:
 
 ```bash
 # Run all unit and integration tests
