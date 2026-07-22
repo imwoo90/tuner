@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["matrix","telegram"]};
+window.SIDEBAR_ITEMS = {"mod":["telegram"]};

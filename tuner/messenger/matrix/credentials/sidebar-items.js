@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["login_or_restore","restore_from_config","restore_from_file","save_credentials"],"struct":["MatrixCredentials"]};
