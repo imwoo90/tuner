@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["group_discovered_models","handle_effort_command","handle_model_command","handle_model_command_empty","handle_model_command_switch","parse_model_effort_args","send_reply"]};

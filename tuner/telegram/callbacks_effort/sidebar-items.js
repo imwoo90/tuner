@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_efforts_for_base","handle_model_base_callback","handle_model_effort_callback","handle_standalone_effort_callback","render_effort_keyboard"]};

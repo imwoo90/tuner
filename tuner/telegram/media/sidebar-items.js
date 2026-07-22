@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["download_and_inject_media_hint","download_telegram_media","get_media_file_id_and_ext","has_media","prepend_reply_to_media"]};
