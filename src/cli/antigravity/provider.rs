@@ -106,14 +106,6 @@ impl AntigravityCli {
         let child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
 
-        let task_id = self.config.process_label.strip_prefix("task:").map(|s| s.to_string());
-
-        if let (Some(tid), Some(pid)) = (&task_id, child.id()) {
-            if let Some(r) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
-                r.register(tid.clone(), pid).await;
-            }
-        }
-
         let res = match tokio::time::timeout(tokio::time::Duration::from_secs(300), child.wait_with_output()).await {
             Ok(Ok(o)) => Ok((
                 String::from_utf8_lossy(&o.stdout).into(),
@@ -123,12 +115,6 @@ impl AntigravityCli {
             Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
             Err(_) => Err("Command timed out after 300 seconds".to_string()),
         };
-
-        if let Some(ref tid) = task_id {
-            if let Some(r) = crate::tasks::runner::GLOBAL_PROCESS_REGISTRY.get() {
-                r.unregister(tid).await;
-            }
-        }
 
         res
     }

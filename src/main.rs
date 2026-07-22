@@ -13,7 +13,8 @@
 
 pub mod cli;
 pub mod config;
-pub mod telegram;
+pub mod messenger;
+pub use messenger::telegram;
 pub mod session;
 pub mod cleanup;
 pub mod heartbeat;
@@ -23,9 +24,7 @@ pub mod background;
 pub mod security;
 pub mod bus;
 pub mod webhook;
-pub mod tasks;
 pub mod i18n;
-pub mod messenger;
 pub mod supervisor;
 pub mod setup;
 pub mod upgrade;
@@ -45,8 +44,7 @@ pub mod supervisor_tests;
 #[cfg(test)]
 pub mod webhook_tests;
 
-#[cfg(test)]
-pub mod tasks_tests;
+
 
 #[cfg(test)]
 pub mod i18n_tests;
@@ -85,9 +83,7 @@ pub mod security_tests_extra;
 #[cfg(test)]
 pub mod bus_tests;
 
-#[cfg(test)]
-#[path = "messenger/matrix/concurrency_tests.rs"]
-pub mod matrix_concurrency_tests;
+
 
 
 

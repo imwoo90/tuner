@@ -10,3 +10,4 @@
 //! #messenger-adapter, #matrix-adapter, #chat-bridge
 
 pub mod matrix;
+pub mod telegram;

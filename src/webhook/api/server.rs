@@ -31,7 +31,7 @@ pub struct ApiServerState {
             >,
         >,
     >,
-    pub task_hub: Option<Arc<crate::tasks::TaskHub>>,
+
 }
 
 pub struct ApiServer {
@@ -55,7 +55,7 @@ impl ApiServer {
                 active_state_getter: None,
                 next_conn_id: 0,
                 active_ws: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-                task_hub: None,
+
             })),
             shutdown_tx: std::sync::Mutex::new(None),
         }
@@ -98,9 +98,6 @@ impl ApiServer {
         self.state.lock().unwrap().active_state_getter = Some(getter);
     }
 
-    pub fn set_task_hub(&self, hub: Arc<crate::tasks::TaskHub>) {
-        self.state.lock().unwrap().task_hub = Some(hub);
-    }
 
     pub async fn start(&self, host: &str, port: u16) -> Result<(), String> {
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
@@ -111,12 +108,7 @@ impl ApiServer {
             .route("/ws", get(handle_websocket))
             .route("/files", get(handle_file_download))
             .route("/upload", post(handle_file_upload))
-            .route("/tasks/create", post(crate::webhook::api::tasks::handle_task_create))
-            .route("/tasks/resume", post(crate::webhook::api::tasks::handle_task_resume))
-            .route("/tasks/ask_parent", post(crate::webhook::api::tasks::handle_task_ask_parent))
-            .route("/tasks/list", get(crate::webhook::api::tasks::handle_task_list))
-            .route("/tasks/cancel", post(crate::webhook::api::tasks::handle_task_cancel))
-            .route("/tasks/delete", post(crate::webhook::api::tasks::handle_task_delete))
+
             .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
             .with_state(self.state.clone());
 
