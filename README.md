@@ -133,7 +133,19 @@ You can then customize this configuration to fit your environment. The supported
 }
 ```
 
+### 📲 Telegram Bot Setup Guidelines
+
+To integrate the Tuner bot with Telegram:
+1. **Create Bot**: Use [@BotFather](https://t.me/BotFather) on Telegram to create your bot and obtain the API Token.
+2. **Configure Token**: Insert the API Token into your `config.json` under `"telegram_token"`.
+3. **Group & Topic Setup (Critical)**:
+   - If adding the bot to a group chat (supergroup) or using topic-based threads:
+   - **Invite the bot** to the group.
+   - **Promote the bot to Administrator**. The bot *must* have admin privileges (specifically to read messages, post messages, and optionally manage topics) to bypass Telegram's default Privacy Mode and receive messages.
+   - Retrieve the group chat ID (e.g. starting with `-100`) and add it to `"allowed_group_ids"` in `config.json`.
+
 ---
+
 
 ## 🤖 Telegram Slash Commands
 

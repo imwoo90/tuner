@@ -130,6 +130,7 @@ fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String>
     }
     
     println!("🎉 Setup complete! Please start the tuner bot and send a message (e.g. /start) to register as owner.");
+    println!("📌 Note: If you invite the bot to a group chat/supergroup, you MUST promote it to Administrator (specifically enabling message reading) to bypass Telegram's default Privacy Mode.");
     Ok(())
 }
 
