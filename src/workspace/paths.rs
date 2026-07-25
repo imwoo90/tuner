@@ -209,6 +209,7 @@ pub fn resolve_paths(
     let defaults = home_defaults
         .or_else(|| std::env::var("TUNER_HOME_DEFAULTS").ok().map(PathBuf::from))
         .unwrap_or_else(|| root.join("_home_defaults"));
+    let defaults = std::fs::canonicalize(&defaults).unwrap_or(defaults);
 
     DuctorPaths::new(home, defaults, root, profile)
 }

@@ -47,21 +47,16 @@ impl CronScheduler {
     }
 
     fn normalize_cron_expression(expr: &str) -> String {
-        let parts: Vec<&str> = expr.split_whitespace().collect();
-        if parts.len() == 5 {
-            format!("0 {}", expr)
-        } else {
-            expr.to_string()
-        }
+        if expr.split_whitespace().count() == 5 { format!("0 {}", expr) } else { expr.to_string() }
     }
 
     pub(crate) fn calculate_next_run(&self, job: &CronJob) -> Result<DateTime<Utc>, String> {
-        let normalized = Self::normalize_cron_expression(&job.schedule);
-        let sched = Schedule::from_str(&normalized).map_err(|e| e.to_string())?;
-        let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
-        let tz: Tz = tz_str.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
-        let next_local = sched.upcoming(tz).next().ok_or_else(|| "No upcoming execution time found".to_string())?;
-        Ok(next_local.with_timezone(&Utc))
+        let norm = Self::normalize_cron_expression(&job.schedule);
+        let sched = Schedule::from_str(&norm).map_err(|e| e.to_string())?;
+        let tz_s = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
+        let tz: Tz = tz_s.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
+        let next = sched.upcoming(tz).next().ok_or_else(|| "No upcoming run".to_string())?;
+        Ok(next.with_timezone(&Utc))
     }
 
     pub fn start(self: Arc<Self>) {
@@ -69,11 +64,12 @@ impl CronScheduler {
         tokio::spawn(async move {
             let mut last_mtime: Option<SystemTime> = None;
             let mut next_run_times: HashMap<String, DateTime<Utc>> = HashMap::new();
+            let mut loaded_jobs_configs: HashMap<String, (String, String)> = HashMap::new();
             let mut check_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             println!("🤖 [tuner] CronScheduler started");
             loop {
                 check_interval.tick().await;
-                let _ = scheduler.tick(&mut last_mtime, &mut next_run_times).await;
+                let _ = scheduler.tick(&mut last_mtime, &mut next_run_times, &mut loaded_jobs_configs).await;
             }
         });
     }
@@ -82,8 +78,9 @@ impl CronScheduler {
         &self,
         last_mtime: &mut Option<SystemTime>,
         next_run_times: &mut HashMap<String, DateTime<Utc>>,
+        loaded_jobs_configs: &mut HashMap<String, (String, String)>,
     ) -> Result<(), String> {
-        let _ = self.reload_if_changed(last_mtime, next_run_times).await;
+        let _ = self.reload_if_changed(last_mtime, next_run_times, loaded_jobs_configs).await;
         let _ = self.run_due_jobs(next_run_times).await;
         Ok(())
     }
@@ -92,22 +89,36 @@ impl CronScheduler {
         &self,
         last_mtime: &mut Option<SystemTime>,
         next_run_times: &mut HashMap<String, DateTime<Utc>>,
+        loaded_jobs_configs: &mut HashMap<String, (String, String)>,
     ) -> Result<(), String> {
         let current_mtime = std::fs::metadata(self.manager.jobs_path()).ok().and_then(|m| m.modified().ok());
         if current_mtime != *last_mtime {
             *last_mtime = current_mtime;
             println!("🤖 [tuner] CronScheduler: reloading jobs");
             if let Ok(jobs) = self.manager.list_jobs().await {
-                let mut updated = HashMap::new();
+                let mut updated_times = HashMap::new();
+                let mut updated_configs = HashMap::new();
                 for job in jobs {
                     if job.enabled {
+                        let config_key = (job.schedule.clone(), job.timezone.clone());
+                        let has_changed = match loaded_jobs_configs.get(&job.id) {
+                            Some(old_cfg) => old_cfg != &config_key,
+                            None => true,
+                        };
+
                         if let Ok(next) = self.calculate_next_run(&job) {
-                            let next_run = next_run_times.get(&job.id).filter(|&&e| e > Utc::now()).copied().unwrap_or(next);
-                            updated.insert(job.id, next_run);
+                            let next_run = if has_changed {
+                                next
+                            } else {
+                                next_run_times.get(&job.id).filter(|&&e| e > Utc::now()).copied().unwrap_or(next)
+                            };
+                            updated_times.insert(job.id.clone(), next_run);
+                            updated_configs.insert(job.id, config_key);
                         }
                     }
                 }
-                *next_run_times = updated;
+                *next_run_times = updated_times;
+                *loaded_jobs_configs = updated_configs;
             }
         }
         Ok(())
@@ -155,13 +166,19 @@ impl CronScheduler {
         format!(
             "{}\n\n\
              IMPORTANT:\n\
-             - Read the {}_MEMORY.md file (it contains important information!)\n\
-             - When finished, update {}_MEMORY.md with DATE + TIME and what you have done.\n\
-             - The final answer is delivered to Telegram automatically by ductor.\n\
-             - Return only the user-facing result text.\n\
-             - Do not include transport/debug/tool confirmations (for example: \"Message sent successfully\").",
+             - Read {}_MEMORY.md for crucial context.\n\
+             - Update {}_MEMORY.md with timestamp and work summary when done.\n\
+             - Telegram delivery is automatic. Return only user-facing result text.\n\
+             - Do not include confirmation notes (e.g. \"Message sent\").",
             instruction, folder, folder
         )
+    }
+
+    async fn submit_cron_result(&self, title: &str, res: &str, stat: &str, cid: i64, tid: Option<i64>) {
+        let mut env = crate::bus::adapters::from_cron_result(
+            title, res, stat, Some(cid), tid, Some(&self.config.transport)
+        );
+        self.bus.submit(&mut env).await;
     }
 
     async fn run_cli_command(&self, job: &CronJob, workspace: std::path::PathBuf, cli: &AntigravityCli) -> Result<(), String> {
@@ -180,28 +197,13 @@ impl CronScheduler {
                 };
                 self.manager.update_run_status(&job_id, &status).await?;
                 if !job.silent_on_success || resp.is_error {
-                    let mut env = crate::bus::adapters::from_cron_result(
-                        &job_title,
-                        &resp.result,
-                        &status,
-                        Some(chat_id),
-                        topic_id,
-                        Some(&self.config.transport),
-                    );
-                    self.bus.submit(&mut env).await;
+                    self.submit_cron_result(&job_title, &resp.result, &status, chat_id, topic_id).await;
                 }
             }
             Err(e) => {
-                self.manager.update_run_status(&job_id, &format!("error:{}", e)).await?;
-                let mut env = crate::bus::adapters::from_cron_result(
-                    &job_title,
-                    "",
-                    &format!("error:{}", e),
-                    Some(chat_id),
-                    topic_id,
-                    Some(&self.config.transport),
-                );
-                self.bus.submit(&mut env).await;
+                let err_status = format!("error:{}", e);
+                self.manager.update_run_status(&job_id, &err_status).await?;
+                self.submit_cron_result(&job_title, "", &err_status, chat_id, topic_id).await;
             }
         }
         Ok(())

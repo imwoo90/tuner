@@ -195,7 +195,7 @@ pub fn clean_broken_links(directory: &Path) -> usize {
 pub fn clean_invalid_workspace_skill_links(base_dir: &Path) -> usize {
     if !base_dir.is_dir() { return 0; }
     let mut removed = 0;
-    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules"];
+    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules", "builtin"];
     if let Ok(entries) = std::fs::read_dir(base_dir) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -234,10 +234,16 @@ pub fn link_skill_everywhere(skill_name: &str, canonical: &Path, all_dirs: &Hash
 
     let canon_resolved = std::fs::canonicalize(canonical)?;
 
-    for base_dir in all_dirs.values() {
+    for (name_key, base_dir) in all_dirs {
         if !base_dir.is_dir() {
             let _ = std::fs::create_dir_all(base_dir);
         }
+        
+        // Skip ductor workspace destination if the skill is built-in
+        if name_key == "ductor" && canonical.starts_with(base_dir.join("builtin")) {
+            continue;
+        }
+
         let dest = base_dir.join(skill_name);
         if let Ok(dest_canon) = std::fs::canonicalize(&dest) {
             if dest_canon == canon_resolved {

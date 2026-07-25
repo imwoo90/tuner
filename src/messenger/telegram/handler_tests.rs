@@ -95,10 +95,25 @@ async fn test_telegram_command_status() {
 #[tokio::test]
 async fn test_telegram_command_memory() {
     let (mgr, cfg, cli, bot, _, topic_cache, _, _) = setup();
+    let temp_dir = tempfile::tempdir().unwrap();
+    
+    // 1. Test when memory is empty/missing
+    let mut cfg_empty = (*cfg).clone();
+    cfg_empty.working_dir = temp_dir.path().to_path_buf();
+    let cfg_empty_arc = Arc::new(cfg_empty);
     let cron_mgr = CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
     let msg = make_msg(r#"{"message_id":8,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/memory"}"#);
-    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, &cron_mgr, &topic_cache).await;
     assert!(res.is_ok() && res.unwrap());
+
+    // 2. Test when memory is populated
+    let mem_dir = temp_dir.path().join("memory_system");
+    std::fs::create_dir_all(&mem_dir).unwrap();
+    let mem_file = mem_dir.join("MAINMEMORY.md");
+    std::fs::write(&mem_file, "Hello Tuner Memory!").unwrap();
+    
+    let res2 = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    assert!(res2.is_ok() && res2.unwrap());
 }
 
 #[tokio::test]

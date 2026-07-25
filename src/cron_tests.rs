@@ -73,7 +73,7 @@ mod tests {
 
 
 
-        let job = CronJob::new(
+        let mut job = CronJob::new(
             "job1".to_string(),
             "Title".to_string(),
             "0 9 * * *".to_string(),
@@ -82,6 +82,7 @@ mod tests {
             100,
             None,
         );
+        job.timezone = "Asia/Seoul".to_string();
 
         let next_run = scheduler.calculate_next_run(&job);
         assert!(next_run.is_ok());

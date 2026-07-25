@@ -104,7 +104,7 @@ pub(crate) async fn handle_commands(
         return Ok(true);
     }
     if text == "/memory" {
-        let _ = handle_memory_command(bot, msg).await;
+        let _ = handle_memory_command(bot, msg, config).await;
         return Ok(true);
     }
     if text == "/cron" {
@@ -184,9 +184,9 @@ async fn handle_session_control_commands(
 async fn handle_memory_command(
     bot: &Bot,
     msg: &Message,
+    config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let memory_path = std::path::PathBuf::from(home).join(".tuner/workspace/memory_system/MAINMEMORY.md");
+    let memory_path = config.working_dir.join("memory_system/MAINMEMORY.md");
     let content = std::fs::read_to_string(memory_path)
         .unwrap_or_else(|_| t!("bot.memory_empty"));
     

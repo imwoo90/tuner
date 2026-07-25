@@ -75,7 +75,7 @@ pub fn sync_bundled_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(
     if !bundled.is_dir() {
         return Ok(());
     }
-    let target_dir = paths.skills_dir();
+    let target_dir = paths.skills_dir().join("builtin");
     let _ = std::fs::create_dir_all(&target_dir);
 
     let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules"];
@@ -172,7 +172,9 @@ pub fn discover_skills(dir: &Path) -> HashMap<String, PathBuf> {
     if !dir.is_dir() {
         return skills;
     }
-    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules"];
+    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules", "builtin"];
+    
+    // Scan main directory (user custom skills)
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -191,6 +193,30 @@ pub fn discover_skills(dir: &Path) -> HashMap<String, PathBuf> {
             }
         }
     }
+    
+    // Scan builtin subdirectory
+    let builtin_dir = dir.join("builtin");
+    if builtin_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&builtin_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    let name = match path.file_name().and_then(|s| s.to_str()) {
+                        Some(n) => n,
+                        None => continue,
+                    };
+                    if name.starts_with('.') || skip_dirs.contains(&name) {
+                        continue;
+                    }
+                    let is_dir = path.is_dir() || (path.is_symlink() && path.exists());
+                    if is_dir && has_valid_skill_frontmatter(&path) {
+                        skills.entry(name.to_string()).or_insert(path);
+                    }
+                }
+            }
+        }
+    }
+    
     skills
 }
 
