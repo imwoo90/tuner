@@ -223,7 +223,7 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         let out = h.output.lock().await.clone();
         let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
-        if s.contains("\r> ") || s.contains("\n> ") || dead {
+        if s.contains("\r>") || s.contains("\n>") || dead {
             return Ok(());
         }
         drop(hs);
