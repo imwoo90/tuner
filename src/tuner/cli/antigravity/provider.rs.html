@@ -223,7 +223,7 @@
 <a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span>out = h.output.lock().<span class="kw">await</span>.clone();
 <a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>dead = h.child.try_wait().ok().flatten().is_some();
 <a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">let </span>s = String::from_utf8_lossy(<span class="kw-2">&amp;</span>out);
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">if </span>s.contains(<span class="string">"\r&gt; "</span>) || s.contains(<span class="string">"\n&gt; "</span>) || s.contains(<span class="string">"\u{1b}[?25h"</span>) || dead {
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">if </span>s.contains(<span class="string">"\r&gt; "</span>) || s.contains(<span class="string">"\n&gt; "</span>) || dead {
 <a href=#227 id=227 data-nosnippet>227</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#228 id=228 data-nosnippet>228</a>        }
 <a href=#229 id=229 data-nosnippet>229</a>        drop(hs);
