@@ -167,6 +167,57 @@ def _transcribe_whisper_cpp(path: Path) -> dict:
     return {"transcript": result.stdout.strip(), "method": "whisper_cpp"}
 
 
+def _transcribe_google_speech(path: Path) -> dict:
+    """Transcribe using Google Web Speech API via SpeechRecognition package."""
+    try:
+        import speech_recognition as sr
+    except ImportError:
+        return {"error": "speech_recognition package not installed"}
+
+    temp_wav = None
+    if path.suffix.lower() not in [".wav", ".flac", ".aiff", ".aif"]:
+        import tempfile
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            return {"error": "ffmpeg not found for audio conversion"}
+        
+        fd, temp_wav_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        temp_wav = Path(temp_wav_path)
+        
+        try:
+            res = subprocess.run(
+                [ffmpeg_bin, "-y", "-i", str(path), str(temp_wav)],
+                capture_output=True,
+                check=False
+            )
+            if res.returncode != 0:
+                temp_wav.unlink(missing_ok=True)
+                return {"error": f"ffmpeg conversion failed: {res.stderr[:200]}"}
+        except Exception as e:
+            return {"error": f"ffmpeg spawn failed: {e}"}
+            
+        transcribe_path = temp_wav
+    else:
+        transcribe_path = path
+
+    try:
+        r = sr.Recognizer()
+        with sr.AudioFile(str(transcribe_path)) as source:
+            audio = r.record(source)
+        text = r.recognize_google(audio, language='ko-KR')
+        if temp_wav:
+            temp_wav.unlink(missing_ok=True)
+        return {
+            "transcript": text,
+            "method": "google_web_speech_api",
+        }
+    except Exception as e:
+        if temp_wav:
+            temp_wav.unlink(missing_ok=True)
+        return {"error": f"Google Speech Recognition error: {e}"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Transcribe audio/voice to text")
     parser.add_argument("--file", required=True, help="Path to audio file")
@@ -185,6 +236,7 @@ def main() -> None:
         _transcribe_openai,
         _transcribe_local_whisper,
         _transcribe_whisper_cpp,
+        _transcribe_google_speech,
     ]
     errors: list[str] = []
 
