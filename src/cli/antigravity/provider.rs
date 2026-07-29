@@ -224,6 +224,8 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
         if s.contains("\r>") || s.contains("\n>") || dead {
+            drop(hs);
+            tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
             return Ok(());
         }
         drop(hs);
