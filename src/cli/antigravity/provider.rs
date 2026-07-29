@@ -49,7 +49,6 @@ impl AntigravityCli {
         env: &HashMap<String, String>,
         agy_ws: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
-        println!("[DBG_PTY] enter: {}", session_id);
         let sessions = self.sessions.clone();
         let sid_str = session_id.to_string();
         sessions.set_running(&sid_str, true).await;
@@ -61,7 +60,6 @@ impl AntigravityCli {
                 .get_mut(session_id)
                 .map(|h| { let u = !h.initialized; h.initialized = true; u })
                 .unwrap_or(false);
-            println!("[DBG_PTY] needs_init: {}", needs_init);
 
             if needs_init {
                 wait_for_pty_prompt(&self.sessions, session_id).await?;
@@ -73,12 +71,9 @@ impl AntigravityCli {
             let sz = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
 
             let input_prompt = format!("{}\r", prompt);
-            println!("[DBG_PTY] write input...");
             self.sessions.write_to_session(session_id, &input_prompt).await?;
 
-            println!("[DBG_PTY] wait log complete...");
             super::polling::wait_for_log_completion(&self.sessions, session_id, Some(p), sz).await?;
-            println!("[DBG_PTY] log completed!");
 
             use std::os::unix::process::ExitStatusExt;
             Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))
@@ -221,30 +216,19 @@ impl AgentProvider for AntigravityCli {
 }
 
 async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
-    println!("[DBG_W] enter: {}", sid);
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < 15 {
-        let (output_arc, dead) = {
-            let mut hs = mgr.holders.lock().await;
-            let h = hs.get_mut(sid).ok_or("No holder")?;
-            let dead = h.child.try_wait().ok().flatten().is_some();
-            (h.output.clone(), dead)
-        };
-        if dead {
-            println!("[DBG_W] dead");
-            return Err("PTY process died early".to_string());
-        }
-        let out = output_arc.lock().await.clone();
+        let mut hs = mgr.holders.lock().await;
+        let h = hs.get_mut(sid).ok_or("No holder")?;
+        let out = h.output.lock().await.clone();
+        let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
-        println!("[DBG_W] sz: {}, tail: {:?}", s.len(), if s.len() > 20 { &s[s.len()-20..] } else { &s });
-        let trimmed = s.trim_end();
-        if trimmed.ends_with('>') {
-            println!("[DBG_W] OK");
+        if s.contains("\r> ") || s.contains("\n> ") || s.contains("\u{1b}[?25h") || dead {
             return Ok(());
         }
+        drop(hs);
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-    println!("[DBG_W] timeout");
     Err("Timeout waiting for interactive session initialization".to_string())
 }
 
