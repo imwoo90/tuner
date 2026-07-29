@@ -261,7 +261,10 @@ pub(crate) async fn handle_message(
         .or_else(|| config.language.clone())
         .unwrap_or_else(|| "en".to_string());
 
+    let lock_pool = sessions.lock_pool.clone();
     let fut = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
+        let lock = lock_pool.get((msg.chat.id.0, topic_id));
+        let _guard = lock.lock().await;
         handle_message_inner(bot, msg, config, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager).await
     });
     if cfg!(test) { fut.await } else { tokio::spawn(fut); Ok(()) }

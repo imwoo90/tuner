@@ -31,6 +31,7 @@ pub struct SessionManager {
     max_msgs: Option<i64>,
     lock: Mutex<()>,
     resolver: Option<TopicNameResolver>,
+    pub lock_pool: std::sync::Arc<crate::bus::lock_pool::LockPool>,
 }
 
 impl SessionManager {
@@ -51,6 +52,7 @@ impl SessionManager {
             max_msgs: max_session_messages,
             lock: Mutex::new(()),
             resolver: None,
+            lock_pool: std::sync::Arc::new(crate::bus::lock_pool::LockPool::new_default()),
         }
     }
 
@@ -69,15 +71,11 @@ impl SessionManager {
         if !self.path.exists() { return Ok(HashMap::new()); }
         let content = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
         if content.trim().is_empty() { return Ok(HashMap::new()); }
-        let raw_map: HashMap<String, serde_json::Value> = serde_json::from_str(&content)
-            .unwrap_or_else(|e| {
-                eprintln!("Warning: sessions.json corrupt: {}", e);
-                HashMap::new()
-            });
+        let raw_map: HashMap<String, serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
         let mut result = HashMap::new();
         for (k, v) in raw_map {
-            let pk = match k.parse::<SessionKey>() { Ok(k) => k, Err(_) => return Ok(HashMap::new()) };
-            let mut sd = match serde_json::from_value::<SessionData>(v) { Ok(d) => d, Err(_) => return Ok(HashMap::new()) };
+            let Ok(pk) = k.parse::<SessionKey>() else { return Ok(HashMap::new()); };
+            let Ok(mut sd) = serde_json::from_value::<SessionData>(v) else { return Ok(HashMap::new()); };
             if sd.transport.is_empty() { sd.transport = pk.transport.clone(); }
             sd.migrate_legacy_metrics();
             result.insert(pk.storage_key(), sd);
@@ -88,9 +86,7 @@ impl SessionManager {
     pub fn save(&self, sessions: &HashMap<String, SessionData>) -> Result<(), String> {
         let temp_path = self.path.with_extension("tmp");
         let content = serde_json::to_string_pretty(sessions).map_err(|e| e.to_string())?;
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
+        if let Some(p) = self.path.parent() { fs::create_dir_all(p).map_err(|e| e.to_string())?; }
         fs::write(&temp_path, content).map_err(|e| e.to_string())?;
         fs::rename(&temp_path, &self.path).map_err(|e| e.to_string())?;
         Ok(())
@@ -243,9 +239,7 @@ impl SessionManager {
                 pk.chat_id = new;
                 map.insert(pk.storage_key(), v);
                 chg = true;
-            } else {
-                map.insert(k, v);
-            }
+            } else { map.insert(k, v); }
         }
         if chg { self.save(&map)?; }
         Ok(())
