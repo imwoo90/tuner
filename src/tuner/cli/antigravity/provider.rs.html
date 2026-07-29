@@ -224,14 +224,16 @@
 <a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>dead = h.child.try_wait().ok().flatten().is_some();
 <a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">let </span>s = String::from_utf8_lossy(<span class="kw-2">&amp;</span>out);
 <a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">if </span>s.contains(<span class="string">"\r&gt;"</span>) || s.contains(<span class="string">"\n&gt;"</span>) || dead {
-<a href=#227 id=227 data-nosnippet>227</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#228 id=228 data-nosnippet>228</a>        }
-<a href=#229 id=229 data-nosnippet>229</a>        drop(hs);
-<a href=#230 id=230 data-nosnippet>230</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
-<a href=#231 id=231 data-nosnippet>231</a>    }
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="prelude-val">Err</span>(<span class="string">"Timeout waiting for interactive session initialization"</span>.to_string())
-<a href=#233 id=233 data-nosnippet>233</a>}
-<a href=#234 id=234 data-nosnippet>234</a>
-<a href=#235 id=235 data-nosnippet>235</a>
+<a href=#227 id=227 data-nosnippet>227</a>            drop(hs);
+<a href=#228 id=228 data-nosnippet>228</a>            tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">4000</span>)).<span class="kw">await</span>;
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#230 id=230 data-nosnippet>230</a>        }
+<a href=#231 id=231 data-nosnippet>231</a>        drop(hs);
+<a href=#232 id=232 data-nosnippet>232</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
+<a href=#233 id=233 data-nosnippet>233</a>    }
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="prelude-val">Err</span>(<span class="string">"Timeout waiting for interactive session initialization"</span>.to_string())
+<a href=#235 id=235 data-nosnippet>235</a>}
 <a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a>
 </code></pre></div></section></main></body></html>
