@@ -80,6 +80,9 @@ impl AntigravityCli {
         }.await;
 
         sessions.set_running(&sid_str, false).await;
+        if res.is_err() {
+            sessions.terminate(&sid_str).await;
+        }
         if !sessions.is_active(&sid_str).await {
             sessions.set_ask_active(&sid_str, false).await;
         }

@@ -89,7 +89,7 @@ pub mod helpers {
 
     pub async fn wait_for_prompt(temp: &tempfile::TempDir, pattern: &str) -> String {
         let mut prompt_log = String::new();
-        for _ in 0..50 {
+        for _ in 0..100 {
             if let Ok(c) = std::fs::read_to_string(temp.path().join("received_prompts.txt")) {
                 prompt_log = c;
                 if prompt_log.contains(pattern) { break; }

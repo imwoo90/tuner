@@ -51,10 +51,19 @@ async fn test_telegram_command_new() {
     mgr.update_session(&updated, 0.0, 0).await.unwrap();
 
     let msg = make_msg(r#"{"message_id":3,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/new"}"#);
-    handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+    
+    // Spawn active dummy session process in cli.sessions
+    let workspace = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut mock_env = std::collections::HashMap::new();
+    mock_env.insert("TUNER_CHAT_ID".to_string(), "123".to_string());
+    cli.sessions.ensure_session("active-conv-xyz", &workspace, "cat", &[], &mock_env).await.unwrap();
+    assert!(cli.sessions.is_active("active-conv-xyz").await);
+
+    handle_message(bot, msg, cfg, mgr.clone(), cli.clone(), cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
     assert_eq!(s_after.get_session_id("antigravity"), "mock-session-123");
+    assert!(!cli.sessions.is_active("active-conv-xyz").await);
 }
 
 #[tokio::test]
