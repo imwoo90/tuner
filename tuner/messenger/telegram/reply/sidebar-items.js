@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_topic_id"]};
+window.SIDEBAR_ITEMS = {"fn":["build_reply_prompt","get_topic_id"]};
