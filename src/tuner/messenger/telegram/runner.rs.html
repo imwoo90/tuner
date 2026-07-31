@@ -97,30 +97,31 @@
 <a href=#97 id=97 data-nosnippet>97</a><span class="kw">pub async fn </span>run_bot(config: CliConfig, paths: DuctorPaths) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
 <a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or(config.telegram_token.clone());
 <a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>(bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).<span class="kw">await</span>;
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let _ </span>= commands::register_commands(<span class="kw-2">&amp;</span>bot).<span class="kw">await</span>;
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let </span>config_arc = Arc::new(config);
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span>home = std::env::var(<span class="string">"HOME"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"."</span>.to_string());
-<a href=#103 id=103 data-nosnippet>103</a>    
-<a href=#104 id=104 data-nosnippet>104</a>    spawn_restart_watcher(home.clone());
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span>topic_cache = Arc::new(TopicNameCache::new());
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let </span>p = paths.sessions_path();
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span>sessions = Arc::new(build_sessions(p, topic_cache.clone()));
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a>    reply::load_sessions_cache(<span class="kw-2">&amp;</span>sessions, <span class="kw-2">&amp;</span>topic_cache).<span class="kw">await</span>;
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span>cli = Arc::new(AntigravityCli::new((<span class="kw-2">*</span>config_arc).clone()));
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), paths.clone());
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>media_group_manager = Arc::new(<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager::new());
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>(b, s) = (bot.clone(), sessions.clone());
-<a href=#115 id=115 data-nosnippet>115</a>    tokio::spawn(<span class="kw">async move </span>{ reply::send_startup_notification(b, s).<span class="kw">await</span>; });
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span>handler = dptree::entry()
-<a href=#118 id=118 data-nosnippet>118</a>        .branch(Update::filter_message().endpoint(handle_message))
-<a href=#119 id=119 data-nosnippet>119</a>        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a>    Dispatcher::builder(bot, handler)
-<a href=#122 id=122 data-nosnippet>122</a>        .dependencies(<span class="macro">dptree::deps!</span>[config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager])
-<a href=#123 id=123 data-nosnippet>123</a>        .build().dispatch().<span class="kw">await</span>;
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="prelude-val">Ok</span>(())
-<a href=#125 id=125 data-nosnippet>125</a>}
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let _ </span>= bot.delete_webhook().drop_pending_updates(<span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let _ </span>= commands::register_commands(<span class="kw-2">&amp;</span>bot).<span class="kw">await</span>;
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span>config_arc = Arc::new(config);
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>home = std::env::var(<span class="string">"HOME"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"."</span>.to_string());
+<a href=#104 id=104 data-nosnippet>104</a>    
+<a href=#105 id=105 data-nosnippet>105</a>    spawn_restart_watcher(home.clone());
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let </span>topic_cache = Arc::new(TopicNameCache::new());
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">let </span>p = paths.sessions_path();
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">let </span>sessions = Arc::new(build_sessions(p, topic_cache.clone()));
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a>    reply::load_sessions_cache(<span class="kw-2">&amp;</span>sessions, <span class="kw-2">&amp;</span>topic_cache).<span class="kw">await</span>;
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>cli = Arc::new(AntigravityCli::new((<span class="kw-2">*</span>config_arc).clone()));
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), paths.clone());
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>media_group_manager = Arc::new(<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager::new());
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>(b, s) = (bot.clone(), sessions.clone());
+<a href=#116 id=116 data-nosnippet>116</a>    tokio::spawn(<span class="kw">async move </span>{ reply::send_startup_notification(b, s).<span class="kw">await</span>; });
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span>handler = dptree::entry()
+<a href=#119 id=119 data-nosnippet>119</a>        .branch(Update::filter_message().endpoint(handle_message))
+<a href=#120 id=120 data-nosnippet>120</a>        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>    Dispatcher::builder(bot, handler)
+<a href=#123 id=123 data-nosnippet>123</a>        .dependencies(<span class="macro">dptree::deps!</span>[config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager])
+<a href=#124 id=124 data-nosnippet>124</a>        .build().dispatch().<span class="kw">await</span>;
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="prelude-val">Ok</span>(())
+<a href=#126 id=126 data-nosnippet>126</a>}
 </code></pre></div></section></main></body></html>
