@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["SessionManager"],"type":["TopicNameResolver"]};
+window.SIDEBAR_ITEMS = {"mod":["resolver","store"],"struct":["SessionManager"],"type":["TopicNameResolver"]};

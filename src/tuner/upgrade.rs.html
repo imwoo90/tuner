@@ -195,4 +195,51 @@
 <a href=#195 id=195 data-nosnippet>195</a>    }
 <a href=#196 id=196 data-nosnippet>196</a>    <span class="prelude-val">Ok</span>(())
 <a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a><span class="attr">#[cfg(test)]
+<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">mod </span>tests {
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="attr">#[test]
+<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">fn </span>test_version_comparison() {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">assert!</span>(is_newer_version(<span class="string">"0.1.0"</span>, <span class="string">"0.1.1"</span>));
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="macro">assert!</span>(is_newer_version(<span class="string">"0.1.0"</span>, <span class="string">"v0.2.0"</span>));
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="macro">assert!</span>(is_newer_version(<span class="string">"1.0.0"</span>, <span class="string">"2.0.0"</span>));
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="macro">assert!</span>(is_newer_version(<span class="string">"0.1.0"</span>, <span class="string">"0.1.0.1"</span>));
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="macro">assert!</span>(!is_newer_version(<span class="string">"0.2.0"</span>, <span class="string">"0.1.0"</span>));
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="macro">assert!</span>(!is_newer_version(<span class="string">"0.1.1"</span>, <span class="string">"0.1.1"</span>));
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="macro">assert!</span>(!is_newer_version(<span class="string">"v1.2.3"</span>, <span class="string">"1.2.3"</span>));
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="macro">assert!</span>(!is_newer_version(<span class="string">"1.0.0"</span>, <span class="string">"0.9.9"</span>));
+<a href=#214 id=214 data-nosnippet>214</a>    }
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="attr">#[test]
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">fn </span>test_github_release_deserialization() {
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">let </span>json_data = <span class="string">r#"{
+<a href=#219 id=219 data-nosnippet>219</a>            "tag_name": "v0.1.1",
+<a href=#220 id=220 data-nosnippet>220</a>            "body": "Fixed critical issues",
+<a href=#221 id=221 data-nosnippet>221</a>            "assets": [
+<a href=#222 id=222 data-nosnippet>222</a>                {
+<a href=#223 id=223 data-nosnippet>223</a>                    "name": "tuner-linux-amd64",
+<a href=#224 id=224 data-nosnippet>224</a>                    "browser_download_url": "https://example.com/download/tuner-linux-amd64"
+<a href=#225 id=225 data-nosnippet>225</a>                }
+<a href=#226 id=226 data-nosnippet>226</a>            ]
+<a href=#227 id=227 data-nosnippet>227</a>        }"#</span>;
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">let </span>release: <span class="prelude-ty">Result</span>&lt;GithubRelease, <span class="kw">_</span>&gt; = serde_json::from_str(json_data);
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="macro">assert!</span>(release.is_ok());
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>release = release.unwrap();
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="macro">assert_eq!</span>(release.tag_name, <span class="string">"v0.1.1"</span>);
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="macro">assert_eq!</span>(release.body.as_deref(), <span class="prelude-val">Some</span>(<span class="string">"Fixed critical issues"</span>));
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="macro">assert_eq!</span>(release.assets.len(), <span class="number">1</span>);
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="macro">assert_eq!</span>(release.assets[<span class="number">0</span>].name, <span class="string">"tuner-linux-amd64"</span>);
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="macro">assert_eq!</span>(release.assets[<span class="number">0</span>].browser_download_url, <span class="string">"https://example.com/download/tuner-linux-amd64"</span>);
+<a href=#237 id=237 data-nosnippet>237</a>    }
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="attr">#[test]
+<a href=#240 id=240 data-nosnippet>240</a>    </span><span class="kw">fn </span>test_development_install_detection() {
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="macro">assert!</span>(is_dev_install());
+<a href=#242 id=242 data-nosnippet>242</a>    }
+<a href=#243 id=243 data-nosnippet>243</a>}
+<a href=#244 id=244 data-nosnippet>244</a>
 </code></pre></div></section></main></body></html>

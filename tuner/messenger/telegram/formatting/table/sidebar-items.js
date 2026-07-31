@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_tables","format_table","is_separator_row","parse_table_row"]};
+window.SIDEBAR_ITEMS = {"fn":["extract_tables"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["merge_json_values"],"struct":["ApiConfig","CliConfig","HeartbeatConfig","MatrixConfig","ProfileConfig","WebhookConfig"]};
+window.SIDEBAR_ITEMS = {"struct":["ApiConfig","CliConfig","HeartbeatConfig","ProfileConfig","WebhookConfig"]};

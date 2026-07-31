@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! Validates permissions and updates active workspace states.
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Collaboration Graph
-<a href=#8 id=8 data-nosnippet>8</a>//! - Called by [`process_text_with_files`](super::process_text_with_files) at early check cycles.
+<a href=#8 id=8 data-nosnippet>8</a>//! - Called by `process_text_with_files` at early check cycles.
 <a href=#9 id=9 data-nosnippet>9</a>//! - Instructs [`SessionManager`](crate::session::manager::SessionManager) to reset or resolve sessions.
 <a href=#10 id=10 data-nosnippet>10</a>//! - Interacts with [`CronManager`](crate::cron::manager::CronManager) to toggle scheduled jobs.
 <a href=#11 id=11 data-nosnippet>11</a>//!
@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::t;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">super</span>::commands_model::{handle_model_command, handle_effort_command};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::commands_model::{handle_model_command, handle_effort_command};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">async fn </span>send_reply(
 <a href=#22 id=22 data-nosnippet>22</a>    bot: <span class="kw-2">&amp;</span>Bot,
@@ -80,176 +80,125 @@
 <a href=#80 id=80 data-nosnippet>80</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
 <a href=#81 id=81 data-nosnippet>81</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
 <a href=#82 id=82 data-nosnippet>82</a>    cron_manager: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager,
-<a href=#83 id=83 data-nosnippet>83</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">super</span>::TopicNameCache,
+<a href=#83 id=83 data-nosnippet>83</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">crate</span>::messenger::telegram::TopicNameCache,
 <a href=#84 id=84 data-nosnippet>84</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
 <a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if </span>handle_info_commands(bot, msg, text, config, sessions, cli).<span class="kw">await</span><span class="question-mark">? </span>{
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
 <a href=#87 id=87 data-nosnippet>87</a>    }
 <a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/new"</span>) || text.starts_with(<span class="string">"/reset"</span>) || text == <span class="string">"/stop" </span>|| text == <span class="string">"/stop_all" </span>|| text == <span class="string">"/abort" </span>{
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">return </span>handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).<span class="kw">await</span>;
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">return </span><span class="kw">crate</span>::messenger::telegram::commands_control::handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).<span class="kw">await</span>;
 <a href=#90 id=90 data-nosnippet>90</a>    }
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/model"</span>) {
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>args = text[<span class="string">"/model"</span>.len()..].trim();
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let _ </span>= handle_model_command(bot, msg, args, config, sessions, cli).<span class="kw">await</span>;
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#95 id=95 data-nosnippet>95</a>    }
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/effort"</span>) {
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>args = text[<span class="string">"/effort"</span>.len()..].trim();
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let _ </span>= handle_effort_command(bot, msg, args, config, sessions).<span class="kw">await</span>;
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#100 id=100 data-nosnippet>100</a>    }
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/lang"</span>) {
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span>args = text[<span class="string">"/lang"</span>.len()..].trim();
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let _ </span>= <span class="kw">crate</span>::telegram::lang::handle_lang_command(bot, msg, args, config, sessions).<span class="kw">await</span>;
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">if </span>text == <span class="string">"/memory" </span>{
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">let _ </span>= handle_memory_command(bot, msg, config).<span class="kw">await</span>;
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#109 id=109 data-nosnippet>109</a>    }
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">if </span>text == <span class="string">"/cron" </span>{
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let _ </span>= handle_cron_command(bot, msg, cron_manager).<span class="kw">await</span>;
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#113 id=113 data-nosnippet>113</a>    }
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">if </span>text == <span class="string">"/upgrade" </span>{
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let _ </span>= <span class="kw">super</span>::upgrade::handle_upgrade_command(bot, msg).<span class="kw">await</span>;
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#117 id=117 data-nosnippet>117</a>    }
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#119 id=119 data-nosnippet>119</a>}
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="kw">async fn </span>handle_cron_command(
-<a href=#122 id=122 data-nosnippet>122</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#123 id=123 data-nosnippet>123</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#124 id=124 data-nosnippet>124</a>    cron_manager: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager,
-<a href=#125 id=125 data-nosnippet>125</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>((txt, markup)) = <span class="kw">crate</span>::telegram::cron_selector::build_cron_page(cron_manager, <span class="number">0</span>, <span class="prelude-val">None</span>).<span class="kw">await </span>{
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, txt);
-<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id {
-<a href=#129 id=129 data-nosnippet>129</a>            req = req.message_thread_id(tid);
-<a href=#130 id=130 data-nosnippet>130</a>        }
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let _ </span>= req.reply_markup(markup).<span class="kw">await</span>;
-<a href=#132 id=132 data-nosnippet>132</a>    }
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="prelude-val">Ok</span>(())
-<a href=#134 id=134 data-nosnippet>134</a>}
-<a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a><span class="kw">async fn </span>handle_new_command(
-<a href=#139 id=139 data-nosnippet>139</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#140 id=140 data-nosnippet>140</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#141 id=141 data-nosnippet>141</a>    args: <span class="kw-2">&amp;</span>str,
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw-2">mut </span>topic_id: <span class="prelude-ty">Option</span>&lt;i64&gt;,
-<a href=#143 id=143 data-nosnippet>143</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#144 id=144 data-nosnippet>144</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#145 id=145 data-nosnippet>145</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#146 id=146 data-nosnippet>146</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">super</span>::TopicNameCache,
-<a href=#147 id=147 data-nosnippet>147</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = args.split_whitespace().collect();
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">if </span>parts.len() &gt; <span class="number">1 </span>{
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>name = parts[<span class="number">1</span>];
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(resolved_tid) = topic_cache.find_by_name(msg.chat.id.<span class="number">0</span>, name) {
-<a href=#152 id=152 data-nosnippet>152</a>            topic_id = <span class="prelude-val">Some</span>(resolved_tid);
-<a href=#153 id=153 data-nosnippet>153</a>        } <span class="kw">else </span>{
-<a href=#154 id=154 data-nosnippet>154</a>            <span class="kw">let _ </span>= send_reply(bot, msg, <span class="macro">t!</span>(<span class="string">"bot.unknown_topic"</span>, name = name)).<span class="kw">await</span>;
-<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#156 id=156 data-nosnippet>156</a>        }
-<a href=#157 id=157 data-nosnippet>157</a>    }
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(msg.chat.id.<span class="number">0</span>, topic_id);
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(existing_sess)) = sessions.get_active(<span class="kw-2">&amp;</span>key).<span class="kw">await </span>{
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span>old_sid = existing_sess.get_session_id(<span class="kw-2">&amp;</span>config.provider);
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">if </span>!old_sid.is_empty() {
-<a href=#162 id=162 data-nosnippet>162</a>            cli.sessions.terminate(<span class="kw-2">&amp;</span>old_sid).<span class="kw">await</span>;
-<a href=#163 id=163 data-nosnippet>163</a>        }
-<a href=#164 id=164 data-nosnippet>164</a>    }
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>model = config.model.as_deref().unwrap_or(<span class="string">"antigravity-default"</span>);
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span><span class="kw-2">mut </span>sess = sessions.reset_provider_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, model).<span class="kw">await</span>.unwrap();
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let _ </span>= <span class="kw">crate</span>::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config).<span class="kw">await</span>;
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="prelude-val">Ok</span>(())
-<a href=#169 id=169 data-nosnippet>169</a>}
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a><span class="kw">async fn </span>handle_session_control_commands(
-<a href=#172 id=172 data-nosnippet>172</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#173 id=173 data-nosnippet>173</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#174 id=174 data-nosnippet>174</a>    text: <span class="kw-2">&amp;</span>str,
-<a href=#175 id=175 data-nosnippet>175</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#176 id=176 data-nosnippet>176</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#177 id=177 data-nosnippet>177</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#178 id=178 data-nosnippet>178</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">super</span>::TopicNameCache,
-<a href=#179 id=179 data-nosnippet>179</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>args = text.trim();
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>cmd = args.split_whitespace().next().unwrap_or(<span class="string">""</span>);
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>topic_id = <span class="kw">crate</span>::telegram::get_topic_id(msg);
-<a href=#183 id=183 data-nosnippet>183</a>
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">if </span>cmd == <span class="string">"/new" </span>|| cmd == <span class="string">"/reset" </span>{
-<a href=#185 id=185 data-nosnippet>185</a>        handle_new_command(bot, msg, args, topic_id, config, sessions, cli, topic_cache).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#187 id=187 data-nosnippet>187</a>    }
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">if </span>cmd == <span class="string">"/stop" </span>{
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>count = cli.sessions.abort(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let _ </span>= send_reply(bot, msg, <span class="macro">t!</span>(<span class="string">"bot.stop_success"</span>, count = count)).<span class="kw">await</span>;
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#192 id=192 data-nosnippet>192</a>    }
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if </span>cmd == <span class="string">"/stop_all" </span>|| cmd == <span class="string">"/abort" </span>{
-<a href=#194 id=194 data-nosnippet>194</a>        cli.sessions.terminate_all().<span class="kw">await</span>;
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let _ </span>= send_reply(bot, msg, <span class="macro">t!</span>(<span class="string">"bot.stop_all_success"</span>)).<span class="kw">await</span>;
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#199 id=199 data-nosnippet>199</a>}
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a><span class="kw">async fn </span>handle_memory_command(
-<a href=#205 id=205 data-nosnippet>205</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#206 id=206 data-nosnippet>206</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#207 id=207 data-nosnippet>207</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#208 id=208 data-nosnippet>208</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">let </span>memory_path = config.working_dir.join(<span class="string">"memory_system/MAINMEMORY.md"</span>);
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">let </span>content = std::fs::read_to_string(memory_path)
-<a href=#211 id=211 data-nosnippet>211</a>        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">t!</span>(<span class="string">"bot.memory_empty"</span>));
-<a href=#212 id=212 data-nosnippet>212</a>    
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">let </span>html_text = <span class="kw">crate</span>::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>content);
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">let </span>chunks = <span class="kw">crate</span>::telegram::formatting::split_html_message(<span class="kw-2">&amp;</span>html_text, <span class="number">4000</span>);
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">for </span>chunk <span class="kw">in </span>chunks {
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, chunk)
-<a href=#217 id=217 data-nosnippet>217</a>            .parse_mode(teloxide::types::ParseMode::Html);
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id {
-<a href=#219 id=219 data-nosnippet>219</a>            req = req.message_thread_id(tid);
-<a href=#220 id=220 data-nosnippet>220</a>        }
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let _ </span>= req.<span class="kw">await</span>;
-<a href=#222 id=222 data-nosnippet>222</a>    }
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="prelude-val">Ok</span>(())
-<a href=#224 id=224 data-nosnippet>224</a>}
-<a href=#225 id=225 data-nosnippet>225</a>
-<a href=#226 id=226 data-nosnippet>226</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>get_bot_commands() -&gt; Vec&lt;teloxide::types::BotCommand&gt; {
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span>list = [
-<a href=#228 id=228 data-nosnippet>228</a>        (<span class="string">"new"</span>, <span class="string">"Start a fresh conversation session"</span>),
-<a href=#229 id=229 data-nosnippet>229</a>        (<span class="string">"reset"</span>, <span class="string">"Alias for /new"</span>),
-<a href=#230 id=230 data-nosnippet>230</a>        (<span class="string">"stop"</span>, <span class="string">"Cancel active CLI processes in chat"</span>),
-<a href=#231 id=231 data-nosnippet>231</a>        (<span class="string">"abort"</span>, <span class="string">"Forcefully stop all running workers"</span>),
-<a href=#232 id=232 data-nosnippet>232</a>        (<span class="string">"model"</span>, <span class="string">"Select or change active AI model"</span>),
-<a href=#233 id=233 data-nosnippet>233</a>        (<span class="string">"effort"</span>, <span class="string">"Select or change reasoning effort (low|medium|high)"</span>),
-<a href=#234 id=234 data-nosnippet>234</a>        (<span class="string">"lang"</span>, <span class="string">"Change active language for this session"</span>),
-<a href=#235 id=235 data-nosnippet>235</a>        (<span class="string">"status"</span>, <span class="string">"Show bot status and diagnostics report"</span>),
-<a href=#236 id=236 data-nosnippet>236</a>        (<span class="string">"memory"</span>, <span class="string">"Print workspace MAINMEMORY.md contents"</span>),
-<a href=#237 id=237 data-nosnippet>237</a>        (<span class="string">"restart"</span>, <span class="string">"Trigger clean restart of tuner service"</span>),
-<a href=#238 id=238 data-nosnippet>238</a>        (<span class="string">"plan"</span>, <span class="string">"Request step-by-step plan before execution"</span>),
-<a href=#239 id=239 data-nosnippet>239</a>        (<span class="string">"grill_me"</span>, <span class="string">"Start interactive interview alignment"</span>),
-<a href=#240 id=240 data-nosnippet>240</a>        (<span class="string">"goal"</span>, <span class="string">"Launch long-running thorough task"</span>),
-<a href=#241 id=241 data-nosnippet>241</a>        (<span class="string">"learn"</span>, <span class="string">"Record learning or behavior correction"</span>),
-<a href=#242 id=242 data-nosnippet>242</a>        (<span class="string">"teamwork_preview"</span>, <span class="string">"Launch collaborative multi-agent simulation"</span>),
-<a href=#243 id=243 data-nosnippet>243</a>        (<span class="string">"upgrade"</span>, <span class="string">"Check for updates and perform self-upgrade"</span>),
-<a href=#244 id=244 data-nosnippet>244</a>    ];
-<a href=#245 id=245 data-nosnippet>245</a>    list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
-<a href=#246 id=246 data-nosnippet>246</a>        command: c.to_string(),
-<a href=#247 id=247 data-nosnippet>247</a>        description: d.to_string(),
-<a href=#248 id=248 data-nosnippet>248</a>    }).collect()
-<a href=#249 id=249 data-nosnippet>249</a>}
-<a href=#250 id=250 data-nosnippet>250</a>
-<a href=#251 id=251 data-nosnippet>251</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>register_commands(bot: <span class="kw-2">&amp;</span>Bot) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#252 id=252 data-nosnippet>252</a>    bot.set_my_commands(get_bot_commands()).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="prelude-val">Ok</span>(())
-<a href=#254 id=254 data-nosnippet>254</a>}
+<a href=#91 id=91 data-nosnippet>91</a>    handle_setting_commands(bot, msg, text, config, sessions, cli, cron_manager).<span class="kw">await
+<a href=#92 id=92 data-nosnippet>92</a></span>}
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a><span class="kw">async fn </span>handle_setting_commands(
+<a href=#95 id=95 data-nosnippet>95</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#96 id=96 data-nosnippet>96</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#97 id=97 data-nosnippet>97</a>    text: <span class="kw-2">&amp;</span>str,
+<a href=#98 id=98 data-nosnippet>98</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#99 id=99 data-nosnippet>99</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
+<a href=#100 id=100 data-nosnippet>100</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#101 id=101 data-nosnippet>101</a>    cron_manager: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager,
+<a href=#102 id=102 data-nosnippet>102</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/model"</span>) {
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let _ </span>= handle_model_command(bot, msg, text[<span class="string">"/model"</span>.len()..].trim(), config, sessions, cli).<span class="kw">await</span>;
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#106 id=106 data-nosnippet>106</a>    }
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/effort"</span>) {
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let _ </span>= handle_effort_command(bot, msg, text[<span class="string">"/effort"</span>.len()..].trim(), config, sessions).<span class="kw">await</span>;
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#110 id=110 data-nosnippet>110</a>    }
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/lang"</span>) {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let _ </span>= <span class="kw">crate</span>::telegram::lang::handle_lang_command(bot, msg, text[<span class="string">"/lang"</span>.len()..].trim(), config, sessions).<span class="kw">await</span>;
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/notify"</span>) {
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let _ </span>= <span class="kw">crate</span>::messenger::telegram::commands_notify::handle_notify_command(bot, msg, text[<span class="string">"/notify"</span>.len()..].trim(), config, sessions).<span class="kw">await</span>;
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#118 id=118 data-nosnippet>118</a>    }
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">if </span>text == <span class="string">"/memory" </span>{
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let _ </span>= handle_memory_command(bot, msg, config).<span class="kw">await</span>;
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#122 id=122 data-nosnippet>122</a>    }
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">if </span>text == <span class="string">"/cron" </span>{
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let _ </span>= handle_cron_command(bot, msg, cron_manager).<span class="kw">await</span>;
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#126 id=126 data-nosnippet>126</a>    }
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">if </span>text == <span class="string">"/upgrade" </span>{
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let _ </span>= <span class="kw">crate</span>::messenger::telegram::upgrade::handle_upgrade_command(bot, msg).<span class="kw">await</span>;
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#132 id=132 data-nosnippet>132</a>}
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a><span class="kw">async fn </span>handle_cron_command(
+<a href=#135 id=135 data-nosnippet>135</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#136 id=136 data-nosnippet>136</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#137 id=137 data-nosnippet>137</a>    cron_manager: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager,
+<a href=#138 id=138 data-nosnippet>138</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>((txt, markup)) = <span class="kw">crate</span>::telegram::cron_selector::build_cron_page(cron_manager, <span class="number">0</span>, <span class="prelude-val">None</span>).<span class="kw">await </span>{
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, txt);
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id {
+<a href=#142 id=142 data-nosnippet>142</a>            req = req.message_thread_id(tid);
+<a href=#143 id=143 data-nosnippet>143</a>        }
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let _ </span>= req.reply_markup(markup).<span class="kw">await</span>;
+<a href=#145 id=145 data-nosnippet>145</a>    }
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="prelude-val">Ok</span>(())
+<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>get_bot_commands() -&gt; Vec&lt;teloxide::types::BotCommand&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">let </span>list = [
+<a href=#153 id=153 data-nosnippet>153</a>        (<span class="string">"new"</span>, <span class="string">"Start a fresh conversation session"</span>),
+<a href=#154 id=154 data-nosnippet>154</a>        (<span class="string">"reset"</span>, <span class="string">"Alias for /new"</span>),
+<a href=#155 id=155 data-nosnippet>155</a>        (<span class="string">"stop"</span>, <span class="string">"Cancel active CLI processes in chat"</span>),
+<a href=#156 id=156 data-nosnippet>156</a>        (<span class="string">"abort"</span>, <span class="string">"Forcefully stop all running workers"</span>),
+<a href=#157 id=157 data-nosnippet>157</a>        (<span class="string">"model"</span>, <span class="string">"Select or change active AI model"</span>),
+<a href=#158 id=158 data-nosnippet>158</a>        (<span class="string">"effort"</span>, <span class="string">"Select or change reasoning effort (low|medium|high)"</span>),
+<a href=#159 id=159 data-nosnippet>159</a>        (<span class="string">"lang"</span>, <span class="string">"Change active language for this session"</span>),
+<a href=#160 id=160 data-nosnippet>160</a>        (<span class="string">"status"</span>, <span class="string">"Show bot status and diagnostics report"</span>),
+<a href=#161 id=161 data-nosnippet>161</a>        (<span class="string">"memory"</span>, <span class="string">"Print workspace MAINMEMORY.md contents"</span>),
+<a href=#162 id=162 data-nosnippet>162</a>        (<span class="string">"restart"</span>, <span class="string">"Trigger clean restart of tuner service"</span>),
+<a href=#163 id=163 data-nosnippet>163</a>        (<span class="string">"plan"</span>, <span class="string">"Request step-by-step plan before execution"</span>),
+<a href=#164 id=164 data-nosnippet>164</a>        (<span class="string">"grill_me"</span>, <span class="string">"Start interactive interview alignment"</span>),
+<a href=#165 id=165 data-nosnippet>165</a>        (<span class="string">"goal"</span>, <span class="string">"Launch long-running thorough task"</span>),
+<a href=#166 id=166 data-nosnippet>166</a>        (<span class="string">"learn"</span>, <span class="string">"Record learning or behavior correction"</span>),
+<a href=#167 id=167 data-nosnippet>167</a>        (<span class="string">"teamwork_preview"</span>, <span class="string">"Launch collaborative multi-agent simulation"</span>),
+<a href=#168 id=168 data-nosnippet>168</a>        (<span class="string">"notify"</span>, <span class="string">"Set background notification mode (clean|detailed)"</span>),
+<a href=#169 id=169 data-nosnippet>169</a>        (<span class="string">"upgrade"</span>, <span class="string">"Check for updates and perform self-upgrade"</span>),
+<a href=#170 id=170 data-nosnippet>170</a>    ];
+<a href=#171 id=171 data-nosnippet>171</a>    list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
+<a href=#172 id=172 data-nosnippet>172</a>        command: c.to_string(),
+<a href=#173 id=173 data-nosnippet>173</a>        description: d.to_string(),
+<a href=#174 id=174 data-nosnippet>174</a>    }).collect()
+<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>register_commands(bot: <span class="kw-2">&amp;</span>Bot) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#178 id=178 data-nosnippet>178</a>    bot.set_my_commands(get_bot_commands()).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="prelude-val">Ok</span>(())
+<a href=#180 id=180 data-nosnippet>180</a>}
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a><span class="kw">async fn </span>handle_memory_command(
+<a href=#184 id=184 data-nosnippet>184</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#185 id=185 data-nosnippet>185</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#186 id=186 data-nosnippet>186</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#187 id=187 data-nosnippet>187</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span>memory_path = config.working_dir.join(<span class="string">"memory_system/MAINMEMORY.md"</span>);
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span>content = std::fs::read_to_string(memory_path)
+<a href=#190 id=190 data-nosnippet>190</a>        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">t!</span>(<span class="string">"bot.memory_empty"</span>));
+<a href=#191 id=191 data-nosnippet>191</a>    
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span>html_text = <span class="kw">crate</span>::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>content);
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>chunks = <span class="kw">crate</span>::telegram::formatting::split_html_message(<span class="kw-2">&amp;</span>html_text, <span class="number">4000</span>);
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">for </span>chunk <span class="kw">in </span>chunks {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, chunk)
+<a href=#196 id=196 data-nosnippet>196</a>            .parse_mode(teloxide::types::ParseMode::Html);
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id {
+<a href=#198 id=198 data-nosnippet>198</a>            req = req.message_thread_id(tid);
+<a href=#199 id=199 data-nosnippet>199</a>        }
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let _ </span>= req.<span class="kw">await</span>;
+<a href=#201 id=201 data-nosnippet>201</a>    }
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="prelude-val">Ok</span>(())
+<a href=#203 id=203 data-nosnippet>203</a>}
 </code></pre></div></section></main></body></html>

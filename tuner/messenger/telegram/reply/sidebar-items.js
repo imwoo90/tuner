@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_reply_prompt","find_last_active_session","get_remaining_prompt","get_topic_id","load_sessions_cache","parse_model_directive","resolve_session_model","send_startup_notification","strip_mention"]};
+window.SIDEBAR_ITEMS = {"fn":["get_topic_id"]};

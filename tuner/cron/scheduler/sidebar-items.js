@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CronScheduler"]};
+window.SIDEBAR_ITEMS = {"mod":["executor","trigger"],"struct":["CronScheduler"]};

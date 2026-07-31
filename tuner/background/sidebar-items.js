@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["models","observer","test_utils"]};
+window.SIDEBAR_ITEMS = {"mod":["models","notification_observer","observer","test_utils"]};

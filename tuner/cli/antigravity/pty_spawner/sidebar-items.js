@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["disable_echo","set_non_blocking","spawn_drain_task","spawn_session"],"struct":["SessionHolder"]};
+window.SIDEBAR_ITEMS = {"fn":["spawn_session"],"struct":["SessionHolder"]};

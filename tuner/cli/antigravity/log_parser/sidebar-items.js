@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_formatted_progress","process_entry"],"struct":["AntigravityLogParser"]};
+window.SIDEBAR_ITEMS = {"struct":["AntigravityLogParser"]};

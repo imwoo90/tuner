@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["agy_state_root","conv_id_for_cwd","is_placeholder_content","newest_brain_dir","parse_antigravity_json","read_transcript_answer","remove_html_comments_and_nbsp","resolve_brain_dir"]};
+window.SIDEBAR_ITEMS = {"fn":["agy_state_root","is_placeholder_content","parse_antigravity_json","read_transcript_answer","resolve_brain_dir"]};

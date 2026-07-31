@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_forum_topic_events"],"struct":["BotInfo","TopicNameCache"]};
+window.SIDEBAR_ITEMS = {"struct":["BotInfo","TopicNameCache"]};

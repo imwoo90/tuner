@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["find_locales_dir","flatten","format_string","is_safe_lang","load_language","load_toml"],"struct":["TranslationStore"]};

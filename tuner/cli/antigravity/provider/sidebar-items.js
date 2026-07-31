@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["wait_for_pty_prompt"]};
+window.SIDEBAR_ITEMS = {};

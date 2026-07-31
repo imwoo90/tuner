@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["detect_suspicious_patterns","fold_fullwidth","fold_fullwidth_char","get_patterns"]};
+window.SIDEBAR_ITEMS = {"fn":["detect_suspicious_patterns","fold_fullwidth","fold_fullwidth_char"]};

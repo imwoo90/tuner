@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_lang_command"]};
+window.SIDEBAR_ITEMS = {};

@@ -6,9 +6,9 @@
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Collaboration Graph
 <a href=#8 id=8 data-nosnippet>8</a>//! - Binds directly to the Teloxide listener event loop.
-<a href=#9 id=9 data-nosnippet>9</a>//! - Dispatches commands to [`super::commands::handle_commands`].
-<a href=#10 id=10 data-nosnippet>10</a>//! - Routes callbacks to [`super::callbacks::handle_callback_query`].
-<a href=#11 id=11 data-nosnippet>11</a>//! - Downloads photos/files via [`super::reply::download_telegram_media`].
+<a href=#9 id=9 data-nosnippet>9</a>//! - Dispatches commands to `commands::handle_commands`.
+<a href=#10 id=10 data-nosnippet>10</a>//! - Routes callbacks to `callbacks::handle_callback_query`.
+<a href=#11 id=11 data-nosnippet>11</a>//! - Downloads photos/files via `reply::download_telegram_media`.
 <a href=#12 id=12 data-nosnippet>12</a>//!
 <a href=#13 id=13 data-nosnippet>13</a>//! ## Search Tags
 <a href=#14 id=14 data-nosnippet>14</a>//! #ingress-handler, #telegram-dispatcher, #event-router, #media-downloads
@@ -19,8 +19,8 @@
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::session::manager::SessionManager;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::cron::manager::CronManager;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">super</span>::topic_cache::{BotInfo, TopicNameCache};
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use super</span>::{reply, commands, topic_cache, session_init, ask_helpers, get_topic_id, process_text_with_files};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::topic_cache::{BotInfo, TopicNameCache};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::{reply, topic_cache, get_topic_id, process_text_with_files};
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">fn </span>auto_register_owner(from_id: i64) {
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">let </span>home = std::env::var(<span class="string">"HOME"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"."</span>.to_string());
@@ -83,7 +83,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>    cron_manager: Arc&lt;CronManager&gt;,
 <a href=#84 id=84 data-nosnippet>84</a>    topic_cache: Arc&lt;TopicNameCache&gt;,
 <a href=#85 id=85 data-nosnippet>85</a>    bot_info: Arc&lt;BotInfo&gt;,
-<a href=#86 id=86 data-nosnippet>86</a>    media_group_manager: Arc&lt;<span class="kw">super</span>::media_group::MediaGroupManager&gt;,
+<a href=#86 id=86 data-nosnippet>86</a>    media_group_manager: Arc&lt;<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager&gt;,
 <a href=#87 id=87 data-nosnippet>87</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#88 id=88 data-nosnippet>88</a>    media_group_manager.add_message(
 <a href=#89 id=89 data-nosnippet>89</a>        bot.clone(),
@@ -187,7 +187,7 @@
 <a href=#187 id=187 data-nosnippet>187</a>    cron_manager: Arc&lt;CronManager&gt;,
 <a href=#188 id=188 data-nosnippet>188</a>    topic_cache: Arc&lt;TopicNameCache&gt;,
 <a href=#189 id=189 data-nosnippet>189</a>    bot_info: Arc&lt;BotInfo&gt;,
-<a href=#190 id=190 data-nosnippet>190</a>    media_group_manager: Arc&lt;<span class="kw">super</span>::media_group::MediaGroupManager&gt;,
+<a href=#190 id=190 data-nosnippet>190</a>    media_group_manager: Arc&lt;<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager&gt;,
 <a href=#191 id=191 data-nosnippet>191</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span>media_group_id = msg.media_group_id().map(|s| s.to_string());
 <a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(group_id) = media_group_id {
@@ -214,7 +214,7 @@
 <a href=#214 id=214 data-nosnippet>214</a>    cron_manager: Arc&lt;CronManager&gt;,
 <a href=#215 id=215 data-nosnippet>215</a>    topic_cache: Arc&lt;TopicNameCache&gt;,
 <a href=#216 id=216 data-nosnippet>216</a>    bot_info: Arc&lt;BotInfo&gt;,
-<a href=#217 id=217 data-nosnippet>217</a>    media_group_manager: Arc&lt;<span class="kw">super</span>::media_group::MediaGroupManager&gt;,
+<a href=#217 id=217 data-nosnippet>217</a>    media_group_manager: Arc&lt;<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager&gt;,
 <a href=#218 id=218 data-nosnippet>218</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">if </span>!validate_and_auth_message(<span class="kw-2">&amp;</span>bot, <span class="kw-2">&amp;</span>msg, <span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>sessions, <span class="kw-2">&amp;</span>topic_cache).<span class="kw">await</span><span class="question-mark">? </span>{
 <a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
@@ -248,7 +248,7 @@
 <a href=#248 id=248 data-nosnippet>248</a>    cron_manager: Arc&lt;CronManager&gt;,
 <a href=#249 id=249 data-nosnippet>249</a>    topic_cache: Arc&lt;TopicNameCache&gt;,
 <a href=#250 id=250 data-nosnippet>250</a>    bot_info: Arc&lt;BotInfo&gt;,
-<a href=#251 id=251 data-nosnippet>251</a>    media_group_manager: Arc&lt;<span class="kw">super</span>::media_group::MediaGroupManager&gt;,
+<a href=#251 id=251 data-nosnippet>251</a>    media_group_manager: Arc&lt;<span class="kw">crate</span>::messenger::telegram::media_group::MediaGroupManager&gt;,
 <a href=#252 id=252 data-nosnippet>252</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#253 id=253 data-nosnippet>253</a>    <span class="macro">println!</span>(<span class="string">"🤖 [tuner] handle_message: received update from chat {}, text: {:?}"</span>, msg.chat.id, msg.text().or(msg.caption()));
 <a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>topic_id = get_topic_id(<span class="kw-2">&amp;</span>msg);
@@ -269,4 +269,8 @@
 <a href=#269 id=269 data-nosnippet>269</a>    </span>});
 <a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">if </span><span class="macro">cfg!</span>(test) { fut.<span class="kw">await </span>} <span class="kw">else </span>{ tokio::spawn(fut); <span class="prelude-val">Ok</span>(()) }
 <a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["initialize_session_if_needed"]};
+window.SIDEBAR_ITEMS = {};
