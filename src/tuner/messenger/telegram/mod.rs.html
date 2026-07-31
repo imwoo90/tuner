@@ -166,7 +166,7 @@
 <a href=#166 id=166 data-nosnippet>166</a>    inject_pre_downloaded_files(<span class="kw-2">&amp;mut </span>prompt, pre_downloaded_files);
 <a href=#167 id=167 data-nosnippet>167</a>
 <a href=#168 id=168 data-nosnippet>168</a>    history::log_telegram_message(<span class="kw-2">&amp;</span>config.working_dir, <span class="kw-2">&amp;</span>active_session_id, <span class="string">"user"</span>, <span class="prelude-val">Some</span>(msg.id.<span class="number">0</span>), text, <span class="bool-val">true</span>, <span class="prelude-val">None</span>);
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>ask_helpers::feed_active_session_if_running(bot, msg, <span class="kw-2">&amp;</span>active_session_id, current_text, cli, sessions, sess.clone(), config).<span class="kw">await</span><span class="question-mark">? </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>ask_helpers::feed_active_session_if_running(bot, msg, <span class="kw-2">&amp;</span>active_session_id, <span class="kw-2">&amp;</span>prompt, cli, sessions, sess.clone(), config).<span class="kw">await</span><span class="question-mark">? </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
 <a href=#170 id=170 data-nosnippet>170</a>
 <a href=#171 id=171 data-nosnippet>171</a>    run_cli_stream(bot, msg, <span class="kw-2">&amp;</span>prompt, <span class="kw-2">&amp;</span>active_session_id, cli, sessions.as_ref(), sess, config).<span class="kw">await
 <a href=#172 id=172 data-nosnippet>172</a></span>}
