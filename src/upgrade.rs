@@ -32,18 +32,8 @@ pub fn is_dev_install() -> bool {
         if path_str.contains("/target/debug/") || path_str.contains("/target/release/") {
             return true;
         }
-        if let Some(parent) = exe.parent() {
-            if parent.join("Cargo.toml").is_file() || parent.join(".git").is_dir() {
-                return true;
-            }
-            if let Some(gp) = parent.parent() {
-                if gp.join("Cargo.toml").is_file() || gp.join(".git").is_dir() {
-                    return true;
-                }
-            }
-        }
     }
-    Path::new("Cargo.toml").is_file()
+    false
 }
 
 pub async fn get_latest_release() -> Result<GithubRelease, String> {
