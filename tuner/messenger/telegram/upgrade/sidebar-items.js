@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {};
+window.SIDEBAR_ITEMS = {"fn":["build_upgrade_keyboard","handle_upgrade_command","send_reply"]};

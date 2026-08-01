@@ -5,8 +5,8 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! Feeds responses back to background execution PTY streams and handles state transitions.
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Collaboration Graph
-<a href=#8 id=8 data-nosnippet>8</a>//! - Interacts with `ask_helpers` to submit input.
-<a href=#9 id=9 data-nosnippet>9</a>//! - Used by `handle_message` to route new messages.
+<a href=#8 id=8 data-nosnippet>8</a>//! - Interacts with [`super::ask_helpers`] to submit input.
+<a href=#9 id=9 data-nosnippet>9</a>//! - Used by [`super::handler::handle_message`] to route new messages.
 <a href=#10 id=10 data-nosnippet>10</a>//!
 <a href=#11 id=11 data-nosnippet>11</a>//! ## Search Tags
 <a href=#12 id=12 data-nosnippet>12</a>//! #ask-process, #user-input, #pty-feedback
@@ -15,8 +15,8 @@
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::session::manager::SessionManager;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::ask_helpers::find_write_in_index;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">super</span>::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">super</span>::ask_helpers::find_write_in_index;
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a>
@@ -33,7 +33,7 @@
 <a href=#33 id=33 data-nosnippet>33</a>    <span class="kw">let </span>bot_clone = bot.clone();
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">let </span>msg_clone = msg.clone();
 <a href=#35 id=35 data-nosnippet>35</a>    tokio::spawn(<span class="kw">async move </span>{
-<a href=#36 id=36 data-nosnippet>36</a>        <span class="kw">let _ </span>= <span class="kw">crate</span>::messenger::telegram::run_cli_stream(<span class="kw-2">&amp;</span>bot_clone, <span class="kw-2">&amp;</span>msg_clone, <span class="kw-2">&amp;</span>keystrokes, <span class="kw-2">&amp;</span>session_id, <span class="kw-2">&amp;</span>cli, <span class="kw-2">&amp;</span>sessions, sess, <span class="kw-2">&amp;</span>config).<span class="kw">await</span>;
+<a href=#36 id=36 data-nosnippet>36</a>        <span class="kw">let _ </span>= <span class="kw">super</span>::run_cli_stream(<span class="kw-2">&amp;</span>bot_clone, <span class="kw-2">&amp;</span>msg_clone, <span class="kw-2">&amp;</span>keystrokes, <span class="kw-2">&amp;</span>session_id, <span class="kw-2">&amp;</span>cli, <span class="kw-2">&amp;</span>sessions, sess, <span class="kw-2">&amp;</span>config).<span class="kw">await</span>;
 <a href=#37 id=37 data-nosnippet>37</a>    });
 <a href=#38 id=38 data-nosnippet>38</a>}
 <a href=#39 id=39 data-nosnippet>39</a>
@@ -81,8 +81,8 @@
 <a href=#81 id=81 data-nosnippet>81</a>        state.waiting_for_write_in = <span class="bool-val">false</span>;
 <a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">let </span>show_prev = state.current_index &gt; <span class="number">0</span>;
 <a href=#83 id=83 data-nosnippet>83</a>        cli.sessions.set_ask_state(sid, state.clone()).<span class="kw">await</span>;
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>markup = <span class="kw">crate</span>::messenger::telegram::ask_helpers::build_ask_keyboard_helper(sid, nq, <span class="kw-2">&amp;</span>state.current_bitmap, show_prev);
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>nq.question);
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>markup = <span class="kw">super</span>::ask_helpers::build_ask_keyboard_helper(sid, nq, <span class="kw-2">&amp;</span>state.current_bitmap, show_prev);
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>nq.question);
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let _ </span>= bot.edit_message_text(chat_id, msg_id, html)
 <a href=#87 id=87 data-nosnippet>87</a>            .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#88 id=88 data-nosnippet>88</a>            .reply_markup(markup)
@@ -114,7 +114,7 @@
 <a href=#114 id=114 data-nosnippet>114</a>            }
 <a href=#115 id=115 data-nosnippet>115</a>        }
 <a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>user_action_text = <span class="macro">format!</span>(<span class="string">"Selected Option: {}"</span>, chosen);
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">crate</span>::messenger::telegram::history::log_telegram_message(
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">super</span>::history::log_telegram_message(
 <a href=#118 id=118 data-nosnippet>118</a>            <span class="kw-2">&amp;</span>config.working_dir,
 <a href=#119 id=119 data-nosnippet>119</a>            sid,
 <a href=#120 id=120 data-nosnippet>120</a>            <span class="string">"user"</span>,
@@ -132,7 +132,7 @@
 <a href=#132 id=132 data-nosnippet>132</a>        }
 <a href=#133 id=133 data-nosnippet>133</a>
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">if </span>!advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, <span class="kw-2">&amp;mut </span>state).<span class="kw">await</span><span class="question-mark">? </span>{
-<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">crate</span>::messenger::telegram::ask_helpers::update_telegram_ask_ui(bot, msg, idx, data).<span class="kw">await</span>;
+<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">super</span>::ask_helpers::update_telegram_ask_ui(bot, msg, idx, data).<span class="kw">await</span>;
 <a href=#136 id=136 data-nosnippet>136</a>            spawn_cli_stream_in_background(
 <a href=#137 id=137 data-nosnippet>137</a>                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
 <a href=#138 id=138 data-nosnippet>138</a>            );
@@ -154,7 +154,7 @@
 <a href=#154 id=154 data-nosnippet>154</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>state) = cli.sessions.get_ask_state(sid).<span class="kw">await </span>{
 <a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>user_action_text = <span class="macro">format!</span>(<span class="string">"Submitted Multi-select: [{}]"</span>, opts.join(<span class="string">", "</span>));
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">crate</span>::messenger::telegram::history::log_telegram_message(
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">super</span>::history::log_telegram_message(
 <a href=#158 id=158 data-nosnippet>158</a>            <span class="kw-2">&amp;</span>config.working_dir,
 <a href=#159 id=159 data-nosnippet>159</a>            sid,
 <a href=#160 id=160 data-nosnippet>160</a>            <span class="string">"user"</span>,
@@ -181,7 +181,7 @@
 <a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">if </span>!advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, <span class="kw-2">&amp;mut </span>state).<span class="kw">await</span><span class="question-mark">? </span>{
 <a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">let </span>ch = <span class="kw">if </span>opts.is_empty() { <span class="string">"None"</span>.to_string() } <span class="kw">else </span>{ opts.join(<span class="string">", "</span>) };
 <a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">let </span>txt = <span class="macro">format!</span>(<span class="string">"{}\n\n(Selected: **{}**)"</span>, msg.text().unwrap_or(<span class="string">""</span>), ch);
-<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
 <a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).<span class="kw">await</span>;
 <a href=#186 id=186 data-nosnippet>186</a>            spawn_cli_stream_in_background(
 <a href=#187 id=187 data-nosnippet>187</a>                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
@@ -201,7 +201,7 @@
 <a href=#201 id=201 data-nosnippet>201</a>) {
 <a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span>options_str = ask.options.join(<span class="string">", "</span>);
 <a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span>text_to_log = <span class="macro">format!</span>(<span class="string">"Question: {}\nOptions: [{}]"</span>, ask.question, options_str);
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">crate</span>::messenger::telegram::history::log_telegram_message(
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">super</span>::history::log_telegram_message(
 <a href=#205 id=205 data-nosnippet>205</a>        <span class="kw-2">&amp;</span>config.working_dir,
 <a href=#206 id=206 data-nosnippet>206</a>        sess_id,
 <a href=#207 id=207 data-nosnippet>207</a>        <span class="string">"bot"</span>,
@@ -227,7 +227,7 @@
 <a href=#227 id=227 data-nosnippet>227</a>    } <span class="kw">else </span>{
 <a href=#228 id=228 data-nosnippet>228</a>        build_single_select_keyboard(<span class="kw-2">&amp;</span>sess_id, <span class="kw-2">&amp;</span>ask.options, <span class="bool-val">false</span>)
 <a href=#229 id=229 data-nosnippet>229</a>    };
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span>html_question = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>ask.question);
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span>html_question = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>ask.question);
 <a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(chat_id, html_question)
 <a href=#232 id=232 data-nosnippet>232</a>        .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#233 id=233 data-nosnippet>233</a>        .reply_markup(markup);

@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::session::AskState;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>std::sync::Arc;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">super</span>::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>find_write_in_index(options: <span class="kw-2">&amp;</span>[String]) -&gt; usize {
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">for </span>(i, opt) <span class="kw">in </span>options.iter().enumerate() {
@@ -35,7 +35,7 @@
 <a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span><span class="kw-2">mut </span>is_write_in = <span class="bool-val">false</span>;
 <a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">if </span>waiting_for_write_in {
 <a href=#37 id=37 data-nosnippet>37</a>        is_write_in = <span class="bool-val">true</span>;
-<a href=#38 id=38 data-nosnippet>38</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(i) = <span class="kw">crate</span>::messenger::telegram::formatting::find_best_option(current_text, <span class="kw-2">&amp;</span>q.options) {
+<a href=#38 id=38 data-nosnippet>38</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(i) = <span class="kw">super</span>::formatting::find_best_option(current_text, <span class="kw-2">&amp;</span>q.options) {
 <a href=#39 id=39 data-nosnippet>39</a>        <span class="kw">let </span>opt = <span class="kw-2">&amp;</span>q.options[i];
 <a href=#40 id=40 data-nosnippet>40</a>        <span class="kw">if </span>opt.to_lowercase().contains(<span class="string">"write-in"</span>) || opt.contains(<span class="string">"직접 입력"</span>) {
 <a href=#41 id=41 data-nosnippet>41</a>            is_write_in = <span class="bool-val">true</span>;
@@ -125,7 +125,7 @@
 <a href=#125 id=125 data-nosnippet>125</a>    q: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
 <a href=#126 id=126 data-nosnippet>126</a>    markup: teloxide::types::InlineKeyboardMarkup,
 <a href=#127 id=127 data-nosnippet>127</a>) {
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>q.question);
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>q.question);
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let _ </span>= bot.edit_message_text(chat_id, teloxide::types::MessageId(mid), html)
 <a href=#130 id=130 data-nosnippet>130</a>        .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#131 id=131 data-nosnippet>131</a>        .reply_markup(markup)
@@ -148,7 +148,7 @@
 <a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">if </span>state.current_index + <span class="number">1 </span>&lt; state.questions.len() {
 <a href=#149 id=149 data-nosnippet>149</a>        state.current_index += <span class="number">1</span>;
 <a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>nq = state.questions[state.current_index].clone();
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>bitmap = <span class="kw">crate</span>::messenger::telegram::multi_select::get_bitmap_for_question(<span class="kw-2">&amp;</span>nq, <span class="kw-2">&amp;</span>state.answers, state.current_index);
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>bitmap = <span class="kw">super</span>::multi_select::get_bitmap_for_question(<span class="kw-2">&amp;</span>nq, <span class="kw-2">&amp;</span>state.answers, state.current_index);
 <a href=#152 id=152 data-nosnippet>152</a>        state.current_bitmap = bitmap.clone();
 <a href=#153 id=153 data-nosnippet>153</a>        state.waiting_for_write_in = <span class="bool-val">false</span>;
 <a href=#154 id=154 data-nosnippet>154</a>        cli.sessions.set_ask_state(sid, state).<span class="kw">await</span>;
@@ -162,7 +162,7 @@
 <a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(mid) = msg_id {
 <a href=#163 id=163 data-nosnippet>163</a>            <span class="kw">let _ </span>= bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).<span class="kw">await</span>;
 <a href=#164 id=164 data-nosnippet>164</a>        }
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">crate</span>::messenger::telegram::ask_process::spawn_cli_stream_in_background(
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">super</span>::ask_process::spawn_cli_stream_in_background(
 <a href=#166 id=166 data-nosnippet>166</a>            bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone(),
 <a href=#167 id=167 data-nosnippet>167</a>        );
 <a href=#168 id=168 data-nosnippet>168</a>    }
@@ -194,7 +194,7 @@
 <a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(mid) = msg_id {
 <a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(q) = state.questions.get(state.current_index) {
 <a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">let </span>txt = <span class="macro">format!</span>(<span class="string">"{}\n\n(Selected: **{}**)"</span>, q.question, current_text);
-<a href=#197 id=197 data-nosnippet>197</a>            <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
+<a href=#197 id=197 data-nosnippet>197</a>            <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
 <a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, teloxide::types::MessageId(mid), html)
 <a href=#199 id=199 data-nosnippet>199</a>                .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#200 id=200 data-nosnippet>200</a>                .<span class="kw">await</span>;
@@ -218,55 +218,49 @@
 <a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>is_active = cli.sessions.is_active(session_id).<span class="kw">await</span>;
 <a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>is_running = cli.sessions.is_running(session_id).<span class="kw">await</span>;
 <a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span>is_ask = cli.sessions.is_ask_active(session_id).<span class="kw">await</span>;
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="macro">eprintln!</span>(<span class="string">"🔍 [DEBUG-REPLY] feed_active_session: sid={}, active={}, running={}, ask={}"</span>, session_id, is_active, is_running, is_ask);
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="macro">eprintln!</span>(<span class="string">"🔍 [DEBUG-REPLY] feed_active_session_if_running: session_id={}, is_active={}, is_running={}, is_ask={}"</span>, session_id, is_active, is_running, is_ask);
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">if </span>is_active &amp;&amp; (is_running || is_ask) {
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">if </span>is_ask {
-<a href=#226 id=226 data-nosnippet>226</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(state) = cli.sessions.get_ask_state(session_id).<span class="kw">await </span>{
-<a href=#227 id=227 data-nosnippet>227</a>                <span class="kw">let _ </span>= handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#228 id=228 data-nosnippet>228</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#229 id=229 data-nosnippet>229</a>            }
-<a href=#230 id=230 data-nosnippet>230</a>        }
-<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">if </span>is_running {
-<a href=#232 id=232 data-nosnippet>232</a>            <span class="kw">let </span>input_prompt = <span class="kw">if </span>current_text.contains(<span class="string">'\n'</span>) {
-<a href=#233 id=233 data-nosnippet>233</a>                <span class="macro">format!</span>(<span class="string">"\x1b[200~{}\x1b[201~\r"</span>, current_text)
-<a href=#234 id=234 data-nosnippet>234</a>            } <span class="kw">else </span>{
-<a href=#235 id=235 data-nosnippet>235</a>                <span class="macro">format!</span>(<span class="string">"{}\r"</span>, current_text)
-<a href=#236 id=236 data-nosnippet>236</a>            };
-<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let _ </span>= cli.sessions.write_to_session(session_id, <span class="kw-2">&amp;</span>input_prompt).<span class="kw">await</span>;
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#239 id=239 data-nosnippet>239</a>        }
-<a href=#240 id=240 data-nosnippet>240</a>    }
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#242 id=242 data-nosnippet>242</a>}
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_ask_keyboard_helper(
-<a href=#245 id=245 data-nosnippet>245</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#246 id=246 data-nosnippet>246</a>    nq: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
-<a href=#247 id=247 data-nosnippet>247</a>    bitmap: <span class="kw-2">&amp;</span>str,
-<a href=#248 id=248 data-nosnippet>248</a>    show_prev: bool,
-<a href=#249 id=249 data-nosnippet>249</a>) -&gt; teloxide::types::InlineKeyboardMarkup {
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">if </span>nq.is_multi_select {
-<a href=#251 id=251 data-nosnippet>251</a>        build_multi_select_keyboard(sid, <span class="kw-2">&amp;</span>nq.options, bitmap, show_prev)
-<a href=#252 id=252 data-nosnippet>252</a>    } <span class="kw">else </span>{
-<a href=#253 id=253 data-nosnippet>253</a>        build_single_select_keyboard(sid, <span class="kw-2">&amp;</span>nq.options, show_prev)
-<a href=#254 id=254 data-nosnippet>254</a>    }
-<a href=#255 id=255 data-nosnippet>255</a>}
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_telegram_ask_ui(bot: <span class="kw-2">&amp;</span>teloxide::Bot, msg: <span class="kw-2">&amp;</span>Message, idx: usize, data: <span class="kw-2">&amp;</span>str) {
-<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">let </span><span class="kw-2">mut </span>chosen = <span class="macro">format!</span>(<span class="string">"Option {}"</span>, idx + <span class="number">1</span>);
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(rm) = msg.reply_markup() {
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">for </span>r <span class="kw">in </span><span class="kw-2">&amp;</span>rm.inline_keyboard {
-<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">for </span>b <span class="kw">in </span>r {
-<a href=#262 id=262 data-nosnippet>262</a>                <span class="kw">if let </span>teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = <span class="kw-2">&amp;</span>b.kind {
-<a href=#263 id=263 data-nosnippet>263</a>                    <span class="kw">if </span>cbd == data { chosen = b.text.clone(); }
-<a href=#264 id=264 data-nosnippet>264</a>                }
-<a href=#265 id=265 data-nosnippet>265</a>            }
-<a href=#266 id=266 data-nosnippet>266</a>        }
-<a href=#267 id=267 data-nosnippet>267</a>    }
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>txt = <span class="macro">format!</span>(<span class="string">"{}\n\n(Selected: **{}**)"</span>, msg.text().unwrap_or(<span class="string">""</span>), chosen);
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).<span class="kw">await</span>;
-<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">if </span>is_active &amp;&amp; (is_running || is_ask) {
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">if </span>is_ask {
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(state) = cli.sessions.get_ask_state(session_id).<span class="kw">await </span>{
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">let _ </span>= handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#226 id=226 data-nosnippet>226</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#227 id=227 data-nosnippet>227</a>            }
+<a href=#228 id=228 data-nosnippet>228</a>        }
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">if </span>is_running {
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">let </span>input_prompt = <span class="macro">format!</span>(<span class="string">"{}\r"</span>, current_text);
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="kw">let _ </span>= cli.sessions.write_to_session(session_id, <span class="kw-2">&amp;</span>input_prompt).<span class="kw">await</span>;
+<a href=#232 id=232 data-nosnippet>232</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#233 id=233 data-nosnippet>233</a>        }
+<a href=#234 id=234 data-nosnippet>234</a>    }
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_ask_keyboard_helper(
+<a href=#239 id=239 data-nosnippet>239</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#240 id=240 data-nosnippet>240</a>    nq: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
+<a href=#241 id=241 data-nosnippet>241</a>    bitmap: <span class="kw-2">&amp;</span>str,
+<a href=#242 id=242 data-nosnippet>242</a>    show_prev: bool,
+<a href=#243 id=243 data-nosnippet>243</a>) -&gt; teloxide::types::InlineKeyboardMarkup {
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">if </span>nq.is_multi_select {
+<a href=#245 id=245 data-nosnippet>245</a>        build_multi_select_keyboard(sid, <span class="kw-2">&amp;</span>nq.options, bitmap, show_prev)
+<a href=#246 id=246 data-nosnippet>246</a>    } <span class="kw">else </span>{
+<a href=#247 id=247 data-nosnippet>247</a>        build_single_select_keyboard(sid, <span class="kw-2">&amp;</span>nq.options, show_prev)
+<a href=#248 id=248 data-nosnippet>248</a>    }
+<a href=#249 id=249 data-nosnippet>249</a>}
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_telegram_ask_ui(bot: <span class="kw-2">&amp;</span>teloxide::Bot, msg: <span class="kw-2">&amp;</span>Message, idx: usize, data: <span class="kw-2">&amp;</span>str) {
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span><span class="kw-2">mut </span>chosen = <span class="macro">format!</span>(<span class="string">"Option {}"</span>, idx + <span class="number">1</span>);
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(rm) = msg.reply_markup() {
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">for </span>r <span class="kw">in </span><span class="kw-2">&amp;</span>rm.inline_keyboard {
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">for </span>b <span class="kw">in </span>r {
+<a href=#256 id=256 data-nosnippet>256</a>                <span class="kw">if let </span>teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = <span class="kw-2">&amp;</span>b.kind {
+<a href=#257 id=257 data-nosnippet>257</a>                    <span class="kw">if </span>cbd == data { chosen = b.text.clone(); }
+<a href=#258 id=258 data-nosnippet>258</a>                }
+<a href=#259 id=259 data-nosnippet>259</a>            }
+<a href=#260 id=260 data-nosnippet>260</a>        }
+<a href=#261 id=261 data-nosnippet>261</a>    }
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">let </span>txt = <span class="macro">format!</span>(<span class="string">"{}\n\n(Selected: **{}**)"</span>, msg.text().unwrap_or(<span class="string">""</span>), chosen);
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).<span class="kw">await</span>;
+<a href=#265 id=265 data-nosnippet>265</a>}
 </code></pre></div></section></main></body></html>

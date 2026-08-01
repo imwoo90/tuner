@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["render_template"],"struct":["WebhookEntry","WebhookResult"]};
+window.SIDEBAR_ITEMS = {"fn":["default_bearer","default_hex","default_sha256","default_sig_prefix","default_true","render_template"],"struct":["WebhookEntry","WebhookResult"]};

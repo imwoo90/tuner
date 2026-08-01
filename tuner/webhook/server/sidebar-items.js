@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ServerState","WebhookServer"],"type":["DispatchHandler"]};
+window.SIDEBAR_ITEMS = {"fn":["check_auth","handle_health","handle_webhook"],"struct":["ServerState","WebhookServer"],"type":["DispatchHandler"]};

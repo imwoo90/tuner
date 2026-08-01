@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["NamedSession","NamedSessionRegistry"]};
+window.SIDEBAR_ITEMS = {"fn":["get_random_seed"],"struct":["NamedSession","NamedSessionRegistry"]};

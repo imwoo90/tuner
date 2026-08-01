@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["resolve_paths"],"struct":["TunerPaths"],"type":["DuctorPaths"]};
+window.SIDEBAR_ITEMS = {"fn":["resolve_paths"],"struct":["DuctorPaths"]};

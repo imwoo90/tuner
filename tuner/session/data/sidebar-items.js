@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["default_notify_mode"],"struct":["ProviderSessionData","SessionData"]};
+window.SIDEBAR_ITEMS = {"fn":["default_model","default_now_iso","default_provider","default_transport"],"struct":["ProviderSessionData","SessionData"]};

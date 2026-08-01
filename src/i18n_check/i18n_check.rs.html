@@ -7,16 +7,17 @@
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Search Tags
 <a href=#8 id=8 data-nosnippet>8</a>//! #i18n-check
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>tuner::i18n;
-<a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">fn </span>main() {
-<a href=#13 id=13 data-nosnippet>13</a>    <span class="kw">let </span>args: Vec&lt;String&gt; = std::env::args().collect();
-<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">let </span>slice = <span class="kw">if </span>args.is_empty() {
-<a href=#15 id=15 data-nosnippet>15</a>        <span class="kw-2">&amp;</span>[][..]
-<a href=#16 id=16 data-nosnippet>16</a>    } <span class="kw">else </span>{
-<a href=#17 id=17 data-nosnippet>17</a>        <span class="kw-2">&amp;</span>args[<span class="number">1</span>..]
-<a href=#18 id=18 data-nosnippet>18</a>    };
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">let </span>exit_code = i18n::check::run_checker(slice);
-<a href=#20 id=20 data-nosnippet>20</a>    std::process::exit(exit_code);
-<a href=#21 id=21 data-nosnippet>21</a>}
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="attr">#[path = <span class="string">"../i18n/mod.rs"</span>]
+<a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">pub mod </span>i18n;
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">fn </span>main() {
+<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">let </span>args: Vec&lt;String&gt; = std::env::args().collect();
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">let </span>slice = <span class="kw">if </span>args.is_empty() {
+<a href=#16 id=16 data-nosnippet>16</a>        <span class="kw-2">&amp;</span>[][..]
+<a href=#17 id=17 data-nosnippet>17</a>    } <span class="kw">else </span>{
+<a href=#18 id=18 data-nosnippet>18</a>        <span class="kw-2">&amp;</span>args[<span class="number">1</span>..]
+<a href=#19 id=19 data-nosnippet>19</a>    };
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">let </span>exit_code = i18n::check::run_checker(slice);
+<a href=#21 id=21 data-nosnippet>21</a>    std::process::exit(exit_code);
+<a href=#22 id=22 data-nosnippet>22</a>}
 </code></pre></div></section></main></body></html>

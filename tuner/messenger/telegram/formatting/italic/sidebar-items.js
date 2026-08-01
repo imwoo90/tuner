@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["format_italic_delim"]};
+window.SIDEBAR_ITEMS = {"fn":["format_italic_delim","is_whitespace_or_punct"]};

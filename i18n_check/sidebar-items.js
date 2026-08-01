@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"macro":[["t",1],["t_plural",1],["t_rich",1]],"mod":["i18n"]};

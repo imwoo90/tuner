@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AskState","SessionManager"]};
+window.SIDEBAR_ITEMS = {"fn":["terminate_duplicates"],"struct":["AskState","SessionManager"]};

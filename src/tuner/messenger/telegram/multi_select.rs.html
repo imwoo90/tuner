@@ -120,7 +120,7 @@
 <a href=#120 id=120 data-nosnippet>120</a>                state.waiting_for_write_in = <span class="bool-val">true</span>;
 <a href=#121 id=121 data-nosnippet>121</a>                sessions.set_ask_state(sid, state).<span class="kw">await</span>;
 <a href=#122 id=122 data-nosnippet>122</a>                <span class="kw">let </span>txt = <span class="macro">format!</span>(<span class="string">"{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요."</span>, msg.text().unwrap_or(<span class="string">""</span>));
-<a href=#123 id=123 data-nosnippet>123</a>                <span class="kw">let </span>html = <span class="kw">crate</span>::messenger::telegram::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
+<a href=#123 id=123 data-nosnippet>123</a>                <span class="kw">let </span>html = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>txt);
 <a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).<span class="kw">await</span>;
 <a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">return</span>;
 <a href=#126 id=126 data-nosnippet>126</a>            }
