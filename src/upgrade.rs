@@ -26,16 +26,6 @@ pub struct GithubRelease {
     pub assets: Vec<GithubAsset>,
 }
 
-pub fn is_dev_install() -> bool {
-    if let Ok(exe) = std::env::current_exe() {
-        let path_str = exe.to_string_lossy();
-        if path_str.contains("/target/debug/") || path_str.contains("/target/release/") {
-            return true;
-        }
-    }
-    false
-}
-
 pub async fn get_latest_release() -> Result<GithubRelease, String> {
     let client = reqwest::Client::builder()
         .user_agent("tuner-updater")
@@ -161,12 +151,6 @@ pub async fn perform_upgrade(url: &str) -> Result<(), String> {
 }
 
 pub async fn run_cli_upgrade() -> Result<(), String> {
-    if is_dev_install() {
-        println!("Self-upgrade is not available for development installs.");
-        println!("Please run 'git pull' and 'cargo build --release' instead.");
-        return Ok(());
-    }
-
     println!("Checking for updates...");
     let release = get_latest_release().await?;
     let current = env!("CARGO_PKG_VERSION");

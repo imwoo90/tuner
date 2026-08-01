@@ -50,11 +50,6 @@ pub(crate) async fn handle_upgrade_command(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), teloxide::RequestError> {
-    if crate::upgrade::is_dev_install() {
-        let _ = send_reply(bot, msg, crate::t!("upgrade.dev_body")).await;
-        return Ok(());
-    }
-
     let processing_msg = send_reply(bot, msg, crate::t!("bot.processing")).await?;
 
     match crate::upgrade::get_latest_release().await {
