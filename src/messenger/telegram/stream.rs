@@ -245,7 +245,7 @@ pub(crate) async fn consume_stream(
     ).await?;
 
     if let Some(mid) = pub_msg_id {
-        if last_text.contains("**[Ductor Background Progress]**") || last_text.contains("<!-- Waiting for") {
+        if last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for") {
             let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
             set_progress_reaction(mid.0, chat_id, tok);
             updated.last_progress_msg_id = Some(mid.0);

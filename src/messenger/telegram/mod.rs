@@ -59,6 +59,7 @@ pub mod runner;
 pub mod attachments;
 pub mod media_group;
 pub mod upgrade;
+pub mod async_observer;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
@@ -176,6 +177,15 @@ pub(crate) async fn process_text_with_files(
     if active_session_id.is_empty() {
         return Ok(());
     }
+
+    async_observer::spawn_session_async_observer(
+        bot.clone(),
+        msg,
+        active_session_id.clone(),
+        cli.clone(),
+        sessions.clone(),
+        config.clone(),
+    );
 
     let mut prompt = build_reply_prompt(msg, current_text);
     inject_pre_downloaded_files(&mut prompt, pre_downloaded_files);

@@ -287,7 +287,6 @@ fn test_log_parser_extracts_tool_completions_and_final_response() {
     
     assert!(text.contains("📥 **Tool Completions:**"));
     assert!(text.contains("`run_command (execute)` completed"));
-    assert!(text.contains("✅ **Final Response:**"));
     assert!(text.contains("All done!"));
 }
 

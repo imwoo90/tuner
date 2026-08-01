@@ -18,6 +18,8 @@ use std::path::PathBuf;
 pub mod events;
 #[cfg(test)]
 pub mod events_tests;
+#[cfg(test)]
+pub mod async_tests;
 pub mod session;
 #[cfg(test)]
 pub mod session_tests;

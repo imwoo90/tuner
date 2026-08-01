@@ -35,4 +35,3 @@ fn test_github_release_deserialization() {
     assert_eq!(release.assets[0].name, "tuner-linux-amd64");
     assert_eq!(release.assets[0].browser_download_url, "https://example.com/download/tuner-linux-amd64");
 }
-}
