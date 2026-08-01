@@ -78,16 +78,11 @@ fn build_formatted_progress(
         parts.push(comp);
     }
     if let Some(final_ans) = final_content {
-        parts.push(format!("✅ **Final Response:**\n{}", final_ans));
+        parts.push(final_ans.to_string());
     }
 
     if !parts.is_empty() {
-        let header = if final_content.is_some() {
-            "**[Ductor Background Completed]**"
-        } else {
-            "**[Ductor Background Progress]**"
-        };
-        Some(format!("{}\n\n{}", header, parts.join("\n\n")))
+        Some(parts.join("\n\n"))
     } else {
         None
     }
