@@ -88,12 +88,19 @@ pub fn spawn_session(
     args: &[String],
     env: &HashMap<String, String>,
 ) -> Result<SessionHolder, String> {
-    let pty = openpty(None, None).map_err(|e| e.to_string())?;
+    let winsize = nix::pty::Winsize {
+        ws_row: 24,
+        ws_col: 80,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let pty = openpty(Some(&winsize), None).map_err(|e| e.to_string())?;
 
     disable_echo(&pty.slave)?;
     set_non_blocking(&pty.master)?;
 
     let master_raw = pty.master.as_raw_fd();
+    let slave_raw = pty.slave.as_raw_fd();
     let master_dup = nix::unistd::dup(master_raw).map_err(|e| e.to_string())?;
 
     let stdin_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
@@ -109,6 +116,15 @@ pub fn spawn_session(
         .stderr(stderr_redirect)
         .process_group(0)
         .kill_on_drop(true);
+
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(move || {
+            let _ = nix::unistd::setsid();
+            let _ = nix::unistd::tcsetpgrp(slave_raw, nix::unistd::getpid());
+            Ok(())
+        });
+    }
 
     let child = cmd.spawn().map_err(|e| e.to_string())?;
     let output = std::sync::Arc::new(Mutex::new(Vec::new()));

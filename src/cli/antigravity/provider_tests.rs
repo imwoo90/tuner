@@ -20,8 +20,18 @@ fn test_build_env_injects_agent_info() {
     assert_eq!(env.get("TUNER_AGENT_NAME").unwrap(), "main");
     assert_eq!(env.get("TUNER_CHAT_ID").unwrap(), "1234");
     assert_eq!(env.get("TUNER_TRANSPORT").unwrap(), "tg");
+    assert_eq!(env.get("TERM").unwrap(), "dumb");
+    assert_eq!(env.get("NO_COLOR").unwrap(), "1");
     assert!(env.contains_key("TUNER_HOME"));
     assert!(env.contains_key("TUNER_SHARED_MEMORY_PATH"));
+}
+
+#[test]
+fn test_strip_ansi_removes_color_and_control_codes() {
+    use super::provider::strip_ansi;
+    let colored = "\x1b[94m> \x1b[mHello \x1b[?25hWorld\x1b[2J";
+    let clean = strip_ansi(colored);
+    assert_eq!(clean, "> Hello World");
 }
 
 fn write_mock_script(dir: &Path, code: &str) {

@@ -29,6 +29,8 @@ impl AntigravityCli {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
         let shared_memory_path = tuner_home.join("SHAREDMEMORY.md");
+        add("TERM", "dumb".into());
+        add("NO_COLOR", "1".into());
         add("TUNER_HOME", tuner_home.to_string_lossy().into());
         add("TUNER_SHARED_MEMORY_PATH", shared_memory_path.to_string_lossy().into());
         env
@@ -218,6 +220,12 @@ impl AgentProvider for AntigravityCli {
     }
 }
 
+pub(crate) fn strip_ansi(s: &str) -> String {
+    static ANSI_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = ANSI_RE.get_or_init(|| regex::Regex::new(r"\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])").unwrap());
+    re.replace_all(s, "").to_string()
+}
+
 async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < 15 {
@@ -226,7 +234,8 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         let out = h.output.lock().await.clone();
         let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
-        if s.contains("\r>") || s.contains("\n>") || dead {
+        let clean = strip_ansi(&s);
+        if clean.contains("\r>") || clean.contains("\n>") || clean.contains("\n> ") || clean.contains("\r> ") || clean.contains("\n >") || s.contains("\r>") || s.contains("\n>") || dead {
             drop(hs);
             tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
             return Ok(());
@@ -234,7 +243,12 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         drop(hs);
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-    Err("Timeout waiting for interactive session initialization".to_string())
+    let last_out = if let Some(h) = mgr.holders.lock().await.get(sid) {
+        String::from_utf8_lossy(&h.output.lock().await).to_string()
+    } else {
+        "No holder found".to_string()
+    };
+    Err(format!("Timeout waiting for interactive session initialization. PTY output so far: {}", last_out))
 }
 
 
