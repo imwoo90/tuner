@@ -249,6 +249,13 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
 }
 
 pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {
-    bot.set_my_commands(get_bot_commands()).await?;
+    let cmds = get_bot_commands();
+    let _ = bot.delete_my_commands().await;
+    let _ = bot.delete_my_commands().scope(teloxide::types::BotCommandScope::AllPrivateChats).await;
+    let _ = bot.delete_my_commands().scope(teloxide::types::BotCommandScope::AllGroupChats).await;
+
+    let _ = bot.set_my_commands(cmds.clone()).await;
+    let _ = bot.set_my_commands(cmds.clone()).scope(teloxide::types::BotCommandScope::AllPrivateChats).await;
+    let _ = bot.set_my_commands(cmds).scope(teloxide::types::BotCommandScope::AllGroupChats).await;
     Ok(())
 }
