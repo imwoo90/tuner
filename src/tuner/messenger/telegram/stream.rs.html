@@ -245,7 +245,7 @@
 <a href=#245 id=245 data-nosnippet>245</a>    ).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#246 id=246 data-nosnippet>246</a>
 <a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(mid) = pub_msg_id {
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">if </span>last_text.contains(<span class="string">"**[Ductor Background Progress]**"</span>) || last_text.contains(<span class="string">"&lt;!-- Waiting for"</span>) {
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">if </span>last_text.contains(<span class="string">"🛠️ **Tool Calls:"</span>) || last_text.contains(<span class="string">"&lt;!-- Waiting for"</span>) {
 <a href=#249 id=249 data-nosnippet>249</a>            <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
 <a href=#250 id=250 data-nosnippet>250</a>            set_progress_reaction(mid.<span class="number">0</span>, chat_id, tok);
 <a href=#251 id=251 data-nosnippet>251</a>            updated.last_progress_msg_id = <span class="prelude-val">Some</span>(mid.<span class="number">0</span>);
