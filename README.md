@@ -141,7 +141,7 @@ To publish an official release:
 - **Real-Time Idle Session Async Observer**: Monitors active session transcript logs in the background while idle, dispatching real-time notifications for subagent completions, background task outputs, and timer/cron events directly to Telegram as clean markdown messages.
 - **Interactive Inline Keyboard Loops (`ask_question`)**: Converts agent `ask_question` prompts into real-time Telegram Inline Keyboards. Supports direct write-in text responses without extra confirmation, and seamless `Prev` option navigation via ANSI arrow key sequence (`\x1B[D`) injection to PTY stdin.
 - **Automatic Media Ingestion & Multimodal Support**: Automatically downloads incoming Telegram images/documents into workspace `telegram_files/` and injects `view_file` prompt hints for native LLM multimodal analysis.
-- **Session & Chat Persistence**: Structured JSON-based session storage tracks per-topic message history, LLM model state, token usage, and cumulative API costs (USD).
+- **Session & Chat Persistence**: Structured JSON-based session storage tracks per-topic message history, active LLM model selection, reasoning effort settings, and session identity.
 - **Self-Upgrade Engine**: Supports single-command in-place executable upgrades from GitHub Releases with zero-downtime supervisor process restarts.
 - **Webhook & API Servers (Axum)**: Features a robust Axum-based async web server with HMAC-SHA256 signature verification, Bearer Token authentication, and built-in Rate Limiting.
 - **PTY Session Supervision**: Launches agent CLI processes in stateful virtual PTY sessions, supporting real-time stdout/stderr interception, interactive stdin injection, and timeout protection.
@@ -192,7 +192,7 @@ sequenceDiagram
     end
 
     AGY-->>PTY: Process Exit (Code 0 / Error)
-    PTY->>Session: Update Cumulative Tokens, Cost, and Save Session JSON
+    PTY->>Session: Save Session JSON and Update Session State
 
     loop Idle Session Async Observer
         Observer->>Observer: Watch transcript_full.jsonl for new entries
