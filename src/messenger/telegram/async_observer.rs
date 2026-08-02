@@ -70,6 +70,8 @@ async fn handle_async_turn_output(
             );
         }
     }
+
+    let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, txt, config).await;
 }
 
 fn create_brain_dir_watcher(
