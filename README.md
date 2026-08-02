@@ -26,19 +26,8 @@ This downloads the latest GitHub Release archive (`.tar.gz`), extracts `tuner` a
 # Run the interactive configuration wizard
 ~/.tuner/bin/tuner --setup
 
-# Register tuner as a systemd user service
+# (Optional) Register tuner as a systemd user service
 ~/.tuner/bin/tuner --install-systemd
-```
-
-### 🛠️ Manage Systemd Daemon
-```bash
-# Reload, enable, and start the service
-systemctl --user daemon-reload
-systemctl --user enable tuner.service
-systemctl --user restart tuner.service
-
-# Inspect live service logs
-journalctl --user -u tuner.service -f
 ```
 
 ---
