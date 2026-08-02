@@ -188,11 +188,7 @@ async fn handle_upgrade_confirm(
             if let Some(asset) = release.assets.iter().find(|a| a.name.ends_with(".tar.gz")) {
                 match crate::upgrade::perform_upgrade(&asset.browser_download_url).await {
                     Ok(()) => {
-                        let success_text = format!(
-                            "{}\n{}",
-                            crate::t!("upgrade_handler.restarting"),
-                            crate::t!("bot.startup_complete")
-                        );
+                        let success_text = crate::t!("upgrade_handler.restarting");
                         let _ = bot.edit_message_text(msg.chat.id, msg.id, success_text).await;
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                         std::process::exit(42);

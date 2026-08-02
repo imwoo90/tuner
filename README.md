@@ -181,5 +181,51 @@ cargo test
 
 ---
 
+## 🤝 Development & Contribution Guide
+
+We welcome contributions! To maintain stability between production environments and active development, we follow a containerized workflow with separate Telegram bot tokens.
+
+### 🏗️ Architecture Layout
+- **Production Environment**: Runs official GitHub Releases on the Host PC/server (supervised via `systemd` or `tuner` master daemon).
+- **Development Environment**: Runs inside an isolated Docker container (`tuner-sandbox`) linked to a separate Telegram Dev Bot Token.
+
+### 🛠️ Setting Up Local Development
+1. Start the container environment:
+   ```bash
+   docker run -d --name tuner-sandbox -v $(pwd):/workspace -w /workspace tuner-tuner-sandbox sleep infinity
+   ```
+2. Configure your Telegram Dev Bot Token in `~/.tuner/config/config.json` inside the container.
+
+### 🔄 Real-Time Build & Deploy Workflow
+To test changes to source code (`src/`) or assets (`_home_defaults/`) in real-time:
+
+```bash
+# Run the automated dev deployment script
+bash scripts/dev_deploy.sh
+```
+
+The `dev_deploy.sh` script automatically:
+1. Compiles the latest release binary (`cargo build --release`).
+2. Syncs the binary & `_home_defaults` asset folder to `tuner-sandbox`.
+3. Auto-restarts the container worker daemon seamlessly.
+
+### 🔀 Submitting Contributions (Pull Requests)
+1. Fork the repository and create a feature branch (`git checkout -b feature/my-feature`).
+2. Test your changes locally using `cargo test` and `bash scripts/dev_deploy.sh`.
+3. Push your branch to your fork and submit a **Pull Request (PR)** targeting the `main` branch.
+
+### 🚀 Maintainer Release Workflow
+*(For repository maintainers only)*
+To publish an official release:
+1. Update version numbers in `Cargo.toml` and run `cargo check` to update `Cargo.lock`.
+2. Commit with release notes: `git commit -m "bump: release v0.1.x"`
+3. Push `main` to the `release` branch:
+   ```bash
+   git push origin main:release
+   ```
+   GitHub Actions will automatically verify the build, generate tag `v0.1.x`, and publish binaries to GitHub Releases.
+
+---
+
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE).
