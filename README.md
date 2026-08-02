@@ -7,34 +7,45 @@
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start Guide
 
-### Prerequisites
-- **Antigravity CLI (`agy`)**: The `agy` executable must be installed and available in your system `$PATH`.
+### Step 1: Verify Antigravity CLI (`agy`)
+Ensure the Antigravity CLI (`agy`) is installed and authenticated on your machine:
+```bash
+agy --version
+```
 
-### 📦 One-Line Automatic Installation
-Install the latest release binary and required assets using the automated installer script:
-
+### Step 2: Run One-Line Installer
+Install the latest `tuner` release binary and required assets to `~/.tuner/bin/`:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bash
 ```
 
-This downloads the latest GitHub Release archive (`.tar.gz`), extracts `tuner` and `_home_defaults` assets, and installs them to `~/.tuner/bin/`.
-
-### ⚙️ Initial Setup & Service Registration
+### Step 3: Run Interactive Setup & Service Registration
+Launch the setup wizard to configure your Telegram bot token, allowed user IDs, and register systemd daemon:
 ```bash
-# Run the interactive configuration wizard
 ~/.tuner/bin/tuner --setup
-
-# (Optional) Register tuner as a systemd user service
-~/.tuner/bin/tuner --install-systemd
 ```
 
 ---
 
-## ⚙️ Configuration (`config.json`)
+## 📲 Telegram Bot Setup Guide
 
-On the first run of the `tuner` daemon, a default configuration template is automatically initialized and written to `~/.tuner/config/config.json`.
+Connecting Tuner to Telegram takes just 3 simple steps:
+
+1. **Get Bot Token**:
+   - Open Telegram and message [@BotFather](https://t.me/BotFather).
+   - Create a bot (`/newbot`) and copy the **HTTP API Token**.
+2. **Get Your Telegram User ID**:
+   - Message [@userinfobot](https://t.me/userinfobot) to get your numerical Telegram User ID.
+3. **Run Setup Wizard**:
+   - Run `~/.tuner/bin/tuner --setup` and enter your Bot Token & User ID.
+
+> 💡 **Group / Supergroup Setup**:
+> If adding the bot to a group chat or topic thread, invite the bot and **promote it to Administrator** (enabling message reading) to bypass Telegram's default Privacy Mode.
+
+<details>
+<summary><b>⚙️ Manual Configuration Schema (`~/.tuner/config/config.json`)</b></summary>
 
 ```json
 {
@@ -48,14 +59,7 @@ On the first run of the `tuner` daemon, a default configuration template is auto
   "timezone": "Asia/Seoul"
 }
 ```
-
-### 📲 Telegram Bot Setup Guidelines
-1. **Create Bot**: Use [@BotFather](https://t.me/BotFather) on Telegram to create your bot and obtain the API Token.
-2. **Configure Token**: Insert the API Token into `config.json` under `"telegram_token"`.
-3. **Group & Topic Setup (Critical)**:
-   - Invite the bot to your group/supergroup.
-   - **Promote the bot to Administrator** (enabling message reading) to bypass Telegram's default Privacy Mode.
-   - Add the group chat ID (e.g. `-100123456789`) to `"allowed_group_ids"`.
+</details>
 
 ---
 
