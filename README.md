@@ -10,24 +10,29 @@
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Rust & Cargo**: Rust 1.75+ is recommended.
 - **Antigravity CLI (`agy`)**: The `agy` executable must be installed and available in your system `$PATH`.
 
-### Quick Installation & Build
+### 📦 One-Line Automatic Installation
+Install the latest release binary and required assets using the automated installer script:
+
 ```bash
-# Check compilation
-cargo check
-
-# Compile production release binary
-cargo build --release
-
-# (Optional) Register tuner as a systemd user service
-./target/release/tuner --install-systemd
+curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bash
 ```
 
-### Manage Systemd Daemon
+This downloads the latest GitHub Release archive (`.tar.gz`), extracts `tuner` and `_home_defaults` assets, and installs them to `~/.tuner/bin/`.
+
+### ⚙️ Initial Setup & Service Registration
 ```bash
-# Reload, enable, and restart the service
+# Run the interactive configuration wizard
+~/.tuner/bin/tuner --setup
+
+# Register tuner as a systemd user service
+~/.tuner/bin/tuner --install-systemd
+```
+
+### 🛠️ Manage Systemd Daemon
+```bash
+# Reload, enable, and start the service
 systemctl --user daemon-reload
 systemctl --user enable tuner.service
 systemctl --user restart tuner.service
