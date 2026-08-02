@@ -10,9 +10,11 @@ It manages the execution of the Antigravity CLI (`agy`), providing modular messe
 ## 🔑 Key Features
 
 - **Extensible Messenger Integration**: Symmetrical messenger transport layout (`src/messenger/telegram/`) ready for multi-protocol extensions. Out-of-the-box native support for Telegram bot APIs.
+- **Real-Time Idle Session Async Observer**: Monitors active session transcript logs in the background while idle, dispatching real-time notifications for subagent completions, background task outputs, and timer/cron events directly to Telegram as clean markdown messages.
 - **Interactive Inline Keyboard Loops (`ask_question`)**: Converts agent `ask_question` prompts into real-time Telegram Inline Keyboards. Supports direct write-in text responses without extra confirmation, and seamless `Prev` option navigation via ANSI arrow key sequence (`\x1B[D`) injection to PTY stdin.
 - **Automatic Media Ingestion & Multimodal Support**: Automatically downloads incoming Telegram images/documents into workspace `telegram_files/` and injects `view_file` prompt hints for native LLM multimodal analysis.
 - **Session & Chat Persistence**: Structured JSON-based session storage tracks per-topic message history, LLM model state, token usage, and cumulative API costs (USD).
+- **Self-Upgrade Engine**: Supports single-command in-place executable upgrades from GitHub Releases with zero-downtime supervisor process restarts.
 - **Webhook & API Servers (Axum)**: Features a robust Axum-based async web server with HMAC-SHA256 signature verification, Bearer Token authentication, and built-in Rate Limiting.
 - **PTY Session Supervision**: Launches agent CLI processes in stateful virtual PTY sessions, supporting real-time stdout/stderr interception, interactive stdin injection, and timeout protection.
 - **Workspace & Skill Initialization**: Automatically synchronizes workspace rules (`CLAUDE.md`, `GEMINI.md`, `AGENTS.md`) and symlinks custom skill directories on startup.
@@ -25,12 +27,13 @@ It manages the execution of the Antigravity CLI (`agy`), providing modular messe
 
 `tuner` is structured into isolated, compile-time verified modules:
 
-- `src/cli/antigravity`: Wraps `agy` CLI execution, spawns PTYs, streams stderr/stdout events, and discovers available models.
+- `src/cli/antigravity`: Wraps `agy` CLI execution, spawns PTYs, streams stderr/stdout events, and parses event deltas (`log_parser`).
 - `src/session`: Manages session keys, state serialization, cumulative costs/tokens, and daily resets.
-- `src/messenger/telegram`: Telegram bot event handler, message parser, interactive inline keyboard generator, and Markdown-to-HTML parser.
+- `src/messenger/telegram`: Telegram bot event handler, `async_observer` background listener, interactive inline keyboard generator, and Markdown-to-HTML parser.
 - `src/background`: PTY executor wrapping spawned CLI processes with safe async cancellation and SIGKILL cleanup.
 - `src/security`: Content filtering, path traversal protection, and allowed root constraints.
 - `src/webhook`: Axum webhook ingress endpoint server.
+- `src/upgrade`: GitHub Release fetcher, tarball unpacker, and atomic executable updater.
 - `src/i18n`: TOML localization file loader and translation macros.
 - `src/messenger/mod.rs` & `src/bus`: Handles multi-messenger transport layout and internal event routing.
 
@@ -45,6 +48,7 @@ sequenceDiagram
     autonumber
     actor User as User (Telegram)
     participant Bot as Messenger Bot (src/messenger/telegram)
+    participant Observer as Async Observer (async_observer.rs)
     participant Session as Session Manager (src/session)
     participant Bus as System Event Bus (src/bus)
     participant PTY as CLI PTY Runner (src/cli/antigravity)
@@ -59,7 +63,7 @@ sequenceDiagram
     Bot->>PTY: Spawn PTY Session with agy CLI
     PTY->>AGY: Send User Prompt to PTY stdin
 
-    loop Asynchronous Stream Loop
+    loop Synchronous Stream Loop
         AGY-->>PTY: Stream Output (TextDelta / AskQuestion / Tool Executions)
         PTY-->>Bus: Dispatch StreamEvent
         alt AskQuestion Triggered
@@ -75,6 +79,14 @@ sequenceDiagram
 
     AGY-->>PTY: Process Exit (Code 0 / Error)
     PTY->>Session: Update Cumulative Tokens, Cost, and Save Session JSON
+
+    loop Idle Session Async Observer
+        Observer->>Observer: Watch transcript_full.jsonl for new entries
+        alt Subagent / Task / Timer Completion while Idle
+            Observer->>Bot: Parse Delta & Send Un-nested Real-Time Notification
+            Bot-->>User: Deliver Background Turn Message
+        end
+    end
 ```
 
 ---
@@ -158,6 +170,7 @@ Type `/` in your Telegram chat to trigger autocomplete and descriptions. Below i
 | `/model` | Toggle the active LLM model for the current topic via an inline selector. |
 | `/effort` | Select the reasoning effort level (high, medium, low) for the current LLM model. |
 | `/lang` | Select the active session language (English, Korean, etc.) via an inline keyboard. |
+| `/upgrade` | Check GitHub Releases and perform an in-place executable upgrade. |
 | `/memory` | Output the current content of the workspace `MAINMEMORY.md` file. |
 | `/stop` | Gracefully cancel active agent CLI processes running in the current chat topic. |
 | `/abort` | Forcefully terminate all running workers and background tasks. |
@@ -172,7 +185,7 @@ Type `/` in your Telegram chat to trigger autocomplete and descriptions. Below i
 
 ## 🧪 Testing
 
-`tuner` features an extensive test suite verifying 380+ test cases to ensure stability:
+`tuner` features an extensive test suite verifying 385+ test cases to ensure stability:
 
 ```bash
 # Run all unit and integration tests
