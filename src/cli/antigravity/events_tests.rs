@@ -14,10 +14,7 @@ fn test_antigravity_batch_json_extracts_common_content_keys() {
 }
 
 fn create_test_dir(name: &str) -> PathBuf {
-    let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    p.push("target");
-    p.push("test_dirs");
-    p.push(name);
+    let p = std::env::temp_dir().join("tuner_events_tests").join(name);
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p

@@ -80,12 +80,17 @@ async fn handle_model_command_empty(
     let mut models = cli.discover_models().await;
     if models.is_empty() {
         models = vec![
+            "gemini-3.7-flash-high".to_string(),
+            "gemini-3.7-flash-medium".to_string(),
+            "gemini-3.7-flash-low".to_string(),
             "gemini-3.6-flash-high".to_string(),
             "gemini-3.6-flash-medium".to_string(),
             "gemini-3.6-flash-low".to_string(),
             "gemini-3.5-flash-high".to_string(),
             "gemini-3.1-pro-high".to_string(),
             "claude-sonnet-4-6".to_string(),
+            "claude-opus-4-6-thinking".to_string(),
+            "gpt-oss-120b-medium".to_string(),
             "antigravity-default".to_string(),
         ];
     }

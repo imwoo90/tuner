@@ -24,7 +24,9 @@ pub fn parse_models(output: &str) -> Vec<String> {
         if name.starts_with("Usage:") || name.starts_with("Flags:") || name.starts_with("Available subcommands:") {
             return Vec::new();
         }
-        models.push(name.to_string());
+        if let Some(token) = name.split_whitespace().next() {
+            models.push(token.to_string());
+        }
     }
     models
 }

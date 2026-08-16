@@ -43,6 +43,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub fn agy_state_root(env: Option<&HashMap<String, String>>) -> PathBuf {
+    if let Some(e) = env {
+        if let Some(root) = e.get("AGY_STATE_ROOT") {
+            return PathBuf::from(root);
+        }
+    }
+    if let Ok(root) = std::env::var("AGY_STATE_ROOT") {
+        return PathBuf::from(root);
+    }
     let home = if let Some(e) = env {
         e.get("USERPROFILE")
             .cloned()

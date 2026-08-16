@@ -19,6 +19,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_models_handles_two_column_descriptions() {
+        let sample = "gemini-3.7-flash-high     Gemini 3.7 Flash (High)\ngemini-3.7-flash-medium   Gemini 3.7 Flash (Medium)\nclaude-sonnet-4-6         Claude Sonnet 4.6 (Thinking)\n";
+        let parsed = parse_models(sample);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0], "gemini-3.7-flash-high");
+        assert_eq!(parsed[1], "gemini-3.7-flash-medium");
+        assert_eq!(parsed[2], "claude-sonnet-4-6");
+    }
+
+    #[test]
     fn test_parse_models_skips_blank_lines() {
         let parsed = parse_models("\ngemini-3.6-flash-high\n\n");
         assert_eq!(parsed.len(), 1);

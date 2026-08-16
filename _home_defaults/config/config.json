@@ -7,6 +7,6 @@
     -1001234567890
   ],
   "language": "ko",
-  "model": "gemini-3.6-flash",
+  "model": "gemini-3.7-flash",
   "effort": "high"
 }
