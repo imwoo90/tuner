@@ -7,19 +7,19 @@ services:
     stdin_open: true
     tty: true
     command: ["sleep", "infinity"]
-    user: "1000:1000"
+    user: "${UID:-1000}:${GID:-1000}"
     environment:
-      - HOME=/home/wimvm
-      - USER=wimvm
+      - HOME=${HOME:-/root}
+      - USER=${USER:-root}
       - TERM=xterm-256color
       - RUST_LOG=info
-      - PATH=/home/wimvm/.local/bin:/home/wimvm/.gemini/antigravity-cli/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PATH=${HOME:-/root}/.local/bin:${HOME:-/root}/.gemini/antigravity-cli/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
-      # 1. Source code workspace (real-time dev sync)
-      - /home/wimvm/.tuner/profiles/default/workspace/projects/tuner:/workspace
+      # 1. Source code workspace (relative to repo root)
+      - .:/workspace
       # 2. Container Tuner persistent home directory
-      - /home/wimvm/.tuner-dev:/home/wimvm/.tuner
-      # 3. Antigravity state, tokens & CLI binary directory (matching host paths for UID 1000)
-      - /home/wimvm/.gemini:/home/wimvm/.gemini
+      - ${HOME:-/root}/.tuner-dev:${HOME:-/root}/.tuner
+      # 3. Antigravity state, tokens & CLI binary directory (matching host user HOME)
+      - ${HOME:-/root}/.gemini:${HOME:-/root}/.gemini
       # 4. Host local bin directory
-      - /home/wimvm/.local/bin:/home/wimvm/.local/bin:ro
+      - ${HOME:-/root}/.local/bin:${HOME:-/root}/.local/bin:ro
