@@ -87,18 +87,37 @@ Connecting Tuner to Telegram takes just 3 simple steps:
 
 ## 🤝 Development & Contribution Guide
 
-We welcome contributions! To maintain stability between production environments and active development, we follow a containerized workflow with separate Telegram bot tokens.
+We welcome contributions! To maintain stability between production environments and active development, we follow an isolated containerized workflow with separate Telegram bot tokens.
 
 ### 🏗️ Architecture Layout
 - **Production Environment**: Runs official GitHub Releases on the Host PC/server (supervised via `systemd` or `tuner` master daemon).
-- **Development Environment**: Runs inside an isolated Docker container (`tuner-sandbox`) linked to a separate Telegram Dev Bot Token.
+- **Development Environment**: Runs inside an isolated Docker container (`tuner-sandbox`) linked to a separate Telegram Dev Bot Token, sharing host `agy` authentication and state seamlessly.
 
 ### 🛠️ Setting Up Local Development
-1. Start the container environment:
+
+1. **Verify Host Prerequisites**:
+   Ensure `agy` CLI is installed and authenticated on your host machine:
    ```bash
-   docker run -d --name tuner-sandbox -v $(pwd):/workspace -w /workspace tuner-tuner-sandbox sleep infinity
+   agy --version
    ```
-2. Configure your Telegram Dev Bot Token in `~/.tuner/config/config.json` inside the container.
+
+2. **Start the Sandbox Container**:
+   Launch the development sandbox container via Docker Compose (automatically maps your user ID, `$HOME`, `agy` credentials, and `~/.tuner-dev` workspace):
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Configure Development Bot Token**:
+   Set your dedicated Telegram Dev Bot Token and allowed user ID in `~/.tuner-dev/profiles/default/config/config.json`:
+   ```json
+   {
+     "telegram_token": "YOUR_DEV_TELEGRAM_BOT_TOKEN",
+     "allowed_user_ids": [123456789],
+     "language": "ko",
+     "model": "gemini-3.7-flash",
+     "effort": "high"
+   }
+   ```
 
 ### 🔄 Real-Time Build & Deploy Workflow
 To test changes to source code (`src/`) or assets (`_home_defaults/`) in real-time:
@@ -111,12 +130,13 @@ bash scripts/dev_deploy.sh
 The `dev_deploy.sh` script automatically:
 1. Compiles the latest release binary (`cargo build --release`).
 2. Syncs the binary & `_home_defaults` asset folder to `tuner-sandbox`.
-3. Auto-restarts the container worker daemon seamlessly.
+3. Auto-restarts the container worker daemon (`tuner --worker default`).
 
 ### 🔀 Submitting Contributions (Pull Requests)
 1. Fork the repository and create a feature branch (`git checkout -b feature/my-feature`).
-2. Test your changes locally using `cargo test` and `bash scripts/dev_deploy.sh`.
-3. Push your branch to your fork and submit a **Pull Request (PR)** targeting the `main` branch.
+2. Ensure all tests pass: `cargo test`.
+3. Verify live behavior in the dev container with `bash scripts/dev_deploy.sh`.
+4. Push your branch to your fork and submit a **Pull Request (PR)** targeting the `main` branch.
 
 ### 🚀 Maintainer Release Workflow
 *(For repository maintainers only)*
