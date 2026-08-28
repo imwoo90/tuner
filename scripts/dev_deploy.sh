@@ -30,8 +30,7 @@ if [ -d "$DEFAULTS_DIR" ]; then
     docker cp "$DEFAULTS_DIR" "$CONTAINER_NAME:/root/.tuner/bin/"
 fi
 
-echo "🔄 Restarting container tuner worker..."
+echo "🔄 Ensuring container worker is not conflicting with host..."
 docker exec "$CONTAINER_NAME" pkill -9 -f tuner || true
-docker exec -d "$CONTAINER_NAME" bash -c "while true; do /root/.tuner/bin/tuner --worker default; sleep 1; done"
 
-echo "✅ Dev deploy complete! Container $CONTAINER_NAME is running updated binary & assets."
+echo "✅ Dev deploy complete! Container $CONTAINER_NAME has updated binary & assets at /root/.tuner/bin/tuner."
