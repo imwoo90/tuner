@@ -17,6 +17,9 @@ fi
 
 echo "📦 Syncing binary & _home_defaults asset to $CONTAINER_NAME..."
 
+# Ensure target directory exists
+docker exec "$CONTAINER_NAME" mkdir -p /root/.tuner/bin
+
 # Copy binary atomically
 docker cp "$RELEASE_BIN" "$CONTAINER_NAME:/root/.tuner/bin/tuner.new"
 docker exec "$CONTAINER_NAME" mv -f /root/.tuner/bin/tuner.new /root/.tuner/bin/tuner
