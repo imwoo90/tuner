@@ -17,7 +17,9 @@ services:
     volumes:
       # 1. Source code workspace (real-time dev sync)
       - /home/wimvm/.tuner/profiles/default/workspace/projects/tuner:/workspace
-      # 2. Antigravity state, tokens & CLI binary directory (matching host paths for UID 1000)
+      # 2. Container Tuner persistent home directory
+      - /home/wimvm/.tuner-dev:/home/wimvm/.tuner
+      # 3. Antigravity state, tokens & CLI binary directory (matching host paths for UID 1000)
       - /home/wimvm/.gemini:/home/wimvm/.gemini
-      # 3. Host local bin directory
+      # 4. Host local bin directory
       - /home/wimvm/.local/bin:/home/wimvm/.local/bin:ro
