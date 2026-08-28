@@ -7,15 +7,17 @@ services:
     stdin_open: true
     tty: true
     command: ["sleep", "infinity"]
+    user: "1000:1000"
     environment:
-      - HOME=/root
+      - HOME=/home/wimvm
+      - USER=wimvm
       - TERM=xterm-256color
       - RUST_LOG=info
-      - PATH=/root/.local/bin:/root/.gemini/antigravity-cli/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PATH=/home/wimvm/.local/bin:/home/wimvm/.gemini/antigravity-cli/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       # 1. Source code workspace (real-time dev sync)
       - /home/wimvm/.tuner/profiles/default/workspace/projects/tuner:/workspace
-      # 2. Antigravity state, tokens & CLI binary directory (directory bind mount for atomic in-place updates)
-      - /home/wimvm/.gemini/antigravity-cli:/root/.gemini/antigravity-cli
-      # 3. Host local bin directory (directory bind mount instead of single-file inode mount)
-      - /home/wimvm/.local/bin:/root/.local/bin:ro
+      # 2. Antigravity state, tokens & CLI binary directory (matching host paths for UID 1000)
+      - /home/wimvm/.gemini:/home/wimvm/.gemini
+      # 3. Host local bin directory
+      - /home/wimvm/.local/bin:/home/wimvm/.local/bin:ro
