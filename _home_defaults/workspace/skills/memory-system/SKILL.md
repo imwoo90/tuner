@@ -5,7 +5,7 @@ description: Provides deterministic tools and instructions to safely read recent
 
 # memory-system Skill
 
-This skill is designed to manage the compaction and consolidation of the profile's long-term memory ([MAINMEMORY.md](file:///home/wimvm/.tuner/profiles/default/workspace/memory_system/MAINMEMORY.md)) in a highly structured, isolated, and verified manner.
+This skill is designed to manage the compaction and consolidation of the profile's long-term memory ([MAINMEMORY.md](memory_system/MAINMEMORY.md)) in a highly structured, isolated, and verified manner.
 
 ## Key Capabilities
 

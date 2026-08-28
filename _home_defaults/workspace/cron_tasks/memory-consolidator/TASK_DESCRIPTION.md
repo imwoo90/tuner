@@ -7,7 +7,7 @@ Consolidate, compress, and update the long-term memory file `MAINMEMORY.md` of t
 ## Assignment
 
 1. **Read the memory-system Skill Instructions**:
-   - Refer to the skill documentation in [SKILL.md](file:///home/wimvm/.tuner/profiles/default/workspace/skills/builtin/memory-system/SKILL.md) to understand its capabilities and usage.
+   - Refer to the skill documentation in [SKILL.md](skills/builtin/memory-system/SKILL.md) to understand its capabilities and usage.
 2. **Collect Recent Conversation Logs**:
    - Retrieve new chat history logs since the last consolidation by running the `get-logs` subcommand:
      ```bash
@@ -15,7 +15,7 @@ Consolidate, compress, and update the long-term memory file `MAINMEMORY.md` of t
      ```
    - Analyze the output. If no new logs are returned, proceed directly to step 5 to update the consolidation timestamp.
 3. **Understand Current Memory**:
-   - Read the current [MAINMEMORY.md](file:///home/wimvm/.tuner/profiles/default/workspace/memory_system/MAINMEMORY.md) file to review existing user details, system architecture, and preferences.
+   - Read the current [MAINMEMORY.md](memory_system/MAINMEMORY.md) file to review existing user details, system architecture, and preferences.
 4. **Extract and Merge Durable Facts**:
    - Analyze the new logs to extract any **durable facts** (long-term facts about the user, family, system configurations, or preferences).
    - Merge these facts into the appropriate sections of `MAINMEMORY.md`.
