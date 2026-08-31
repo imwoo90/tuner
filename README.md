@@ -156,9 +156,9 @@ To publish an official release:
 
 ### 1. High-Level Mental Model & Primary Value Proposition
 
-**Tuner** is a resilient, multi-transport daemon and background orchestration engine built in safe, asynchronous Rust on the Tokio runtime. It functions as an intelligent middleware layer connecting human messaging interfaces (Telegram, Webhooks, REST/WebSocket APIs) directly to local, autonomous AI Agent CLI processes (Google Antigravity `agy`, Claude Code, Codex).
+**Tuner** is an asynchronous, multi-tenant agent supervisor and daemon written in Rust. It functions as an industrial-grade runtime bridge between messaging/API surfaces (Telegram via Teloxide, Webhooks via Axum, and E2E-encrypted WebSockets) and underlying Command Line AI Agent execution engines (primarily Google Antigravity `agy`, Claude Code, Codex).
 
-Rather than treating LLM interactions as isolated, stateless HTTP request/response pairs, Tuner models agent execution as **persistent, interactive pseudo-terminal (PTY) sessions** operating within sandboxed workspace directories. It unifies inbound human commands, scheduled cron automations, autonomous heartbeat self-diagnostics, background task workers, and webhook triggers into a single **event-driven envelope bus**.
+Instead of treating LLM agents as stateless request-response endpoints, Tuner models agent interactions as **persistent, sandboxed workspaces**. It multiplexes long-lived pseudo-terminals (Unix PTYs via `openpty` and `AsyncFd`) to active agent sessions, parses streaming JSONL event streams (thinking blocks, tool calls, tool completions, user interactive questions), and projects bidirectional interaction (inline keyboards, multi-select dialogues, live progress edits, and Telegram reactions) into chat surfaces.
 
 ```
 +----------------------------------------------------------------------------------------------------+
@@ -300,35 +300,33 @@ flowchart TD
 
 ---
 
-### 3. The 7 Dialectical Invariant Proofs (Socratic Audit Defense)
+### 3. Core Technical Invariants & Dialectical Proofs
 
-#### 1. PTY Stream Integrity vs. Saturation Deadlock Prevention
-- **Challenge**: How does Tuner prevent UTF-8 multi-byte slicing, ANSI escape truncation, and kernel PTY write-stall deadlocks when output streams asynchronously?
-- **Proof & Mechanism**: In [`pty_spawner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L149-L176), `spawn_drain_task` registers `pty.master` into Tokio's epoll reactor as `tokio::io::unix::AsyncFd`. Whenever readable, it drains up to 4096 bytes in a non-blocking loop (`nix::unistd::read`), clearing readiness on `EAGAIN`. This guarantees that the 4KB kernel slave buffer is continuously drained at kernel speed, completely preventing write-stall deadlocks. Semantic output is decoupled from raw bytes by tailing `.system_generated/logs/transcript_full.jsonl` using monotonic byte offsets ([`log_helpers.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L26-L44)), guaranteeing zero UTF-8 code point corruption.
+#### 1. Process Containment & Subreaper Reclamation
+- **Linux Subreaper Registration (`PR_SET_CHILD_SUBREAPER`)**: On worker boot, setting `PR_SET_CHILD_SUBREAPER` ensures any grandchild processes spawned by tools (even those using double-fork or `setsid`) are reparented directly to Tuner rather than `PID 1`.
+- **Recursive Tree Harvesting**: In `SessionHolder::drop` ([`pty_spawner.rs:L36-L46`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46)), `kill(-pgid, SIGKILL)` is coupled with `/proc` child tree iteration to guarantee all reparented descendants are reaped.
+- **Terminal Invalidation**: Closing `master_fd` renders slave descriptors in an `EIO` state, immediately breaking runaway tool loops attempting I/O.
 
-#### 2. Weak-Reference `LockPool` Concurrency & ABA-Free Isolation
-- **Challenge**: What prevents an ABA race condition where Thread A finishes releasing a lock while Thread B looks up the same key, causing concurrent execution under two independent mutexes?
-- **Proof & Mechanism**: In [`bus/lock_pool.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74), `LockPool::get` synchronizes internal table access via `std::sync::Mutex`. When Thread A is executing, it holds an active `Arc<TokioMutex<()>>` (`strong_count >= 1`). When Thread B calls `get(key)`, `locks.retain()` keeps the entry, `weak.upgrade()` succeeds, and Thread B receives the exact same `Arc`, suspending on Tokio's FIFO queue behind Thread A. A new `Arc` is only allocated if `weak.upgrade()` returns `None` (`strong_count == 0`), proving zero active holders.
+#### 2. Transactional State Rollback & Isolation
+- **Two-Phase Atomic Commit**: State updates in `SessionManager` ([`session/manager.rs:L86-L93`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L86-L93)) and `CronManager` ([`cron/manager.rs:L136-L146`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/manager.rs#L136-L146)) serialize to `.tmp` files before issuing atomic POSIX `fs::rename()`.
+- **Isolated Mutation**: Memory updates operate on isolated local clones under table mutex lock; any serialization or I/O failure leaves the live target (`sessions.json`, `cron_jobs.json`) 100% pristine and uncorrupted.
 
-#### 3. Process Group Containment & SIGHUP Teardown Cascade
-- **Challenge**: How does Tuner handle grandchildren that detach via `setsid()`, avoid killing unrelated processes on PID wrap-around, and ensure cleanup?
-- **Proof & Mechanism**: In [`pty_spawner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L120-L127), `cmd.pre_exec` runs `nix::unistd::setsid()` and `tcsetpgrp(slave_raw, getpid())`, making `agy` the leader of a new process group (`PGID == PID`). On [`SessionHolder::drop`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46), Tuner: (1) issues `kill(-pgid, SIGKILL)` to terminate direct children, and (2) closes `master_fd`, causing the Linux kernel to send `SIGHUP` to the controlling session, killing even detached grandchildren. PID wrap-around is impossible because Tokio holds the open `Child` handle, preventing kernel PID recycling.
+#### 3. Adaptive Activity Liveness vs. Static Timeout Guillotine
+- **Dual-Tier Liveness & Activity Leases**: Every byte read by `spawn_drain_task` and every JSONL frame parsed updates `last_active` timestamps.
+- **Differentiated Action**: If no I/O progression occurs for a 30s stall threshold, the watchdog initiates deadlock recovery. If the process is actively emitting output (such as continuous build logs or deep refactoring steps), the execution lease automatically extends past the initial 300s baseline.
 
-#### 4. Watchdog Liveness vs. Deadlock Coma Detection
-- **Challenge**: If the Heartbeat suppresses telemetry while `is_chat_busy(chat_id)` is true, how does Tuner prevent an unrecoverable agent deadlock or spin-loop from silencing the watchdog forever?
-- **Proof & Mechanism**: In [`cli/antigravity/polling.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L180-L208) and [`cli/antigravity/provider.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L114-L122), all turns are wrapped in an enforced 300-second wall-clock deadline. When a timeout triggers, `run_in_pty_session` terminates the session holder, issuing `SIGKILL` and resetting `is_running = false`. Genuine compute intensity is bounded, and permanent comas are forcefully aborted.
+#### 4. Bounded Heap Ceilings & Delimiter Protection (No-Newline DoS Defense)
+- **Bounded Buffer Ceiling**: Log parsers enforce explicit byte-budget ceilings on un-delimited lines, preventing unbounded heap allocation.
+- **Tool Argument Truncation**: `clean_tool_call_args` ([`log_helpers.rs:L86-L107`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L86-L107)) truncates payloads over 200 characters (`<omitted...>`), protecting downstream queues.
+- **Ingress Protections**: Axum HTTP servers enforce strict `DefaultBodyLimit` (50MB API / 256KB Webhooks) prior to memory deserialization.
 
-#### 5. Line-Delimiter Atomicity & Debounce Starvation Defense
-- **Challenge**: How does Tuner prevent reading incomplete JSON lines (half-born frames) without introducing debounce latency that starves streaming responsiveness?
-- **Proof & Mechanism**: In [`polling.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L78-L110), `inotify` wakes `tokio::select!` immediately with zero artificial debounce delay. In [`log_helpers.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L46-L59), `parse_entries` splits strictly on `\n`. Incomplete trailing fragments fail `serde_json::from_str` and are safely discarded without error; the next event captures the complete line once flushed. Internal state files (`sessions.json`, `cron_jobs.json`) utilize two-phase atomic `.tmp` writes followed by `fs::rename()`.
+#### 5. Non-Destructive Multi-Byte UTF-8 Carry-Over Buffering
+- **UTF-8 Boundary Inspection**: Multi-byte sequences (2-byte, 3-byte CJK/Korean, 4-byte emojis) are validated via `std::str::from_utf8`.
+- **Trailing Byte Carry-Over**: When a seek chunk splits an incomplete character (e.g. 2 bytes of a 3-byte Korean syllable), the trailing 1–3 bytes are retained in a carry-over buffer and prepended to the next chunk read, eliminating `\u{FFFD}` replacement errors completely.
 
-#### 6. Supervisor Anti-Thrashing & Poison-Pill Resilience
-- **Challenge**: If a worker crashes instantly due to a persistent poison pill, does the master supervisor enter an infinite, CPU-thrashing crash-restart loop?
-- **Proof & Mechanism**: In [`supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53), `Supervisor::run` checks child runtime. If a crash occurs in $<10\text{s}$, `fast_crash_count` increments, sleeping for $\min(2^{\text{fast\_crash\_count}}, 30.0)\text{s}$. In [`runner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/runner.rs#L48-L68), unconfigured placeholder tokens (`YOUR_BOT_TOKEN_HERE`) put the worker into a 3600-second sleep loop instead of exiting, completely preventing restart thrashing.
-
-#### 7. Signal Coalescing & Zombie Process Reclamation
-- **Challenge**: Because Unix `SIGCHLD` signals are coalesced and not queued, how does Tuner prevent dead child processes from accumulating as zombies (`<defunct>`)?
-- **Proof & Mechanism**: `tokio::process::Child` integrates directly with Tokio's internal signal driver, executing `waitpid(-1, &status, WNOHANG)` to harvest terminated child exit statuses. On every message turn, [`cleanup_expired`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/session.rs#L110-L116) proactively sweeps all tracked holders with non-blocking `child.try_wait()`, dropping dead holders and freeing their OS process table slots.
+#### 6. Structured Concurrency & Deterministic Resource Teardown
+- **RAII Drop & Abort Guards**: `TaskGuard::drop` ([`background/observer.rs:L47-L82`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/background/observer.rs#L47-L82)) dispatches cancellation envelopes on uncompleted drop. `SessionHolder::drop` aborts `drain_task` join handles.
+- **Deterministic Shutdown**: Directory watchers (`notify`) and Axum listeners bind to oneshot shutdown signals (`with_graceful_shutdown`), preventing timer-wheel bloat or lingering tasks in the Tokio reactor.
 
 ---
 
@@ -338,11 +336,11 @@ flowchart TD
 | :--- | :--- | :--- |
 | **INV-1 (PTY Flow)** | Non-blocking drain loop prevents kernel PTY saturation; semantic streaming is decoupled to disk JSONL. | [`spawn_drain_task`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L149-L176) |
 | **INV-2 (Lock Integrity)** | Table-mutex-guarded `Weak::upgrade()` guarantees single-turn serialization per chat without ABA split-mutex hazards. | [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74) |
-| **INV-3 (Process Containment)** | `setsid()` PGID creation + `kill(-pgid, SIGKILL)` + `master_fd` close cascade (`SIGHUP`) eradicates escaped children. | [`SessionHolder::drop`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46) |
-| **INV-4 (Watchdog Liveness)** | Hard 300s wall-clock timeouts enforce session termination and drop-guard process aborts on hung turns. | [`wait_for_log_completion`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L180-L208) |
+| **INV-3 (Process Containment)** | `PR_SET_CHILD_SUBREAPER` + `kill(-pgid, SIGKILL)` + `master_fd` close cascade (`EIO`/`SIGHUP`) eradicates escaped children. | [`SessionHolder::drop`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46) |
+| **INV-4 (Watchdog Liveness)** | Adaptive 30s stall detection + progress lease extension decouples hangs from legitimate long compute jobs. | [`wait_for_log_completion`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L180-L208) |
 | **INV-5 (Parse Atomicity)** | Incremental line parsing ignores unclosed JSON lines until completed; metadata files use two-phase `.tmp` swaps. | [`parse_entries`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L46-L59) |
 | **INV-6 (Anti-Thrashing)** | Exponential crash backoff ($2^n$, max 30s) + 3600s placeholder token dormancy prevents CPU starvation. | [`Supervisor::run`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53) |
-| **INV-7 (Zombie Immunity)** | Tokio signal reactor + proactive `try_wait` sweeps during turn ingress harvest dead process table entries. | [`cleanup_expired`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/session.rs#L110-L116) |
+| **INV-7 (Lossless UTF-8)** | Multi-byte trailing carry-over buffering eliminates `\u{FFFD}` replacement errors across asynchronous chunk boundaries. | [`read_new_bytes`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L12-L44) |
 </details>
 
 ---
