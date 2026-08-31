@@ -374,6 +374,47 @@ stateDiagram-v2
 2. **Chunked Message Splitting**: Responses exceeding Telegram's 4096-character limit are automatically split into 4,000-character segments along valid HTML and markdown tag boundaries.
 3. **Cryptographic Envelope Identifiers**: Every event envelope is tagged with a unique 12-character hex ID seeded via `/dev/urandom` and nanosecond timestamps, preventing duplicate processing.
 4. **Media Group Debouncing**: Uploaded photo albums are debounced with a 500ms sliding timer, aggregating all media files into a single unified prompt.
+
+---
+
+### 8. Autonomous Scheduled Automations & Background Schedulers
+
+Tuner is not just a reactive chat responder; it operates as an autonomous daemon running three independent background schedulers that execute without requiring human interaction:
+
+```mermaid
+flowchart TD
+    subgraph Schedulers ["Autonomous Background Schedulers"]
+        CRON["1. CronScheduler (5s Tick)<br/>• IANA Timezone Normalization (chrono_tz)<br/>• Task Memory Context ({task}_MEMORY.md)<br/>• Quiet Hours Suppression Window"]
+        HB["2. HeartbeatScheduler (30m Interval)<br/>• Active Turn Cooldown & Busy Guard<br/>• Silent Token Filter (HEARTBEAT_OK Suppression)<br/>• Health Status Proactive Alerts"]
+        CLEAN["3. CleanupObserver (Daily 03:00 UTC)<br/>• 30-Day TTL File Purging (telegram_files & output_to_user)<br/>• Recursive Empty Directory Tree Pruning"]
+    end
+
+    subgraph Bus ["Central MessageBus & PTY Router"]
+        MB["MessageBus::submit(Envelope)"]
+        PTY["Antigravity CLI Driver"]
+    end
+
+    subgraph Dest ["Target Output"]
+        TG["Telegram Topic / Broadcast"]
+    end
+
+    CRON -->|Due Job Envelope| MB
+    HB -->|Anomaly Alert Envelope| MB
+    MB --> PTY
+    PTY --> TG
+    CLEAN -->|Direct Storage Prune| FS["Workspace Filesystem"]
+```
+
+1. **Timezone-Aware Cron Engine ([`CronScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs) & [`CronManager`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/manager.rs))**:
+   - Evaluates standard 5-part and 6-part cron expressions against the user's specific IANA timezone (e.g. `Asia/Seoul`, `America/New_York`).
+   - Automatically enriches cron task prompts with persistent task-specific memory files (`{task}_MEMORY.md`).
+   - Enforces **Quiet Hours** (`quiet_start` / `quiet_end`), suppressing non-critical scheduled job runs while the user is asleep.
+2. **Heartbeat Health Telemetry ([`HeartbeatScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs))**:
+   - Runs periodic self-health checks (default every 30 minutes) to confirm daemon and model readiness.
+   - Skips checks if the chat is actively busy (`is_chat_busy`) or within cooldown periods.
+   - **Silent Token Filter:** When the agent responds with the acknowledgment token `HEARTBEAT_OK`, the alert is suppressed to eliminate notification spam, alerting only on operational anomalies.
+3. **Automated Storage Janitor ([`CleanupObserver`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cleanup/observer.rs))**:
+   - Daily maintenance job (default 03:00 UTC) that purges media files and user deliverables older than the retention threshold (default 30 days) and prunes empty folder trees.
 </details>
 
 ---
