@@ -84,7 +84,7 @@ fn check_file(path: &Path) -> Result<(), String> {
     // 1. Check logical code limit (max 10,000 characters)
     if logical_code_chars > 10000 {
         return Err(format!(
-            "error: File {:?} has {} logical code characters, which exceeds the limit of 10,000 characters (AGENT.md rule).",
+            "error: File {:?} has {} logical code characters, which exceeds the limit of 10,000 characters (AGENTS.md rule).",
             path,
             logical_code_chars
         ));
@@ -93,7 +93,7 @@ fn check_file(path: &Path) -> Result<(), String> {
     // 2. Check documentation character limit (max 4,000 characters)
     if doc_chars > 4000 {
         return Err(format!(
-            "error: File {:?} has {} documentation/comment characters, which exceeds the limit of 4,000 characters (AGENT.md rule).",
+            "error: File {:?} has {} documentation/comment characters, which exceeds the limit of 4,000 characters (AGENTS.md rule).",
             path,
             doc_chars
         ));
@@ -164,7 +164,7 @@ fn check_file(path: &Path) -> Result<(), String> {
             {
                 if seen_opening_brace && fn_chars > 2000 {
                     return Err(format!(
-                        "error: Function at {:?}:{}: {} characters (exceeds the limit of 2,000 characters, AGENT.md rule).\nLine: {}",
+                        "error: Function at {:?}:{}: {} characters (exceeds the limit of 2,000 characters, AGENTS.md rule).\nLine: {}",
                         path,
                         fn_start_line,
                         fn_chars,

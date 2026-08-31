@@ -1,4 +1,4 @@
-# Rust Code & Documentation Guide (AGENT.md)
+# Rust Code & Documentation Guide (AGENTS.md)
 
 This file defines the coding guidelines and architectural standards for the project. The codebase follows a **"Code as Documentation"** philosophy, optimized for seamless collaboration between human developers and AI Agents.
 
@@ -49,7 +49,7 @@ When writing new features, always follow these TDD cycles:
 ## 4. AI Agent Navigation Guide (LLM Wiki)
 
 For AI Agents traversing this repository:
-1.  **Entry Points**: Start with `AGENT.md` (this file) and `README.md` to understand the system architecture, goals, and compilation rules.
+1.  **Entry Points**: Start with `AGENTS.md` (this file) and `README.md` to understand the system architecture, goals, and compilation rules.
 2.  **Module Indexing**: Every directory is a Rust module with a `mod.rs` file acting as the `index.md` directory catalog. Read the module-level documentation (`//!`) at the top of `mod.rs` to understand the architecture, data flow, and submodules.
 3.  **Graph Traversal via Rustdoc**: Follow compile-checked intra-doc links (e.g. `[MyStruct]`) to jump between types and files. Rustdoc verifies these links at compile-time, forming a type-safe, zero-maintenance knowledge graph.
 4.  **JSON AST Graph Query**: Generate the crate's documentation AST using `cargo +nightly rustdoc --bin <crate> -- -Z unstable-options --output-format json`. Query specific items from `target/doc/<crate>.json` via standard inline commands (e.g., `python3 -c "import json; d=json.load(open('target/doc/<crate>.json')); ..."`).
