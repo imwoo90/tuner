@@ -154,9 +154,9 @@ To publish an official release:
 <details>
 <summary><b>🔑 Key Features & Architecture Specifications</b></summary>
 
-### 🏛️ 3-Tier System Architecture Overview
+### 🏛️ System Architecture Overview & Mental Models
 
-`tuner` is designed as a high-performance, asynchronous orchestration supervisor for the Google Antigravity CLI (`agy`). It bridges real-time messaging clients (Telegram) and webhooks with virtual PTY agent execution environments, managing state persistence, interactive dialog loops, background task scheduling, and idle turn observations.
+`tuner` is an asynchronous, high-concurrency orchestration supervisor and daemon for the Google Antigravity CLI (`agy`). It bridges external messaging channels (Telegram Long Polling), asynchronous cron engines, and HTTP webhooks with interactive agent pseudo-terminals (PTYs), managing continuous state persistence, interactive multi-turn question handling (`ask_question`), task-local internationalization, and idle background push notifications.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -178,90 +178,78 @@ To publish an official release:
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 🔄 Dynamic End-to-End Dataflow
+---
 
-The following sequence diagram details the full lifecycle of an update: per-topic mutex lock acquisition at entry, authentication, media ingestion, state resolution, continuous async observer spawning, PTY execution, interactive tool queries, turn finalization, and idle background push delivery.
+### 🔍 1. Model Switching & Provider Session Isolation
+
+#### 1.1 PTY Session Holder Invalidation vs. Reuse Lifecycle
+Interactive execution with Antigravity is anchored in virtual pseudo-terminals managed by [`SessionManager`](src/cli/antigravity/session.rs) and [`SessionHolder`](src/cli/antigravity/pty_spawner.rs).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Telegram)
-    participant Bot as Telegram Ingress (src/messenger/telegram)
-    participant Lock as LockPool (src/bus/lock_pool)
-    participant Session as Session Manager (src/session)
-    participant PTY as CLI PTY Engine (src/cli/antigravity)
-    participant AGY as agy CLI Subprocess
-    participant Obs as Continuous Async Observer (async_observer.rs)
+    actor User as Telegram User
+    participant Cmd as Command Router (commands_model.rs)
+    participant SM as SessionManager (src/session/manager.rs)
+    participant CLI as AntigravityCli (provider.rs)
+    participant SH as SessionHolder Registry (session.rs)
+    participant PTY as Child PTY Process (openpty)
 
-    %% 1. Ingress & Lock Acquisition
-    User->>Bot: Send Text / Photo / Document / Voice Update
-    Bot->>Lock: Acquire Mutex Lock for (chat_id, topic_id) (handler.rs:L264-L268)
-    activate Lock
-
-    %% 2. Authentication & Media Handling
-    Bot->>Bot: Authenticate User & Group ID (handler.rs:L43-L74)
-    alt Media Attachment Present
-        Bot->>Bot: Download file to telegram_files/ (handler.rs:L102-L144)
-        Bot->>Bot: Prepend `[SYSTEM HINT] view_file` path to prompt (mod.rs:L134-L151)
+    alt Model / Effort Switch (/model or /effort)
+        User->>Cmd: Send /model gemini-3.7-flash --effort high
+        Cmd->>SM: resolve_session(key, provider, default_model)
+        Cmd->>SM: Update sess.model & sess.effort via update_session()
+        Cmd-->>User: Reply "Model switched to gemini-3.7-flash (effort: high)"
+        Note over SH,PTY: Active PTY holder is REUSED for the same session_id.<br/>CLI config carries model/effort overrides into runtime.
+    else Reset / Fresh Session (/new or /reset)
+        User->>Cmd: Send /new
+        Cmd->>SM: reset_session(key) -> Clears session_id
+        Cmd->>CLI: initialize_session_if_needed()
+        CLI->>SH: ensure_session(new_session_id)
+        SH->>PTY: spawn_session() with openpty & async drainer
+        Note over SH: Old SessionHolder drops: SIGKILL to process group (-pid),<br/>drain_task.abort(), close(master_fd)
     end
-
-    %% 3. Session Resolution & Continuous Observer Spawning
-    Bot->>Session: Resolve Session & Check Freshness / Daily Reset (manager.rs:L101-L140)
-    Session-->>Bot: Return SessionData (Model, Effort, History, Tokens)
-    Bot->>Obs: Spawn / Deduplicate Continuous Session Observer (mod.rs:L181-L188)
-    activate Obs
-    Note over Obs: Registered in WATCHED_SESSIONS (async_observer.rs:L26-L31)
-
-    %% 4. PTY Launch & Streaming
-    Bot->>PTY: Spawn PTY Session & Send Prompt via Stdin (pty_spawner.rs:L85-L147)
-    PTY->>AGY: Launch agy --prompt-interactive (provider.rs:L47-L92)
-    PTY->>PTY: Mark Session as Running (session.rs:L70-L77)
-    Note over Obs: Suppresses dispatches while CLI turn is running (async_observer.rs:L136-L142)
-
-    %% 5. Stream Loop & Log Polling
-    par Synchronous Stream Polling
-        loop Active Polling on transcript_full.jsonl (polling.rs:L62-L113)
-            AGY-->>PTY: Append raw events to transcript_full.jsonl
-            PTY->>PTY: Parse Log Delta (Thinking, Tools, Content) (log_parser.rs:L100-L160)
-            PTY-->>Bot: Emit StreamEvent (TextDelta / AskQuestion)
-            
-            alt Text Delta
-                Bot->>Bot: Debounce 2.0s & Markdown-to-HTML conversion (stream.rs:L152-L176)
-                Bot-->>User: Edit / Send Live Telegram Message
-            else AskQuestion Triggered
-                Bot->>Bot: Construct Inline Keyboard (ask_process.rs:L215-L247)
-                Bot-->>User: Display Interactive Question & Options
-                User->>Bot: Click Button / Reply Custom Text / Click [Prev] / [Skip]
-                Bot->>PTY: Write Option / ANSI Arrow (\x1B[D) / Write-in Sequence to PTY Stdin (ask_helpers.rs:L51-L75)
-            end
-        end
-    end
-
-    %% 6. Turn Completion & Identity Preservation
-    AGY-->>PTY: Turn Done (DONE event / Process Ready)
-    PTY->>PTY: Mark Session as Idle (session.rs:L84-L90)
-    PTY-->>Bot: StreamEvent::Result (polling.rs:L23-L31)
-    Bot->>Session: Update Message Count, Tokens, USD Cost (manager.rs:L168-L180)
-    Bot->>Session: Atomic persist to sessions.json (manager.rs:L86-L93)
-    Bot->>Lock: Release Mutex Lock Guard (handler.rs:L268)
-    deactivate Lock
-
-    %% 7. Idle Background Async Push Notifications
-    Note over Obs: Session is now Idle (is_running == false)
-    loop Continuous Filesystem & Inotify Watcher (async_observer.rs:L153-L198)
-        Obs->>Obs: Watch brain/<sid>/transcript_full.jsonl for new entries
-        alt Subagent / Background Task / Timer Completed while Idle
-            Obs->>Obs: Parse New Log Delta & Format Progress (log_parser.rs:L100-L160)
-            Obs->>Bot: Dispatch Un-nested Background Notification (async_observer.rs:L43-L75)
-            Bot-->>User: Deliver Real-Time Push Notification to Telegram Topic
-        end
-    end
-    deactivate Obs
 ```
 
-### 🎮 Interactive `ask_question` Loop & State Machine
+- **Model & Effort Modification Without Invalidation**: When a user issues `/model` or `/effort`, [`handle_model_command_switch`](src/messenger/telegram/commands_model.rs) updates `sess.model` and `sess.effort` in [`SessionData`](src/session/data.rs) and persists via [`update_session`](src/session/manager.rs). When [`ensure_session`](src/cli/antigravity/session.rs) executes, if the child process is alive, it **reuses the existing SessionHolder**, refreshing `h.last_active = Instant::now()`.
+- **Deterministic Termination & Holder Dropping**: In [`SessionHolder::drop`](src/cli/antigravity/pty_spawner.rs), Tuner aborts the drain task, sends `SIGKILL` to `-pgid` (`nix::unistd::Pid::from_raw(-(pid as i32))`), and closes the master file descriptor.
 
-When an agent invokes `ask_question` or `ask_permission`, Tuner translates the CLI ANSI prompts into Telegram Inline Keyboards. The state machine below illustrates the precise input handling, including the multi-step write-in feed mechanism ([`ask_helpers.rs:L51-L75`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_helpers.rs#L51-L75)):
+#### 1.2 Provider Session Partitioning & Metric Aggregation
+Tuner supports multiple AI providers (e.g. `antigravity`, `claude`, `codex`) within the same chat topic by isolating metrics inside a `HashMap<String, ProviderSessionData>` in [`SessionData`](src/session/data.rs).
+
+- **Provider Independence**: Switching `config.provider` allows each provider to retain its own `session_id`, conversation history, token counters, and USD cost accumulation without wiping other providers.
+- **Atomic Preservation**: [`preserve_session_identity`](src/session/manager.rs) iterates through `session.provider_sessions`, merging counts with `cur_data.message_count.max(data.message_count)` and `total_cost_usd.max(data.total_cost_usd)`.
+- **Turn Updates**: [`update_session`](src/session/manager.rs) increments metrics strictly for the active provider.
+
+---
+
+### ⚡ 2. Concurrent Event Interleaving (Cron, Webhook vs. User Turns & `AskState`)
+
+#### 2.1 Mutex Lock Contention in `LockPool` (Queueing vs. Timeouts)
+All ingress channels—Telegram updates, Webhook executions, Cron executions, and Message Bus injections—coordinate through [`LockPool`](src/bus/lock_pool.rs).
+
+```mermaid
+flowchart TD
+    A[Incoming Ingress Event] --> B{Source Type}
+    B -->|Telegram Message| C[handler.rs: lock_pool.get(chat_id, topic_id)]
+    B -->|Webhook Ingress| D[session_loop.rs: lock_pool.get(chat_id, topic_id)]
+    B -->|Cron / MessageBus| E[bus.rs: LockMode::Required -> lock_pool.get(key)]
+    
+    C --> F[TokioMutex::lock().await]
+    D --> F
+    E --> F
+    
+    F -->|Contention / Active Turn Running| G[Asynchronous Tokio FIFO Wait Queue<br/>Non-blocking to worker threads, No Timeout Dropping]
+    F -->|Lock Acquired| H[Execute Turn / Stream / Bus Injection]
+    H --> I[Drop MutexGuard -> Next Queued Event Awakes]
+```
+
+- **Memory-Safe Weak References**: [`LockPool::get`](src/bus/lock_pool.rs) stores `Weak<TokioMutex<()>>` inside a standard sync mutex and calls `locks.retain(|_, weak| weak.strong_count() > 0)` on every lookup, guaranteeing automatic memory reclamation when locks are released.
+- **Fair Asynchronous Queueing**: Contending tasks await `lock.lock().await`. They do not drop or time out; Tokio places them into an asynchronous FIFO wait queue, ensuring zero CLI state corruption or PTY stdin interleaving.
+
+#### 2.2 Interactive `ask_question` Loop & ANSI Ingress Injection
+
+When the agent requires user clarification or tool confirmation via `ask_question`, Tuner transitions the session into an interactive state machine without blocking the underlying runtime:
 
 ```mermaid
 stateDiagram-v2
@@ -269,7 +257,7 @@ stateDiagram-v2
     DetectAskQuestion --> RenderUI: Extract questions, options, & is_multi_select flag
     RenderUI --> WaitingUserInput: Display Inline Keyboard (+ [Prev], [Skip], Write-in option)
 
-    WaitingUserInput --> OptionSelected: User clicks Option Button
+    WaitingUserInput --> OptionSelected: User clicks Option Button (ask_callbacks.rs)
     OptionSelected --> SendNumber: Write Option Index ('1', '2', ...) to PTY Stdin
     
     WaitingUserInput --> MultiSelectToggle: User toggles checkboxes in Multi-Select
@@ -278,17 +266,17 @@ stateDiagram-v2
     UpdateBitmap --> SendKeystrokes: Send checked numbers + Enter ('\r') to PTY Stdin
 
     WaitingUserInput --> PrevClicked: User clicks [Prev] Button
-    PrevClicked --> SendANSIArrow: Write ANSI Left-Arrow ('\\x1B[D') to PTY Stdin
+    PrevClicked --> SendANSIArrow: Write ANSI Left-Arrow ('\x1B[D') to PTY Stdin
     SendANSIArrow --> RenderUI: Decrement question index & Rollback UI
 
     WaitingUserInput --> SkipClicked: User clicks [Skip] Button
-    SkipClicked --> SendEscape: Write ESC ('\\x1B') to PTY Stdin
+    SkipClicked --> SendEscape: Write ESC ('\x1B') to PTY Stdin
 
     WaitingUserInput --> TextReply: User types direct chat reply / write-in answer
     TextReply --> SendWriteInIndex: Send Write-in Option Index ('w_idx + 1') to PTY Stdin
-    SendWriteInIndex --> ClearPrevText: If previous answer exists, send backspaces ('\\x7F' * len)
-    ClearPrevText --> SendCustomText: Write '<current_text>\\r' to PTY Stdin
-    SendCustomText --> SendMultiEnter: If multi-select, send additional '\\r' to submit
+    SendWriteInIndex --> ClearPrevText: If previous answer exists, send backspaces ('\x7F' * len)
+    ClearPrevText --> SendCustomText: Write '<current_text>\r' to PTY Stdin
+    SendCustomText --> SendMultiEnter: If multi-select, send additional '\r' to submit
 
     SendNumber --> CheckNext: Check remaining questions in batch
     SendKeystrokes --> CheckNext: Check remaining questions in batch
@@ -300,32 +288,122 @@ stateDiagram-v2
     ResumeStream --> [*]
 ```
 
-### 📦 Complete Module Architecture & Code Reference
+- **Interactive Interception**: In [`process_text_with_files`](src/messenger/telegram/mod.rs), incoming messages are checked with `feed_active_session_if_running`.
+- **Write-In Feeder**: In [`send_write_in_input`](src/messenger/telegram/ask_helpers.rs), write-in submissions handle index selection, backspace clearing (`\x7F` * len), text injection, and carriage returns.
 
-The following table documents all **20 core architectural modules** in `projects/tuner/src/` with their responsibilities and verified source code line ranges:
+#### 2.3 `AsyncObserver` Transcript Disambiguation (Idle Subagents vs. Active Turns)
 
-| # | Module / Subsystem | Architectural Role & Core Responsibilities | Verified Code Evidence (File & Line Range) |
+[`AsyncObserver`](src/messenger/telegram/async_observer.rs) continuously monitors `transcript_full.jsonl` using both Linux `inotify` and a 4-second fallback interval:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CLI as Antigravity CLI
+    participant File as transcript_full.jsonl
+    participant Obs as AsyncObserver (async_observer.rs)
+    participant Stream as Active Stream Consumer (stream.rs)
+    participant User as Telegram Topic
+
+    alt Turn Active (is_running == true)
+        CLI->>File: Write chunk (Tool call / Model thinking)
+        File-->>Obs: inotify Modify Event
+        Obs->>Obs: handle_running_state_check(): is_running == true
+        Note over Obs: Suppresses dispatches! Advances last_size to EOF.<br/>Resets parser instance.
+        File->>Stream: Polling loop reads delta (polling.rs)
+        Stream->>User: Stream delta rendered directly to Telegram
+    else Turn Completes -> Transitions to Idle
+        Stream->>Obs: Turn completes, set_running(false)
+        Obs->>Obs: was_running == true -> sets was_running = false,<br/>anchors last_size at turn finish
+    else Idle Subagent / Background Notification Arrives
+        CLI->>File: Background subagent completes / Timer fires
+        File-->>Obs: inotify Modify Event
+        Obs->>Obs: is_running == false & was_running == false
+        Obs->>Obs: parse_log_delta(transcript_path, last_size)
+        Obs->>User: Dispatch Un-nested Push Notification to Telegram Topic!
+    end
+```
+
+---
+
+### 🌐 3. Async i18n Task-Local Scoping & Thread-Local Bleed Mitigation
+
+In Tokio's multi-threaded runtime, asynchronous tasks suspend at `.await` yield points and may resume on different OS worker threads:
+
+```
+❌ The Thread-Local Bleed Hazard (std::thread_local!):
+[Tokio Worker Thread #1] -> Runs Task A (Korean) -> Sets thread_local("ko") -> .await (Task A yields)
+[Tokio Worker Thread #1] -> Picks up Task B (English) -> Reads thread_local("ko") 💥 POLLUTION!
+[Tokio Worker Thread #2] -> Resumes Task A (Korean) -> Reads thread_local(None) 💥 CONTEXT LOST!
+
+✅ The Task-Local Solution (tokio::task_local!):
+[Task A (Korean)]  -- TaskContext { TASK_ACTIVE_LANG = "ko" } follows Task A across any thread!
+[Task B (English)] -- TaskContext { TASK_ACTIVE_LANG = "en" } follows Task B across any thread!
+```
+
+Tuner defines `tokio::task_local! { pub static TASK_ACTIVE_LANG: String; }` in [`src/i18n/mod.rs`](src/i18n/mod.rs). In [`handle_message`](src/messenger/telegram/handler.rs), every incoming update resolves the topic's configured language and executes inside `TASK_ACTIVE_LANG.scope(active_lang, async move { ... })`, completely eliminating cross-thread context bleeding.
+
+---
+
+### 🐳 4. Dev Docker Sandbox vs. Host Production Daemon Coexistence
+
+#### 4.1 Antigravity State Sharing & Conversation UUID Namespace Isolation
+The development sandbox container (`tuner-sandbox`) runs side-by-side with the host production daemon using [`docker-compose.yml`](docker-compose.yml):
+
+```
+Host Production Daemon                                Docker Sandbox (tuner-sandbox)
+┌──────────────────────────────────────┐              ┌──────────────────────────────────────┐
+│ Base Directory: ~/.tuner             │              │ Container Persistent: ~/.tuner-dev   │
+│ Config: ~/.tuner/config/config.json  │              │ Config: ~/.tuner-dev/config/config.json
+│ Telegram Token: PROD_BOT_TOKEN       │              │ Telegram Token: DEV_BOT_TOKEN        │
+│ Workspace: ~/.tuner/.../workspace    │              │ Workspace: /workspace                │
+└──────────────────┬───────────────────┘              └──────────────────┬───────────────────┘
+                   │                                                     │
+                   ▼                                                     ▼
+     sessions.json (Host Keys)                             sessions.json (Dev Keys)
+                   │                                                     │
+                   └───────────────────┬─────────────────────────────────┘
+                                       │
+                                       ▼ Shared Volume Mount: ~/.gemini
+                   ┌──────────────────────────────────────┐
+                   │ ~/.gemini/antigravity-cli/           │
+                   │ ├── OAuth Tokens & Credential State  │
+                   │ └── brain/<conversation-uuid>/       │
+                   │     ├── .system_generated/logs/      │
+                   │     └── ...                          │
+                   └──────────────────────────────────────┘
+```
+
+- **Shared Authentication**: Mount point `${HOME}/.gemini:${HOME}/.gemini` enables the dev sandbox to invoke authenticated `agy` CLI operations instantly without re-authenticating.
+- **UUID Namespace Isolation**: Every conversation created by `agy` is assigned a unique UUID in `brain/<uuid>`. Because session storage keys and `sessions.json` reside in `~/.tuner` (host) vs `~/.tuner-dev` (container), session IDs never collide.
+- **Telegram Bot Token 409 Conflict Prevention**: Separate configuration paths (`~/.tuner` vs `~/.tuner-dev`) guarantee that production and development daemons never share a bot token, preventing Long Polling HTTP 409 collisions.
+- **UID 1000 & Atomic Deploy**: Container runs as non-root `user: "${UID:-1000}:${GID:-1000}"`. In [`scripts/dev_deploy.sh`](scripts/dev_deploy.sh), binaries are updated via atomic `mv -f tuner.new tuner` before restarting workers.
+
+---
+
+### 📦 5. Complete 20-Module Reference Index
+
+| # | Module / Subsystem | Architectural Role & Core Responsibilities | Verified Code Evidence |
 |---|---|---|---|
-| 1 | **`src/messenger/telegram`** | Teloxide bot entry point, message ingress dispatcher, command registration, and chat routing. | [`runner.rs:L85-L113`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/runner.rs#L85-L113)<br>[`handler.rs:L242-L271`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/handler.rs#L242-L271) |
-| 2 | **`src/messenger/telegram/stream.rs`** | Debounces streaming stdout chunks (2s interval), parses markdown to HTML, and handles message splitting (4000-char limits). | [`stream.rs:L78-L118`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/stream.rs#L78-L118)<br>[`stream.rs:L152-L208`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/stream.rs#L152-L208) |
-| 3 | **`src/messenger/telegram/ask_*.rs`** | Interactive dialog state machine (`AskState`), keyboard builder, ANSI key injection (`\x1B[D` for Prev, `\x1B` for Skip), and multi-step write-in input feeder. | [`ask_process.rs:L69-L142`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_process.rs#L69-L142)<br>[`ask_callbacks.rs:L52-L175`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_callbacks.rs#L52-L175)<br>[`ask_helpers.rs:L51-L75`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_helpers.rs#L51-L75) |
-| 4 | **`src/messenger/telegram/async_observer.rs`** | Continuous session transcript watcher (`notify`) monitoring `transcript_full.jsonl` across turns; suppresses dispatches while active and delivers push notifications when idle. | [`async_observer.rs:L18-L41`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/async_observer.rs#L18-L41)<br>[`async_observer.rs:L128-L198`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/async_observer.rs#L128-L198) |
-| 5 | **`src/cli/antigravity`** | Antigravity CLI provider implementation, environment variable propagation (`TUNER_*`), session resolution, and error parsing. | [`provider.rs:L21-L37`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L21-L37)<br>[`provider.rs:L47-L92`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L47-L92)<br>[`session.rs:L118-L149`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/session.rs#L118-L149) |
-| 6 | **`src/cli/antigravity/pty_spawner.rs`** | Spawns agent CLI child processes wrapped in virtual pseudo-terminals (`openpty`), disables terminal echo, and manages non-blocking async master fd draining. | [`pty_spawner.rs:L25-L66`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L25-L66)<br>[`pty_spawner.rs:L85-L175`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L85-L175) |
-| 7 | **`src/cli/antigravity/log_parser.rs`** | Incremental JSON line parser (`AntigravityLogParser`) extracting model thinking blocks, tool calls, tool completions, final content, and `ask_question` tool structures. | [`log_parser.rs:L16-L62`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_parser.rs#L16-L62)<br>[`log_parser.rs:L100-L160`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_parser.rs#L100-L160) |
-| 8 | **`src/cli/antigravity/polling.rs`** | Coordinates live transcript polling loops, inotify directory watchers, and completion detection (`wait_for_log_completion`) to yield stream frames (`StreamEvent`). | [`polling.rs:L62-L113`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L62-L113)<br>[`polling.rs:L180-L257`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L180-L257) |
-| 9 | **`src/session`** | JSON-based session state persistence (`sessions.json`), per-topic session key resolution, token/cost metrics accumulation, and timezone-based daily reset rules. | [`manager.rs:L59-L93`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L59-L93)<br>[`manager.rs:L101-L180`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L101-L180)<br>[`data.rs:L15-L47`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/session/data.rs#L15-L47) |
-| 10 | **`src/bus`** | Central asynchronous message bus (`MessageBus`), chat/topic mutex lock pools (`LockPool`), prompt injection hooks, and transport routing (`TelegramTransport`). | [`bus.rs:L94-L149`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/bus/bus.rs#L94-L149)<br>[`lock_pool.rs:L15-L31`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L15-L31)<br>[`envelope.rs:L10-L45`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/bus/envelope.rs#L10-L45) |
-| 11 | **`src/background`** | Background task executor (`BackgroundObserver`) enforcing per-chat task concurrency limits (`MAX_TASKS_PER_CHAT = 5`), timeout guards, and drop cancellations. | [`observer.rs:L84-L143`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/background/observer.rs#L84-L143)<br>[`observer.rs:L238-L288`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/background/observer.rs#L238-L288) |
-| 12 | **`src/cron`** | Background cron scheduler (`CronScheduler`) evaluating cron expressions with timezone offsets, quiet hours enforcement, and automatic CLI execution. | [`scheduler.rs:L62-L146`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs#L62-L146)<br>[`scheduler.rs:L212-L247`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs#L212-L247)<br>[`manager.rs:L12-L40`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cron/manager.rs#L12-L40) |
-| 13 | **`src/heartbeat`** | Periodic daemon telemetry loop checking idle session health, evaluating quiet hours, suppressing `HEARTBEAT_OK` acknowledgments, and routing bus alerts. | [`scheduler.rs:L82-L124`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs#L82-L124)<br>[`scheduler.rs:L126-L193`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs#L126-L193) |
-| 14 | **`src/cleanup`** | Storage maintenance observer (`CleanupObserver`) performing scheduled purges of expired media/deliverable files in `telegram_files/` and `output_to_user/`. | [`observer.rs:L43-L95`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cleanup/observer.rs#L43-L95)<br>[`observer.rs:L118-L145`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/cleanup/observer.rs#L118-L145) |
-| 15 | **`src/webhook`** | Axum HTTP server hosting `/health` and `/hooks/:hook_id`, validating Bearer tokens and HMAC-SHA256 signatures with rate limiting. | [`server.rs:L59-L134`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/webhook/server.rs#L59-L134)<br>[`auth.rs:L14-L80`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/webhook/auth.rs#L14-L80) |
-| 16 | **`src/workspace`** | Single source of truth for workspace layout paths (`DuctorPaths`), rule deployment (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), and bundled skills synchronization. | [`paths.rs:L13-L215`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/workspace/paths.rs#L13-L215)<br>[`sync.rs:L76-L124`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/workspace/sync.rs#L76-L124) |
-| 17 | **`src/security`** | File path traversal sandbox validator (`validate_file_path`, `is_path_safe`) resolving symlinks and enforcing allowed root directory constraints. | [`paths.rs:L40-L77`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/security/paths.rs#L40-L77)<br>[`paths.rs:L80-L117`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/security/paths.rs#L80-L117) |
-| 18 | **`src/i18n`** | Thread-safe TOML translation catalog supporting 9 languages (en, de, nl, es, fr, id, pt, ru, ko) via macros (`t!`, `t_rich!`, `t_plural!`) and scoped task context (`TASK_ACTIVE_LANG`). | [`mod.rs:L38-L83`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/i18n/mod.rs#L38-L83)<br>[`mod.rs:L92-L136`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/i18n/mod.rs#L92-L136)<br>[`mod.rs:L201-L235`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/i18n/mod.rs#L201-L235) |
-| 19 | **`src/supervisor.rs`** | Process supervisor managing profile workers, handling SIGTERM signals, and enforcing exponential backoff restarts. | [`supervisor.rs:L33-L66`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L66)<br>[`supervisor.rs:L68-L96`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L68-L96) |
-| 20 | **`src/upgrade.rs`** | Self-upgrade engine querying GitHub Releases, downloading release archives, and performing atomic in-place executable replacement. | [`upgrade.rs:L29-L71`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/upgrade.rs#L29-L71)<br>[`upgrade.rs:L105-L171`](file:///home/wimvm/tuner/profiles/default/workspace/projects/tuner/src/upgrade.rs#L105-L171) |
+| 1 | **`src/messenger/telegram`** | Teloxide long polling, ingress dispatcher, topic routing, media ingestion. | [`runner.rs:L85-L113`](src/messenger/telegram/runner.rs)<br>[`handler.rs:L242-L271`](src/messenger/telegram/handler.rs) |
+| 2 | **`src/messenger/telegram/stream.rs`** | Debounces streaming stdout chunks (2s interval), parses markdown to HTML, message splitting. | [`stream.rs:L78-L118`](src/messenger/telegram/stream.rs)<br>[`stream.rs:L152-L208`](src/messenger/telegram/stream.rs) |
+| 3 | **`src/messenger/telegram/ask_*.rs`** | Interactive dialog state machine (`AskState`), keyboard builder, ANSI key injection, write-in input feeder. | [`ask_process.rs:L69-L142`](src/messenger/telegram/ask_process.rs)<br>[`ask_callbacks.rs:L52-L175`](src/messenger/telegram/ask_callbacks.rs)<br>[`ask_helpers.rs:L51-L75`](src/messenger/telegram/ask_helpers.rs) |
+| 4 | **`src/messenger/telegram/async_observer.rs`** | Continuous session transcript watcher (`notify`) monitoring `transcript_full.jsonl` for idle background completions. | [`async_observer.rs:L18-L41`](src/messenger/telegram/async_observer.rs)<br>[`async_observer.rs:L128-L198`](src/messenger/telegram/async_observer.rs) |
+| 5 | **`src/cli/antigravity`** | Antigravity CLI driver, environment variable propagation, session resolution, error parsing. | [`provider.rs:L21-L37`](src/cli/antigravity/provider.rs)<br>[`provider.rs:L47-L92`](src/cli/antigravity/provider.rs)<br>[`session.rs:L118-L149`](src/cli/antigravity/session.rs) |
+| 6 | **`src/cli/antigravity/pty_spawner.rs`** | Spawns agent child processes in pseudo-terminals (`openpty`), disables echo, manages non-blocking async master fd draining. | [`pty_spawner.rs:L25-L66`](src/cli/antigravity/pty_spawner.rs)<br>[`pty_spawner.rs:L85-L175`](src/cli/antigravity/pty_spawner.rs) |
+| 7 | **`src/cli/antigravity/log_parser.rs`** | Incremental JSON log parser extracting thinking blocks, tool calls, and `ask_question` events. | [`log_parser.rs:L16-L62`](src/cli/antigravity/log_parser.rs)<br>[`log_parser.rs:L100-L160`](src/cli/antigravity/log_parser.rs) |
+| 8 | **`src/cli/antigravity/polling.rs`** | Coordinates live transcript polling loops, inotify watchers, and completion detection. | [`polling.rs:L62-L113`](src/cli/antigravity/polling.rs)<br>[`polling.rs:L180-L257`](src/cli/antigravity/polling.rs) |
+| 9 | **`src/session`** | JSON-based session state persistence (`sessions.json`), provider partitioning, token/cost metric accumulation, daily reset rules. | [`manager.rs:L59-L93`](src/session/manager.rs)<br>[`manager.rs:L101-L180`](src/session/manager.rs)<br>[`data.rs:L15-L102`](src/session/data.rs) |
+| 10 | **`src/bus`** | Central message bus (`MessageBus`), chat/topic lock pools (`LockPool`), prompt injection hooks. | [`bus.rs:L94-L149`](src/bus/bus.rs)<br>[`lock_pool.rs:L15-L74`](src/bus/lock_pool.rs)<br>[`envelope.rs:L10-L45`](src/bus/envelope.rs) |
+| 11 | **`src/background`** | Background task executor (`BackgroundObserver`) enforcing chat task concurrency limits (`MAX_TASKS = 5`) and timeout guards. | [`observer.rs:L84-L143`](src/background/observer.rs)<br>[`observer.rs:L238-L288`](src/background/observer.rs) |
+| 12 | **`src/cron`** | Background cron scheduler evaluating cron expressions, timezone offsets, and quiet hours. | [`scheduler.rs:L62-L146`](src/cron/scheduler.rs)<br>[`manager.rs:L12-L40`](src/cron/manager.rs) |
+| 13 | **`src/heartbeat`** | Periodic daemon telemetry loop checking idle health, evaluating quiet hours, routing bus alerts. | [`scheduler.rs:L82-L124`](src/heartbeat/scheduler.rs)<br>[`scheduler.rs:L126-L193`](src/heartbeat/scheduler.rs) |
+| 14 | **`src/cleanup`** | Storage maintenance observer performing scheduled purges of expired media in `telegram_files/` and `output_to_user/`. | [`observer.rs:L43-L95`](src/cleanup/observer.rs)<br>[`observer.rs:L118-L145`](src/cleanup/observer.rs) |
+| 15 | **`src/webhook`** | Axum HTTP server hosting `/health` and `/hooks/:hook_id`, validating Bearer tokens and HMAC-SHA256 signatures. | [`server.rs:L59-L134`](src/webhook/server.rs)<br>[`auth.rs:L14-L80`](src/webhook/auth.rs) |
+| 16 | **`src/workspace`** | Workspace path resolver (`DuctorPaths`), rules deployment (`CLAUDE.md`, `GEMINI.md`), skills synchronization. | [`paths.rs:L13-L215`](src/workspace/paths.rs)<br>[`sync.rs:L76-L124`](src/workspace/sync.rs) |
+| 17 | **`src/security`** | File path traversal sandbox validator (`validate_file_path`, `is_path_safe`) enforcing root directory confinement. | [`paths.rs:L40-L77`](src/security/paths.rs)<br>[`paths.rs:L80-L117`](src/security/paths.rs) |
+| 18 | **`src/i18n`** | Thread-safe TOML translation catalog for 9 languages with scoped task-local context (`TASK_ACTIVE_LANG`). | [`mod.rs:L38-L83`](src/i18n/mod.rs)<br>[`mod.rs:L201-L235`](src/i18n/mod.rs) |
+| 19 | **`src/supervisor.rs`** | Process supervisor managing profile workers, handling SIGTERM signals, exponential backoff restarts. | [`supervisor.rs:L33-L66`](src/supervisor.rs)<br>[`supervisor.rs:L68-L96`](src/supervisor.rs) |
+| 20 | **`src/upgrade.rs`** | Self-upgrade engine querying GitHub Releases, downloading archives, performing atomic in-place executable replacement. | [`upgrade.rs:L29-L71`](src/upgrade.rs)<br>[`upgrade.rs:L105-L171`](src/upgrade.rs) |
 </details>
 
 ---
