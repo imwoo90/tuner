@@ -5,7 +5,7 @@
 - Module boundaries:
   - `src/cli/antigravity`: wraps `agy` CLI, parses events, error handling, model discovery, and trust checks.
   - `src/session`: manages session keys, data persistence, and lifecycle.
-  - `src/telegram`: command parser, message replies, markdown/HTML formatting, and scheduling selectors.
+  - `src/messenger/telegram`: command parser, message replies, markdown/HTML formatting, and scheduling selectors.
   - `src/heartbeat`: periodic status telemetry, logging, and quiet hours.
   - `src/cron`: cron job scheduler and manager.
   - `src/cleanup`: stale temp files, old logs, and process cleanup.
