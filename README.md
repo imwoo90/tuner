@@ -156,9 +156,7 @@ To publish an official release:
 
 ### 1. High-Level Mental Model & Primary Value Proposition
 
-**Tuner** is an asynchronous, multi-tenant agent supervisor and daemon written in Rust. It functions as an industrial-grade runtime bridge between messaging/API surfaces (Telegram via Teloxide, Webhooks via Axum, and E2E-encrypted WebSockets) and underlying Command Line AI Agent execution engines (primarily Google Antigravity `agy`, Claude Code, Codex).
-
-Instead of treating LLM agents as stateless request-response endpoints, Tuner models agent interactions as **persistent, sandboxed workspaces**. It multiplexes long-lived pseudo-terminals (Unix PTYs via `openpty` and `AsyncFd`) to active agent sessions, parses streaming JSONL event streams (thinking blocks, tool calls, tool completions, user interactive questions), and projects bidirectional interaction (inline keyboards, multi-select dialogues, live progress edits, and Telegram reactions) into chat surfaces.
+**Tuner** is a multi-profile, resilient autonomous daemon and bridge architecture written in safe, asynchronous Rust on the Tokio runtime. It transforms terminal-bound AI agent CLI runtimes (specifically Google Antigravity `agy`, Claude Code, Codex, and Gemini CLI tools) into 24/7 long-lived autonomous agents accessible via multi-channel messaging interfaces (Telegram, WebSockets/Axum, and Matrix), scheduled automations (Cron), and webhook triggers.
 
 ```
 +----------------------------------------------------------------------------------------------------+
@@ -166,8 +164,8 @@ Instead of treating LLM agents as stateless request-response endpoints, Tuner mo
 |                                                                                                    |
 |  [Ingress Channels]                [Unified Message Bus]                 [Agent Execution Engine]  |
 |  - Telegram Bot (Teloxide)         - LockPool (Chat/Topic locks)         - PTY Spawner (openpty)   |
-|  - Webhook API (Axum)       ===>   - Envelope Protocol            ===>   - Log Parser (JSONL)      |
-|  - WebSockets & REST               - Adapters & Observers                - Antigravity / Claude    |
+|  - Webhook API (Axum)       ===>   - Envelope Protocol            ===>   - Headless Pipe Fallback  |
+|  - WebSockets & REST               - 3-Tier Priority Arbitrator          - Log Parser (JSONL)      |
 |  - Cron & Heartbeat Loops          - Cascading Fallback                  - Interactive Stdin Pipe  |
 +----------------------------------------------------------------------------------------------------+
 ```
@@ -201,6 +199,7 @@ flowchart TD
     subgraph RuntimeExecution["CLI Agent Execution Subsystem"]
         CLI["AntigravityCli (agy Process Driver)"]
         PTY["PTY Spawner (nix openpty / non-echoing FD)"]
+        PIPE["Headless Pipe Fallback (Stdio::piped)"]
         POLL["Log Polling Engine (notify / JSONL Parser)"]
         AGY["agy CLI Child Process (Workspace Sandboxed)"]
     end
@@ -219,7 +218,9 @@ flowchart TD
     CLN --> SESS
 
     CLI --> PTY
+    CLI --> PIPE
     PTY --> AGY
+    PIPE --> AGY
     AGY -.-> POLL
     POLL -.-> CLI
     SEC -.-> CLI
@@ -300,33 +301,29 @@ flowchart TD
 
 ---
 
-### 3. Core Technical Invariants & Dialectical Proofs
+### 3. Core Technical Invariants & Dialectical Proofs (The 5 Supreme Laws)
 
-#### 1. Process Containment & Subreaper Reclamation
-- **Linux Subreaper Registration (`PR_SET_CHILD_SUBREAPER`)**: On worker boot, setting `PR_SET_CHILD_SUBREAPER` ensures any grandchild processes spawned by tools (even those using double-fork or `setsid`) are reparented directly to Tuner rather than `PID 1`.
-- **Recursive Tree Harvesting**: In `SessionHolder::drop` ([`pty_spawner.rs:L36-L46`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46)), `kill(-pgid, SIGKILL)` is coupled with `/proc` child tree iteration to guarantee all reparented descendants are reaped.
-- **Terminal Invalidation**: Closing `master_fd` renders slave descriptors in an `EIO` state, immediately breaking runaway tool loops attempting I/O.
+#### 1. Mathematical Deadlock Elimination & Starvation Immunity (Law 1 & 2)
+- **Single-Lock Discipline**: Every turn acquires strictly one lock for its target `(chat_id, topic_id)` key via [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74). Cross-session delegations yield their current turn and dispatch an [`Envelope`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/envelope.rs#L79-L138) with `LockMode::Required`, eliminating Coffman hold-and-wait conditions ($|\text{Locks}| \le 1 \implies \text{Deadlock} = \emptyset$).
+- **FIFO Queuing & Preemption**: Tokio Mutex ensures strict FIFO order, while background schedulers proactively interrogate [`is_chat_busy`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs#L100-L109) to yield to active user dialogues.
+- **Lock-Free Emergency Control**: Administrative commands (`/abort`, `/stop`, `/restart`) bypass the prompt injection lock pool entirely ([`commands.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/commands.rs#L75-L119)), issuing immediate `SIGKILL` directly to the child process group.
 
-#### 2. Transactional State Rollback & Isolation
-- **Two-Phase Atomic Commit**: State updates in `SessionManager` ([`session/manager.rs:L86-L93`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L86-L93)) and `CronManager` ([`cron/manager.rs:L136-L146`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/manager.rs#L136-L146)) serialize to `.tmp` files before issuing atomic POSIX `fs::rename()`.
-- **Isolated Mutation**: Memory updates operate on isolated local clones under table mutex lock; any serialization or I/O failure leaves the live target (`sessions.json`, `cron_jobs.json`) 100% pristine and uncorrupted.
+#### 2. Substrate Invariance & Headless Pipe Fallback (Law 3)
+- **Dual-Path Execution**: When running in unprivileged containers, rootless pods, or strict seccomp sandboxes where `nix::pty::openpty` or `/dev/pts` device allocation is denied, Tuner gracefully falls back to standard asynchronous pipes ([`run_oneshot`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L94-L125)) with `Stdio::piped()`.
+- **Environment Sanitization**: Sets `TERM=dumb`, `NO_COLOR=1`, and `CI=1` ([`provider.rs:L22-L37`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L22-L37)) to prevent downstream tools from emitting unparsed curses/terminal control codes over headless pipes.
 
-#### 3. Adaptive Activity Liveness vs. Static Timeout Guillotine
-- **Dual-Tier Liveness & Activity Leases**: Every byte read by `spawn_drain_task` and every JSONL frame parsed updates `last_active` timestamps.
-- **Differentiated Action**: If no I/O progression occurs for a 30s stall threshold, the watchdog initiates deadlock recovery. If the process is actively emitting output (such as continuous build logs or deep refactoring steps), the execution lease automatically extends past the initial 300s baseline.
+#### 3. Existential Liveness of Silent Compute (Law 4)
+- **Kernel-Level Process Probing**: Telemetry is decoupled from stdout byte frequency. A non-blocking 500ms [`child.try_wait()`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L148-L178) sweep queries the kernel process table directly.
+- **Differentiating Contemplation from Comas**: Heavy tasks emitting zero stdout for 40 seconds (e.g. monolithic compilation, large downloads) are verified as alive (`Ok(None)`), while the generous 300s lease window and continuous `⏳` reactions preserve user trust without premature timeout aborts.
 
-#### 4. Bounded Heap Ceilings & Delimiter Protection (No-Newline DoS Defense)
-- **Bounded Buffer Ceiling**: Log parsers enforce explicit byte-budget ceilings on un-delimited lines, preventing unbounded heap allocation.
-- **Tool Argument Truncation**: `clean_tool_call_args` ([`log_helpers.rs:L86-L107`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L86-L107)) truncates payloads over 200 characters (`<omitted...>`), protecting downstream queues.
-- **Ingress Protections**: Axum HTTP servers enforce strict `DefaultBodyLimit` (50MB API / 256KB Webhooks) prior to memory deserialization.
+#### 4. Pathological Stream Invariance & Grapheme-Safe HTML Splitting (Law 5)
+- **Multi-Byte UTF-8 Code Point Invariance**: [`split_at_char_limit`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L12-L26) iterates across Unicode scalar values (`chars()`) and accumulates `c.len_utf8()`, guaranteeing that multi-byte code points (emojis, CJK glyphs, ANSI markers) are never sliced mid-byte.
+- **Stack-Based HTML Tag Balancing**: [`tokenize_html`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L40-L56) tracks open tags (`<pre>`, `<code>`, `<blockquote>`, `<b>`, `<i>`) on an `open_tags: Vec<String>` stack, automatically appending closing tags to Chunk $N$ and prepending open tags to Chunk $N+1$ to ensure well-formed DOM structure.
 
-#### 5. Non-Destructive Multi-Byte UTF-8 Carry-Over Buffering
-- **UTF-8 Boundary Inspection**: Multi-byte sequences (2-byte, 3-byte CJK/Korean, 4-byte emojis) are validated via `std::str::from_utf8`.
-- **Trailing Byte Carry-Over**: When a seek chunk splits an incomplete character (e.g. 2 bytes of a 3-byte Korean syllable), the trailing 1–3 bytes are retained in a carry-over buffer and prepended to the next chunk read, eliminating `\u{FFFD}` replacement errors completely.
-
-#### 6. Structured Concurrency & Deterministic Resource Teardown
-- **RAII Drop & Abort Guards**: `TaskGuard::drop` ([`background/observer.rs:L47-L82`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/background/observer.rs#L47-L82)) dispatches cancellation envelopes on uncompleted drop. `SessionHolder::drop` aborts `drain_task` join handles.
-- **Deterministic Shutdown**: Directory watchers (`notify`) and Axum listeners bind to oneshot shutdown signals (`with_graceful_shutdown`), preventing timer-wheel bloat or lingering tasks in the Tokio reactor.
+#### 5. Two-Phase Atomic Persistence & Self-Healing Supervision (Law 1 & 2)
+- **Two-Phase Atomic Commits**: All JSON state updates (`sessions.json`, `cron_jobs.json`, `webhooks.json`, `named_sessions.json`) write data to a temporary file (`.tmp`) before invoking atomic POSIX `fs::rename`, eliminating corrupted state files during power loss or abrupt crashes.
+- **Anti-Thrashing Crash Backoff**: In [`supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53), worker crashes under 10 seconds apply exponential backoff ($\min(2^n, 30.0)\text{s}$), while deliberate restarts (`exit(42)`) trigger instant respawns.
+- **Boot Crash Reconciler**: [`NamedSessionRegistry::recover_crash`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/named.rs#L86-L98) atomically resets orphaned `"running"` sessions back to `"idle"` on boot.
 
 ---
 
@@ -334,13 +331,13 @@ flowchart TD
 
 | Invariant | System Guarantee | Source Reference |
 | :--- | :--- | :--- |
-| **INV-1 (PTY Flow)** | Non-blocking drain loop prevents kernel PTY saturation; semantic streaming is decoupled to disk JSONL. | [`spawn_drain_task`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L149-L176) |
-| **INV-2 (Lock Integrity)** | Table-mutex-guarded `Weak::upgrade()` guarantees single-turn serialization per chat without ABA split-mutex hazards. | [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74) |
-| **INV-3 (Process Containment)** | `PR_SET_CHILD_SUBREAPER` + `kill(-pgid, SIGKILL)` + `master_fd` close cascade (`EIO`/`SIGHUP`) eradicates escaped children. | [`SessionHolder::drop`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46) |
-| **INV-4 (Watchdog Liveness)** | Adaptive 30s stall detection + progress lease extension decouples hangs from legitimate long compute jobs. | [`wait_for_log_completion`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L180-L208) |
-| **INV-5 (Parse Atomicity)** | Incremental line parsing ignores unclosed JSON lines until completed; metadata files use two-phase `.tmp` swaps. | [`parse_entries`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L46-L59) |
-| **INV-6 (Anti-Thrashing)** | Exponential crash backoff ($2^n$, max 30s) + 3600s placeholder token dormancy prevents CPU starvation. | [`Supervisor::run`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53) |
-| **INV-7 (Lossless UTF-8)** | Multi-byte trailing carry-over buffering eliminates `\u{FFFD}` replacement errors across asynchronous chunk boundaries. | [`read_new_bytes`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_helpers.rs#L12-L44) |
+| **INV-1 (Lock Discipline)** | Single-lock discipline ($|\text{Locks}| \le 1$) mathematically precludes distributed circular wait deadlocks. | [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74) |
+| **INV-2 (Substrate Invariance)** | Graceful degradation from interactive PTYs to headless `Stdio::piped()` pipes in restricted containers. | [`run_oneshot`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L94-L125) |
+| **INV-3 (Silent Liveness)** | Non-blocking 500ms `child.try_wait()` sweeps verify kernel process liveness during zero-stdout compute. | [`check_completion_step`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L148-L178) |
+| **INV-4 (Emergency Preemption)** | Administrative commands (`/abort`, `/stop`, `/restart`) bypass the prompt lock pool for direct teardown. | [`commands.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/commands.rs#L75-L119) |
+| **INV-5 (Tag-Balanced HTML)** | Grapheme-safe slicing via `c.len_utf8()` + stack-based open tag reconstitution across 4000-char chunks. | [`split_html_message`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs) |
+| **INV-6 (Anti-Thrashing)** | Exponential crash backoff ($\min(2^n, 30\text{s})$) + 3600s placeholder token dormancy prevents CPU exhaustion. | [`Supervisor::run`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53) |
+| **INV-7 (Atomic Disk Commits)** | Two-phase atomic `.tmp` file creation followed by `fs::rename()` prevents disk corruption on sudden death. | [`SessionManager::save`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L86-L94) |
 </details>
 
 ---
