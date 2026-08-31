@@ -152,269 +152,291 @@ To publish an official release:
 ---
 
 <details open>
-<summary><b>🏛️ System Architecture: The Tuner Operating Platform (Exp 5 Approved)</b></summary>
+<summary><b>🏛️ System Architecture: Tuner Daemon & Agent Runtime (Officially Approved)</b></summary>
 
-### 1. Executive Summary & Core Purpose
+### 1. Executive Perspective & Comprehensive Mental Model
 
-**Tuner** is a central operating platform and agent supervisor written in Rust. It bridges human communication channels (Telegram, Webhooks, REST/WS APIs) with local command-line AI engines (Google Antigravity `agy`, Claude Code, Codex) executing inside isolated pseudo-terminal environments.
+Modern Large Language Model (LLM) coding agents (e.g., Google Antigravity `agy`, Anthropic Claude Code, OpenAI Codex, and Gemini CLI) operate primarily as ephemeral, single-user, interactive terminal sessions. While effective for localized interactive development, they lack daemonization, multi-channel messaging interfaces, persistent session registries, scheduled background automations, secure remote ingress, and multi-tenant process supervision.
+
+`tuner` bridges this gap. Implemented in safe, asynchronous Rust on the Tokio runtime, `tuner` transforms standalone CLI-based AI coding agents into a continuous, stateful, multi-channel daemon infrastructure.
+
+```
++----------------------------------------------------------------------------------------------------+
+|                                           TUNER DAEMON                                             |
+|                                                                                                    |
+|  [Ingress Channels]                [Unified Message Bus]                 [Agent Execution Engine]  |
+|  - Telegram Bot (Teloxide)         - LockPool (Chat/Topic locks)         - PTY Spawner (openpty)   |
+|  - Webhook API (Axum)       ===>   - Envelope Protocol            ===>   - Log Parser (JSONL)      |
+|  - WebSockets & REST               - Adapters & Observers                - Antigravity / Claude    |
+|  - Cron & Heartbeat Loops          - Cascading Fallback                  - Interactive Stdin Pipe  |
++----------------------------------------------------------------------------------------------------+
+```
+
+#### Dual-Mode Architectural Topography
+1. **Master Supervisor Mode** ([`main.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/main.rs#L195-L216)): Operates as a root supervisor daemon managing child profile workers (`tuner --worker <profile_name>`), monitoring heartbeats, enforcing crash backoffs, and responding to system-wide re-exec signals (Exit Code `42`).
+2. **Worker Profile Mode** ([`runner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/runner.rs#L85-L113)): Operates an isolated agent workspace profile with dedicated session persistence, pseudo-terminal pools, scheduled cron jobs, quiet-hour telemetry heartbeats, cleanup observers, and messaging transceivers.
 
 ```mermaid
-flowchart TD
-    subgraph Ingress ["1. Ingress & Trigger Channels"]
-        TG["Telegram User / Group / Topics"]
-        CRON["Cron Job Scheduler"]
-        HB["Heartbeat Telemetry"]
-        WH["Webhooks & REST/WS API"]
+graph TD
+    subgraph Supervisor Plane [Master Mode Process]
+        M["main::run_master_mode()"] -->|tokio::process::Command| W1["Worker Process: Profile 'default'"]
+        M -->|tokio::process::Command| W2["Worker Process: Profile 'secondary'"]
+        S["supervisor::Supervisor"] -->|Supervises Master| M
     end
 
-    subgraph Core ["2. Tuner Core Operating Hub"]
-        AUTH["Security & Sandbox Gatekeeper"]
-        BUS["Central Event & Message Bus"]
-        LOCK["Chat & Topic Lock Pool"]
-        SESS["Session & Memory Manager"]
+    subgraph Worker Runtime [Per-Profile Worker Process]
+        W1 --> SM["SessionManager (sessions.json)"]
+        W1 --> MB["MessageBus (Transports & Envelopes)"]
+        W1 --> LP["LockPool (Weak-Ref Mutexes)"]
+        W1 --> AGY["AntigravityCli (PTY Manager)"]
+        W1 --> CS["CronScheduler (cron_jobs.json)"]
+        W1 --> HS["HeartbeatScheduler (Telemetry)"]
+        W1 --> CL["CleanupObserver (Disk Purging)"]
+        W1 --> WS["WebhookServer (Axum HTTP)"]
+        W1 --> API["ApiServer (WebSockets/REST)"]
     end
 
-    subgraph Execution ["3. AI Agent Execution Engine"]
-        PTY["Interactive Terminal Manager (PTY)"]
-        CLI["Antigravity CLI Driver"]
-        LOGS["Real-Time Log Streamer & Debouncer"]
+    subgraph Subprocess Execution [Agent Subshell]
+        AGY -->|openpty / setsid| PTY["PTY Spawner (Child agy)"]
+        PTY -->|JSONL Stream| LOG[".system_generated/logs/transcript_full.jsonl"]
+        LOG -->|notify FS Events| POLL["Polling Streamer"]
+        POLL -->|StreamEvent Deltas| STR["Telegram Stream Consumer"]
     end
-
-    TG --> AUTH
-    CRON --> BUS
-    HB --> BUS
-    WH --> BUS
-
-    AUTH --> LOCK
-    LOCK --> BUS
-    BUS --> SESS
-    SESS --> CLI
-    CLI --> PTY
-    PTY --> LOGS
-    LOGS --> TG
 ```
 
 ---
 
-### 2. Validation of the 3 Core Pillars
+### 2. Core Subsystems & Operational Mechanics
 
-```mermaid
-flowchart TD
-    subgraph Pillar1 ["Pillar 1: PTY Substrates"]
-        P1["Interactive Pseudo-Terminal Engine<br/>• Raw TTY Allocation (openpty)<br/>• Echo Suppression & ANSI Stripping<br/>• Interactive Bidirectional Keystrokes"]
-    end
+#### 2.1 PTY Subshell vs. Standard Non-Blocking Pipes
+Standard pipes created via `std::process::Stdio::piped()` fail catastrophically when driving modern interactive agent CLI tools like Google Antigravity `agy`. `tuner` explicitly implements raw Unix pseudo-terminal (`PTY`) subshells using `openpty(3)` ([`pty_spawner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L85-L147)).
 
-    subgraph Pillar2 ["Pillar 2: Deterministic Supervision & Boundaries"]
-        P2["Process Lifecycle & Sandboxing<br/>• Dual-Mode Master/Worker Watchdog<br/>• RAII Process Group Reaping (-pgid SIGKILL)<br/>• Allowed Roots Path Sandbox & Injection Filter"]
-    end
-
-    subgraph Pillar3 ["Pillar 3: Structured Event & Message Bus"]
-        P3["Centralized Message Bus & Concurrency<br/>• Standardized Envelope Routing<br/>• Weak-Ref LockPool (Chat/Topic Isolation)<br/>• Unified Observer Dispatchers (Cron/HB/Webhooks)"]
-    end
-
-    Pillar1 <--> Pillar2
-    Pillar2 <--> Pillar3
-    Pillar3 <--> Pillar1
+```
++-----------------------------------------------------------------------------------+
+|                              PTY DESCRIPTOR TOPOLOGY                              |
+|                                                                                   |
+|  [Tuner Daemon]                                        [Child Subprocess: agy]    |
+|  AsyncFd<OwnedFd> (Master FD)  <=== Unix PTY ===>      Slave FD (Stdin/Stdout/Err)|
+|  - Non-blocking (O_NONBLOCK)                           - Echo disabled (~ECHO)    |
+|  - Asynchronous drain task                             - Process Group Leader     |
++-----------------------------------------------------------------------------------+
 ```
 
-- **Pillar 1: PTY Substrates (`cli/antigravity/pty_spawner.rs`)**: Creates non-blocking pseudo-terminals where CLI agents run as live terminal sessions, supporting live tool-use inspection, intermediate reasoning extraction, and multi-turn interactive questions.
-- **Pillar 2: Deterministic Supervision & Boundaries (`supervisor.rs`, `security/`)**: Enforces supervisor crash recovery, process-group cleanup (`kill(-pgid, SIGKILL)` on drop), path traversal sandboxes (`validate_file_path`), and prompt injection defense (`detect_suspicious_patterns`).
-- **Pillar 3: Structured Event & Message Bus (`bus/bus.rs`)**: Standardizes all actions (user messages, scheduled cron jobs, background tasks, webhooks, heartbeats) into structured `Envelope` packets with thread-safe `LockPool` synchronization.
+- **Interactive TTY Checks (`isatty(3)`)**: Modern CLI agents inspect `isatty(STDIN_FILENO)`. When attached to regular pipes, they disable interactive rich features, abort interactive option menus (`ask_question`), or exit immediately assuming a headless batch script. PTY allocation satisfies `isatty()`.
+- **Block Buffering Deadlocks (`libc` 4KB/8KB buffers)**: Standard C runtime libraries apply block-buffering (typically 4096 or 8192 bytes) when standard output is not a terminal. In an interactive dialogue, the agent prints a short prompt and waits for user input. Because the buffer has not filled, `libc` never flushes stdout across the pipe, causing an unrecoverable deadlock. Allocating a PTY forces the underlying C library into **line-buffered or unbuffered** mode.
+- **Echo Suppression (`~ECHO`)**: Terminal drivers echo input characters back to the master descriptor by default. In [`disable_echo()`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L68-L74), `tuner` clears `LocalFlags::ECHO` before passing the slave descriptor to the child, preventing input keystrokes from corrupting output streams.
+- **Process Group Isolation**: In `spawn_session()`, a `pre_exec` closure calls `setsid()` and `tcsetpgrp()`. This establishes the child as a distinct session leader, allowing clean signal propagation and total process group eradication upon teardown.
+- **Non-Blocking Master Descriptors**: The master descriptor is set to `O_NONBLOCK` and wrapped inside Tokio's [`AsyncFd`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L131). An asynchronous drain loop ([`spawn_drain_task`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L149-L175)) yields on `async_master.readable().await`, draining chunks into a shared buffer without reactor stalls.
 
 ---
 
-### 3. PTY Jargon & Justification vs. Standard UNIX Pipes
+#### 2.2 Weak-Reference `LockPool` Mechanics & Deadlock Freedom
+To serialize execution within individual chat threads while maximizing concurrency across unrelated chats, `tuner` implements a specialized asynchronous lock pool ([`LockPool`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L38-L117)).
 
-```mermaid
-flowchart LR
-    subgraph PipeApproach ["Standard Unix Pipe (Stdio::piped) - FAILS"]
-        P_IN["Program"] -->|isatty = false| P_BUF["Full 4KB/8KB Buffer"]
-        P_BUF -->|Silent Hang / No Prompt Flush| P_OUT["Broken Stream / CLI Exits"]
-    end
-
-    subgraph PTYApproach ["Tuner PTY Substrate (nix::pty::openpty) - SUCCEEDS"]
-        T_IN["Program"] -->|isatty = true| T_TTY["Master/Slave PTY Pair"]
-        T_TTY -->|disable_echo + non-blocking| T_OUT["Real-Time Live Event Stream"]
-    end
+```
++-----------------------------------------------------------------------------------+
+|                              LOCKPOOL ARCHITECTURE                                |
+|                                                                                   |
+|  [LockPool]                                                                       |
+|  Mutex<HashMap<LockKey, Weak<tokio::sync::Mutex<()>>>>                            |
+|                                                                                   |
+|  1. Incoming Request for (chat_id, topic_id)                                      |
+|  2. locks.retain(|_, weak| weak.strong_count() > 0)    ==> Auto-prune dead locks  |
+|  3. weak.upgrade()                                     ==> Upgrade or Create New  |
+|  4. Return Arc<tokio::sync::Mutex<()>>                 ==> Acquire turn lock      |
++-----------------------------------------------------------------------------------+
 ```
 
-1. **`isatty()` Terminal Checks**: CLI engines call `isatty(STDIN_FILENO)`. When attached to standard pipes, `isatty()` returns `false`, causing the CLI to disable interactive prompts, turn off ANSI rendering, or abort interactive mode.
-2. **Buffer Flushing (Block Buffering Deadlock)**: C/C++ runtimes switch to full block buffering (4KB/8KB) when stdout is not a TTY. Output is held in OS RAM instead of flushing line-by-line, causing silent hangs. `openpty` forces genuine line-by-line terminal flushing.
-3. **Echo Cancellation**: Standard cooked TTY mode echoes typed stdin bytes back into stdout. Tuner removes `LocalFlags::ECHO` via `tcsetattr` at creation, preventing prompt echo corruption.
-4. **ANSI Scrubbing**: Tuner uses compiled regex stripping (`\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])`) for raw terminal output while reading structured machine logs (`transcript_full.jsonl`) for thinking and tool calls.
+- **Automatic Garbage Collection on Lookup**: Every call to `LockPool::get()` sweeps the table with `locks.retain(|_, weak| weak.strong_count() > 0)`. Completed locks (strong count = 0) are evicted dynamically, scaling to thousands of topics with zero idle memory overhead.
+- **Deadlock Freedom**: Envelopes only acquire a single lock for their target `(chat_id, topic_id)` key. Because turns never perform multi-lock nested acquisitions, cyclical lock inversion deadlocks are mathematically impossible.
+- **ABA Prevention**: Rust's `Arc`/`Weak` reference counters guarantee that memory addresses are never recycled while references exist, completely preventing ABA identity collisions.
 
 ---
 
-### 4. Process Failure Domains & Recovery
-
-| Failure Scenario | Detection Mechanism | Tuner Mitigation Strategy | Relevant Code |
-| :--- | :--- | :--- | :--- |
-| **Silent Hang** | Dual timeout barriers: 15s PTY prompt init, 300s wall-clock turn limit. | Aborts future, drops `SessionHolder`, executes process-group annihilation, and returns actionable error. | [`cli/antigravity/provider.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs) |
-| **OOM / SIGSEGV / Crash** | Non-blocking `child.try_wait()` returns `Some(ExitStatus)` where `!status.success()`. | Catches non-zero exit codes immediately, parses error suggestions (API keys, PATH), marks session inactive. | [`cli/antigravity/polling.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs) |
-| **Rapid Crash Loop** | Supervisor tracks worker runtime (<10s = fast crash count). | Applies exponential backoff sleep $\min(2^{\text{count}}, 30.0)\text{s}$ to prevent CPU starvation. | [`supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L44-L50) |
-| **Orphan Sub-processes & Zombies** | Spawned processes are assigned a new Process Group ID (`process_group(0)` + `setsid()`). | **RAII Drop Reaping:** `SessionHolder::drop` issues `kill(-pgid, SIGKILL)` to instantly reap all child processes. | [`cli/antigravity/pty_spawner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs#L36-L46) |
-| **User Manual Abort (`/stop`)** | Commands trigger `abort(chat_id, topic_id)`. | Evicts session holders from memory, which immediately invokes `Drop` and kills running processes. | [`telegram/commands.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/commands.rs) |
-
----
-
-### 5. Concurrency, Race Conditions & Collision Avoidance
-
-```mermaid
-sequenceDiagram
-    participant User1 as User Message (Turn A)
-    participant User2 as User Message (Turn B)
-    participant Pool as LockPool (ChatID, TopicID)
-    participant Worker as Worker Engine
-
-    User1->>Pool: Acquire Lock (Chat: 100, Topic: None)
-    Pool-->>User1: Lock Granted
-    par Turn A executes
-        User1->>Worker: Run Turn A (PTY & Streaming)
-    and Turn B arrives
-        User2->>Pool: Request Lock (Chat: 100, Topic: None)
-        Note over User2,Pool: Queued in Tokio FIFO Mutex<br/>(Waits for Turn A to finish)
-    end
-    Worker-->>User1: Turn A Completes & Releases Lock
-    Pool-->>User2: Lock Granted to Turn B
-    User2->>Worker: Run Turn B sequentially
-```
-
-1. **Granular Topic Isolation (`LockPool`)**: Locks are keyed by `(chat_id, Option<topic_id>)`. Turns within the same topic run strictly in FIFO sequence; distinct topics/chats execute in full parallelism. Dead locks are pruned dynamically via `Weak<TokioMutex<()>>`.
-2. **Backpressure & 2-Second Rate Limiter**: Output deltas are buffered and throttled to at most once every 2 seconds (`last_edit.elapsed() >= Duration::from_secs(2)`), preventing Telegram HTTP 429 rate limit bans.
-3. **Webhook Sliding Window Limiter**: Restricts incoming webhooks to the configured threshold (default 30 req/min).
-
----
-
-### 6. Formal Agent Lifecycle State Machine
+#### 2.3 Exit Code 42 Orchestration & Re-exec Protocol
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle: Daemon Booted & Schedulers Active
-
-    state Idle {
-        [*] --> WaitingForEvent
-    }
-
-    WaitingForEvent --> Authenticating : Message / Trigger Received
+    [*] --> SupervisorRunning: tuner --supervisor
+    SupervisorRunning --> SpawnChild: supervisor::Supervisor::run()
+    SpawnChild --> ChildRunning: tokio::process::Command::spawn()
     
-    state Authenticating {
-        [*] --> CheckUserWhitelist
-        CheckUserWhitelist --> CheckPathSandbox
-        CheckPathSandbox --> CheckInjectionPatterns
-    }
-
-    Authenticating --> Rejected : Security / Whitelist Failure
-    Rejected --> Idle : Log & Drop / Alert
-
-    Authenticating --> LockAcquisition : Checks Passed
+    ChildRunning --> ChildExit: child.wait()
     
-    state LockAcquisition {
-        [*] --> RequestChatTopicLock
-        RequestChatTopicLock --> LockGranted : Mutex Available
-        RequestChatTopicLock --> Queued : Thread Busy (FIFO Queue)
-        Queued --> LockGranted : Prior Turn Finishes
-    }
-
-    LockGranted --> SessionResolution : Resolve Key (Key & Model)
+    state ChildExit <<choice>>
+    ChildExit --> CleanExit: Exit Code 0
+    ChildExit --> FastRestart: Exit Code 42
+    ChildExit --> CrashRecovery: Exit Code != 0 & != 42
     
-    state SessionResolution {
-        [*] --> CheckFreshness
-        CheckFreshness --> DailyReset : Stale (>Idle Timeout or Past 4:00 AM)
-        CheckFreshness --> ReuseSession : Fresh
-        DailyReset --> LoadWorkspaceRules
-        ReuseSession --> LoadWorkspaceRules
+    CleanExit --> [*]: Master Terminates
+    FastRestart --> SpawnChild: Reset backoff, Immediate Spawn
+    
+    state CrashRecovery {
+        [*] --> CheckRuntime
+        CheckRuntime --> FastCrash: Runtime < 10s (fast_crash_count++)
+        CheckRuntime --> StableCrash: Runtime >= 10s (fast_crash_count = 0)
+        FastCrash --> BackoffSleep: sleep(min(2^count, 30s))
+        StableCrash --> BackoffSleep: sleep(min(2^0, 30s))
+        BackoffSleep --> [*]
     }
-
-    SessionResolution --> PTYSpawning : Launch Engine
-
-    state PTYSpawning {
-        [*] --> OpenPTYDescriptor
-        OpenPTYDescriptor --> DisableEcho
-        DisableEcho --> SetProcessGroup
-        SetProcessGroup --> WaitForPrompt : 15s Timer
-    }
-
-    PTYSpawning --> TimeoutFailure : Prompt Timeout (>15s)
-    PTYSpawning --> ActiveExecution : Terminal Prompt Ready
-
-    state ActiveExecution {
-        [*] --> WritePrompt
-        WritePrompt --> StreamLogDelta : Poll transcript_full.jsonl
-        StreamLogDelta --> DebouncedChatEdit : 2s Rate Limiter
-        StreamLogDelta --> InteractiveAsk : Tool calls ask_question
-        InteractiveAsk --> WaitUserButtonCallback : Render Inline Keyboard
-        WaitUserButtonCallback --> WritePrompt : Button Clicked / Answer Injected
-    }
-
-    ActiveExecution --> ProcessCrashed : OOM / SIGSEGV / Exit Code != 0
-    ActiveExecution --> TurnTimeout : Total Runtime > 300s
-    ActiveExecution --> UserCancelled : User triggers /stop or /abort
-    ActiveExecution --> TurnCompleted : Status == DONE
-
-    state TerminatingAndCleanup {
-        [*] --> HarvestMetrics
-        HarvestMetrics --> AppendHistoryLog
-        AppendHistoryLog --> ReapProcessGroup
-        ReapProcessGroup --> ReleaseLock
-    }
-
-    ProcessCrashed --> TerminatingAndCleanup : Parse Smart CLI Error
-    TurnTimeout --> TerminatingAndCleanup : Format Timeout Notice
-    UserCancelled --> TerminatingAndCleanup : Clean Termination
-    TurnCompleted --> TerminatingAndCleanup : Deliver Deliverables & Attachments
-
-    TerminatingAndCleanup --> Idle : Return to Ready
+    CrashRecovery --> SpawnChild: Respawn Worker
 ```
 
----
-
-### 7. Memory Protection & Idempotency Guarantees
-
-1. **Incremental Log Delta Polling**: Tuner tracks the exact byte offset (`prev_size`). Only newly appended bytes are read and parsed, avoiding unbounded multi-megabyte log buffering.
-2. **Chunked Message Splitting**: Responses exceeding Telegram's 4096-character limit are automatically split into 4,000-character segments along valid HTML and markdown tag boundaries.
-3. **Cryptographic Envelope Identifiers**: Every event envelope is tagged with a unique 12-character hex ID seeded via `/dev/urandom` and nanosecond timestamps, preventing duplicate processing.
-4. **Media Group Debouncing**: Uploaded photo albums are debounced with a 500ms sliding timer, aggregating all media files into a single unified prompt.
+- **Exit Code `0`**: Graceful shutdown requested by user or system. Loop terminates.
+- **Exit Code `42`**: Intentional self-restart signal (emitted by `/restart`, upgrade completion, or owner registration). The supervisor resets `fast_crash_count = 0` and immediately respawns the child with zero delay.
+- **Non-Zero Crashes**: If child runtime was $< 10$ seconds, `fast_crash_count` increments; otherwise, it resets to 0. It executes exponential backoff sleep $\min(2^{\text{fast\_crash\_count}}, 30.0)\text{ seconds}$.
+- **Child Subprocess Teardown Guard** ([`terminate_child`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L68-L96)): Issues `SIGTERM` to the child PID, escalating to `SIGKILL` after 5 seconds to guarantee clean termination.
 
 ---
 
-### 8. Autonomous Scheduled Automations & Background Schedulers
-
-Tuner is not just a reactive chat responder; it operates as an autonomous daemon running three independent background schedulers that execute without requiring human interaction:
+### 3. Formal End-to-End Turn State Machine
 
 ```mermaid
-flowchart TD
-    subgraph Schedulers ["Autonomous Background Schedulers"]
-        CRON["1. CronScheduler (5s Tick)<br/>• IANA Timezone Normalization (chrono_tz)<br/>• Task Memory Context ({task}_MEMORY.md)<br/>• Quiet Hours Suppression Window"]
-        HB["2. HeartbeatScheduler (30m Interval)<br/>• Active Turn Cooldown & Busy Guard<br/>• Silent Token Filter (HEARTBEAT_OK Suppression)<br/>• Health Status Proactive Alerts"]
-        CLEAN["3. CleanupObserver (Daily 03:00 UTC)<br/>• 30-Day TTL File Purging (telegram_files & output_to_user)<br/>• Recursive Empty Directory Tree Pruning"]
-    end
+stateDiagram-v2
+    [*] --> IngressUpdate: Telegram / API / Webhook Message
 
-    subgraph Bus ["Central MessageBus & PTY Router"]
-        MB["MessageBus::submit(Envelope)"]
-        PTY["Antigravity CLI Driver"]
-    end
+    state IngressUpdate {
+        [*] --> ExtractMetadata: Parse chat_id, from_id, topic_id
+        ExtractMetadata --> CheckAuth: Query allowed_user_ids / groups
+    }
 
-    subgraph Dest ["Target Output"]
-        TG["Telegram Topic / Broadcast"]
-    end
+    CheckAuth --> OwnerAutoReg: Empty allowed_user_ids & from_id != 0
+    OwnerAutoReg --> Exit42: Save config, trigger restart (Exit 42)
+    Exit42 --> [*]
 
-    CRON -->|Due Job Envelope| MB
-    HB -->|Anomaly Alert Envelope| MB
-    MB --> PTY
-    PTY --> TG
-    CLEAN -->|Direct Storage Prune| FS["Workspace Filesystem"]
+    CheckAuth --> DropUnauthorized: from_id / group_id not whitelisted
+    DropUnauthorized --> [*]
+
+    CheckAuth --> AcquireTurnLock: Authentication Passed
+
+    state AcquireTurnLock {
+        [*] --> LockPoolGet: LockPool::get(chat_id, topic_id)
+        LockPoolGet --> AwaitMutex: lock.lock().await
+    }
+
+    AcquireTurnLock --> ResolveSessionData: Lock Acquired
+
+    state ResolveSessionData {
+        [*] --> LoadJson: SessionManager::load()
+        LoadJson --> CheckFreshness: is_session_fresh()
+        CheckFreshness --> UseExisting: Fresh (under idle/msg/daily reset limits)
+        CheckFreshness --> CreateNew: Stale / Expired (SessionData::new)
+    }
+
+    ResolveSessionData --> RouteActiveSession: SessionData Resolved
+
+    state RouteActiveSession <<choice>>
+    RouteActiveSession --> InjectRunningPTY: Session Active & Running/Ask
+    RouteActiveSession --> SpawnNewPTY: Session Idle / Needs Spawning
+
+    InjectRunningPTY --> FeedInteractiveStdin: feed_active_session_if_running()
+    FeedInteractiveStdin --> AwaitPTYStream
+
+    SpawnNewPTY --> SpawnerInit: spawn_session() (openpty, setsid)
+    SpawnerInit --> WaitForPrompt: wait_for_pty_prompt()
+
+    state WaitForPrompt <<choice>>
+    WaitForPrompt --> PTYInitTimeout: Timeout > 15s
+    WaitForPrompt --> WritePromptToPTY: Prompt Symbol '>' Detected
+
+    PTYInitTimeout --> AbortAndReportError: Kill PTY, Return Error HTML
+    WritePromptToPTY --> AwaitPTYStream: Write prompt + '\r'
+
+    state AwaitPTYStream {
+        [*] --> PollTranscript: spawn_log_polling()
+        PollTranscript --> NotifyEvent: Transcript JSONL Modified
+        NotifyEvent --> LogParser: AntigravityLogParser::parse_log_delta()
+        
+        state LogParser <<choice>>
+        LogParser --> DeltaText: Thinking / Tool Call / Delta
+        LogParser --> InteractiveAsk: Tool Call 'ask_question'
+        LogParser --> FinalResult: Status 'DONE' & Tool Calls Empty
+
+        DeltaText --> DebouncedEdit: Edit Telegram Message (2s interval)
+        InteractiveAsk --> RenderKeyboard: Render Inline Keyboard & Set AskState
+        RenderKeyboard --> UserInteractionWait: Wait for Callback or Write-in
+        UserInteractionWait --> InjectInteractiveAnswer: User clicks button / sends text
+        InjectInteractiveAnswer --> PollTranscript: Write option index + '\r' to PTY
+    }
+
+    AbortAndReportError --> ReleaseTurnLock
+    FinalResult --> PostProcessOutput: Format HTML & Split 4000 chars
+
+    state PostProcessOutput {
+        [*] --> CheckAttachments: send_file_attachments()
+        CheckAttachments --> HistoryLog: log_telegram_message()
+        HistoryLog --> SessionUpdate: update_session() (tokens, cost, count)
+    }
+
+    PostProcessOutput --> ReleaseTurnLock: Drop Lock Guard
+    ReleaseTurnLock --> [*]: Turn Complete
 ```
 
-1. **Timezone-Aware Cron Engine ([`CronScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs) & [`CronManager`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/manager.rs))**:
-   - Evaluates standard 5-part and 6-part cron expressions against the user's specific IANA timezone (e.g. `Asia/Seoul`, `America/New_York`).
-   - Automatically enriches cron task prompts with persistent task-specific memory files (`{task}_MEMORY.md`).
-   - Enforces **Quiet Hours** (`quiet_start` / `quiet_end`), suppressing non-critical scheduled job runs while the user is asleep.
-2. **Heartbeat Health Telemetry ([`HeartbeatScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs))**:
-   - Runs periodic self-health checks (default every 30 minutes) to confirm daemon and model readiness.
-   - Skips checks if the chat is actively busy (`is_chat_busy`) or within cooldown periods.
-   - **Silent Token Filter:** When the agent responds with the acknowledgment token `HEARTBEAT_OK`, the alert is suppressed to eliminate notification spam, alerting only on operational anomalies.
+---
+
+### 4. Scheduler Arbitration & Collision Dynamics
+
+```
++-----------------------------------------------------------------------------------+
+|                        COLLISION ARBITRATION HIERARCHY                            |
+|                                                                                   |
+|  [CronScheduler]             [HeartbeatScheduler]          [Telegram Ingress]     |
+|         |                            |                             |              |
+|         v                            v                             v              |
+|  1. Quiet Hours Check        1. Quiet Hours Check          1. Auth Check          |
+|  2. Path Sandboxing          2. is_chat_busy() Check       2. LockPool.get()      |
+|  3. LockMode::Required       3. is_cooling_down() Check    3. feed_active_session |
+|         |                            |                             |              |
+|         +----------------------------+-----------------------------+              |
+|                                      |                                            |
+|                                      v                                            |
+|                  MessageBus & LockPool Dynamic Arbitration                        |
++-----------------------------------------------------------------------------------+
+```
+
+1. **Cron Execution Arbitration ([`CronScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs#L32-L248))**:
+   - Polls every 5s, calculating next runs via `cron::Schedule::upcoming(tz)`.
+   - **Quiet Hours:** Skips execution if local time is within `[quiet_start, quiet_end]`.
+   - **Enriched Memory Context:** Injects `<task>_MEMORY.md` into prompts.
+   - **Bus Dispatch:** Emits `Envelope` with `Origin::Cron`, acquiring chat `LockPool` mutex before delivery.
+2. **Telemetry Heartbeat Arbitration ([`HeartbeatScheduler`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs#L23-L194))**:
+   - Runs periodic health checks (every 30m).
+   - **Busy Chat Avoidance:** Aborts check if `is_chat_busy()` detects an active PTY session.
+   - **ACK Suppression:** When the model replies with `HEARTBEAT_OK`, notifications are suppressed to prevent spam.
 3. **Automated Storage Janitor ([`CleanupObserver`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cleanup/observer.rs))**:
-   - Daily maintenance job (default 03:00 UTC) that purges media files and user deliverables older than the retention threshold (default 30 days) and prunes empty folder trees.
+   - Daily maintenance (03:00 UTC) purges media files and deliverables older than 30 days and removes empty directory trees.
+
+---
+
+### 5. Fault Tolerance, Security & Auxiliary Subsystems
+
+#### 5.1 Fault Tolerance & Silent Crash Recovery
+- **Non-Blocking Process Probing (`try_wait`)**: Polled on every tick; detects premature process termination immediately without hanging.
+- **Process Group Eradication (`SIGKILL -pgid`)**: `SessionHolder::drop` sends `SIGKILL` to `-pgid`, instantly reaping compiler, interpreter, and tool child processes.
+- **RAII Drop Guards (`TaskGuard`)**: Synthesizes `BackgroundResultStatus::Aborted` on unexpected cancellation, keeping central event streams clean.
+- **Crash State Reconciler**: On daemon boot, `NamedSessionRegistry::recover_crash` reconciles interrupted `"running"` sessions back to `"idle"`.
+
+#### 5.2 Security Sandboxing & Prompt Injection Defense
+- **Path Traversal Containment ([`validate_file_path`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/security/paths.rs#L80-L109))**: Rejects null bytes (`\0`) and control characters, resolves symlinks, and enforces root boundary containment (`workspace/`, `cron_tasks/`, `output_to_user/`).
+- **Prompt Injection Defense ([`detect_suspicious_patterns`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/security/content.rs#L46-L55))**: Folds full-width Unicode characters and scans against instruction overrides, role hijacking, fake system tokens (`<|im_start|>`), and internal metadata leaks.
+
+#### 5.3 Auxiliary Subsystems
+- **Media Ingestion & Debouncing ([`MediaGroupManager`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/media_group.rs#L25-L86))**: Aggregates album uploads across 1.5s windows, downloading items sequentially into `workspace/telegram_files/` and injecting a unified prompt hint.
+- **Multi-Provider Accounting ([`ProviderSessionData`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/data.rs#L85))**: Tracks session IDs, message counts, token totals, and USD costs independently per CLI provider.
+- **Task-Local Localization ([`TASK_ACTIVE_LANG`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/i18n/mod.rs))**: Propagates localized language catalogs across Tokio tasks without cross-tenant leakage.
+- **Axum Webhook & API Security ([`auth.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/auth.rs#L59-L65))**: Sliding-window rate limiter and constant-time HMAC-SHA256 signature verification via `subtle::ConstantTimeEq`.
+
+---
+
+### 6. Architectural Verdict & Quality Guarantees
+
+| Quality Attribute | Architectural Guarantee | Implementation Mechanism |
+| :--- | :--- | :--- |
+| **Fault Tolerance** | Zero manual intervention on crashes; zero zombie processes. | Supervisor Exit Code 42 re-exec protocol; exponential crash backoff; negative process group `kill(-pgid, SIGKILL)` in Drop guards. |
+| **Concurrency Safety** | Thread-level serialization with cluster-level parallelism. | Dynamic `LockPool` with weak-reference garbage collection on access; hierarchical single-lock acquisition discipline. |
+| **State Integrity** | Zero data corruption on sudden shutdown or power cut. | Atomic temporary-file-and-rename staging (`.tmp` $\to$ target) for all JSON state storage. |
+| **Isolation** | Strict separation of agent memory, skills, and tools across profiles. | `DuctorPaths` rooted directory hierarchy; `validate_file_path` canonical sandboxing; full-width Unicode regex prompt injection filters. |
+| **Interactivity** | True bi-directional dialogue with headless CLI agents. | Raw PTY subshell allocation (`openpty`, `~ECHO`); non-blocking `AsyncFd` reading; filesystem event log polling; inline keyboard stdin injection. |
 </details>
 
 ---
