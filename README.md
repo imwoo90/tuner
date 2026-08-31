@@ -152,192 +152,245 @@ To publish an official release:
 ---
 
 <details open>
-<summary><b>🏛️ System Architecture: Tuner Daemon & Agent Orchestration Runtime (Dialectically Certified)</b></summary>
+<summary><b>🏛️ System Architecture: Tuner Daemon & Autonomous Bridge (Dialectically Certified)</b></summary>
 
-### 1. High-Level Mental Model & Primary Value Proposition
+### 1. Universal System Ontology & Dual-Mode Topography
 
-**Tuner** is a multi-profile, resilient autonomous daemon and bridge architecture written in safe, asynchronous Rust on the Tokio runtime. It transforms terminal-bound AI agent CLI runtimes (specifically Google Antigravity `agy`, Claude Code, Codex, and Gemini CLI tools) into 24/7 long-lived autonomous agents accessible via multi-channel messaging interfaces (Telegram, WebSockets/Axum, and Matrix), scheduled automations (Cron), and webhook triggers.
+**`tuner`** (internally referenced as **Ductor**) is a mission-critical, concurrent agentic daemon written in safe, asynchronous Rust on the Tokio runtime. It functions as an autonomous supervisory control plane and multiplexer bridging conversational frontends (Telegram Bot API, End-to-End Encrypted WebSockets, HTTP REST/Webhooks) to local agent runtime substrates (Antigravity CLI / `agy`, Claude CLI, Codex CLI, Gemini CLI).
 
 ```
 +----------------------------------------------------------------------------------------------------+
 |                                           TUNER DAEMON                                             |
 |                                                                                                    |
-|  [Ingress Channels]                [Unified Message Bus]                 [Agent Execution Engine]  |
-|  - Telegram Bot (Teloxide)         - LockPool (Chat/Topic locks)         - PTY Spawner (openpty)   |
-|  - Webhook API (Axum)       ===>   - Envelope Protocol            ===>   - Headless Pipe Fallback  |
-|  - WebSockets & REST               - 3-Tier Priority Arbitrator          - Log Parser (JSONL)      |
-|  - Cron & Heartbeat Loops          - Cascading Fallback                  - Interactive Stdin Pipe  |
+|  [Ingress Transports]              [Unified Message Bus]                 [Agent Execution Plane]   |
+|  - Telegram Bot (Teloxide)         - LockPool (Weak Mutexes)             - PTY Spawner (openpty)   |
+|  - E2E WebSockets (Curve25519)     - 3-Tier Priority Arbitrator          - Headless Pipe Fallback  |
+|  - Axum Webhooks & REST     ===>   - Envelope Protocol            ===>   - Log Parser (JSONL)      |
+|  - Autonomous Schedulers           - Multi-Provider Skill Sync           - Interactive Stdin Pipe  |
+|  - i18n Localization Engine        - Two-Phase Atomic Commits            - Process Group SIGKILL   |
 +----------------------------------------------------------------------------------------------------+
 ```
 
 #### Dual-Mode Master-Supervisor Topology
-1. **Master Supervisor Mode** ([`main.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/main.rs#L195-L216)): Operates as a root supervisor daemon managing child profile workers (`tuner --worker <profile_name>`), monitoring heartbeats, enforcing crash backoffs, and responding to system-wide re-exec signals (Exit Code `42`).
-2. **Worker Profile Mode** ([`runner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/runner.rs#L85-L113)): Operates an isolated agent workspace profile with dedicated session persistence, pseudo-terminal pools, scheduled cron jobs, quiet-hour telemetry heartbeats, cleanup observers, and messaging transceivers.
+1. **Master / Supervisor Mode** ([`src/main.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/main.rs#L195-L216), [`src/supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L16-L66)): Operates as a root supervisor daemon managing child profile workers (`tuner --worker <profile>`), monitoring heartbeats via non-blocking process polling (`child.try_wait()`), executing exponential crash backoffs ($\min(2^n, 30.0)\text{s}$), and watching for IPC restart markers (`~/.tuner/restart-requested` $\to$ Exit Code `42`).
+2. **Worker Mode** ([`src/main.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/main.rs#L161-L193), [`src/messenger/telegram/runner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/runner.rs#L85-L113), [`src/webhook/server.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/server.rs#L34-L92)): Executes dedicated profile instances, managing isolated workspaces, pseudo-terminal pools, encrypted message routers, session persistence engines, and background schedulers.
 
 ```mermaid
-flowchart TD
-    subgraph IngressTransports["Ingress & Egress Transports"]
-        TG["Telegram Bot (Teloxide)"]
-        MX["Matrix Client (Configured)"]
-        WH["Webhook / Axum REST & WebSocket API"]
+flowchart TB
+    subgraph SupervisorPlane [Supervisor & Master Plane]
+        Main[src/main.rs: Master Loop]
+        Super[src/supervisor.rs: ProcessSupervisor]
+        RestartWatcher[Restart Marker Watcher]
+        Main --> Super
+        Super -->|Spawns --worker <profile>| WorkerA[Worker Process: Default]
+        Super -->|Spawns --worker <profile>| WorkerB[Worker Process: Custom]
+        RestartWatcher -->|SIGTERM / Exit 42| Super
     end
 
-    subgraph CoreDaemon["Tuner Core Daemon Architecture"]
-        BUS["MessageBus (Async Event Router)"]
-        LOCK["LockPool (Chat/Topic Async Mutexes)"]
-        SESS["SessionManager (Multi-Session & Freshness Engine)"]
-        SEC["Security Sandbox & Content Filter"]
+    subgraph IngressTransports [Ingress & Messaging Plane]
+        TG[src/messenger/telegram: Teloxide Polling]
+        WS[src/webhook/api/websocket.rs: Axum E2E WS]
+        WH[src/webhook/server.rs: Axum Webhooks]
+        Bus[src/bus/bus.rs: MessageBus]
+        Lock[src/bus/lock_pool.rs: LockPool]
+        
+        TG --> Lock
+        WS --> Lock
+        WH --> Lock
+        Lock --> Bus
     end
 
-    subgraph AutonomousObservers["Autonomous Background Automations"]
-        CRON["CronScheduler (Timezone & Quiet-Hour Aware)"]
-        HB["HeartbeatScheduler (Telemetry & Diagnostics)"]
-        BG["BackgroundObserver (In-flight Task Quota Manager)"]
-        CLN["CleanupObserver (Retention & Purge Manager)"]
+    subgraph CoreRuntimes [Agent Substrate & Execution Plane]
+        SessMgr[src/session/manager.rs: SessionManager]
+        NamedReg[src/session/named.rs: NamedSessionRegistry]
+        Provider[src/cli/antigravity/provider.rs: AgentProvider]
+        PTY[src/cli/antigravity/pty_spawner.rs: PTY Spawner]
+        Parser[src/cli/antigravity/log_parser.rs: LogParser]
+        
+        Bus --> SessMgr
+        SessMgr --> Provider
+        Provider --> PTY
+        PTY -->|openpty / AsyncFd / pgid| AgyCLI[Antigravity CLI: agy]
+        AgyCLI -->|transcript_full.jsonl| Parser
     end
 
-    subgraph RuntimeExecution["CLI Agent Execution Subsystem"]
-        CLI["AntigravityCli (agy Process Driver)"]
-        PTY["PTY Spawner (nix openpty / non-echoing FD)"]
-        PIPE["Headless Pipe Fallback (Stdio::piped)"]
-        POLL["Log Polling Engine (notify / JSONL Parser)"]
-        AGY["agy CLI Child Process (Workspace Sandboxed)"]
+    subgraph AuxiliaryShadowPlanes [Shadow & Automation Engines]
+        Cron[src/cron/scheduler.rs: CronScheduler]
+        HB[src/heartbeat/scheduler.rs: HeartbeatScheduler]
+        Clean[src/cleanup/observer.rs: CleanupObserver]
+        Sync[src/workspace/sync.rs: Multi-Provider Sync]
+        Upgrade[src/upgrade.rs: Self-Upgrade Engine]
+        
+        Cron --> Bus
+        HB --> Bus
+        Clean --> SessMgr
+        Sync --> Provider
     end
-
-    TG <--> BUS
-    MX <--> BUS
-    WH <--> BUS
-
-    BUS <--> LOCK
-    LOCK <--> SESS
-    SESS <--> CLI
-
-    CRON --> BUS
-    HB --> BUS
-    BG --> BUS
-    CLN --> SESS
-
-    CLI --> PTY
-    CLI --> PIPE
-    PTY --> AGY
-    PIPE --> AGY
-    AGY -.-> POLL
-    POLL -.-> CLI
-    SEC -.-> CLI
 ```
 
 ---
 
-### 2. End-to-End Dataflows & Execution Lifecycles
+### 2. Topographical Cartography of the 9 Functional Planes
 
-#### 2.1 Interactive User Message Turn Lifecycle
+| Functional Plane | Responsibilities & Core Files | Source Invariants |
+|---|---|---|
+| **1. Supervisor & Lifecycle** | Master supervisor daemon, exponential crash backoff, signal escalation (`SIGTERM` $\to$ `SIGKILL`), zero-downtime self-upgrades | [`src/main.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/main.rs)<br>[`src/supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs)<br>[`src/upgrade.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/upgrade.rs) |
+| **2. Message Bus & Locking** | Envelope routing across 10 origins, weak-reference mutex pool (`LockPool`), deadlock-free single-lock discipline | [`src/bus/bus.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/bus.rs)<br>[`src/bus/lock_pool.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs)<br>[`src/bus/envelope.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/envelope.rs) |
+| **3. Session & Persistence** | Two-phase atomic `.tmp` $\to$ `rename` storage, mnemonic names (`swift-fox`), timezone daily resets, topic migration | [`src/session/manager.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs)<br>[`src/session/named.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/named.rs)<br>[`src/session/freshness.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/freshness.rs) |
+| **4. Agent CLI Substrate** | UNIX PTY spawner (`openpty`), `AsyncFd` non-blocking drain, JSONL streaming, headless pipe fallback (`Stdio::piped`) | [`src/cli/antigravity/pty_spawner.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/pty_spawner.rs)<br>[`src/cli/antigravity/provider.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs)<br>[`src/cli/antigravity/log_parser.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/log_parser.rs) |
+| **5. E2E Crypto & Webhooks** | Curve25519-Salsa20-Poly1305 encrypted WebSockets, Diffie-Hellman handshake, HMAC-SHA256 authentication | [`src/webhook/api/crypto.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/api/crypto.rs)<br>[`src/webhook/server.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/server.rs)<br>[`src/webhook/auth.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/auth.rs) |
+| **6. Workspace & Skills Sync** | Cross-provider rule deployment (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), skill symlinking across `.claude`/`.codex`/`.gemini` | [`src/workspace/rules.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/rules.rs)<br>[`src/workspace/skills.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/skills.rs)<br>[`src/workspace/paths.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/paths.rs) |
+| **7. Automations & Observers** | Timezone-aware cron tasks with memory enrichment, quiet-hour heartbeat diagnostics, 30-day storage hygiene | [`src/cron/scheduler.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cron/scheduler.rs)<br>[`src/heartbeat/scheduler.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs)<br>[`src/cleanup/observer.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cleanup/observer.rs) |
+| **8. Telegram & UI Stream** | Debounced 2s streaming, stack-based HTML tag chunking, bitmap multi-select and write-in backtracking UI | [`src/messenger/telegram/stream.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/stream.rs)<br>[`src/messenger/telegram/formatting/`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting.rs)<br>[`src/messenger/telegram/ask_process.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_process.rs) |
+| **9. Security & Localization** | Path traversal sandboxing, fullwidth Unicode injection defense, 9-language async task-local scoping (`TASK_ACTIVE_LANG`) | [`src/security/paths.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/security/paths.rs)<br>[`src/security/content.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/security/content.rs)<br>[`src/i18n/mod.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/i18n/mod.rs) |
+
+---
+
+### 3. The Shadow Planes: Unveiling Non-Conversational Bastions
+
+#### 3.1 Multi-Provider Rule & Skill Synchronization Engine
+`tuner` automatically discovers authenticated providers (Claude, Codex, Gemini, Antigravity), deploys matching rule templates (`RULES-{variant}.md` $\to$ `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), and purges stale rule files for unauthenticated engines ([`src/workspace/rules.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/rules.rs)). It scans all skills with valid YAML/TOML frontmatter in `SKILL.md` and establishes bidirectional symlinks across provider directories (`.claude/skills`, `.codex/skills`, `.gemini/skills`) with canonical precedence: `ductor` > `claude` > `codex` > `gemini` ([`src/workspace/skills.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/skills.rs)).
+
+#### 3.2 Full-Duplex E2E Encrypted WebSockets (Curve25519-Salsa20-Poly1305)
+For external runners and headless frontends, `tuner` hosts an authenticated, end-to-end encrypted WebSocket server ([`src/webhook/api/crypto.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/webhook/api/crypto.rs)):
+1. **Handshake**: Client submits plaintext `auth` frame containing Bearer Token and Curve25519 public key. Server validates token in constant time, generates an ephemeral Curve25519 keypair, derives a shared symmetric secret via Diffie-Hellman (`SalsaBox`), and returns `auth_ok`.
+2. **Encrypted Frame Stream**: All subsequent bidirectional frames (text deltas, tool previews, interactive queries) are sealed with unique 24-byte random nonces prepended to Poly1305 authenticated ciphertexts.
+
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Telegram User
-    participant Bot as Teloxide Bot / Dispatcher
-    participant Router as process_text_with_files
-    participant SManager as SessionManager
-    participant LPool as LockPool
-    participant Cli as AntigravityCli
-    participant PTY as PTY Spawner / SessionHolder
-    participant Watcher as inotify / Log Poller
-    participant Stream as Stream Consumer
+    participant Client as WS Client
+    participant Server as Tuner WS Server (Axum)
+    participant Core as PTY Engine
 
-    User->>Bot: Sends message ("Build feature X")
-    Bot->>Router: Dispatch message update
-    Router->>SManager: resolve_session(key, provider, model)
-    SManager-->>Router: Returns active SessionData & session_id
-    Router->>LPool: Acquire lock for (chat_id, topic_id)
-    Note over Router,LPool: Serialization guarantees no concurrent prompt collisions
-    Router->>Cli: send_streaming(prompt, session_id, ...)
-    Cli->>PTY: write_to_session(master_fd, prompt + "\r")
-    PTY->>Watcher: Logs written to transcript_full.jsonl
-    Watcher-->>Stream: Emits StreamEvent::TextDelta / AskQuestion
-    Stream-->>Bot: Debounced HTML edit/send (4000 char chunks)
-    Bot-->>User: Real-time visual progress & thinking blocks
-    Watcher-->>Stream: StreamEvent::Result(CliResponse)
-    Stream->>SManager: update_session(metrics, tokens, cost)
-    Router->>LPool: Release lock
+    Client->>Server: Plaintext Auth Frame (Token, Client_PK)
+    Note over Server: Constant-time Token Validation<br/>Generate Ephemeral Server_PK<br/>Derive SalsaBox Context
+    Server->>Client: Plaintext AuthOK Frame (Server_PK, ActiveModel)
+    Note over Client,Server: All Future Frames are Curve25519-Salsa20-Poly1305 Encrypted (24B Nonce)
+
+    Client->>Server: Encrypted Frame: "Implement feature X"
+    Server->>Core: Forward to PTY stdin
+    Core-->>Server: Stream TextDelta & Tool Calls
+    Server-->>Client: Encrypted Frame: TextDelta / Progress
+    Core-->>Server: Final Result
+    Server-->>Client: Encrypted Frame: Result Payload
 ```
 
-#### 2.2 Autonomous Background Automations (Cron / Heartbeat / Background Tasks)
+#### 3.3 Internationalization (i18n) Engine with Task-Local Scoping
+- Supports 9 languages (`en`, `de`, `nl`, `es`, `fr`, `id`, `pt`, `ru`, `ko`) loaded from flattened TOML catalogs with English fallback ([`src/i18n/loader.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/i18n/loader.rs)).
+- Uses `tokio::task_local! { pub static TASK_ACTIVE_LANG: String; }` to isolate language contexts per asynchronous task without global mutex contention.
+- Implements `t!` macro for dot-syntax argument interpolation (`{name}`, `{count}`) and `t_plural!` for linguistic pluralization.
+
+#### 3.4 Zero-Downtime Autonomous Self-Upgrade Engine
+[`src/upgrade.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/upgrade.rs) queries GitHub Releases, streams `.tar.gz` assets, verifies semver tags, unpacks binaries into temporary files with `0o755` permissions, performs atomic executable replacement via `fs::rename`, and triggers master supervisor restart with Exit Code `42`.
+
+---
+
+### 4. End-to-End Macro-Lifecycles & Dynamic State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ingress: User Message / Webhook / Cron
+    
+    state Ingress {
+        direction LR
+        AuthCheck --> MentionFilter
+        MentionFilter --> MediaDownload
+        MediaDownload --> ReplyPromptBuilder
+    }
+
+    Ingress --> Arbitration: Acquire Chat+Topic Mutex
+    
+    state Arbitration {
+        direction TB
+        LockPoolGet --> SessionResolve
+        SessionResolve --> StaleCheck
+        StaleCheck --> SessionInit: Needs Boot
+        StaleCheck --> PTYDispatch: Active
+    }
+
+    state ExecutionPlane {
+        direction TB
+        PTYDispatch --> AsyncDrain: OpenPTY + AsyncFd
+        AsyncDrain --> LogWatcher: transcript_full.jsonl
+        LogWatcher --> DebounceStream: 2s Interval
+        DebounceStream --> AskQuestionWait: Agent asks question
+        DebounceStream --> ExecutionComplete: CLI Finished
+    }
+
+    state AskQuestionWait {
+        direction LR
+        RenderInlineUI --> AwaitUserInput
+        AwaitUserInput --> SendKeystrokes: Option Selected
+        AwaitUserInput --> BacktrackWriteIn: Text Input
+        SendKeystrokes --> DebounceStream
+        BacktrackWriteIn --> DebounceStream
+    }
+
+    Arbitration --> ExecutionPlane
+    ExecutionPlane --> Persistence: Two-Phase Atomic Write
+    
+    state Persistence {
+        direction LR
+        WriteTemp: write(.tmp) --> AtomicRename: rename(.tmp -> .json)
+    }
+
+    Persistence --> [*]
+```
+
+#### 4.1 Interactive Question State Machine (`AskQuestion`)
+When an agent calls `ask_question` or `ask_permission` ([`src/messenger/telegram/ask_process.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/ask_process.rs)):
+1. PTY execution pauses awaiting standard input.
+2. Bot renders dynamic inline keyboards supporting single-select buttons or multi-select checklists tracked in bitmap strings (`10100`).
+3. Direct write-in text responses send backspace erasure sequences (`\x7F` $\times N$) to PTY stdin followed by newline confirmation (`\r`).
+4. Navigation controls support backtracking to previous questions (`\x1B[D`) and skipping (`\x1B`).
+
+#### 4.2 Two-Phase Atomic Persistence
+All state mutations across `SessionManager`, `NamedSessionRegistry`, `CronManager`, and `WebhookManager` serialize data into `.tmp` files before invoking atomic POSIX `fs::rename()`. Power loss or sudden kernel panics never result in truncated or corrupted JSON state files.
+
+---
+
+### 5. The 5 Supreme Invariant Defenses
+
 ```mermaid
 flowchart TD
-    subgraph CronSubsystem["Cron Scheduling Engine"]
-        CTick["CronScheduler tick (every 5s)"] --> CCheck["Check mtime & reload cron_jobs.json"]
-        CCheck --> CDue["Identify Due Jobs (Utc::now() >= next_run)"]
-        CDue --> CQ["check_quiet_hours_at(job, tz)"]
-        CQ -- "In Quiet Hours" --> CSkip["Skip Tick"]
-        CQ -- "Active Window" --> CSafe["Validate Task Folder & Paths"]
-        CSafe --> CPrompt["Enrich Prompt with {folder}_MEMORY.md"]
-        CPrompt --> CExec["AntigravityCli::send() in task workspace"]
-        CExec --> CBus["Submit Cron Result Envelope to MessageBus"]
+    subgraph Def1 [Invariant 1: Deadlock Elimination]
+        D1A["LockPool::get(chat_id, topic_id)"] --> D1B["Weak<TokioMutex<()>> Reference Pool"]
+        D1B --> D1C["Auto-Pruning of Dead Weak Locks"]
+        D1C --> D1D["Independent Cross-Chat Execution"]
     end
 
-    subgraph HeartbeatSubsystem["Heartbeat Telemetry Engine"]
-        HTick["HeartbeatScheduler tick (interval_minutes)"] --> HQ["Evaluate Quiet Window"]
-        HQ -- "Quiet Hours" --> HSkip["Skip Tick"]
-        HQ -- "Active" --> HBusy["is_chat_busy(chat_id) (Inspect active PTY)"]
-        HBusy -- "Active PTY" --> HSkip
-        HBusy -- "Idle" --> HCool["is_cooling_down(session)"]
-        HCool -- "Cooldown Active" --> HSkip
-        HCool -- "Ready" --> HProbe["Send Prompt: 'System self-check...'"]
-        HProbe --> HCheck{"Response == HEARTBEAT_OK?"}
-        HCheck -- "Yes" --> HSuppress["Suppress Notification (Quiet OK)"]
-        HCheck -- "No (Anomaly)" --> HAlert["Submit Alert Envelope to Bus -> Deliver to Chat"]
+    subgraph Def2 [Invariant 2: Substrate Degradation]
+        D2A["PTY openpty() Failure / Non-Unix"] --> D2B["Fallback to Headless stdio Pipes"]
+        D2B --> D2C["Direct Pipe Draining"]
     end
 
-    subgraph BackgroundTaskSubsystem["Background Task Observer"]
-        BGSub["BackgroundObserver::submit()"] --> BGQuota{"Active Tasks < MAX_TASKS_PER_CHAT (5)?"}
-        BGQuota -- "No" --> BGReject["Reject: Too many active tasks"]
-        BGQuota -- "Yes" --> BGG["Instantiate TaskGuard (RAII Drop Guard)"]
-        BGG --> BGSpawn["tokio::spawn with timeout Duration"]
-        BGSpawn --> BGRun["Execute provider.send()"]
-        BGRun --> BGEnd{"Completed / Timed Out / Aborted?"}
-        BGEnd --> BGFin["Map Status & Dispatch Result to Bus Handler"]
+    subgraph Def3 [Invariant 3: Silent Compute Liveness]
+        D3A["PTY Buffer Silent"] --> D3B["child.try_wait() Status Check"]
+        D3B --> D3C["transcript_full.jsonl Size Delta Detection"]
+        D3C --> D3D["Zero Zombie Hangs"]
+    end
+
+    subgraph Def4 [Invariant 4: Multi-Byte UTF-8 Safety]
+        D4A["Arbitrary Byte Chunk"] --> D4B["char_indices() / c.len_utf8()"]
+        D4B --> D4C["Exact Character Boundary Slicing"]
+    end
+
+    subgraph Def5 [Invariant 5: Stack-Based HTML Balancing]
+        D5A["4000-Char Limit Exceeded"] --> D5B["Tokenize Tags & Text"]
+        D5B --> D5C["Stack Track: open_tags"]
+        D5C --> D5D["Inject Closing Tags at Split"]
+        D5D --> D5E["Re-open Tags in Next Chunk"]
     end
 ```
 
----
-
-### 3. Core Technical Invariants & Dialectical Proofs (The 5 Supreme Laws)
-
-#### 1. Mathematical Deadlock Elimination & Starvation Immunity (Law 1 & 2)
-- **Single-Lock Discipline**: Every turn acquires strictly one lock for its target `(chat_id, topic_id)` key via [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74). Cross-session delegations yield their current turn and dispatch an [`Envelope`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/envelope.rs#L79-L138) with `LockMode::Required`, eliminating Coffman hold-and-wait conditions ($|\text{Locks}| \le 1 \implies \text{Deadlock} = \emptyset$).
-- **FIFO Queuing & Preemption**: Tokio Mutex ensures strict FIFO order, while background schedulers proactively interrogate [`is_chat_busy`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/heartbeat/scheduler.rs#L100-L109) to yield to active user dialogues.
-- **Lock-Free Emergency Control**: Administrative commands (`/abort`, `/stop`, `/restart`) bypass the prompt injection lock pool entirely ([`commands.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/commands.rs#L75-L119)), issuing immediate `SIGKILL` directly to the child process group.
-
-#### 2. Substrate Invariance & Headless Pipe Fallback (Law 3)
-- **Dual-Path Execution**: When running in unprivileged containers, rootless pods, or strict seccomp sandboxes where `nix::pty::openpty` or `/dev/pts` device allocation is denied, Tuner gracefully falls back to standard asynchronous pipes ([`run_oneshot`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L94-L125)) with `Stdio::piped()`.
-- **Environment Sanitization**: Sets `TERM=dumb`, `NO_COLOR=1`, and `CI=1` ([`provider.rs:L22-L37`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L22-L37)) to prevent downstream tools from emitting unparsed curses/terminal control codes over headless pipes.
-
-#### 3. Existential Liveness of Silent Compute (Law 4)
-- **Kernel-Level Process Probing**: Telemetry is decoupled from stdout byte frequency. A non-blocking 500ms [`child.try_wait()`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L148-L178) sweep queries the kernel process table directly.
-- **Differentiating Contemplation from Comas**: Heavy tasks emitting zero stdout for 40 seconds (e.g. monolithic compilation, large downloads) are verified as alive (`Ok(None)`), while the generous 300s lease window and continuous `⏳` reactions preserve user trust without premature timeout aborts.
-
-#### 4. Pathological Stream Invariance & Grapheme-Safe HTML Splitting (Law 5)
-- **Multi-Byte UTF-8 Code Point Invariance**: [`split_at_char_limit`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L12-L26) iterates across Unicode scalar values (`chars()`) and accumulates `c.len_utf8()`, guaranteeing that multi-byte code points (emojis, CJK glyphs, ANSI markers) are never sliced mid-byte.
-- **Stack-Based HTML Tag Balancing**: [`tokenize_html`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L40-L56) tracks open tags (`<pre>`, `<code>`, `<blockquote>`, `<b>`, `<i>`) on an `open_tags: Vec<String>` stack, automatically appending closing tags to Chunk $N$ and prepending open tags to Chunk $N+1$ to ensure well-formed DOM structure.
-
-#### 5. Two-Phase Atomic Persistence & Self-Healing Supervision (Law 1 & 2)
-- **Two-Phase Atomic Commits**: All JSON state updates (`sessions.json`, `cron_jobs.json`, `webhooks.json`, `named_sessions.json`) write data to a temporary file (`.tmp`) before invoking atomic POSIX `fs::rename`, eliminating corrupted state files during power loss or abrupt crashes.
-- **Anti-Thrashing Crash Backoff**: In [`supervisor.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53), worker crashes under 10 seconds apply exponential backoff ($\min(2^n, 30.0)\text{s}$), while deliberate restarts (`exit(42)`) trigger instant respawns.
-- **Boot Crash Reconciler**: [`NamedSessionRegistry::recover_crash`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/named.rs#L86-L98) atomically resets orphaned `"running"` sessions back to `"idle"` on boot.
-
----
-
-### 4. Comprehensive Invariant Verification Matrix
-
-| Invariant | System Guarantee | Source Reference |
-| :--- | :--- | :--- |
-| **INV-1 (Lock Discipline)** | Single-lock discipline ($|\text{Locks}| \le 1$) mathematically precludes distributed circular wait deadlocks. | [`LockPool::get`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74) |
-| **INV-2 (Substrate Invariance)** | Graceful degradation from interactive PTYs to headless `Stdio::piped()` pipes in restricted containers. | [`run_oneshot`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L94-L125) |
-| **INV-3 (Silent Liveness)** | Non-blocking 500ms `child.try_wait()` sweeps verify kernel process liveness during zero-stdout compute. | [`check_completion_step`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L148-L178) |
-| **INV-4 (Emergency Preemption)** | Administrative commands (`/abort`, `/stop`, `/restart`) bypass the prompt lock pool for direct teardown. | [`commands.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/commands.rs#L75-L119) |
-| **INV-5 (Tag-Balanced HTML)** | Grapheme-safe slicing via `c.len_utf8()` + stack-based open tag reconstitution across 4000-char chunks. | [`split_html_message`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs) |
-| **INV-6 (Anti-Thrashing)** | Exponential crash backoff ($\min(2^n, 30\text{s})$) + 3600s placeholder token dormancy prevents CPU exhaustion. | [`Supervisor::run`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/supervisor.rs#L33-L53) |
-| **INV-7 (Atomic Disk Commits)** | Two-phase atomic `.tmp` file creation followed by `fs::rename()` prevents disk corruption on sudden death. | [`SessionManager::save`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/session/manager.rs#L86-L94) |
+| Invariant Defense | Failure Mode Prevented | Exact Code Implementation |
+|---|---|---|
+| **1. Deadlock Elimination** | Circular wait locks across concurrent sessions | [`src/bus/lock_pool.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/bus/lock_pool.rs#L58-L74): Granular `Weak<TokioMutex<()>>` pool ($|\text{Locks}| \le 1 \implies \text{Deadlock} = \emptyset$). Dead weak refs auto-pruned on retrieval. |
+| **2. Substrate Invariance** | PTY `/dev/pts` allocation failure in rootless containers | [`src/cli/antigravity/provider.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/provider.rs#L94-L125): Automatic fallback from `openpty` to headless standard async pipes (`Stdio::piped()`) with `TERM=dumb`, `NO_COLOR=1`, and `CI=1`. |
+| **3. Silent Compute Liveness** | False-positive timeouts during 40s silent compilation | [`src/cli/antigravity/polling.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/cli/antigravity/polling.rs#L148-L178): 500ms non-blocking `child.try_wait()` kernel sweeps verify process table liveness during zero-stdout compute. |
+| **4. UTF-8 Boundary Safety** | Multi-byte character corruption when slicing strings | [`src/messenger/telegram/formatting/splitting.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L12-L26): `split_at_char_limit` iterates on `chars()` and accumulates `c.len_utf8()`, preventing mid-character byte cuts. |
+| **5. Stack-Based HTML Balancing** | Telegram API 400 errors from unclosed formatting tags | [`src/messenger/telegram/formatting/splitting.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/messenger/telegram/formatting/splitting.rs#L28-L156): `open_tags: Vec<String>` stack automatically synthesizes closing tags for Chunk $N$ and reopens them in Chunk $N+1$. |
 </details>
 
 ---
