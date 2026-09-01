@@ -152,7 +152,7 @@ To publish an official release:
 ---
 
 <details open>
-<summary><b>🏛️ System Architecture: Tuner Daemon & Autonomous Bridge (Dialectically Certified)</b></summary>
+<summary><b>🏛️ System Architecture: Tuner Autonomous Daemon Engine (Dialectically Certified)</b></summary>
 
 ### 1. Universal System Ontology & Dual-Mode Topography
 
