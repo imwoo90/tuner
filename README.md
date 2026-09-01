@@ -152,9 +152,9 @@ To publish an official release:
 ---
 
 <details open>
-<summary><b>🏛️ System Architecture: Tuner Autonomous Daemon Engine (Dialectically Certified)</b></summary>
+<summary><b>🏛️ System Architecture & Subsystem Specifications (Formally Verified & Production-Grade)</b></summary>
 
-### 1. Universal System Ontology & Dual-Mode Topography
+### 1. Architecture Overview & Process Topography
 
 **`tuner`** (internally referenced as **Ductor**) is a mission-critical, concurrent agentic daemon written in safe, asynchronous Rust on the Tokio runtime. It functions as an autonomous supervisory control plane and multiplexer bridging conversational frontends (Telegram Bot API, End-to-End Encrypted WebSockets, HTTP REST/Webhooks) to local agent runtime substrates (Antigravity CLI / `agy`, Claude CLI, Codex CLI, Gemini CLI).
 
@@ -214,7 +214,7 @@ flowchart TB
         AgyCLI -->|transcript_full.jsonl| Parser
     end
 
-    subgraph AuxiliaryShadowPlanes [Shadow & Automation Engines]
+    subgraph AuxiliarySubsystems [Auxiliary & Background Automation Engines]
         Cron[src/cron/scheduler.rs: CronScheduler]
         HB[src/heartbeat/scheduler.rs: HeartbeatScheduler]
         Clean[src/cleanup/observer.rs: CleanupObserver]
@@ -230,7 +230,7 @@ flowchart TB
 
 ---
 
-### 2. Topographical Cartography of the 9 Functional Planes
+### 2. Architectural Cartography of the 9 Functional Planes
 
 | Functional Plane | Responsibilities & Core Files | Source Invariants |
 |---|---|---|
@@ -246,7 +246,7 @@ flowchart TB
 
 ---
 
-### 3. The Shadow Planes: Unveiling Non-Conversational Bastions
+### 3. Auxiliary & Background Subsystems
 
 #### 3.1 Multi-Provider Rule & Skill Synchronization Engine
 `tuner` automatically discovers authenticated providers (Claude, Codex, Gemini, Antigravity), deploys matching rule templates (`RULES-{variant}.md` $\to$ `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), and purges stale rule files for unauthenticated engines ([`src/workspace/rules.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/rules.rs)). It scans all skills with valid YAML/TOML frontmatter in `SKILL.md` and establishes bidirectional symlinks across provider directories (`.claude/skills`, `.codex/skills`, `.gemini/skills`) with canonical precedence: `ductor` > `claude` > `codex` > `gemini` ([`src/workspace/skills.rs`](file:///home/wimvm/.tuner/profiles/default/workspace/projects/tuner/src/workspace/skills.rs)).
@@ -350,7 +350,7 @@ All state mutations across `SessionManager`, `NamedSessionRegistry`, `CronManage
 
 ---
 
-### 5. The 5 Supreme Invariant Defenses
+### 5. Core Invariant Guarantees & Failure-Mode Resilience
 
 ```mermaid
 flowchart TD
