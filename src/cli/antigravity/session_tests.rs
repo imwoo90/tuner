@@ -160,10 +160,10 @@ async fn test_write_to_session_does_not_block_concurrent_holder_access() {
     let res = manager.ensure_session("sess-write-bench", &workspace, "cat", &[], &env).await;
     assert!(res.is_ok());
 
-    // 2. Start a write in the background with multiple characters
+    // 2. Start a paced write in the background with backspace erasure characters
     let mgr_clone = manager.clone();
     let write_handle = tokio::spawn(async move {
-        let long_input = "a".repeat(50);
+        let long_input = "\x7f".repeat(50);
         mgr_clone.write_to_session("sess-write-bench", &long_input).await
     });
 
@@ -186,5 +186,29 @@ async fn test_write_to_session_does_not_block_concurrent_holder_access() {
 
     // Clean up
     manager.terminate_all().await;
+}
+
+#[tokio::test]
+async fn test_write_to_session_bulk_prompt_instantaneous() {
+    use super::session::SessionManager;
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let env = HashMap::new();
+    let manager = SessionManager::new();
+
+    let res = manager.ensure_session("sess-bulk-test", &workspace, "cat", &[], &env).await;
+    assert!(res.is_ok());
+
+    // 2,000 characters prompt (typical large user prompt / code question)
+    let large_prompt = "x".repeat(2000);
+    let start = std::time::Instant::now();
+    let write_res = manager.write_to_session("sess-bulk-test", &large_prompt).await;
+    let elapsed = start.elapsed();
+
+    assert!(write_res.is_ok());
+    assert!(write_res.unwrap());
+    // With 0ms bulk writes, 2,000 chars must complete in less than 15ms!
+    assert!(elapsed < Duration::from_millis(15), "Bulk prompt write took too long: {:?}", elapsed);
+
+    manager.terminate("sess-bulk-test").await;
 }
 

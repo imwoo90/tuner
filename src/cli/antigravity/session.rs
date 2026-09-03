@@ -169,19 +169,19 @@ impl SessionManager {
         };
 
         if let Some(fd) = master_fd {
-            if input.starts_with('\x1b') {
-                super::pty_spawner::write_fd(fd, input)?;
-            } else {
+            if input.contains('\x7f') {
                 for c in input.chars() {
                     let s = c.to_string();
                     super::pty_spawner::write_fd(fd, &s)?;
                     let delay = if cfg!(test) {
                         tokio::time::Duration::from_millis(1)
                     } else {
-                        tokio::time::Duration::from_millis(100)
+                        tokio::time::Duration::from_millis(20)
                     };
                     tokio::time::sleep(delay).await;
                 }
+            } else {
+                super::pty_spawner::write_fd(fd, input)?;
             }
             Ok(true)
         } else {
