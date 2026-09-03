@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tuner File Review</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark-dimmed.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --tab-bg: #21262d;
+      --tab-active: #388bfd33;
+      --tab-active-border: #58a6ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 12px;
+      background: var(--tab-bg);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+    button.btn {
+      background: var(--tab-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    button.btn:hover { background: var(--border); }
+    button.btn:active { transform: scale(0.97); }
+    .tabs-wrapper {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 12px;
+      overflow-x: auto;
+      white-space: nowrap;
+      flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tabs-wrapper::-webkit-scrollbar { display: none; }
+    .tab-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      margin-right: 6px;
+      font-size: 13px;
+      background: var(--tab-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+    .tab-item.active {
+      background: var(--tab-active);
+      color: #fff;
+      border-color: var(--tab-active-border);
+      font-weight: 500;
+    }
+    .tab-size {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .meta-bar {
+      padding: 6px 14px;
+      background: #090d12;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .meta-path {
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+      max-width: 65%;
+    }
+    .code-container {
+      flex: 1;
+      overflow: auto;
+      background: #090d12;
+      display: flex;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .line-numbers {
+      padding: 10px 8px 10px 10px;
+      text-align: right;
+      color: #484f58;
+      user-select: none;
+      border-right: 1px solid #21262d;
+      background: #0d1117;
+      min-width: 38px;
+    }
+    .code-content {
+      flex: 1;
+      padding: 10px 12px;
+      overflow-x: auto;
+      color: #e6edf3;
+    }
+    pre { margin: 0; }
+    code.hljs { padding: 0; background: transparent; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <span class="header-title">🔍 Tuner Review</span>
+      <span id="file-count" class="badge">0 files</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="btn-copy" onclick="copyCurrentCode()">📋 복사</button>
+      <button class="btn" id="btn-close" onclick="closeViewer()">✕ 닫기</button>
+    </div>
+  </header>
+
+  <div class="tabs-wrapper" id="tabs-container"></div>
+
+  <div class="meta-bar">
+    <span class="meta-path" id="file-path">-</span>
+    <span id="file-stats">-</span>
+  </div>
+
+  <div class="code-container">
+    <div class="line-numbers" id="line-numbers"></div>
+    <div class="code-content">
+      <pre><code id="code-view" class="hljs"></code></pre>
+    </div>
+  </div>
+
+  <script>
+    const FILES = __FILES_JSON__;
+    let activeIndex = 0;
+
+    function init() {
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+      }
+
+      document.getElementById('file-count').innerText = `${FILES.length}개 파일`;
+      const tabsContainer = document.getElementById('tabs-container');
+      tabsContainer.innerHTML = '';
+
+      FILES.forEach((f, idx) => {
+        const tab = document.createElement('div');
+        tab.className = `tab-item ${idx === 0 ? 'active' : ''}`;
+        tab.id = `tab-${idx}`;
+        tab.onclick = () => selectFile(idx);
+        tab.innerHTML = `<span>📄 ${escapeHtml(f.filename)}</span><span class="tab-size">${formatBytes(f.size_bytes)}</span>`;
+        tabsContainer.appendChild(tab);
+      });
+
+      if (FILES.length > 0) {
+        selectFile(0);
+      }
+    }
+
+    function selectFile(idx) {
+      if (idx < 0 || idx >= FILES.length) return;
+      activeIndex = idx;
+
+      FILES.forEach((_, i) => {
+        const tab = document.getElementById(`tab-${i}`);
+        if (tab) tab.classList.toggle('active', i === idx);
+      });
+
+      const file = FILES[idx];
+      document.getElementById('file-path').innerText = file.path || file.filename;
+      
+      const lineCount = (file.content.match(/\n/g) || []).length + 1;
+      document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
+
+      let lineNums = '';
+      for (let i = 1; i <= lineCount; i++) {
+        lineNums += i + '\n';
+      }
+      document.getElementById('line-numbers').innerText = lineNums;
+
+      const codeEl = document.getElementById('code-view');
+      codeEl.className = 'hljs';
+      if (file.language) {
+        codeEl.classList.add(`language-${file.language}`);
+      }
+      codeEl.textContent = file.content;
+      hljs.highlightElement(codeEl);
+    }
+
+    function copyCurrentCode() {
+      if (!FILES[activeIndex]) return;
+      navigator.clipboard.writeText(FILES[activeIndex].content).then(() => {
+        const btn = document.getElementById('btn-copy');
+        const orig = btn.innerText;
+        btn.innerText = '✓ 완료!';
+        btn.style.borderColor = '#3fb950';
+        setTimeout(() => {
+          btn.innerText = orig;
+          btn.style.borderColor = '';
+        }, 1500);
+      });
+    }
+
+    function closeViewer() {
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.close) {
+        window.Telegram.WebApp.close();
+      } else {
+        window.close();
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[m]);
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

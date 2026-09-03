@@ -126,11 +126,25 @@ async fn handle_callback_query_inner(
                 handle_ask_prev_callback(&bot, msg, d, &cli, &sessions, &config).await;
             } else if d.starts_with("ask_skip:") {
                 handle_ask_skip_callback(&bot, msg, d, &cli, &sessions, &config).await;
+            } else if let Some(token) = d.strip_prefix("dl_files:") {
+                handle_dl_files_callback(&bot, msg, token).await;
             }
         }
         let _ = bot.answer_callback_query(q.id).await;
     }
     Ok(())
+}
+
+async fn handle_dl_files_callback(bot: &teloxide::Bot, msg: &Message, token: &str) {
+    let mgr = super::review::global_review_manager();
+    if let Some(files) = mgr.get_files(token).await {
+        for f in files {
+            let path = std::path::PathBuf::from(&f.path);
+            if path.is_file() {
+                let _ = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path)).await;
+            }
+        }
+    }
 }
 
 pub(crate) async fn handle_callback_query(

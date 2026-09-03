@@ -37,7 +37,28 @@ pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf>
     paths
 }
 
-/// Helper task to send any matching file links as document attachments.
+fn is_blacklisted_file(path: &std::path::Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name == "Cargo.lock" || name == "package-lock.json" || name == "yarn.lock" {
+        return true;
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext == "log" || ext == "jsonl" || ext == "lock" {
+        return true;
+    }
+    let p_str = path.to_string_lossy();
+    if p_str.contains("/target/") || p_str.contains("/.git/") || p_str.contains("/node_modules/") {
+        return true;
+    }
+    false
+}
+
+fn is_image_file(path: &std::path::Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp")
+}
+
+/// Helper task to send matching file links as In-App review buttons or photos.
 pub(crate) async fn send_file_attachments(
     bot: &Bot,
     chat_id: ChatId,
@@ -54,15 +75,67 @@ pub(crate) async fn send_file_attachments(
         home_path.join(".gemini/antigravity-cli"),
     ];
     let file_paths = extract_file_paths(raw_text, &allowed_roots);
+    let mut images = Vec::new();
+    let mut code_files = Vec::new();
+
     for path in file_paths {
-        let mut req = bot.send_document(chat_id, teloxide::types::InputFile::file(&path));
+        if is_blacklisted_file(&path) {
+            continue;
+        }
+        if is_image_file(&path) {
+            images.push(path);
+        } else {
+            code_files.push(path);
+        }
+    }
+
+    for img in images {
+        let mut req = bot.send_photo(chat_id, teloxide::types::InputFile::file(&img));
         if let Some(tid) = thread_id {
             req = req.message_thread_id(tid);
         }
-        if let Err(e) = req.await {
-            eprintln!("Failed to send document {:?}: {:?}", path, e);
+        let _ = req.await;
+    }
+
+    if !code_files.is_empty() {
+        let mgr = super::review::global_review_manager();
+        if let Some((token, count)) = mgr.create_session(&code_files).await {
+            let review_url = mgr.get_review_url(&token).await;
+            send_review_button(bot, chat_id, thread_id, &token, count, &review_url).await;
         }
     }
+}
+
+async fn send_review_button(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    token: &str,
+    count: usize,
+    review_url: &str,
+) {
+    use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo};
+    let btn_text = format!("🔍 참조 파일 {}개 검토 (In-App)", count);
+    let review_btn = if let Ok(parsed_url) = review_url.parse() {
+        if review_url.starts_with("https://") {
+            InlineKeyboardButton::web_app(btn_text, WebAppInfo { url: parsed_url })
+        } else {
+            InlineKeyboardButton::url(btn_text, parsed_url)
+        }
+    } else {
+        InlineKeyboardButton::callback(btn_text, format!("dl_files:{}", token))
+    };
+
+    let download_btn = InlineKeyboardButton::callback("📥 직접 받기", format!("dl_files:{}", token));
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![review_btn, download_btn]]);
+
+    let mut msg_req = bot.send_message(chat_id, format!("📁 <b>답변에서 {}개의 파일이 참조되었습니다.</b>", count))
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .reply_markup(keyboard);
+    if let Some(tid) = thread_id {
+        msg_req = msg_req.message_thread_id(tid);
+    }
+    let _ = msg_req.await;
 }
 
 #[cfg(test)]
