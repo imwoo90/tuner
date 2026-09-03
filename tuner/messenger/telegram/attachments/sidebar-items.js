@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_file_paths","send_file_attachments"]};
+window.SIDEBAR_ITEMS = {"fn":["extract_file_paths","is_blacklisted_file","is_image_file","send_file_attachments","send_review_button"]};
