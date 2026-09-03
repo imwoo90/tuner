@@ -163,36 +163,40 @@
 <a href=#163 id=163 data-nosnippet>163</a>    }
 <a href=#164 id=164 data-nosnippet>164</a>
 <a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">pub async fn </span>write_to_session(<span class="kw-2">&amp;</span><span class="self">self</span>, session_id: <span class="kw-2">&amp;</span>str, input: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;bool, String&gt; {
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>holders = <span class="self">self</span>.holders.lock().<span class="kw">await</span>;
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(holder) = holders.get(session_id) {
-<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">if </span>input.starts_with(<span class="string">'\x1b'</span>) {
-<a href=#169 id=169 data-nosnippet>169</a>                holder.write_input(input)<span class="question-mark">?</span>;
-<a href=#170 id=170 data-nosnippet>170</a>            } <span class="kw">else </span>{
-<a href=#171 id=171 data-nosnippet>171</a>                <span class="kw">for </span>c <span class="kw">in </span>input.chars() {
-<a href=#172 id=172 data-nosnippet>172</a>                    <span class="kw">let </span>s = c.to_string();
-<a href=#173 id=173 data-nosnippet>173</a>                    holder.write_input(<span class="kw-2">&amp;</span>s)<span class="question-mark">?</span>;
-<a href=#174 id=174 data-nosnippet>174</a>                    <span class="kw">let </span>delay = <span class="kw">if </span><span class="macro">cfg!</span>(test) {
-<a href=#175 id=175 data-nosnippet>175</a>                        tokio::time::Duration::from_millis(<span class="number">1</span>)
-<a href=#176 id=176 data-nosnippet>176</a>                    } <span class="kw">else </span>{
-<a href=#177 id=177 data-nosnippet>177</a>                        tokio::time::Duration::from_millis(<span class="number">100</span>)
-<a href=#178 id=178 data-nosnippet>178</a>                    };
-<a href=#179 id=179 data-nosnippet>179</a>                    tokio::time::sleep(delay).<span class="kw">await</span>;
-<a href=#180 id=180 data-nosnippet>180</a>                }
-<a href=#181 id=181 data-nosnippet>181</a>            }
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#183 id=183 data-nosnippet>183</a>        } <span class="kw">else </span>{
-<a href=#184 id=184 data-nosnippet>184</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#185 id=185 data-nosnippet>185</a>        }
-<a href=#186 id=186 data-nosnippet>186</a>    }
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">pub async fn </span>is_active(<span class="kw-2">&amp;</span><span class="self">self</span>, session_id: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="self">self</span>.holders.lock().<span class="kw">await</span>;
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(holder) = h.get_mut(session_id) {
-<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">if </span>holder.child.try_wait().map(|s| s.is_none()).unwrap_or(<span class="bool-val">false</span>) { <span class="kw">return </span><span class="bool-val">true</span>; }
-<a href=#192 id=192 data-nosnippet>192</a>            h.remove(session_id);
-<a href=#193 id=193 data-nosnippet>193</a>        }
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="bool-val">false
-<a href=#195 id=195 data-nosnippet>195</a>    </span>}
-<a href=#196 id=196 data-nosnippet>196</a>}
-<a href=#197 id=197 data-nosnippet>197</a>
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>master_fd = {
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let </span>holders = <span class="self">self</span>.holders.lock().<span class="kw">await</span>;
+<a href=#168 id=168 data-nosnippet>168</a>            holders.get(session_id).map(|h| h.master_fd)
+<a href=#169 id=169 data-nosnippet>169</a>        };
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(fd) = master_fd {
+<a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">if </span>input.starts_with(<span class="string">'\x1b'</span>) {
+<a href=#173 id=173 data-nosnippet>173</a>                <span class="kw">super</span>::pty_spawner::write_fd(fd, input)<span class="question-mark">?</span>;
+<a href=#174 id=174 data-nosnippet>174</a>            } <span class="kw">else </span>{
+<a href=#175 id=175 data-nosnippet>175</a>                <span class="kw">for </span>c <span class="kw">in </span>input.chars() {
+<a href=#176 id=176 data-nosnippet>176</a>                    <span class="kw">let </span>s = c.to_string();
+<a href=#177 id=177 data-nosnippet>177</a>                    <span class="kw">super</span>::pty_spawner::write_fd(fd, <span class="kw-2">&amp;</span>s)<span class="question-mark">?</span>;
+<a href=#178 id=178 data-nosnippet>178</a>                    <span class="kw">let </span>delay = <span class="kw">if </span><span class="macro">cfg!</span>(test) {
+<a href=#179 id=179 data-nosnippet>179</a>                        tokio::time::Duration::from_millis(<span class="number">1</span>)
+<a href=#180 id=180 data-nosnippet>180</a>                    } <span class="kw">else </span>{
+<a href=#181 id=181 data-nosnippet>181</a>                        tokio::time::Duration::from_millis(<span class="number">100</span>)
+<a href=#182 id=182 data-nosnippet>182</a>                    };
+<a href=#183 id=183 data-nosnippet>183</a>                    tokio::time::sleep(delay).<span class="kw">await</span>;
+<a href=#184 id=184 data-nosnippet>184</a>                }
+<a href=#185 id=185 data-nosnippet>185</a>            }
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#187 id=187 data-nosnippet>187</a>        } <span class="kw">else </span>{
+<a href=#188 id=188 data-nosnippet>188</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#189 id=189 data-nosnippet>189</a>        }
+<a href=#190 id=190 data-nosnippet>190</a>    }
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">pub async fn </span>is_active(<span class="kw-2">&amp;</span><span class="self">self</span>, session_id: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="self">self</span>.holders.lock().<span class="kw">await</span>;
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(holder) = h.get_mut(session_id) {
+<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">if </span>holder.child.try_wait().map(|s| s.is_none()).unwrap_or(<span class="bool-val">false</span>) { <span class="kw">return </span><span class="bool-val">true</span>; }
+<a href=#196 id=196 data-nosnippet>196</a>            h.remove(session_id);
+<a href=#197 id=197 data-nosnippet>197</a>        }
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="bool-val">false
+<a href=#199 id=199 data-nosnippet>199</a>    </span>}
+<a href=#200 id=200 data-nosnippet>200</a>}
+<a href=#201 id=201 data-nosnippet>201</a>
 </code></pre></div></section></main></body></html>

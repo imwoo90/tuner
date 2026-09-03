@@ -38,7 +38,7 @@
 <a href=#38 id=38 data-nosnippet>38</a>}
 <a href=#39 id=39 data-nosnippet>39</a>
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">fn </span>tokenize_html(text: <span class="kw-2">&amp;</span>str) -&gt; Vec&lt;<span class="kw-2">&amp;</span>str&gt; {
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>tok_re = Regex::new(<span class="string">r"(&lt;/?[a-zA-Z][^&gt;]*&gt;|\n\n|\n)"</span>).unwrap();
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>tok_re = Regex::new(<span class="string">r"(&lt;/?[a-zA-Z][^&gt;]*&gt;|&amp;(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);|\n\n|\n)"</span>).unwrap();
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">let </span><span class="kw-2">mut </span>tokens = Vec::new();
 <a href=#43 id=43 data-nosnippet>43</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_idx = <span class="number">0</span>;
 <a href=#44 id=44 data-nosnippet>44</a>
@@ -110,88 +110,97 @@
 <a href=#110 id=110 data-nosnippet>110</a>    }
 <a href=#111 id=111 data-nosnippet>111</a>}
 <a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a><span class="kw">fn </span>process_token(
-<a href=#114 id=114 data-nosnippet>114</a>    token_ref: <span class="kw-2">&amp;</span>str,
-<a href=#115 id=115 data-nosnippet>115</a>    max_len: usize,
-<a href=#116 id=116 data-nosnippet>116</a>    open_tags: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
-<a href=#117 id=117 data-nosnippet>117</a>    current_chunk_parts: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
-<a href=#118 id=118 data-nosnippet>118</a>    current_len: <span class="kw-2">&amp;mut </span>usize,
-<a href=#119 id=119 data-nosnippet>119</a>    chunks: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
-<a href=#120 id=120 data-nosnippet>120</a>) {
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span>char_len = |s: <span class="kw-2">&amp;</span>str| s.chars().count();
-<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span><span class="kw-2">mut </span>token = token_ref.to_string();
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">if </span>token.is_empty() {
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">return</span>;
-<a href=#125 id=125 data-nosnippet>125</a>    }
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>is_tag = token.starts_with(<span class="string">'&lt;'</span>) &amp;&amp; token.ends_with(<span class="string">'&gt;'</span>);
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>closing_tags_str = get_closing_tags(open_tags);
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>closing_tags_len = char_len(<span class="kw-2">&amp;</span>closing_tags_str);
-<a href=#130 id=130 data-nosnippet>130</a>
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>!is_tag &amp;&amp; char_len(<span class="kw-2">&amp;</span>token) &gt; (max_len.saturating_sub(<span class="kw-2">*</span>current_len).saturating_sub(closing_tags_len)) {
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>available = max_len.saturating_sub(<span class="kw-2">*</span>current_len).saturating_sub(closing_tags_len);
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">if </span>available &gt; <span class="number">0 </span>{
-<a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">let </span>(prefix, suffix) = split_at_char_limit(<span class="kw-2">&amp;</span>token, available);
-<a href=#135 id=135 data-nosnippet>135</a>            current_chunk_parts.push(prefix.to_string());
-<a href=#136 id=136 data-nosnippet>136</a>            token = suffix.to_string();
-<a href=#137 id=137 data-nosnippet>137</a>        }
-<a href=#138 id=138 data-nosnippet>138</a>
-<a href=#139 id=139 data-nosnippet>139</a>        current_chunk_parts.push(closing_tags_str.clone());
-<a href=#140 id=140 data-nosnippet>140</a>        chunks.push(current_chunk_parts.join(<span class="string">""</span>));
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw-2">*</span>current_chunk_parts = open_tags.clone();
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw-2">*</span>current_len = open_tags.iter().map(|t| char_len(t)).sum();
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">fn </span>flush_chunk(
+<a href=#114 id=114 data-nosnippet>114</a>    closing_tags: String,
+<a href=#115 id=115 data-nosnippet>115</a>    open_tags: <span class="kw-2">&amp;</span>[String],
+<a href=#116 id=116 data-nosnippet>116</a>    parts: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#117 id=117 data-nosnippet>117</a>    len: <span class="kw-2">&amp;mut </span>usize,
+<a href=#118 id=118 data-nosnippet>118</a>    chunks: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#119 id=119 data-nosnippet>119</a>) {
+<a href=#120 id=120 data-nosnippet>120</a>    parts.push(closing_tags);
+<a href=#121 id=121 data-nosnippet>121</a>    chunks.push(parts.join(<span class="string">""</span>));
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw-2">*</span>parts = open_tags.to_vec();
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw-2">*</span>len = open_tags.iter().map(|t| t.chars().count()).sum();
+<a href=#124 id=124 data-nosnippet>124</a>}
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a><span class="kw">fn </span>process_token(
+<a href=#127 id=127 data-nosnippet>127</a>    token_ref: <span class="kw-2">&amp;</span>str,
+<a href=#128 id=128 data-nosnippet>128</a>    max_len: usize,
+<a href=#129 id=129 data-nosnippet>129</a>    open_tags: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#130 id=130 data-nosnippet>130</a>    current_chunk_parts: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#131 id=131 data-nosnippet>131</a>    current_len: <span class="kw-2">&amp;mut </span>usize,
+<a href=#132 id=132 data-nosnippet>132</a>    chunks: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#133 id=133 data-nosnippet>133</a>) {
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">let </span>char_len = |s: <span class="kw-2">&amp;</span>str| s.chars().count();
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span><span class="kw-2">mut </span>token = token_ref.to_string();
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">if </span>token.is_empty() {
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">return</span>;
+<a href=#138 id=138 data-nosnippet>138</a>    }
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">let </span>is_tag = token.starts_with(<span class="string">'&lt;'</span>) &amp;&amp; token.ends_with(<span class="string">'&gt;'</span>);
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">let </span>is_entity = token.starts_with(<span class="string">'&amp;'</span>) &amp;&amp; token.ends_with(<span class="string">';'</span>) &amp;&amp; token.len() &gt;= <span class="number">3</span>;
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span>closing_tags_str = get_closing_tags(open_tags);
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>closing_tags_len = char_len(<span class="kw-2">&amp;</span>closing_tags_str);
 <a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>        token = split_oversized_token(<span class="kw-2">&amp;</span>token, max_len, open_tags, current_chunk_parts, current_len, chunks);
-<a href=#146 id=146 data-nosnippet>146</a>    } <span class="kw">else if </span>!current_chunk_parts.is_empty() &amp;&amp; (<span class="kw-2">*</span>current_len + char_len(<span class="kw-2">&amp;</span>token) + closing_tags_len &gt; max_len) {
-<a href=#147 id=147 data-nosnippet>147</a>        current_chunk_parts.push(closing_tags_str);
-<a href=#148 id=148 data-nosnippet>148</a>        chunks.push(current_chunk_parts.join(<span class="string">""</span>));
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw-2">*</span>current_chunk_parts = open_tags.clone();
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw-2">*</span>current_len = open_tags.iter().map(|t| char_len(t)).sum();
-<a href=#152 id=152 data-nosnippet>152</a>    }
-<a href=#153 id=153 data-nosnippet>153</a>
-<a href=#154 id=154 data-nosnippet>154</a>    update_tags_and_len(<span class="kw-2">&amp;</span>token, is_tag, open_tags, current_chunk_parts, current_len);
-<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">if </span>is_entity {
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">if </span>!current_chunk_parts.is_empty() &amp;&amp; (<span class="kw-2">*</span>current_len + char_len(<span class="kw-2">&amp;</span>token) + closing_tags_len &gt; max_len) {
+<a href=#147 id=147 data-nosnippet>147</a>            flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+<a href=#148 id=148 data-nosnippet>148</a>        }
+<a href=#149 id=149 data-nosnippet>149</a>    } <span class="kw">else if </span>!is_tag &amp;&amp; char_len(<span class="kw-2">&amp;</span>token) &gt; (max_len.saturating_sub(<span class="kw-2">*</span>current_len).saturating_sub(closing_tags_len)) {
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>available = max_len.saturating_sub(<span class="kw-2">*</span>current_len).saturating_sub(closing_tags_len);
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">if </span>available &gt; <span class="number">0 </span>{
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>(prefix, suffix) = split_at_char_limit(<span class="kw-2">&amp;</span>token, available);
+<a href=#153 id=153 data-nosnippet>153</a>            current_chunk_parts.push(prefix.to_string());
+<a href=#154 id=154 data-nosnippet>154</a>            token = suffix.to_string();
+<a href=#155 id=155 data-nosnippet>155</a>        }
 <a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a><span class="kw">fn </span>has_text_content(s: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">let </span>re = Regex::new(<span class="string">r"&lt;[^&gt;]*&gt;"</span>).unwrap();
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>text = re.replace_all(s, <span class="string">""</span>);
-<a href=#160 id=160 data-nosnippet>160</a>    !text.trim().is_empty()
-<a href=#161 id=161 data-nosnippet>161</a>}
+<a href=#157 id=157 data-nosnippet>157</a>        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+<a href=#158 id=158 data-nosnippet>158</a>        token = split_oversized_token(<span class="kw-2">&amp;</span>token, max_len, open_tags, current_chunk_parts, current_len, chunks);
+<a href=#159 id=159 data-nosnippet>159</a>    } <span class="kw">else if </span>!current_chunk_parts.is_empty() &amp;&amp; (<span class="kw-2">*</span>current_len + char_len(<span class="kw-2">&amp;</span>token) + closing_tags_len &gt; max_len) {
+<a href=#160 id=160 data-nosnippet>160</a>        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+<a href=#161 id=161 data-nosnippet>161</a>    }
 <a href=#162 id=162 data-nosnippet>162</a>
-<a href=#163 id=163 data-nosnippet>163</a><span class="kw">pub fn </span>split_html_message(text: <span class="kw-2">&amp;</span>str, max_len: usize) -&gt; Vec&lt;String&gt; {
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span>char_len = |s: <span class="kw-2">&amp;</span>str| s.chars().count();
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">if </span>char_len(text) &lt;= max_len {
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">if </span>text.is_empty() {
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">return </span><span class="macro">vec!</span>[];
-<a href=#168 id=168 data-nosnippet>168</a>        }
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">return </span><span class="macro">vec!</span>[text.to_string()];
-<a href=#170 id=170 data-nosnippet>170</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>    update_tags_and_len(<span class="kw-2">&amp;</span>token, is_tag, open_tags, current_chunk_parts, current_len);
+<a href=#164 id=164 data-nosnippet>164</a>}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a><span class="kw">fn </span>has_text_content(s: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>re = Regex::new(<span class="string">r"&lt;[^&gt;]*&gt;"</span>).unwrap();
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>text = re.replace_all(s, <span class="string">""</span>);
+<a href=#169 id=169 data-nosnippet>169</a>    !text.trim().is_empty()
+<a href=#170 id=170 data-nosnippet>170</a>}
 <a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>tokens = tokenize_html(text);
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span><span class="kw-2">mut </span>chunks = Vec::new();
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_chunk_parts: Vec&lt;String&gt; = Vec::new();
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_len = <span class="number">0</span>;
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span><span class="kw-2">mut </span>open_tags: Vec&lt;String&gt; = Vec::new();
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">for </span>token_ref <span class="kw">in </span>tokens {
-<a href=#179 id=179 data-nosnippet>179</a>        process_token(
-<a href=#180 id=180 data-nosnippet>180</a>            token_ref,
-<a href=#181 id=181 data-nosnippet>181</a>            max_len,
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw-2">&amp;mut </span>open_tags,
-<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw-2">&amp;mut </span>current_chunk_parts,
-<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw-2">&amp;mut </span>current_len,
-<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw-2">&amp;mut </span>chunks,
-<a href=#186 id=186 data-nosnippet>186</a>        );
-<a href=#187 id=187 data-nosnippet>187</a>    }
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">if </span>!current_chunk_parts.is_empty() {
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>closing_tags_str = get_closing_tags(<span class="kw-2">&amp;</span>open_tags);
-<a href=#191 id=191 data-nosnippet>191</a>        current_chunk_parts.push(closing_tags_str);
-<a href=#192 id=192 data-nosnippet>192</a>        chunks.push(current_chunk_parts.join(<span class="string">""</span>));
-<a href=#193 id=193 data-nosnippet>193</a>    }
-<a href=#194 id=194 data-nosnippet>194</a>
-<a href=#195 id=195 data-nosnippet>195</a>    chunks.into_iter().filter(|c| has_text_content(c)).collect()
-<a href=#196 id=196 data-nosnippet>196</a>}
+<a href=#172 id=172 data-nosnippet>172</a><span class="kw">pub fn </span>split_html_message(text: <span class="kw-2">&amp;</span>str, max_len: usize) -&gt; Vec&lt;String&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>char_len = |s: <span class="kw-2">&amp;</span>str| s.chars().count();
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">if </span>char_len(text) &lt;= max_len {
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span>text.is_empty() {
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">return </span><span class="macro">vec!</span>[];
+<a href=#177 id=177 data-nosnippet>177</a>        }
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">return </span><span class="macro">vec!</span>[text.to_string()];
+<a href=#179 id=179 data-nosnippet>179</a>    }
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>tokens = tokenize_html(text);
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span><span class="kw-2">mut </span>chunks = Vec::new();
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_chunk_parts: Vec&lt;String&gt; = Vec::new();
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_len = <span class="number">0</span>;
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span><span class="kw-2">mut </span>open_tags: Vec&lt;String&gt; = Vec::new();
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">for </span>token_ref <span class="kw">in </span>tokens {
+<a href=#188 id=188 data-nosnippet>188</a>        process_token(
+<a href=#189 id=189 data-nosnippet>189</a>            token_ref,
+<a href=#190 id=190 data-nosnippet>190</a>            max_len,
+<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw-2">&amp;mut </span>open_tags,
+<a href=#192 id=192 data-nosnippet>192</a>            <span class="kw-2">&amp;mut </span>current_chunk_parts,
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw-2">&amp;mut </span>current_len,
+<a href=#194 id=194 data-nosnippet>194</a>            <span class="kw-2">&amp;mut </span>chunks,
+<a href=#195 id=195 data-nosnippet>195</a>        );
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">if </span>!current_chunk_parts.is_empty() {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>closing_tags_str = get_closing_tags(<span class="kw-2">&amp;</span>open_tags);
+<a href=#200 id=200 data-nosnippet>200</a>        current_chunk_parts.push(closing_tags_str);
+<a href=#201 id=201 data-nosnippet>201</a>        chunks.push(current_chunk_parts.join(<span class="string">""</span>));
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>    chunks.into_iter().filter(|c| has_text_content(c)).collect()
+<a href=#205 id=205 data-nosnippet>205</a>}
 </code></pre></div></section></main></body></html>

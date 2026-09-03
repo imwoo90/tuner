@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["TelegramTransport"]};
+window.SIDEBAR_ITEMS = {"struct":["TelegramPromptInjector","TelegramTransport"]};
