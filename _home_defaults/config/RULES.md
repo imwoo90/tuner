@@ -17,8 +17,9 @@ Edit only when the user asks for behavior changes.
 
 - `provider`: `antigravity`
 - `model`: default model id
-    - `gemini-3.7-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended default)
-    - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model
+    - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended default)
+    - `gemini-3.7-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model
+    - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Compatibility flash model
     - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Compatibility flash model
     - `gemini-3.1-pro` (effort: `high` | `low`) - Capable reasoning model
     - `claude-sonnet-4-6` - Claude reasoning model

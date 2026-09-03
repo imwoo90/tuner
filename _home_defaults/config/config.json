@@ -6,7 +6,7 @@
   "allowed_group_ids": [
     -1001234567890
   ],
-  "language": "ko",
-  "model": "gemini-3.7-flash",
+  "language": "en",
+  "model": "gemini-3.8-flash",
   "effort": "high"
 }

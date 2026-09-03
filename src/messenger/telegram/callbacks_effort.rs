@@ -57,6 +57,9 @@ pub async fn handle_model_base_callback(
     let mut models = cli.discover_models().await;
     if models.is_empty() {
         models = vec![
+            "gemini-3.8-flash-high".to_string(),
+            "gemini-3.8-flash-medium".to_string(),
+            "gemini-3.8-flash-low".to_string(),
             "gemini-3.7-flash-high".to_string(),
             "gemini-3.7-flash-medium".to_string(),
             "gemini-3.7-flash-low".to_string(),
