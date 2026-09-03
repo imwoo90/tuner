@@ -45,23 +45,27 @@ impl Drop for SessionHolder {
     }
 }
 
+pub fn write_fd(fd: std::os::unix::io::RawFd, input: &str) -> Result<(), String> {
+    let mut bytes_written = 0;
+    let data = input.as_bytes();
+    while bytes_written < data.len() {
+        match nix::unistd::write(fd, &data[bytes_written..]) {
+            Ok(n) => {
+                if n == 0 {
+                    return Err("Written 0 bytes (pipe closed?)".to_string());
+                }
+                bytes_written += n;
+            }
+            Err(nix::Error::EINTR) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(())
+}
+
 impl SessionHolder {
     pub fn write_input(&self, input: &str) -> Result<(), String> {
-        let mut bytes_written = 0;
-        let data = input.as_bytes();
-        while bytes_written < data.len() {
-            match nix::unistd::write(self.master_fd, &data[bytes_written..]) {
-                Ok(n) => {
-                    if n == 0 {
-                        return Err("Written 0 bytes (pipe closed?)".to_string());
-                    }
-                    bytes_written += n;
-                }
-                Err(nix::Error::EINTR) => {}
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        Ok(())
+        write_fd(self.master_fd, input)
     }
 }
 

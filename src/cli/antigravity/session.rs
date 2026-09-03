@@ -163,14 +163,18 @@ impl SessionManager {
     }
 
     pub async fn write_to_session(&self, session_id: &str, input: &str) -> Result<bool, String> {
-        let holders = self.holders.lock().await;
-        if let Some(holder) = holders.get(session_id) {
+        let master_fd = {
+            let holders = self.holders.lock().await;
+            holders.get(session_id).map(|h| h.master_fd)
+        };
+
+        if let Some(fd) = master_fd {
             if input.starts_with('\x1b') {
-                holder.write_input(input)?;
+                super::pty_spawner::write_fd(fd, input)?;
             } else {
                 for c in input.chars() {
                     let s = c.to_string();
-                    holder.write_input(&s)?;
+                    super::pty_spawner::write_fd(fd, &s)?;
                     let delay = if cfg!(test) {
                         tokio::time::Duration::from_millis(1)
                     } else {

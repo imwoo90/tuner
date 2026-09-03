@@ -36,11 +36,20 @@ pub fn get_new_content_string(path: &Path, prev_size: Option<u64>) -> Result<(St
         start_pos = 0;
     }
 
-    let (bytes, new_size) = read_new_bytes(path, start_pos)?;
+    let (bytes, read_to_size) = read_new_bytes(path, start_pos)?;
     if bytes.is_empty() {
-        return Ok((String::new(), new_size));
+        return Ok((String::new(), read_to_size));
     }
-    Ok((String::from_utf8_lossy(&bytes).to_string(), new_size))
+
+    if let Some(last_nl) = bytes.iter().rposition(|&b| b == b'\n') {
+        let valid_bytes = &bytes[..=last_nl];
+        let new_pos = start_pos + (last_nl as u64) + 1;
+        Ok((String::from_utf8_lossy(valid_bytes).to_string(), new_pos))
+    } else if bytes.len() > 64 * 1024 {
+        Ok((String::from_utf8_lossy(&bytes).to_string(), read_to_size))
+    } else {
+        Ok((String::new(), start_pos))
+    }
 }
 
 pub fn parse_entries(new_content: &str) -> Vec<serde_json::Value> {
@@ -154,4 +163,52 @@ pub fn parse_ask_question_tool(tc: &serde_json::Value) -> Option<Vec<crate::cli:
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_get_new_content_string_holds_offset_on_incomplete_line() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_path = temp_dir.path().join("transcript.jsonl");
+
+        let mut file = std::fs::File::create(&log_path).unwrap();
+        file.write_all(b"{\"step_index\": 1, \"content\": \"incomplete").unwrap();
+        file.flush().unwrap();
+
+        let (content, pos) = get_new_content_string(&log_path, None).unwrap();
+        assert_eq!(content, "");
+        assert_eq!(pos, 0);
+
+        file.write_all(b"_line\"}\n").unwrap();
+        file.flush().unwrap();
+
+        let (content2, pos2) = get_new_content_string(&log_path, Some(pos)).unwrap();
+        assert_eq!(content2, "{\"step_index\": 1, \"content\": \"incomplete_line\"}\n");
+        assert_eq!(pos2 as usize, b"{\"step_index\": 1, \"content\": \"incomplete_line\"}\n".len());
+    }
+
+    #[test]
+    fn test_get_new_content_string_advances_only_to_last_newline() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_path = temp_dir.path().join("transcript.jsonl");
+
+        let mut file = std::fs::File::create(&log_path).unwrap();
+        file.write_all(b"{\"line\": 1}\n{\"line\": 2, \"incomplete").unwrap();
+        file.flush().unwrap();
+
+        let (content, pos) = get_new_content_string(&log_path, None).unwrap();
+        assert_eq!(content, "{\"line\": 1}\n");
+        assert_eq!(pos as usize, b"{\"line\": 1}\n".len());
+
+        file.write_all(b"\"}\n").unwrap();
+        file.flush().unwrap();
+
+        let (content2, pos2) = get_new_content_string(&log_path, Some(pos)).unwrap();
+        assert_eq!(content2, "{\"line\": 2, \"incomplete\"}\n");
+        assert_eq!(pos2 as usize, b"{\"line\": 1}\n{\"line\": 2, \"incomplete\"}\n".len());
+    }
 }

@@ -115,4 +115,29 @@ mod tests {
         let msg2 = make_message_json(777, 100, "@opus Hello again");
         let _ = handle_message(bot, msg2, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
     }
+
+    #[tokio::test]
+    async fn test_telegram_prompt_injector_e2e() {
+        use crate::bus::bus::PromptInjector;
+        use crate::messenger::telegram::transport::TelegramPromptInjector;
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let temp_dir = tempfile::tempdir().unwrap();
+        mock_brain_dir(&temp_dir, "mock-session-injector");
+        let (mgr, cfg, cli, _bot, _cron, _cache, _info, _mgm, _env) = setup_e2e_env(
+            &temp_dir,
+            "#!/bin/sh\necho '{\"result\":\"Injected synthesis success\",\"is_error\":false}'\n"
+        );
+
+        let injector = TelegramPromptInjector::new(cli, mgr, cfg);
+        let res = injector.inject_prompt(
+            "Summarize task result",
+            999,
+            "test_label",
+            None,
+            "tg",
+        ).await;
+
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), "Injected synthesis success");
+    }
 }

@@ -37,6 +37,11 @@ fn start_schedulers(
 ) -> Arc<crate::cron::manager::CronManager> {
     let bus = Arc::new(crate::bus::bus::MessageBus::new());
     bus.register_transport(Arc::new(super::transport::TelegramTransport::new(bot.clone())));
+    bus.set_injector(Arc::new(super::transport::TelegramPromptInjector::new(
+        cli.clone(),
+        sess.clone(),
+        cfg.clone(),
+    )));
     Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
     let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
     Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli, bus)).start();

@@ -186,5 +186,18 @@ mod tests {
         let html = markdown_to_telegram_html(input);
         assert_eq!(html, "<a href=\"https://google.com\"><b>bold link</b></a>");
     }
+
+    #[test]
+    fn test_split_html_message_preserves_html_entities_across_boundaries() {
+        let input = "12345&quot;67890";
+        let chunks = split_html_message(input, 8);
+        assert_eq!(chunks, vec!["12345", "&quot;67", "890"]);
+
+        for chunk in &chunks {
+            assert!(!chunk.contains("&qu") || chunk.contains("&quot;"));
+            assert!(!chunk.starts_with("ot;"));
+            assert!(!chunk.ends_with("&qu"));
+        }
+    }
 }
 

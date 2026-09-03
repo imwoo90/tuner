@@ -38,7 +38,7 @@ fn get_closing_tags(open_tags: &[String]) -> String {
 }
 
 fn tokenize_html(text: &str) -> Vec<&str> {
-    let tok_re = Regex::new(r"(</?[a-zA-Z][^>]*>|\n\n|\n)").unwrap();
+    let tok_re = Regex::new(r"(</?[a-zA-Z][^>]*>|&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);|\n\n|\n)").unwrap();
     let mut tokens = Vec::new();
     let mut last_idx = 0;
 
@@ -110,6 +110,19 @@ fn update_tags_and_len(
     }
 }
 
+fn flush_chunk(
+    closing_tags: String,
+    open_tags: &[String],
+    parts: &mut Vec<String>,
+    len: &mut usize,
+    chunks: &mut Vec<String>,
+) {
+    parts.push(closing_tags);
+    chunks.push(parts.join(""));
+    *parts = open_tags.to_vec();
+    *len = open_tags.iter().map(|t| t.chars().count()).sum();
+}
+
 fn process_token(
     token_ref: &str,
     max_len: usize,
@@ -125,10 +138,15 @@ fn process_token(
     }
 
     let is_tag = token.starts_with('<') && token.ends_with('>');
+    let is_entity = token.starts_with('&') && token.ends_with(';') && token.len() >= 3;
     let closing_tags_str = get_closing_tags(open_tags);
     let closing_tags_len = char_len(&closing_tags_str);
 
-    if !is_tag && char_len(&token) > (max_len.saturating_sub(*current_len).saturating_sub(closing_tags_len)) {
+    if is_entity {
+        if !current_chunk_parts.is_empty() && (*current_len + char_len(&token) + closing_tags_len > max_len) {
+            flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+        }
+    } else if !is_tag && char_len(&token) > (max_len.saturating_sub(*current_len).saturating_sub(closing_tags_len)) {
         let available = max_len.saturating_sub(*current_len).saturating_sub(closing_tags_len);
         if available > 0 {
             let (prefix, suffix) = split_at_char_limit(&token, available);
@@ -136,19 +154,10 @@ fn process_token(
             token = suffix.to_string();
         }
 
-        current_chunk_parts.push(closing_tags_str.clone());
-        chunks.push(current_chunk_parts.join(""));
-
-        *current_chunk_parts = open_tags.clone();
-        *current_len = open_tags.iter().map(|t| char_len(t)).sum();
-
+        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
         token = split_oversized_token(&token, max_len, open_tags, current_chunk_parts, current_len, chunks);
     } else if !current_chunk_parts.is_empty() && (*current_len + char_len(&token) + closing_tags_len > max_len) {
-        current_chunk_parts.push(closing_tags_str);
-        chunks.push(current_chunk_parts.join(""));
-
-        *current_chunk_parts = open_tags.clone();
-        *current_len = open_tags.iter().map(|t| char_len(t)).sum();
+        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
     }
 
     update_tags_and_len(&token, is_tag, open_tags, current_chunk_parts, current_len);

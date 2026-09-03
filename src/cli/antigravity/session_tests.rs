@@ -149,3 +149,42 @@ async fn test_session_manager_terminates_duplicate_chat_sessions() {
     assert!(!manager.is_active("session-1").await);
 }
 
+#[tokio::test]
+async fn test_write_to_session_does_not_block_concurrent_holder_access() {
+    use super::session::SessionManager;
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let env = HashMap::new();
+    let manager = std::sync::Arc::new(SessionManager::new());
+
+    // 1. Ensure a session
+    let res = manager.ensure_session("sess-write-bench", &workspace, "cat", &[], &env).await;
+    assert!(res.is_ok());
+
+    // 2. Start a write in the background with multiple characters
+    let mgr_clone = manager.clone();
+    let write_handle = tokio::spawn(async move {
+        let long_input = "a".repeat(50);
+        mgr_clone.write_to_session("sess-write-bench", &long_input).await
+    });
+
+    // 3. Immediately verify that is_active and ensure_session on another key do NOT block
+    tokio::time::sleep(Duration::from_millis(5)).await;
+
+    let start = std::time::Instant::now();
+    let is_act = manager.is_active("sess-write-bench").await;
+    assert!(is_act);
+
+    let res2 = manager.ensure_session("sess-write-concurrent", &workspace, "cat", &[], &env).await;
+    assert!(res2.is_ok());
+    let elapsed = start.elapsed();
+
+    // The concurrent operations must complete in less than 35ms without being blocked
+    assert!(elapsed < Duration::from_millis(35), "Concurrent access took too long: {:?}", elapsed);
+
+    let write_res = write_handle.await.unwrap();
+    assert!(write_res.is_ok());
+
+    // Clean up
+    manager.terminate_all().await;
+}
+
