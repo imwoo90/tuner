@@ -68,7 +68,9 @@ pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
     }
 }
 
-pub(crate) use super::media::{has_media, download_telegram_media, prepend_reply_to_media};
+pub(crate) use super::media::{has_media, download_telegram_media};
+#[cfg(test)]
+pub(crate) use super::media::prepend_reply_to_media;
 
 fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
     let mut remaining_text = "";

@@ -89,6 +89,7 @@ pub(crate) async fn download_and_inject_media_hint(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub(crate) fn prepend_reply_to_media(message: &Message, media_prompt: &str) -> String {
     let cited = if let Some(replied) = message.reply_to_message() {
         replied.text().or(replied.caption()).map(|s| s.trim())
