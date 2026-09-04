@@ -35,6 +35,6 @@ fi
 
 echo "🔄 Restarting container tuner worker..."
 docker exec "$CONTAINER_NAME" pkill -9 -f tuner || true
-docker exec -d "$CONTAINER_NAME" bash -c 'while true; do "$HOME/.tuner/bin/tuner" --worker default; sleep 1; done'
+docker exec -d "$CONTAINER_NAME" bash -c 'while true; do "$HOME/.tuner/bin/tuner" --worker default >> "$HOME/.tuner/tuner.log" 2>&1; sleep 1; done'
 
 echo "✅ Dev deploy complete! Container $CONTAINER_NAME is running updated binary & assets."

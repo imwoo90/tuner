@@ -134,6 +134,16 @@ impl ReviewManager {
         port
     }
 
+    pub async fn warmup(&self) {
+        let port = self.ensure_server_running().await;
+        let mut tunnel_guard = self.tunnel_url.lock().await;
+        if tunnel_guard.is_none() {
+            if let Some(url) = spawn_quick_tunnel(port).await {
+                *tunnel_guard = Some(url);
+            }
+        }
+    }
+
     pub async fn get_review_url(&self, token: &str) -> String {
         let port = self.ensure_server_running().await;
         let mut tunnel_guard = self.tunnel_url.lock().await;
@@ -225,6 +235,14 @@ async fn spawn_quick_tunnel(port: u16) -> Option<String> {
                 let url = &sub[..end + ".trycloudflare.com".len()];
                 let trimmed = url.trim().to_string();
                 tokio::spawn(async move {
+                    use tokio::io::AsyncBufReadExt;
+                    let mut discard = String::new();
+                    while let Ok(n) = reader.read_line(&mut discard).await {
+                        if n == 0 {
+                            break;
+                        }
+                        discard.clear();
+                    }
                     let _ = child.wait().await;
                 });
                 return Some(trimmed);

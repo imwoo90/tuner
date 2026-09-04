@@ -106,6 +106,9 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
+    tokio::spawn(async {
+        super::review::global_review_manager().warmup().await;
+    });
 
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
