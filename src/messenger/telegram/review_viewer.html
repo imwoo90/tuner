@@ -292,8 +292,14 @@
 
   <div class="markdown-container" id="markdown-container" style="display:none;"></div>
 
+  <script id="files-data" type="application/json">__FILES_JSON__</script>
   <script>
-    const FILES = __FILES_JSON__;
+    let FILES = [];
+    try {
+      FILES = JSON.parse(document.getElementById('files-data').textContent);
+    } catch (e) {
+      console.error('Failed to parse files JSON:', e);
+    }
     let activeIndex = 0;
     let isMarkdownRendered = true;
 
@@ -351,17 +357,12 @@
       const file = FILES[idx];
       document.getElementById('file-path').innerText = file.path || file.filename;
       
-      const lineCount = (file.content.match(/
-/g) || []).length + 1;
+      const lines = file.content.split('\n');
+      const lineCount = lines.length;
       document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
 
       // Line numbers for raw code view
-      let lineNums = '';
-      for (let i = 1; i <= lineCount; i++) {
-        lineNums += i + '
-';
-      }
-      document.getElementById('line-numbers').innerText = lineNums;
+      document.getElementById('line-numbers').innerText = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
 
       // Direct syntax highlighting without dataset.highlighted interference
       const codeEl = document.getElementById('code-view');

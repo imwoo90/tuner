@@ -103,8 +103,9 @@ impl ReviewManager {
     pub async fn get_html(&self, token: &str) -> Option<String> {
         let files = self.get_files(token).await?;
         let json_data = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
+        let safe_json = json_data.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT");
         let template = include_str!("review_viewer.html");
-        let rendered = template.replace("__FILES_JSON__", &json_data);
+        let rendered = template.replace("__FILES_JSON__", &safe_json);
         Some(rendered)
     }
 
