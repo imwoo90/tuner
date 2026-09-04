@@ -122,10 +122,19 @@ async fn send_review_button(
     review_url: &str,
 ) {
     use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo};
-    let btn_text = format!("🔍 참조 파일 {}개 검토 (In-App)", count);
+    let is_private = chat_id.0 > 0;
+    let btn_text = if is_private {
+        format!("🔍 참조 파일 {}개 검토 (In-App)", count)
+    } else {
+        format!("🔍 참조 파일 {}개 검토", count)
+    };
     let review_btn = if review_url.starts_with("https://") {
         if let Ok(parsed_url) = review_url.parse() {
-            InlineKeyboardButton::web_app(btn_text, WebAppInfo { url: parsed_url })
+            if is_private {
+                InlineKeyboardButton::web_app(btn_text, WebAppInfo { url: parsed_url })
+            } else {
+                InlineKeyboardButton::url(btn_text, parsed_url)
+            }
         } else {
             InlineKeyboardButton::callback(btn_text, format!("dl_files:{}", token))
         }

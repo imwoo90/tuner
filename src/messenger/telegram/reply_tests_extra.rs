@@ -80,4 +80,61 @@ mod tests {
         assert_eq!(effort, None);
         assert_eq!(prompt, "just plain user text");
     }
+
+    #[test]
+    fn test_reply_to_message_with_expandable_blockquote() {
+        use crate::telegram::reply::build_reply_prompt;
+
+        let msg_json = r#"{
+            "message_id": 2,
+            "date": 123457,
+            "chat": {"id": -1003735536827, "type": "supergroup"},
+            "text": "my follow up question",
+            "reply_to_message": {
+                "message_id": 1,
+                "date": 123456,
+                "chat": {"id": -1003735536827, "type": "supergroup"},
+                "text": "here is some collapsed code",
+                "entities": [
+                    {
+                        "type": "expandable_blockquote",
+                        "offset": 0,
+                        "length": 27
+                    }
+                ]
+            }
+        }"#;
+        let msg: Message = serde_json::from_str(msg_json).expect("should deserialize message with expandable_blockquote");
+        let prompt = build_reply_prompt(&msg, "my follow up question");
+        assert!(prompt.contains("> here is some collapsed code"));
+        assert!(prompt.contains("my follow up question"));
+    }
+
+    #[test]
+    fn test_reply_to_message_with_future_unknown_entity() {
+        use crate::telegram::reply::build_reply_prompt;
+
+        let msg_json = r#"{
+            "message_id": 3,
+            "date": 123458,
+            "chat": {"id": -1003735536827, "type": "supergroup"},
+            "text": "replying to future entity",
+            "reply_to_message": {
+                "message_id": 1,
+                "date": 123456,
+                "chat": {"id": -1003735536827, "type": "supergroup"},
+                "text": "some text with new entity",
+                "entities": [
+                    {
+                        "type": "super_future_unsupported_telegram_entity",
+                        "offset": 0,
+                        "length": 10
+                    }
+                ]
+            }
+        }"#;
+        let msg: Message = serde_json::from_str(msg_json).expect("should deserialize message with unknown entity without crashing");
+        let prompt = build_reply_prompt(&msg, "replying to future entity");
+        assert!(prompt.contains("> some text with new entity"));
+    }
 }

@@ -43,4 +43,7 @@ notify = "8.2.0"
 tempfile = "3.10"
 tower = { version = "0.4", features = ["util"] }
 
+[patch.crates-io]
+teloxide-core = { path = "patches/teloxide-core" }
+
 
