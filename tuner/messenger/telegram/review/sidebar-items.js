@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["detect_language","global_review_manager","handle_health","handle_review_json","handle_review_page","spawn_quick_tunnel"],"static":["INSTANCE"],"struct":["ReviewFile","ReviewManager","SessionEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["SESSION_TTL"],"fn":["detect_language","global_review_manager","handle_health","handle_review_json","handle_review_page","spawn_quick_tunnel"],"static":["INSTANCE"],"struct":["ReviewFile","ReviewManager","SessionEntry"]};
