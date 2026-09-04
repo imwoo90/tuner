@@ -232,7 +232,7 @@ pub(crate) async fn handle_stream_ask_question(
         .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(markup);
     if let Some(tid) = thread_id {
-        req = req.message_thread_id(tid);
+        req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
     }
     match req.await {
         Ok(sent) => {

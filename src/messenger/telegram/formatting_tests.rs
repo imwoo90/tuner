@@ -139,6 +139,27 @@ mod tests {
     }
 
     #[test]
+    fn test_blockquote_expandable_with_fully_quoted_code() {
+        let input = ">! ```rust\n>! fn main() {\n>!     println!(\"hello\");\n>! }\n>! ```";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "<blockquote expandable><pre><code class=\"language-rust\">fn main() {\n    println!(&quot;hello&quot;);\n}\n</code></pre></blockquote>");
+    }
+
+    #[test]
+    fn test_blockquote_standard_with_fully_quoted_code() {
+        let input = "> ```rust\n> fn main() {}\n> ```";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "<blockquote><pre><code class=\"language-rust\">fn main() {}\n</code></pre></blockquote>");
+    }
+
+    #[test]
+    fn test_unquoted_code_with_greater_than_preserved() {
+        let input = "```rust\nif x > 1 {\n    println!(\"> not a quote\");\n}\n```";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "<pre><code class=\"language-rust\">if x &gt; 1 {\n    println!(&quot;&gt; not a quote&quot;);\n}\n</code></pre>");
+    }
+
+    #[test]
     fn test_consecutive_blockquotes_grouped() {
         let input = "> line 1\n>! line 2\n> line 3";
         let html = markdown_to_telegram_html(input);

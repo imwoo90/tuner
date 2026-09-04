@@ -3,7 +3,6 @@ mod tests {
     use crate::telegram::handle_message;
     use crate::config::CliConfig;
     use crate::cli::antigravity::AntigravityCli;
-    use crate::session::key::SessionKey;
     use crate::session::manager::SessionManager;
     use crate::cron::manager::CronManager;
     use std::sync::Arc;
@@ -46,13 +45,13 @@ mod tests {
     #[tokio::test]
     async fn test_telegram_forum_topic_events() {
         let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm) = setup();
-        let msg_created = make_msg(r#"{"message_id":13,"date":1,"chat":{"id":123,"type":"supergroup"},"from":{"id":100,"is_bot":false},"forum_topic_created":{"name":"QA Thread","icon_color":0},"message_thread_id":999}"#);
+        let msg_created = make_msg(r#"{"message_id":13,"date":1,"chat":{"id":123,"type":"supergroup"},"from":{"id":100,"is_bot":false,"first_name":"User"},"forum_topic_created":{"name":"QA Thread","icon_color":0},"message_thread_id":999}"#);
         handle_message(bot.clone(), msg_created, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
 
         // Verify it is inserted in topic_cache
         assert_eq!(topic_cache.find_by_name(123, "@QA Thread"), Some(999));
 
-        let msg_edited = make_msg(r#"{"message_id":14,"date":1,"chat":{"id":123,"type":"supergroup"},"from":{"id":100,"is_bot":false},"forum_topic_edited":{"name":"QA & Testing Thread"},"message_thread_id":999}"#);
+        let msg_edited = make_msg(r#"{"message_id":14,"date":1,"chat":{"id":123,"type":"supergroup"},"from":{"id":100,"is_bot":false,"first_name":"User"},"forum_topic_edited":{"name":"QA & Testing Thread"},"message_thread_id":999}"#);
         handle_message(bot.clone(), msg_edited, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
 
         // Verify it is updated in topic_cache

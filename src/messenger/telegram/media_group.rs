@@ -138,7 +138,7 @@ pub(crate) async fn process_media_group(
     cli: Arc<AntigravityCli>,
     cron_manager: Arc<CronManager>,
     topic_cache: Arc<TopicNameCache>,
-    bot_info: Arc<BotInfo>,
+    _bot_info: Arc<BotInfo>,
 ) -> Result<(), teloxide::RequestError> {
     let mut downloaded_files = Vec::new();
     let dest_dir = config.working_dir.join("telegram_files");

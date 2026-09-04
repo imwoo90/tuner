@@ -40,7 +40,7 @@ impl Transport for TelegramTransport {
         let mut req = self.bot.send_message(teloxide::types::ChatId(chat_id), html_text)
             .parse_mode(teloxide::types::ParseMode::Html);
         if let Some(tid) = topic_id {
-            req = req.message_thread_id(tid as i32);
+            req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
         }
         req.await.map(|_| ()).map_err(|e| e.to_string())
     }

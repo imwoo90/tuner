@@ -99,7 +99,7 @@ pub(crate) async fn send_file_attachments(
     for img in images {
         let mut req = bot.send_photo(chat_id, teloxide::types::InputFile::file(&img));
         if let Some(tid) = thread_id {
-            req = req.message_thread_id(tid);
+            req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
         }
         let _ = req.await;
     }
@@ -158,7 +158,7 @@ async fn send_review_button(
         .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(keyboard);
     if let Some(tid) = thread_id {
-        msg_req = msg_req.message_thread_id(tid);
+        msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
     }
     if let Err(e) = msg_req.await {
         eprintln!("❌ Failed to send review button: {:?}", e);

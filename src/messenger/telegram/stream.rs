@@ -35,13 +35,13 @@ async fn send_single_chunk(
         } else {
             let mut req = bot.send_message(chat_id, chunk)
                 .parse_mode(teloxide::types::ParseMode::Html);
-            if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+            if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
             req.await
         }
     } else {
         let mut req = bot.send_message(chat_id, chunk)
             .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+        if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
         req.await
     }
 }
@@ -166,7 +166,7 @@ async fn handle_text_delta(
         }
     } else {
         let mut req = bot.send_message(chat_id, delta);
-        if let Some(tid) = thread_id { req = req.message_thread_id(tid); }
+        if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
         if let Ok(sent) = req.await {
             *pub_msg_id = Some(sent.id);
             *last_edit = Instant::now();

@@ -16,7 +16,7 @@ pub(crate) fn has_media(message: &Message) -> bool {
         || message.sticker().is_some()
 }
 
-fn get_media_file_id_and_ext(message: &Message) -> Option<(String, String)> {
+fn get_media_file_id_and_ext(message: &Message) -> Option<(teloxide::types::FileId, String)> {
     if let Some(photo) = message.photo() {
         if let Some(best_size) = photo.last() {
             return Some((best_size.file.id.clone(), "jpg".to_string()));
@@ -65,6 +65,7 @@ pub(crate) async fn download_telegram_media(
     Ok(Some(format!("telegram_files/{}", filename)))
 }
 
+#[allow(dead_code)]
 pub(crate) async fn download_and_inject_media_hint(
     bot: &teloxide::Bot,
     message: &Message,
