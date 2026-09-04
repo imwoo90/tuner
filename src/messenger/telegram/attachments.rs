@@ -14,7 +14,7 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use std::path::PathBuf;
 
-/// Scans text for `file://` URLs and markdown file links, validates that they are files within allowed roots,
+/// Scans text strictly for `file://` URLs, validates that they are files within allowed roots,
 /// and returns a list of unique safe file paths.
 pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -28,34 +28,6 @@ pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf>
                             paths.push(path);
                         }
                     }
-                }
-            }
-        }
-    }
-    if let Ok(md_re) = regex::Regex::new(r"\[([^\]]+)\]\(([^)]+)\)") {
-        for cap in md_re.captures_iter(text) {
-            let target = cap[2].trim();
-            if target.starts_with("http://") || target.starts_with("https://") || target.starts_with("tg://") || target.starts_with("file://") {
-                continue;
-            }
-            let clean = target.split('#').next().unwrap_or("").trim();
-            if clean.is_empty() {
-                continue;
-            }
-            let p = PathBuf::from(clean);
-            if p.is_file() && crate::security::paths::is_path_safe(&p, allowed_roots) {
-                if !paths.contains(&p) {
-                    paths.push(p);
-                }
-                continue;
-            }
-            for root in allowed_roots {
-                let joined = root.join(clean);
-                if joined.is_file() && crate::security::paths::is_path_safe(&joined, allowed_roots) {
-                    if !paths.contains(&joined) {
-                        paths.push(joined);
-                    }
-                    break;
                 }
             }
         }
@@ -209,11 +181,10 @@ mod tests {
         assert_eq!(paths_frag.len(), 1);
         assert_eq!(paths_frag[0], file1);
 
-        // Test relative markdown link
+        // Test that relative markdown links without file:// are ignored
         let text_rel = "Check [source](test_file_1.rs) for implementation";
         let paths_rel = extract_file_paths(text_rel, &allowed_roots);
-        assert_eq!(paths_rel.len(), 1);
-        assert_eq!(paths_rel[0], file1);
+        assert_eq!(paths_rel.len(), 0);
 
         // Test trailing punctuation cleanup
         let text_punct = format!("Refer to file://{}.", file1.to_string_lossy());
