@@ -7,6 +7,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark-dimmed.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -75,6 +77,11 @@
     }
     button.btn:hover { background: var(--border); }
     button.btn:active { transform: scale(0.97); }
+    .btn-toggle {
+      background: #1f6feb22 !important;
+      border-color: #388bfd !important;
+      color: #58a6ff !important;
+    }
     .tabs-wrapper {
       background: var(--card-bg);
       border-bottom: 1px solid var(--border);
@@ -156,6 +163,104 @@
     }
     pre { margin: 0; }
     code.hljs { padding: 0; background: transparent; }
+
+    /* Markdown Container Styling */
+    .markdown-container {
+      flex: 1;
+      overflow: auto;
+      background: #0d1117;
+      padding: 16px 20px;
+      color: #c9d1d9;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .markdown-container h1, .markdown-container h2, .markdown-container h3, .markdown-container h4 {
+      color: #f0f6fc;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .markdown-container h1, .markdown-container h2 {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .markdown-container p, .markdown-container ul, .markdown-container ol {
+      margin-bottom: 14px;
+    }
+    .markdown-container ul, .markdown-container ol {
+      padding-left: 24px;
+    }
+    .markdown-container li {
+      margin-bottom: 4px;
+    }
+    .markdown-container code:not(.hljs) {
+      background: #21262d;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12.5px;
+      color: #f0f6fc;
+    }
+    .markdown-container pre {
+      background: #161b22;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      overflow-x: auto;
+      margin-bottom: 14px;
+    }
+    .markdown-container pre code.hljs {
+      padding: 0;
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .markdown-container table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 16px;
+      display: block;
+      overflow-x: auto;
+    }
+    .markdown-container th, .markdown-container td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .markdown-container th {
+      background: #161b22;
+      color: #f0f6fc;
+    }
+    .markdown-container blockquote {
+      border-left: 4px solid var(--accent);
+      color: var(--text-muted);
+      padding: 4px 14px;
+      margin-bottom: 14px;
+      background: #161b2255;
+      border-radius: 0 4px 4px 0;
+    }
+    .markdown-container a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .markdown-container a:hover {
+      text-decoration: underline;
+    }
+    .markdown-container .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #161b22;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .markdown-container .mermaid svg {
+      max-width: 100%;
+      height: auto;
+    }
   </style>
 </head>
 <body>
@@ -165,6 +270,7 @@
       <span id="file-count" class="badge">0 files</span>
     </div>
     <div class="header-actions">
+      <button class="btn btn-toggle" id="btn-toggle-view" style="display:none;" onclick="toggleMarkdownView()">📝 코드</button>
       <button class="btn" id="btn-copy" onclick="copyCurrentCode()">📋 복사</button>
       <button class="btn" id="btn-close" onclick="closeViewer()">✕ 닫기</button>
     </div>
@@ -177,21 +283,42 @@
     <span id="file-stats">-</span>
   </div>
 
-  <div class="code-container">
+  <div class="code-container" id="code-container">
     <div class="line-numbers" id="line-numbers"></div>
     <div class="code-content">
-      <pre><code id="code-view" class="hljs"></code></pre>
+      <pre><code id="code-view"></code></pre>
     </div>
   </div>
+
+  <div class="markdown-container" id="markdown-container" style="display:none;"></div>
 
   <script>
     const FILES = __FILES_JSON__;
     let activeIndex = 0;
+    let isMarkdownRendered = true;
 
     function init() {
       if (window.Telegram && window.Telegram.WebApp) {
         window.Telegram.WebApp.ready();
         window.Telegram.WebApp.expand();
+      }
+
+      if (window.mermaid) {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'dark',
+          securityLevel: 'loose',
+          themeVariables: {
+            darkMode: true,
+            background: '#161b22',
+            primaryColor: '#1f6feb',
+            primaryTextColor: '#c9d1d9',
+            primaryBorderColor: '#388bfd',
+            lineColor: '#58a6ff',
+            secondaryColor: '#238636',
+            tertiaryColor: '#21262d'
+          }
+        });
       }
 
       document.getElementById('file-count').innerText = `${FILES.length}개 파일`;
@@ -224,22 +351,111 @@
       const file = FILES[idx];
       document.getElementById('file-path').innerText = file.path || file.filename;
       
-      const lineCount = (file.content.match(/\n/g) || []).length + 1;
+      const lineCount = (file.content.match(/
+/g) || []).length + 1;
       document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
 
+      // Line numbers for raw code view
       let lineNums = '';
       for (let i = 1; i <= lineCount; i++) {
-        lineNums += i + '\n';
+        lineNums += i + '
+';
       }
       document.getElementById('line-numbers').innerText = lineNums;
 
+      // Direct syntax highlighting without dataset.highlighted interference
       const codeEl = document.getElementById('code-view');
       codeEl.className = 'hljs';
       if (file.language) {
         codeEl.classList.add(`language-${file.language}`);
       }
-      codeEl.textContent = file.content;
-      hljs.highlightElement(codeEl);
+      let highlighted = '';
+      try {
+        if (file.language && hljs.getLanguage(file.language)) {
+          highlighted = hljs.highlight(file.content, { language: file.language }).value;
+        } else {
+          highlighted = hljs.highlightAuto(file.content).value;
+        }
+      } catch (e) {
+        highlighted = escapeHtml(file.content);
+      }
+      codeEl.innerHTML = highlighted;
+
+      // Check if markdown
+      const isMd = file.language === 'markdown';
+      const toggleBtn = document.getElementById('btn-toggle-view');
+
+      if (isMd) {
+        toggleBtn.style.display = 'inline-flex';
+        if (isMarkdownRendered) {
+          showMarkdownView(file.content);
+        } else {
+          showCodeView();
+        }
+      } else {
+        toggleBtn.style.display = 'none';
+        showCodeView();
+      }
+    }
+
+    function showCodeView() {
+      document.getElementById('code-container').style.display = 'flex';
+      document.getElementById('markdown-container').style.display = 'none';
+      const toggleBtn = document.getElementById('btn-toggle-view');
+      toggleBtn.innerText = '👁️ 렌더';
+      isMarkdownRendered = false;
+    }
+
+    function showMarkdownView(content) {
+      document.getElementById('code-container').style.display = 'none';
+      const mdContainer = document.getElementById('markdown-container');
+      mdContainer.style.display = 'block';
+      const toggleBtn = document.getElementById('btn-toggle-view');
+      toggleBtn.innerText = '📝 코드';
+      isMarkdownRendered = true;
+
+      if (window.marked) {
+        const renderer = new marked.Renderer();
+        renderer.code = function(arg1, arg2) {
+          const text = (typeof arg1 === 'object' && arg1 !== null) ? arg1.text : arg1;
+          const lang = (typeof arg1 === 'object' && arg1 !== null) ? arg1.lang : arg2;
+          
+          if (lang === 'mermaid' || lang === 'uml') {
+            return `<div class="mermaid">${escapeHtml(text)}</div>`;
+          }
+          let codeHtml = '';
+          try {
+            if (lang && hljs.getLanguage(lang)) {
+              codeHtml = hljs.highlight(text, { language: lang }).value;
+            } else {
+              codeHtml = hljs.highlightAuto(text).value;
+            }
+          } catch (_) {
+            codeHtml = escapeHtml(text);
+          }
+          return `<pre><code class="hljs ${lang ? 'language-' + lang : ''}">${codeHtml}</code></pre>`;
+        };
+
+        mdContainer.innerHTML = marked.parse(content, { renderer, gfm: true, breaks: true });
+
+        if (window.mermaid) {
+          mermaid.run({ querySelector: '#markdown-container .mermaid' }).catch(err => {
+            console.warn('Mermaid rendering warning:', err);
+          });
+        }
+      } else {
+        mdContainer.innerHTML = `<pre>${escapeHtml(content)}</pre>`;
+      }
+    }
+
+    function toggleMarkdownView() {
+      const file = FILES[activeIndex];
+      if (!file || file.language !== 'markdown') return;
+      if (isMarkdownRendered) {
+        showCodeView();
+      } else {
+        showMarkdownView(file.content);
+      }
     }
 
     function copyCurrentCode() {
