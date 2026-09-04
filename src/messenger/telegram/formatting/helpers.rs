@@ -30,6 +30,57 @@ pub fn markdown_to_telegram_html(text: &str) -> String {
     restore_entities(formatted, &code_blocks, &inline_codes, &links, &table_blocks)
 }
 
+fn sanitize_code_block(code: &str, is_quoted: bool) -> String {
+    let raw_lines: Vec<&str> = code.split('\n').collect();
+    if raw_lines.is_empty() {
+        return code.to_string();
+    }
+
+    let has_quote_prefix = raw_lines.iter().any(|l| {
+        let t = l.trim_start();
+        t.starts_with(">! ") || t.starts_with(">!") || (is_quoted && (t.starts_with("> ") || t.starts_with(">")))
+    }) && raw_lines.iter().all(|l| {
+        let t = l.trim_start();
+        t.is_empty()
+            || t.starts_with(">! ")
+            || t.starts_with(">!")
+            || (is_quoted && (t.starts_with("> ") || t.starts_with(">")))
+    });
+
+    if !has_quote_prefix {
+        return code.to_string();
+    }
+
+    let mut cleaned_lines = Vec::new();
+    let total = raw_lines.len();
+    for (i, line) in raw_lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if i == total - 1 && (trimmed == ">!" || trimmed == ">" || trimmed.is_empty()) {
+            continue;
+        }
+
+        if let Some(rest) = line.strip_prefix(">! ") {
+            cleaned_lines.push(rest);
+        } else if let Some(rest) = line.strip_prefix("> ") {
+            cleaned_lines.push(rest);
+        } else if let Some(rest) = line.strip_prefix(">!") {
+            cleaned_lines.push(rest);
+        } else if let Some(rest) = line.strip_prefix(">") {
+            cleaned_lines.push(rest);
+        } else if trimmed == ">!" || trimmed == ">" {
+            cleaned_lines.push("");
+        } else {
+            cleaned_lines.push(*line);
+        }
+    }
+
+    let mut result = cleaned_lines.join("\n");
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
 fn extract_entities(
     text: &str,
     code_blocks: &mut Vec<(String, String)>,
@@ -37,13 +88,16 @@ fn extract_entities(
     links: &mut Vec<(String, String)>,
     table_blocks: &mut Vec<String>,
 ) -> String {
-    let cb_re = Regex::new(r"(?s)```(\w*)\n(.*?)```").unwrap();
+    let cb_re = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?```(\w*)\n(.*?)```").unwrap();
     let mut text_buf = cb_re.replace_all(text, |caps: &Captures| {
-        let lang = caps.get(1).map_or("", |m| m.as_str()).to_string();
-        let code = caps.get(2).map_or("", |m| m.as_str()).to_string();
+        let prefix_quote = caps.get(1).map_or("", |m| m.as_str());
+        let lang = caps.get(2).map_or("", |m| m.as_str()).to_string();
+        let code = caps.get(3).map_or("", |m| m.as_str());
+        let is_quoted = !prefix_quote.trim().is_empty();
+        let sanitized_code = sanitize_code_block(code, is_quoted);
         let idx = code_blocks.len();
-        code_blocks.push((lang, code));
-        placeholder("CB", idx)
+        code_blocks.push((lang, sanitized_code));
+        format!("{}{}", prefix_quote, placeholder("CB", idx))
     }).to_string();
 
     text_buf = super::table::extract_tables(&text_buf, table_blocks);
