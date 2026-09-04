@@ -122,7 +122,6 @@ pub fn spawn_session(
         .kill_on_drop(true);
 
     unsafe {
-        use std::os::unix::process::CommandExt;
         cmd.pre_exec(move || {
             let _ = nix::unistd::setsid();
             let _ = nix::unistd::tcsetpgrp(slave_raw, nix::unistd::getpid());

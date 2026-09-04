@@ -20,7 +20,6 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::{antigravity::AntigravityCli, AgentProvider};
 use crate::session::{manager::SessionManager, data::SessionData};
-use std::sync::Arc;
 
 pub mod formatting;
 #[cfg(test)]
@@ -87,7 +86,7 @@ pub(crate) async fn run_cli_stream(
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let mut cc = cli.clone();
     cc.config.chat_id = msg.chat.id.0;
-    cc.config.topic_id = msg.thread_id.map(|t| t as i64);
+    cc.config.topic_id = msg.thread_id.map(|t| t.0.0 as i64);
     if !sess.model.is_empty() { cc.config.model = Some(sess.model.clone()); }
     if let Some(ref effort) = sess.effort {
         if !effort.is_empty() {
@@ -95,7 +94,7 @@ pub(crate) async fn run_cli_stream(
         }
     }
     match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
-        Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id, s, sessions, sess, config, cli).await?,
+        Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id.map(|t| t.0.0), s, sessions, sess, config, cli).await?,
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
             let mut r = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
@@ -199,6 +198,7 @@ pub(crate) async fn process_text_with_files(
     run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await
 }
 
+#[allow(dead_code)]
 async fn process_text(
     bot: &Bot,
     msg: &Message,

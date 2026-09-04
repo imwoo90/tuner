@@ -109,7 +109,7 @@ async fn handle_callback_query_inner(
 ) -> Result<(), teloxide::RequestError> {
     use teloxide::prelude::*;
     if let Some(ref d) = q.data {
-        if let Some(ref msg) = q.message {
+        if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref msg)) = q.message {
             if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
                 // Handled
             } else if d.starts_with("crn:") {

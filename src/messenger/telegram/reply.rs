@@ -12,14 +12,14 @@
 //! #prompt-builder, #reply-history, #media-downloader, #mention-filter
 
 use teloxide::types::Message;
-use teloxide::net::Download;
 use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
 
 pub fn get_topic_id(msg: &Message) -> Option<i64> {
-    match &msg.kind {
-        teloxide::types::MessageKind::Common(c) if c.is_topic_message => msg.thread_id.map(|t| t as i64),
-        _ => None,
+    if msg.is_topic_message {
+        msg.thread_id.map(|t| t.0.0 as i64)
+    } else {
+        None
     }
 }
 
@@ -68,7 +68,7 @@ pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
     }
 }
 
-pub(crate) use super::media::{has_media, download_telegram_media, download_and_inject_media_hint, prepend_reply_to_media};
+pub(crate) use super::media::{has_media, download_telegram_media, prepend_reply_to_media};
 
 fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
     let mut remaining_text = "";
@@ -188,7 +188,7 @@ pub(crate) async fn send_startup_notification(
                     let startup_msg = crate::t!("bot.startup_complete");
                     let mut req = bot.send_message(teloxide::types::ChatId(sess.chat_id), startup_msg);
                     if let Some(tid) = sess.topic_id {
-                        req = req.message_thread_id(tid as i32);
+                        req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
                     }
                     match req.await {
                         Ok(_) => println!("🤖 [tuner] Startup notification sent successfully to chat_id: {}", sess.chat_id),

@@ -31,7 +31,7 @@ pub(crate) fn spawn_session_async_observer(
     drop(lock);
 
     let chat_id = msg.chat.id;
-    let thread_id = msg.thread_id;
+    let thread_id = msg.thread_id.map(|t| t.0.0);
 
     tokio::spawn(async move {
         run_observer_loop(bot, chat_id, thread_id, session_id.clone(), cli, sessions, config).await;
@@ -49,7 +49,7 @@ async fn handle_async_turn_output(
     txt: &str,
 ) {
     let mut action_req = bot.send_chat_action(chat_id, ChatAction::Typing);
-    if let Some(t) = thread_id { action_req = action_req.message_thread_id(t); }
+    if let Some(t) = thread_id { action_req = action_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
     let _ = action_req.await;
 
     let html_text = super::formatting::markdown_to_telegram_html(txt);
@@ -57,7 +57,7 @@ async fn handle_async_turn_output(
     for chunk in &chunks {
         let mut msg_req = bot.send_message(chat_id, chunk)
             .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(t) = thread_id { msg_req = msg_req.message_thread_id(t); }
+        if let Some(t) = thread_id { msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
         if let Ok(sent) = msg_req.await {
             super::history::log_telegram_message(
                 &config.working_dir,

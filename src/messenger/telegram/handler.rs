@@ -20,7 +20,7 @@ use crate::session::manager::SessionManager;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cron::manager::CronManager;
 use super::topic_cache::{BotInfo, TopicNameCache};
-use super::{reply, commands, topic_cache, session_init, ask_helpers, get_topic_id, process_text_with_files};
+use super::{reply, topic_cache, get_topic_id, process_text_with_files};
 
 fn auto_register_owner(from_id: i64) {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -47,7 +47,7 @@ async fn validate_and_auth_message(
     sessions: &SessionManager,
     topic_cache: &TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
-    let from_id = msg.from().map(|u| u.id.0 as i64).unwrap_or(0);
+    let from_id = msg.from.as_ref().map(|u| u.id.0 as i64).unwrap_or(0);
     let chat_id = msg.chat.id.0;
     if let Some(to_chat) = msg.migrate_to_chat_id() {
         let _ = sessions.migrate_chat_id(chat_id, to_chat.0).await;
