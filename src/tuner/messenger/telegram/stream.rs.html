@@ -35,13 +35,13 @@
 <a href=#35 id=35 data-nosnippet>35</a>        </span>} <span class="kw">else </span>{
 <a href=#36 id=36 data-nosnippet>36</a>            <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(chat_id, chunk)
 <a href=#37 id=37 data-nosnippet>37</a>                .parse_mode(teloxide::types::ParseMode::Html);
-<a href=#38 id=38 data-nosnippet>38</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(tid); }
+<a href=#38 id=38 data-nosnippet>38</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
 <a href=#39 id=39 data-nosnippet>39</a>            req.<span class="kw">await
 <a href=#40 id=40 data-nosnippet>40</a>        </span>}
 <a href=#41 id=41 data-nosnippet>41</a>    } <span class="kw">else </span>{
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(chat_id, chunk)
 <a href=#43 id=43 data-nosnippet>43</a>            .parse_mode(teloxide::types::ParseMode::Html);
-<a href=#44 id=44 data-nosnippet>44</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(tid); }
+<a href=#44 id=44 data-nosnippet>44</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
 <a href=#45 id=45 data-nosnippet>45</a>        req.<span class="kw">await
 <a href=#46 id=46 data-nosnippet>46</a>    </span>}
 <a href=#47 id=47 data-nosnippet>47</a>}
@@ -166,7 +166,7 @@
 <a href=#166 id=166 data-nosnippet>166</a>        }
 <a href=#167 id=167 data-nosnippet>167</a>    } <span class="kw">else </span>{
 <a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(chat_id, delta);
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(tid); }
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(sent) = req.<span class="kw">await </span>{
 <a href=#171 id=171 data-nosnippet>171</a>            <span class="kw-2">*</span>pub_msg_id = <span class="prelude-val">Some</span>(sent.id);
 <a href=#172 id=172 data-nosnippet>172</a>            <span class="kw-2">*</span>last_edit = Instant::now();

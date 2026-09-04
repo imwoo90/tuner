@@ -99,7 +99,7 @@
 <a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">for </span>img <span class="kw">in </span>images {
 <a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_photo(chat_id, teloxide::types::InputFile::file(<span class="kw-2">&amp;</span>img));
 <a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id {
-<a href=#102 id=102 data-nosnippet>102</a>            req = req.message_thread_id(tid);
+<a href=#102 id=102 data-nosnippet>102</a>            req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
 <a href=#103 id=103 data-nosnippet>103</a>        }
 <a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let _ </span>= req.<span class="kw">await</span>;
 <a href=#105 id=105 data-nosnippet>105</a>    }
@@ -158,7 +158,7 @@
 <a href=#158 id=158 data-nosnippet>158</a>        .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#159 id=159 data-nosnippet>159</a>        .reply_markup(keyboard);
 <a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id {
-<a href=#161 id=161 data-nosnippet>161</a>        msg_req = msg_req.message_thread_id(tid);
+<a href=#161 id=161 data-nosnippet>161</a>        msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
 <a href=#162 id=162 data-nosnippet>162</a>    }
 <a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = msg_req.<span class="kw">await </span>{
 <a href=#164 id=164 data-nosnippet>164</a>        <span class="macro">eprintln!</span>(<span class="string">"❌ Failed to send review button: {:?}"</span>, e);

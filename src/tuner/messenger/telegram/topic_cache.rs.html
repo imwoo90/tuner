@@ -53,7 +53,7 @@
 <a href=#53 id=53 data-nosnippet>53</a>}
 <a href=#54 id=54 data-nosnippet>54</a>
 <a href=#55 id=55 data-nosnippet>55</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>handle_forum_topic_events(msg: <span class="kw-2">&amp;</span>teloxide::types::Message, cache: <span class="kw-2">&amp;</span>TopicNameCache, chat_id: i64) -&gt; bool {
-<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">let </span>tid = <span class="kw">match </span>msg.thread_id { <span class="prelude-val">Some</span>(t) =&gt; t <span class="kw">as </span>i64, <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="bool-val">false </span>};
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">let </span>tid = <span class="kw">match </span>msg.thread_id { <span class="prelude-val">Some</span>(t) =&gt; t.<span class="number">0.0 </span><span class="kw">as </span>i64, <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="bool-val">false </span>};
 <a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>msg.kind {
 <a href=#58 id=58 data-nosnippet>58</a>        teloxide::types::MessageKind::ForumTopicCreated(c) =&gt; {
 <a href=#59 id=59 data-nosnippet>59</a>            cache.insert(chat_id, tid, c.forum_topic_created.name.clone());

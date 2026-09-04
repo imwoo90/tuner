@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SENTINEL"],"fn":["apply_markdown_formatting","extract_entities","markdown_to_telegram_html","placeholder","restore_entities"]};
+window.SIDEBAR_ITEMS = {"constant":["SENTINEL"],"fn":["apply_markdown_formatting","extract_entities","markdown_to_telegram_html","placeholder","restore_entities","sanitize_code_block"]};

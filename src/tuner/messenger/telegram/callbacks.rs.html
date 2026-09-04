@@ -109,7 +109,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">use </span>teloxide::prelude::<span class="kw-2">*</span>;
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>d) = q.data {
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>msg) = q.message {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(teloxide::types::MaybeInaccessibleMessage::Regular(<span class="kw-2">ref </span>msg)) = q.message {
 <a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">if </span>handle_options_and_upgrade_callbacks(<span class="kw-2">&amp;</span>bot, msg, d, <span class="kw-2">&amp;</span>sessions, <span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>cli).<span class="kw">await</span><span class="question-mark">? </span>{
 <a href=#114 id=114 data-nosnippet>114</a>                <span class="comment">// Handled
 <a href=#115 id=115 data-nosnippet>115</a>            </span>} <span class="kw">else if </span>d.starts_with(<span class="string">"crn:"</span>) {

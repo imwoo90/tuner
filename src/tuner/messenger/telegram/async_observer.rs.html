@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>    drop(lock);
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a>    <span class="kw">let </span>chat_id = msg.chat.id;
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">let </span>thread_id = msg.thread_id;
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">let </span>thread_id = msg.thread_id.map(|t| t.<span class="number">0.0</span>);
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a>    tokio::spawn(<span class="kw">async move </span>{
 <a href=#37 id=37 data-nosnippet>37</a>        run_observer_loop(bot, chat_id, thread_id, session_id.clone(), cli, sessions, config).<span class="kw">await</span>;
@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>    txt: <span class="kw-2">&amp;</span>str,
 <a href=#50 id=50 data-nosnippet>50</a>) {
 <a href=#51 id=51 data-nosnippet>51</a>    <span class="kw">let </span><span class="kw-2">mut </span>action_req = bot.send_chat_action(chat_id, ChatAction::Typing);
-<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = thread_id { action_req = action_req.message_thread_id(t); }
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = thread_id { action_req = action_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">let _ </span>= action_req.<span class="kw">await</span>;
 <a href=#54 id=54 data-nosnippet>54</a>
 <a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">let </span>html_text = <span class="kw">super</span>::formatting::markdown_to_telegram_html(txt);
@@ -57,7 +57,7 @@
 <a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">for </span>chunk <span class="kw">in </span><span class="kw-2">&amp;</span>chunks {
 <a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">let </span><span class="kw-2">mut </span>msg_req = bot.send_message(chat_id, chunk)
 <a href=#59 id=59 data-nosnippet>59</a>            .parse_mode(teloxide::types::ParseMode::Html);
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = thread_id { msg_req = msg_req.message_thread_id(t); }
+<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = thread_id { msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(sent) = msg_req.<span class="kw">await </span>{
 <a href=#62 id=62 data-nosnippet>62</a>            <span class="kw">super</span>::history::log_telegram_message(
 <a href=#63 id=63 data-nosnippet>63</a>                <span class="kw-2">&amp;</span>config.working_dir,

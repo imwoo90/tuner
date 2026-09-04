@@ -232,7 +232,7 @@
 <a href=#232 id=232 data-nosnippet>232</a>        .parse_mode(teloxide::types::ParseMode::Html)
 <a href=#233 id=233 data-nosnippet>233</a>        .reply_markup(markup);
 <a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = thread_id {
-<a href=#235 id=235 data-nosnippet>235</a>        req = req.message_thread_id(tid);
+<a href=#235 id=235 data-nosnippet>235</a>        req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
 <a href=#236 id=236 data-nosnippet>236</a>    }
 <a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">match </span>req.<span class="kw">await </span>{
 <a href=#238 id=238 data-nosnippet>238</a>        <span class="prelude-val">Ok</span>(sent) =&gt; {
