@@ -26,6 +26,8 @@ pub struct ReviewFile {
     pub language: String,
 }
 
+const SESSION_TTL: Duration = Duration::from_secs(1800); // 30 minutes
+
 struct SessionEntry {
     created_at: Instant,
     files: Vec<ReviewFile>,
@@ -85,7 +87,7 @@ impl ReviewManager {
 
         let mut map = self.sessions.lock().await;
         let now = Instant::now();
-        map.retain(|_, v| now.duration_since(v.created_at) < Duration::from_secs(86400));
+        map.retain(|_, v| now.duration_since(v.created_at) < SESSION_TTL);
 
         map.insert(token.clone(), SessionEntry {
             created_at: now,
@@ -96,7 +98,9 @@ impl ReviewManager {
     }
 
     pub async fn get_files(&self, token: &str) -> Option<Vec<ReviewFile>> {
-        let map = self.sessions.lock().await;
+        let mut map = self.sessions.lock().await;
+        let now = Instant::now();
+        map.retain(|_, v| now.duration_since(v.created_at) < SESSION_TTL);
         map.get(token).map(|e| e.files.clone())
     }
 
