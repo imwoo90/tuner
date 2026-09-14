@@ -114,23 +114,24 @@ pub(crate) async fn query_quota_from_pty(
     let mut accumulated = Vec::new();
     let start = std::time::Instant::now();
     let mut sent_pagedown = false;
-    let mut pagedown_time = None;
 
     while start.elapsed() < Duration::from_millis(3500) {
         tokio::time::sleep(Duration::from_millis(100)).await;
         if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
             accumulated = bytes;
             let text = String::from_utf8_lossy(&accumulated);
-            if (text.contains("GEMINI MODELS") || text.contains("Models & Quota")) && !sent_pagedown {
+            if text.contains("CLAUDE AND GPT MODELS") {
+                let after_claude = text.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
+                if after_claude.contains("Five Hour Limit") && after_claude.contains('%') {
+                    break;
+                }
+                if !sent_pagedown {
+                    let _ = cli.sessions.write_to_session(session_id, "\x1b[6~").await;
+                    sent_pagedown = true;
+                }
+            } else if (text.contains("GEMINI MODELS") || text.contains("Models & Quota")) && !sent_pagedown {
                 let _ = cli.sessions.write_to_session(session_id, "\x1b[6~").await;
                 sent_pagedown = true;
-                pagedown_time = Some(std::time::Instant::now());
-            }
-            if sent_pagedown {
-                if text.contains("CLAUDE AND GPT MODELS") { break; }
-                if let Some(pd_t) = pagedown_time {
-                    if pd_t.elapsed() > Duration::from_millis(1000) { break; }
-                }
             }
         }
     }
