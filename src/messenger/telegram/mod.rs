@@ -47,6 +47,7 @@ pub mod test_helpers;
 pub static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod commands;
 pub mod cron_selector;
+pub mod cron_formatter;
 pub mod topic_cache;
 pub mod stream;
 pub mod transport;

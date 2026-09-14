@@ -16,6 +16,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId};
 
 use crate::cron::manager::{CronJob, CronManager};
 use crate::t;
+use super::cron_formatter::{format_schedule_display, format_target_topic};
 use super::TopicNameCache;
 
 const PAGE_SIZE: usize = 4;
@@ -26,22 +27,6 @@ fn fingerprint(job_id: &str) -> String {
     let mut hasher = DefaultHasher::new();
     job_id.hash(&mut hasher);
     format!("{:08x}", hasher.finish())
-}
-
-fn format_target_topic(job: &CronJob, topic_cache: Option<&TopicNameCache>) -> String {
-    if job.chat_id == 0 {
-        return t!("bot.cron_target_unset");
-    }
-    if let Some(tid) = job.topic_id {
-        if let Some(cache) = topic_cache {
-            if let Some(name) = cache.find_by_id(job.chat_id, tid) {
-                return format!("<code>#{}</code>", html_escape::encode_safe(&name));
-            }
-        }
-        format!("<code>Topic #{}</code>", tid)
-    } else {
-        t!("bot.cron_target_main_chat")
-    }
 }
 
 fn format_job_and_button(
@@ -65,12 +50,13 @@ fn format_job_and_button(
     let number_str = number.to_string();
     let target = format_target_topic(job, topic_cache);
     let model = job.model.as_deref().unwrap_or("default");
+    let schedule = format_schedule_display(&job.schedule, &job.timezone);
     let line = t!(
         "bot.cron_job_line",
         number = number_str,
         title = html_escape::encode_safe(&job.title),
         status = status,
-        schedule = html_escape::encode_safe(&job.schedule),
+        schedule = schedule,
         target = target,
         model = html_escape::encode_safe(model),
         last_run = html_escape::encode_safe(&last_run)

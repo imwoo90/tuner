@@ -46,16 +46,8 @@ impl CronScheduler {
         Self { config, manager, cli, bus }
     }
 
-    fn normalize_cron_expression(expr: &str) -> String {
-        if expr.split_whitespace().count() == 5 { format!("0 {}", expr) } else { expr.to_string() }
-    }
-
     pub(crate) fn calculate_next_run(&self, job: &CronJob) -> Result<DateTime<Utc>, String> {
-        let norm = Self::normalize_cron_expression(&job.schedule);
-        let sched = Schedule::from_str(&norm).map_err(|e| e.to_string())?;
-        let tz_s = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
-        let tz: Tz = tz_s.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
-        let next = sched.upcoming(tz).next().ok_or_else(|| "No upcoming run".to_string())?;
+        let next = calculate_job_next_run(&job.schedule, &job.timezone)?;
         Ok(next.with_timezone(&Utc))
     }
 
@@ -245,4 +237,17 @@ impl CronScheduler {
         let job_cli = AntigravityCli::new(jc);
         self.run_cli_command(&job, workspace, &job_cli).await
     }
+}
+
+pub fn calculate_job_next_run(schedule: &str, timezone: &str) -> Result<DateTime<Tz>, String> {
+    let norm = if schedule.split_whitespace().count() == 5 {
+        format!("0 {}", schedule)
+    } else {
+        schedule.to_string()
+    };
+    let sched = Schedule::from_str(&norm).map_err(|e| e.to_string())?;
+    let tz_s = if timezone.is_empty() { "UTC" } else { timezone };
+    let tz: Tz = tz_s.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
+    let next = sched.upcoming(tz).next().ok_or_else(|| "No upcoming run".to_string())?;
+    Ok(next)
 }

@@ -13,7 +13,7 @@
       "last_run_at": null,
       "last_run_status": null,
       "provider": null,
-      "model": "gemini-3.1-pro-high",
+      "model": "gemini-3.8-flash-high",
       "reasoning_effort": null,
       "cli_parameters": [],
       "quiet_start": null,
