@@ -50,6 +50,17 @@ impl AntigravityCli {
         Ok(())
     }
 
+    pub async fn ensure_interactive_ready(&self, session_id: &str) -> Result<(), String> {
+        if session_id.starts_with("mock-") {
+            return Ok(());
+        }
+        let env = self.build_env();
+        let agy_ws = self.agy_workspace();
+        self.ensure_interactive_session(session_id, &agy_ws, &env).await?;
+        self.init_pty_if_needed(session_id).await?;
+        Ok(())
+    }
+
     async fn run_in_pty_session(
         &self,
         session_id: &str,

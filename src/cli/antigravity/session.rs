@@ -257,5 +257,23 @@ impl SessionManager {
         }
         false
     }
+
+    pub async fn get_output_len(&self, session_id: &str) -> Option<usize> {
+        let holders = self.holders.lock().await;
+        let holder = holders.get(session_id)?;
+        let out = holder.output.lock().await;
+        Some(out.len())
+    }
+
+    pub async fn get_output_from(&self, session_id: &str, from: usize) -> Option<Vec<u8>> {
+        let holders = self.holders.lock().await;
+        let holder = holders.get(session_id)?;
+        let out = holder.output.lock().await;
+        if from <= out.len() {
+            Some(out[from..].to_vec())
+        } else {
+            Some(Vec::new())
+        }
+    }
 }
 

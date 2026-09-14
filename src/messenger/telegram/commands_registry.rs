@@ -40,12 +40,39 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("goal", "Launch long-running thorough task"),
         ("learn", "Record learning or behavior correction"),
         ("teamwork_preview", "Launch collaborative multi-agent simulation"),
+        ("usage", "Show model quota and remaining limits"),
         ("upgrade", "Check for updates and perform self-upgrade"),
     ];
     list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
         command: c.to_string(),
         description: d.to_string(),
     }).collect()
+}
+
+pub(crate) fn is_workflow_slash_command(text: &str) -> bool {
+    let cmd = text.trim_start().split_whitespace().next().unwrap_or("");
+    matches!(
+        cmd,
+        "/goal"
+            | "/plan"
+            | "/learn"
+            | "/grill_me"
+            | "/grill-me"
+            | "/teamwork_preview"
+            | "/teamwork-preview"
+            | "/browser"
+            | "/boost"
+            | "/schedule"
+    )
+}
+
+pub(crate) fn escape_non_workflow_slash(text: &str) -> String {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with('/') && !is_workflow_slash_command(trimmed) {
+        format!(" {}", text)
+    } else {
+        text.to_string()
+    }
 }
 
 pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {

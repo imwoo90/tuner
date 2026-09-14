@@ -20,7 +20,7 @@ use super::commands_model::{handle_model_command, handle_effort_command};
 #[allow(unused_imports)]
 pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command};
 
-async fn send_reply(
+pub(crate) async fn send_reply(
     bot: &Bot,
     msg: &Message,
     text: impl Into<String>,
@@ -48,6 +48,7 @@ async fn handle_help_command(
 • /lang - Change interface language
 • /memory - View persistent MAINMEMORY.md
 • /cron - Manage scheduled cron tasks
+• /usage - View model quota and remaining limits
 • /upgrade - Check for updates and self-upgrade
 • /restart - Request clean service restart";
     let _ = send_reply(bot, msg, help_text).await;
@@ -111,6 +112,10 @@ pub(crate) async fn handle_commands(
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
     if handle_info_commands(bot, msg, text, config, sessions, cli).await? {
+        return Ok(true);
+    }
+    if text.trim().split_whitespace().next() == Some("/usage") {
+        super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).await?;
         return Ok(true);
     }
     if text.starts_with("/new") || text.starts_with("/reset") || text == "/stop" || text == "/stop_all" || text == "/abort" {

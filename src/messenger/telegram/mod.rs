@@ -64,6 +64,9 @@ pub mod review_tests;
 pub mod media_group;
 pub mod upgrade;
 pub mod async_observer;
+pub mod commands_usage;
+#[cfg(test)]
+pub mod commands_usage_tests;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
@@ -192,6 +195,8 @@ pub(crate) async fn process_text_with_files(
         return Ok(());
     };
 
+    let escaped_text = commands_registry::escape_non_workflow_slash(current_text);
+
     let active_session_id = session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await?;
     if active_session_id.is_empty() {
         return Ok(());
@@ -206,7 +211,7 @@ pub(crate) async fn process_text_with_files(
         config.clone(),
     );
 
-    let mut prompt = build_reply_prompt(msg, current_text);
+    let mut prompt = build_reply_prompt(msg, &escaped_text);
     inject_pre_downloaded_files(&mut prompt, pre_downloaded_files);
 
     history::log_telegram_message(
@@ -220,7 +225,7 @@ pub(crate) async fn process_text_with_files(
         true,
         None,
     );
-    if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
+    if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, &escaped_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
     run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await
 }
