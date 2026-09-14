@@ -134,10 +134,12 @@ async fn test_telegram_command_stop_scoped() {
     cli.sessions.ensure_session("sess-stop-test", &std::path::PathBuf::from("."), "cat", &[], &env).await.unwrap();
     assert!(cli.sessions.is_active("sess-stop-test").await);
 
+    cli.sessions.set_running("sess-stop-test", true).await;
     let msg = make_msg(r#"{"message_id":9,"date":1,"chat":{"id":123,"type":"supergroup","is_forum":true},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"/stop","message_thread_id":456,"is_topic_message":true}"#);
     handle_message(bot, msg, cfg, mgr, cli.clone(), cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
 
-    assert!(!cli.sessions.is_active("sess-stop-test").await);
+    assert!(cli.sessions.is_active("sess-stop-test").await);
+    assert!(cli.sessions.is_interrupted("sess-stop-test").await);
 }
 
 #[tokio::test]

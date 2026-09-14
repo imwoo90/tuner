@@ -89,6 +89,9 @@ pub(crate) async fn handle_stream_result(
     if let Some(ref sid) = resp.session_id {
         last_session_id = Some(sid.clone());
     }
+    if resp.stderr == "Interrupted by user (/stop)" {
+        return Ok(last_session_id);
+    }
     let raw_text = if resp.is_error {
         let code = resp.returncode.unwrap_or(1);
         let error_msg = if !resp.stderr.is_empty() { &resp.stderr } else { &resp.result };

@@ -30,6 +30,7 @@ pub mod pty_spawner;
 pub mod log_helpers;
 pub mod log_parser;
 pub mod polling;
+pub mod completion;
 pub mod discovery;
 #[cfg(test)]
 pub mod discovery_tests;

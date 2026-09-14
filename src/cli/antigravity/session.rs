@@ -29,6 +29,8 @@ pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
     pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
     pub(crate) active_asks: Mutex<HashMap<String, AskState>>,
+    pub(crate) interrupted_sessions: Mutex<std::collections::HashSet<String>>,
+    pub(crate) interrupt_notify: tokio::sync::Notify,
 }
 
 impl Default for SessionManager {
@@ -37,6 +39,8 @@ impl Default for SessionManager {
             holders: Mutex::new(HashMap::new()),
             running_runs: Mutex::new(std::collections::HashSet::new()),
             active_asks: Mutex::new(HashMap::new()),
+            interrupted_sessions: Mutex::new(std::collections::HashSet::new()),
+            interrupt_notify: tokio::sync::Notify::new(),
         }
     }
 }
@@ -148,6 +152,7 @@ impl SessionManager {
     }
 
     pub async fn terminate(&self, session_id: &str) -> bool {
+        self.interrupted_sessions.lock().await.remove(session_id);
         self.holders.lock().await.remove(session_id).is_some()
     }
 
@@ -159,7 +164,63 @@ impl SessionManager {
     }
 
     pub async fn terminate_all(&self) {
+        self.interrupted_sessions.lock().await.clear();
         self.holders.lock().await.clear();
+    }
+
+    pub async fn interrupt(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
+        let matching: Vec<(String, std::os::unix::io::RawFd)> = {
+            let holders = self.holders.lock().await;
+            holders.iter()
+                .filter(|(_, h)| h.chat_id == Some(chat_id) && h.topic_id == topic_id)
+                .map(|(sid, h)| (sid.clone(), h.master_fd))
+                .collect()
+        };
+
+        if matching.is_empty() {
+            return false;
+        }
+
+        let mut found = false;
+        let mut target_sids = Vec::new();
+
+        for (sid, fd) in matching {
+            let is_running = self.is_running(&sid).await;
+            let is_ask = self.is_ask_active(&sid).await;
+            if is_running || is_ask {
+                let _ = super::pty_spawner::write_fd(fd, "\x1b");
+                if is_running {
+                    target_sids.push(sid.clone());
+                }
+                if is_ask {
+                    self.set_ask_active(&sid, false).await;
+                    found = true;
+                }
+            }
+        }
+
+        if !target_sids.is_empty() {
+            {
+                let mut interrupted = self.interrupted_sessions.lock().await;
+                for sid in target_sids {
+                    interrupted.insert(sid);
+                }
+            }
+            self.interrupt_notify.notify_waiters();
+            found = true;
+        }
+
+        found
+    }
+
+    pub async fn is_interrupted(&self, session_id: &str) -> bool {
+        let interrupted = self.interrupted_sessions.lock().await;
+        interrupted.contains(session_id)
+    }
+
+    pub async fn clear_interrupted(&self, session_id: &str) {
+        let mut interrupted = self.interrupted_sessions.lock().await;
+        interrupted.remove(session_id);
     }
 
     pub async fn write_to_session(&self, session_id: &str, input: &str) -> Result<bool, String> {

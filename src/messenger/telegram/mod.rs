@@ -249,6 +249,7 @@ async fn process_text(
 pub mod callbacks_effort;
 pub mod media;
 pub mod commands_model;
+pub mod commands_registry;
 pub mod handler;
 pub(crate) use handler::handle_message;
 

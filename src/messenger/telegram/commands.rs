@@ -17,6 +17,8 @@ use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands_model::{handle_model_command, handle_effort_command};
+#[allow(unused_imports)]
+pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command};
 
 async fn send_reply(
     bot: &Bot,
@@ -30,6 +32,28 @@ async fn send_reply(
     req.await
 }
 
+async fn handle_help_command(
+    bot: &Bot,
+    msg: &Message,
+) -> Result<(), teloxide::RequestError> {
+    let help_text = "\
+🤖 <b>[tuner] Command Reference:</b>
+
+• /status - System diagnostics & session info
+• /stop - Cancel active task in this topic (ESC)
+• /abort - Hard kill all running worker processes
+• /new (/reset) - Start a fresh conversation
+• /model - Switch active AI model
+• /effort - Set reasoning effort (low, medium, high)
+• /lang - Change interface language
+• /memory - View persistent MAINMEMORY.md
+• /cron - Manage scheduled cron tasks
+• /upgrade - Check for updates and self-upgrade
+• /restart - Request clean service restart";
+    let _ = send_reply(bot, msg, help_text).await;
+    Ok(())
+}
+
 async fn handle_info_commands(
     bot: &Bot,
     msg: &Message,
@@ -38,7 +62,11 @@ async fn handle_info_commands(
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
-    if text == "/status" {
+    if text == "/help" || text == "/start" {
+        let _ = handle_help_command(bot, msg).await;
+        return Ok(true);
+    }
+    if text == "/status" || text == "/diagnose" {
         let agy_status = match std::process::Command::new("agy").arg("--version").output() {
             Ok(out) => {
                 let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -186,8 +214,13 @@ async fn handle_session_control_commands(
         return Ok(true);
     }
     if cmd == "/stop" {
-        let count = cli.sessions.abort(msg.chat.id.0, topic_id).await;
-        let _ = send_reply(bot, msg, t!("bot.stop_success", count = count)).await;
+        let interrupted = cli.sessions.interrupt(msg.chat.id.0, topic_id).await;
+        let reply_text = if interrupted {
+            t!("bot.stop_interrupted")
+        } else {
+            t!("bot.stop_none")
+        };
+        let _ = send_reply(bot, msg, reply_text).await;
         return Ok(true);
     }
     if cmd == "/stop_all" || cmd == "/abort" {
@@ -223,39 +256,3 @@ async fn handle_memory_command(
     Ok(())
 }
 
-pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
-    let list = [
-        ("new", "Start a fresh conversation session"),
-        ("reset", "Alias for /new"),
-        ("stop", "Cancel active CLI processes in chat"),
-        ("abort", "Forcefully stop all running workers"),
-        ("model", "Select or change active AI model"),
-        ("effort", "Select or change reasoning effort (low|medium|high)"),
-        ("lang", "Change active language for this session"),
-        ("status", "Show bot status and diagnostics report"),
-        ("memory", "Print workspace MAINMEMORY.md contents"),
-        ("restart", "Trigger clean restart of tuner service"),
-        ("plan", "Request step-by-step plan before execution"),
-        ("grill_me", "Start interactive interview alignment"),
-        ("goal", "Launch long-running thorough task"),
-        ("learn", "Record learning or behavior correction"),
-        ("teamwork_preview", "Launch collaborative multi-agent simulation"),
-        ("upgrade", "Check for updates and perform self-upgrade"),
-    ];
-    list.into_iter().map(|(c, d)| teloxide::types::BotCommand {
-        command: c.to_string(),
-        description: d.to_string(),
-    }).collect()
-}
-
-pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {
-    let cmds = get_bot_commands();
-    let _ = bot.delete_my_commands().await;
-    let _ = bot.delete_my_commands().scope(teloxide::types::BotCommandScope::AllPrivateChats).await;
-    let _ = bot.delete_my_commands().scope(teloxide::types::BotCommandScope::AllGroupChats).await;
-
-    let _ = bot.set_my_commands(cmds.clone()).await;
-    let _ = bot.set_my_commands(cmds.clone()).scope(teloxide::types::BotCommandScope::AllPrivateChats).await;
-    let _ = bot.set_my_commands(cmds).scope(teloxide::types::BotCommandScope::AllGroupChats).await;
-    Ok(())
-}
