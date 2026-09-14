@@ -23,6 +23,8 @@ pub mod async_tests;
 pub mod session;
 #[cfg(test)]
 pub mod session_tests;
+#[cfg(test)]
+pub mod interrupt_tests;
 pub mod provider;
 #[cfg(test)]
 pub mod provider_tests;
