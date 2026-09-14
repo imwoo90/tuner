@@ -154,6 +154,27 @@ fn inject_pre_downloaded_files(prompt: &mut String, files: &[String]) {
     }
 }
 
+async fn resolve_message_session<'a>(
+    bot: &Bot,
+    msg: &Message,
+    text: &'a str,
+    config: &CliConfig,
+    sessions: &SessionManager,
+) -> Result<Option<(crate::session::data::SessionData, &'a str)>, teloxide::RequestError> {
+    let (m_over, eff_over, current_text) = parse_model_directive(text);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
+    let mut m = config.model.clone().unwrap_or_else(|| "antigravity-default".to_string());
+    if let Some(ref mo) = m_over { m = mo.clone(); }
+
+    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
+    if let Some(ref mo) = m_over {
+        if handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions, current_text.is_empty()).await? {
+            return Ok(None);
+        }
+    }
+    Ok(Some((sess, current_text)))
+}
+
 pub(crate) async fn process_text_with_files(
     bot: &Bot,
     msg: &Message,
@@ -167,15 +188,9 @@ pub(crate) async fn process_text_with_files(
 ) -> Result<(), teloxide::RequestError> {
     if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, cron_manager, topic_cache).await? { return Ok(()); }
 
-    let (m_over, eff_over, current_text) = parse_model_directive(text);
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
-    let mut m = config.model.clone().unwrap_or_else(|| "antigravity-default".to_string());
-    if let Some(ref mo) = m_over { m = mo.clone(); }
-
-    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
-    if let Some(ref mo) = m_over {
-        if handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions.as_ref(), current_text.is_empty()).await? { return Ok(()); }
-    }
+    let Some((mut sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions.as_ref()).await? else {
+        return Ok(());
+    };
 
     let active_session_id = session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await?;
     if active_session_id.is_empty() {
@@ -194,7 +209,17 @@ pub(crate) async fn process_text_with_files(
     let mut prompt = build_reply_prompt(msg, current_text);
     inject_pre_downloaded_files(&mut prompt, pre_downloaded_files);
 
-    history::log_telegram_message(&config.working_dir, &active_session_id, "user", Some(msg.id.0), text, true, None);
+    history::log_telegram_message(
+        &config.working_dir,
+        &active_session_id,
+        sess.topic_id,
+        sess.topic_name.as_deref(),
+        "user",
+        Some(msg.id.0),
+        text,
+        true,
+        None,
+    );
     if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, current_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
 
     run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await

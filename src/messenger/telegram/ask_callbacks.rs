@@ -35,9 +35,12 @@ async fn handle_write_in_transition(
 ) {
     state.waiting_for_write_in = true;
     cli.sessions.set_ask_state(sid, state).await;
+    let topic_id = super::get_topic_id(msg);
     super::history::log_telegram_message(
         &config.working_dir,
         sid,
+        topic_id,
+        None,
         "user",
         Some(msg.id.0),
         &format!("Selected Option: {} (Waiting for Write-in)", opt),
@@ -146,9 +149,12 @@ pub(crate) async fn handle_ask_prev_callback(
     let Some(sid) = data.split(':').nth(1) else { return; };
     if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
         if state.current_index > 0 {
+            let topic_id = super::get_topic_id(msg);
             super::history::log_telegram_message(
                 &_c.working_dir,
                 sid,
+                topic_id,
+                None,
                 "user",
                 Some(msg.id.0),
                 "Clicked [Prev] Button",
@@ -187,6 +193,8 @@ pub(crate) async fn process_skip(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
+            sess.topic_id,
+            sess.topic_name.as_deref(),
             "user",
             Some(msg.id.0),
             "Clicked [Skip] Button",

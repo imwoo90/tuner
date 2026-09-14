@@ -23,3 +23,5 @@ pub mod named;
 pub mod manager_tests;
 #[cfg(test)]
 pub mod named_tests;
+#[cfg(test)]
+pub mod topic_history_tests;

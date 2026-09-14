@@ -31,7 +31,7 @@ def find_last_consolidated_time(memory_file):
             return ts
     return None
 
-def cmd_get_logs(workspace_dir):
+def cmd_get_logs(workspace_dir, filter_topic_id=None):
     workspace = Path(workspace_dir).resolve()
     memory_file = workspace / "memory_system" / "MAINMEMORY.md"
     
@@ -59,6 +59,19 @@ def cmd_get_logs(workspace_dir):
         # Double check path containment
         if not history_file.resolve().is_relative_to(brain_dir.resolve()):
             continue
+
+        parent_topic_id = None
+        topic_meta_file = history_file.parent / "topic.json"
+        if topic_meta_file.exists():
+            try:
+                meta = json.loads(topic_meta_file.read_text(encoding="utf-8"))
+                parent_topic_id = meta.get("topic_id")
+            except Exception:
+                pass
+
+        if filter_topic_id is not None and parent_topic_id is not None and parent_topic_id != filter_topic_id:
+            continue
+
         try:
             with open(history_file, "r", encoding="utf-8") as f:
                 for line in f:
@@ -68,11 +81,15 @@ def cmd_get_logs(workspace_dir):
                     ts_str = data.get("timestamp")
                     if not ts_str:
                         continue
+                    entry_topic_id = data.get("topic_id", parent_topic_id)
+                    if filter_topic_id is not None and entry_topic_id != filter_topic_id:
+                        continue
                     # Parse ISO format timestamp
                     try:
                         ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                         if ts >= cutoff:
-                            recent_messages.append((ts, data.get("sender", "unknown"), data.get("text", "")))
+                            topic_label = f" [Topic: {data.get('topic_name') or entry_topic_id}]" if (data.get('topic_name') or entry_topic_id) else ""
+                            recent_messages.append((ts, data.get("sender", "unknown") + topic_label, data.get("text", "")))
                     except Exception:
                         pass
         except Exception as e:
@@ -81,7 +98,8 @@ def cmd_get_logs(workspace_dir):
     # Sort messages chronologically
     recent_messages.sort(key=lambda x: x[0])
 
-    print(f"--- LOGS SINCE {cutoff.strftime('%Y-%m-%d %H:%M:%S KST')} ---")
+    topic_suffix = f" (Filtered by Topic ID: {filter_topic_id})" if filter_topic_id is not None else ""
+    print(f"--- LOGS SINCE {cutoff.strftime('%Y-%m-%d %H:%M:%S KST')}{topic_suffix} ---")
     for ts, sender, text in recent_messages:
         # Convert timestamp to KST for display
         ts_kst = ts.astimezone(timezone(timedelta(hours=9)))
@@ -152,8 +170,17 @@ def main():
         print("Error: Missing --workspace parameter.", file=sys.stderr)
         sys.exit(1)
 
+    topic_id = None
+    for i in range(2, len(sys.argv)):
+        if sys.argv[i] == "--topic-id" and i + 1 < len(sys.argv):
+            try:
+                topic_id = int(sys.argv[i+1])
+            except ValueError:
+                pass
+            break
+
     if cmd == "get-logs":
-        cmd_get_logs(workspace_dir)
+        cmd_get_logs(workspace_dir, topic_id)
     elif cmd == "save-memory":
         # Read content from stdin to avoid command line limits
         content_input = sys.stdin.read()

@@ -54,6 +54,7 @@ async fn handle_async_turn_output(
 
     let html_text = super::formatting::markdown_to_telegram_html(txt);
     let chunks = super::formatting::split_html_message(&html_text, 4000);
+    let topic_id = thread_id.map(|t| t as i64);
     for chunk in &chunks {
         let mut msg_req = bot.send_message(chat_id, chunk)
             .parse_mode(teloxide::types::ParseMode::Html);
@@ -63,6 +64,8 @@ async fn handle_async_turn_output(
                 super::history::log_telegram_message(
                     &config.working_dir,
                     session_id,
+                    topic_id,
+                    None,
                     "bot",
                     Some(sent.id.0),
                     txt,
@@ -75,6 +78,8 @@ async fn handle_async_turn_output(
                 super::history::log_telegram_message(
                     &config.working_dir,
                     session_id,
+                    topic_id,
+                    None,
                     "bot",
                     None,
                     txt,

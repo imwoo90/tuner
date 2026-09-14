@@ -25,6 +25,11 @@ python3 skills/memory-system/scripts/memory_tool.py get-logs --workspace <worksp
 ```
 *Note*: This will strictly scan `<workspace_root_path>/brain/` for `telegram_history.jsonl` files and output logs in chronological order.
 
+To filter logs by a specific Telegram topic (useful for on-demand context recovery across rotated sessions):
+```bash
+python3 skills/memory-system/scripts/memory_tool.py get-logs --workspace <workspace_root_path> --topic-id <TOPIC_ID>
+```
+
 ### 2. Save Consolidated Memory
 To save the consolidated memory, pipe the proposed markdown text directly to the tool:
 ```bash

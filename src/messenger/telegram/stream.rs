@@ -80,6 +80,8 @@ pub(crate) async fn handle_stream_result(
     chat_id: ChatId,
     msg_id: Option<teloxide::types::MessageId>,
     thread_id: Option<i32>,
+    topic_id: Option<i64>,
+    topic_name: Option<&str>,
     resp: crate::cli::CliResponse,
     config: &CliConfig,
 ) -> Result<Option<String>, teloxide::RequestError> {
@@ -107,6 +109,8 @@ pub(crate) async fn handle_stream_result(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
+            topic_id,
+            topic_name,
             "bot",
             sent_msg_id,
             &raw_text,
@@ -199,7 +203,16 @@ async fn process_stream_events(
             }
             StreamEvent::Result(resp) => {
                 *last_text = resp.result.clone();
-                if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_msg_id, thread_id, resp, config).await {
+                if let Ok(Some(sid)) = handle_stream_result(
+                    bot,
+                    chat_id,
+                    *pub_msg_id,
+                    thread_id,
+                    session_data.topic_id,
+                    session_data.topic_name.as_deref(),
+                    resp,
+                    config,
+                ).await {
                     *last_session_id = Some(sid);
                 }
             }

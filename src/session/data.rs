@@ -21,6 +21,8 @@ pub struct ProviderSessionData {
     #[serde(default)]
     pub session_id: String,
     #[serde(default)]
+    pub past_session_ids: Vec<String>,
+    #[serde(default)]
     pub message_count: i64,
     #[serde(default)]
     pub total_cost_usd: f64,
@@ -32,6 +34,7 @@ impl Default for ProviderSessionData {
     fn default() -> Self {
         Self {
             session_id: String::new(),
+            past_session_ids: Vec::new(),
             message_count: 0,
             total_cost_usd: 0.0,
             total_tokens: 0,
@@ -146,7 +149,30 @@ impl SessionData {
 
     pub fn set_session_id(&mut self, provider: &str, session_id: &str) {
         let ps = self.provider_sessions.entry(provider.to_string()).or_default();
+        if !ps.session_id.is_empty() && ps.session_id != session_id {
+            if !ps.past_session_ids.contains(&ps.session_id) {
+                ps.past_session_ids.push(ps.session_id.clone());
+            }
+        }
         ps.session_id = session_id.to_string();
+    }
+
+    pub fn get_past_session_ids(&self, provider: &str) -> Vec<String> {
+        self.provider_sessions.get(provider)
+            .map(|ps| ps.past_session_ids.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn get_all_session_ids(&self, provider: &str) -> Vec<String> {
+        if let Some(ps) = self.provider_sessions.get(provider) {
+            let mut list = ps.past_session_ids.clone();
+            if !ps.session_id.is_empty() && !list.contains(&ps.session_id) {
+                list.push(ps.session_id.clone());
+            }
+            list
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn migrate_legacy_metrics(&mut self) {
@@ -174,6 +200,9 @@ impl SessionData {
 
     pub fn clear_provider_session(&mut self, provider: &str) {
         if let Some(ps) = self.provider_sessions.get_mut(provider) {
+            if !ps.session_id.is_empty() && !ps.past_session_ids.contains(&ps.session_id) {
+                ps.past_session_ids.push(ps.session_id.clone());
+            }
             ps.session_id = String::new();
         }
     }

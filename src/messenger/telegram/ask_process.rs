@@ -117,6 +117,8 @@ pub(crate) async fn process_answer(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
+            sess.topic_id,
+            sess.topic_name.as_deref(),
             "user",
             Some(msg.id.0),
             &user_action_text,
@@ -157,6 +159,8 @@ pub(crate) async fn process_submit(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
+            sess.topic_id,
+            sess.topic_name.as_deref(),
             "user",
             Some(msg.id.0),
             &user_action_text,
@@ -171,11 +175,7 @@ pub(crate) async fn process_submit(
         let _ = cli.sessions.write_to_session(sid, ks).await;
 
         if state.current_index < state.answers.len() {
-            state.answers[state.current_index] = if opts.is_empty() {
-                String::new()
-            } else {
-                opts.join(", ")
-            };
+            state.answers[state.current_index] = opts.join(", ");
         }
 
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
@@ -194,6 +194,8 @@ pub(crate) async fn process_submit(
 fn log_ask_question_result(
     config: &CliConfig,
     sess_id: &str,
+    topic_id: Option<i64>,
+    topic_name: Option<&str>,
     msg_id: Option<i32>,
     ask: &crate::cli::AskQuestionData,
     is_success: bool,
@@ -204,6 +206,8 @@ fn log_ask_question_result(
     super::history::log_telegram_message(
         &config.working_dir,
         sess_id,
+        topic_id,
+        topic_name,
         "bot",
         msg_id,
         &text_to_log,
@@ -234,16 +238,22 @@ pub(crate) async fn handle_stream_ask_question(
     if let Some(tid) = thread_id {
         req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
     }
-    match req.await {
-        Ok(sent) => {
-            log_ask_question_result(config, &sess_id, Some(sent.id.0), &ask, true, None);
-            Ok(sent.id.0)
-        }
-        Err(e) => {
-            log_ask_question_result(config, &sess_id, None, &ask, false, Some(&e.to_string()));
-            Err(e)
-        }
-    }
+    let res = req.await;
+    let (sent_id, ok, err) = match &res {
+        Ok(s) => (Some(s.id.0), true, None),
+        Err(e) => (None, false, Some(e.to_string())),
+    };
+    log_ask_question_result(
+        config,
+        &sess_id,
+        session_data.topic_id,
+        session_data.topic_name.as_deref(),
+        sent_id,
+        &ask,
+        ok,
+        err.as_deref(),
+    );
+    res.map(|s| s.id.0)
 }
 
 pub(crate) async fn handle_ask_question_event(
