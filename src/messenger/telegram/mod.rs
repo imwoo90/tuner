@@ -59,6 +59,7 @@ pub mod ask_process;
 pub mod multi_select;
 pub mod runner;
 pub mod attachments;
+pub mod attachments_dl;
 pub mod review;
 #[cfg(test)]
 pub mod review_tests;

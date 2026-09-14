@@ -152,24 +152,12 @@ async fn handle_callback_query_inner(
             } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
                 // Handled
             } else if let Some(token) = d.strip_prefix("dl_files:") {
-                handle_dl_files_callback(&bot, msg, token).await;
+                super::attachments_dl::handle_dl_files_callback(&bot, msg, token).await;
             }
         }
         let _ = bot.answer_callback_query(q.id).await;
     }
     Ok(())
-}
-
-async fn handle_dl_files_callback(bot: &teloxide::Bot, msg: &Message, token: &str) {
-    let mgr = super::review::global_review_manager();
-    if let Some(files) = mgr.get_files(token).await {
-        for f in files {
-            let path = std::path::PathBuf::from(&f.path);
-            if path.is_file() {
-                let _ = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path)).await;
-            }
-        }
-    }
 }
 
 pub(crate) async fn handle_callback_query(
