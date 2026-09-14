@@ -131,6 +131,7 @@ Press Esc or q to exit
         // Non-workflow slash inputs are prepended with a single space
         assert_eq!(escape_non_workflow_slash("/etc/hosts"), " /etc/hosts");
         assert_eq!(escape_non_workflow_slash("/usage 설명해줘"), " /usage 설명해줘");
+        assert_eq!(escape_non_workflow_slash("/usage 동작 되는거 확인했어."), " /usage 동작 되는거 확인했어.");
         assert_eq!(escape_non_workflow_slash("/var/log/syslog"), " /var/log/syslog");
 
         // Normal inputs without leading slash are untouched

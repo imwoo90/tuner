@@ -114,7 +114,7 @@ pub(crate) async fn handle_commands(
     if handle_info_commands(bot, msg, text, config, sessions, cli).await? {
         return Ok(true);
     }
-    if text.trim().split_whitespace().next() == Some("/usage") {
+    if text.trim() == "/usage" {
         super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).await?;
         return Ok(true);
     }
