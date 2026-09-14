@@ -176,4 +176,35 @@
 <a href=#176 id=176 data-nosnippet>176</a>        }
 <a href=#177 id=177 data-nosnippet>177</a>    })
 <a href=#178 id=178 data-nosnippet>178</a>}
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>strip_ansi(s: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">static </span>ANSI_RE: std::sync::OnceLock&lt;regex::Regex&gt; = std::sync::OnceLock::new();
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>re = ANSI_RE.get_or_init(|| regex::Regex::new(<span class="string">r"\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])"</span>).unwrap());
+<a href=#183 id=183 data-nosnippet>183</a>    re.replace_all(s, <span class="string">""</span>).to_string()
+<a href=#184 id=184 data-nosnippet>184</a>}
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_pty_prompt(mgr: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager, sid: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>start = std::time::Instant::now();
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">while </span>start.elapsed().as_secs() &lt; <span class="number">15 </span>{
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span><span class="kw-2">mut </span>hs = mgr.holders.lock().<span class="kw">await</span>;
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>h = hs.get_mut(sid).ok_or(<span class="string">"No holder"</span>)<span class="question-mark">?</span>;
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>out = h.output.lock().<span class="kw">await</span>.clone();
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>dead = h.child.try_wait().ok().flatten().is_some();
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>s = String::from_utf8_lossy(<span class="kw-2">&amp;</span>out);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>clean = strip_ansi(<span class="kw-2">&amp;</span>s);
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">if </span>clean.contains(<span class="string">'&gt;'</span>) || dead {
+<a href=#196 id=196 data-nosnippet>196</a>            drop(hs);
+<a href=#197 id=197 data-nosnippet>197</a>            tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">4000</span>)).<span class="kw">await</span>;
+<a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#199 id=199 data-nosnippet>199</a>        }
+<a href=#200 id=200 data-nosnippet>200</a>        drop(hs);
+<a href=#201 id=201 data-nosnippet>201</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">100</span>)).<span class="kw">await</span>;
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span>last_out = <span class="kw">if let </span><span class="prelude-val">Some</span>(h) = mgr.holders.lock().<span class="kw">await</span>.get(sid) {
+<a href=#204 id=204 data-nosnippet>204</a>        String::from_utf8_lossy(<span class="kw-2">&amp;</span>h.output.lock().<span class="kw">await</span>).to_string()
+<a href=#205 id=205 data-nosnippet>205</a>    } <span class="kw">else </span>{
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="string">"None"</span>.into()
+<a href=#207 id=207 data-nosnippet>207</a>    };
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"Timeout waiting for session init. PTY: {}"</span>, last_out))
+<a href=#209 id=209 data-nosnippet>209</a>}
 </code></pre></div></section></main></body></html>

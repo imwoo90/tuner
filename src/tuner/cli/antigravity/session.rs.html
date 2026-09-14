@@ -192,11 +192,10 @@
 <a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">pub async fn </span>is_active(<span class="kw-2">&amp;</span><span class="self">self</span>, session_id: <span class="kw-2">&amp;</span>str) -&gt; bool {
 <a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="self">self</span>.holders.lock().<span class="kw">await</span>;
 <a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(holder) = h.get_mut(session_id) {
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">if </span>holder.child.try_wait().map(|s| s.is_none()).unwrap_or(<span class="bool-val">false</span>) { <span class="kw">return </span><span class="bool-val">true</span>; }
-<a href=#196 id=196 data-nosnippet>196</a>            h.remove(session_id);
-<a href=#197 id=197 data-nosnippet>197</a>        }
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="bool-val">false
-<a href=#199 id=199 data-nosnippet>199</a>    </span>}
-<a href=#200 id=200 data-nosnippet>200</a>}
-<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">return </span>holder.child.try_wait().map(|s| s.is_none()).unwrap_or(<span class="bool-val">false</span>);
+<a href=#196 id=196 data-nosnippet>196</a>        }
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="bool-val">false
+<a href=#198 id=198 data-nosnippet>198</a>    </span>}
+<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#200 id=200 data-nosnippet>200</a>
 </code></pre></div></section></main></body></html>
