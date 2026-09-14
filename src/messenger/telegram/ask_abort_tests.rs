@@ -121,4 +121,42 @@ mod tests {
         assert!(ctx.cli.sessions.is_active(session_id).await);
         assert!(!ctx.cli.sessions.is_ask_active(session_id).await);
     }
+
+    #[tokio::test]
+    async fn test_feed_active_session_waits_for_running_turn_and_returns_false() {
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let temp_dir = tempfile::tempdir().unwrap();
+        let session_id = "test-session-running-turn";
+        mock_brain_dir(&temp_dir, session_id);
+        let _env = EnvGuard::new(&temp_dir);
+        let ctx = init_test_context(&temp_dir);
+        let chat_id = 999;
+        let mut env = std::collections::HashMap::new();
+        env.insert("TUNER_CHAT_ID".to_string(), chat_id.to_string());
+        ctx.cli.sessions.ensure_session(session_id, temp_dir.path(), "sleep", &["10".to_string()], &env).await.unwrap();
+        ctx.cli.sessions.set_running(session_id, true).await;
+
+        let sessions_clone = ctx.cli.sessions.clone();
+        let sid_clone = session_id.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            sessions_clone.set_running(&sid_clone, false).await;
+        });
+
+        let msg = make_message_json(chat_id, 100, "New message while running");
+        let start = std::time::Instant::now();
+        let handled = crate::messenger::telegram::ask_helpers::feed_active_session_if_running(
+            &ctx.bot,
+            &msg,
+            session_id,
+            "New message while running",
+            &ctx.cli,
+            &ctx.mgr,
+            crate::session::data::SessionData::default(),
+            &ctx.cfg,
+        ).await.unwrap();
+
+        assert_eq!(handled, false);
+        assert!(start.elapsed().as_millis() >= 150);
+    }
 }

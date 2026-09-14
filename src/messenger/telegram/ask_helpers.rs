@@ -219,18 +219,19 @@ pub(crate) async fn feed_active_session_if_running(
     let is_running = cli.sessions.is_running(session_id).await;
     let is_ask = cli.sessions.is_ask_active(session_id).await;
 
-    if is_active && (is_running || is_ask) {
-        if is_ask {
-            if let Some(state) = cli.sessions.get_ask_state(session_id).await {
-                let _ = handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).await?;
-                return Ok(true);
-            }
-        }
-        if is_running {
-            let input_prompt = format!("{}\r", current_text);
-            let _ = cli.sessions.write_to_session(session_id, &input_prompt).await;
+    if is_active && is_ask {
+        if let Some(state) = cli.sessions.get_ask_state(session_id).await {
+            let _ = handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).await?;
             return Ok(true);
         }
+    }
+
+    if is_active && is_running {
+        let start = std::time::Instant::now();
+        while cli.sessions.is_running(session_id).await && start.elapsed().as_secs() < 60 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        }
+        return Ok(false);
     }
     Ok(false)
 }

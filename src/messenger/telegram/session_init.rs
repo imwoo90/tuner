@@ -29,7 +29,12 @@ pub(crate) async fn initialize_session_if_needed(
     let provider = &config.provider;
     let session_id = sess.get_session_id(provider);
     if !session_id.is_empty() {
-        return Ok(session_id);
+        if session_id.starts_with("mock-") || cli.is_session_alive(&session_id) {
+            return Ok(session_id);
+        }
+        eprintln!("⚠️ [tuner] Session {} for topic {:?} is expired. Resetting...", session_id, sess.topic_name);
+        sess.set_session_id(provider, "");
+        let _ = sessions.preserve_session_identity(sess).await;
     }
 
     if cfg!(test) {
@@ -41,9 +46,19 @@ pub(crate) async fn initialize_session_if_needed(
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
+    boot_fresh_session(bot, msg, sessions, sess, cli, config).await
+}
 
+async fn boot_fresh_session(
+    bot: &Bot,
+    msg: &Message,
+    sessions: &SessionManager,
+    sess: &mut SessionData,
+    cli: &AntigravityCli,
+    config: &CliConfig,
+) -> Result<String, teloxide::RequestError> {
+    let provider = &config.provider;
     let startup_prompt = crate::t!("bot.session_init_prompt");
-
     let ws = cli.agy_workspace();
     match cli.send(&startup_prompt, None, false, ws).await {
         Ok(res) => {

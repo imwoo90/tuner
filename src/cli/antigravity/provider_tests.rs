@@ -214,3 +214,62 @@ async fn test_send_automatically_trusts_workspace() {
     let expected = workspace.canonicalize().unwrap().to_string_lossy().to_string();
     assert!(workspaces.iter().any(|v| v.as_str() == Some(&expected)));
 }
+
+#[test]
+fn test_is_session_alive_detects_valid_and_expired_sessions() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let home = temp_dir.path();
+    unsafe {
+        std::env::set_var("HOME", home.to_string_lossy().to_string());
+    }
+
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        working_dir: home.to_path_buf(),
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+
+    // Empty session
+    assert!(!cli.is_session_alive(""));
+
+    // Non-existent session
+    assert!(!cli.is_session_alive("dead-uuid-1234"));
+
+    // Existing session via conversation db
+    let conv_dir = home.join(".gemini").join("antigravity-cli").join("conversations");
+    std::fs::create_dir_all(&conv_dir).unwrap();
+    std::fs::write(conv_dir.join("live-uuid-1.db"), b"").unwrap();
+    assert!(cli.is_session_alive("live-uuid-1"));
+
+    // Existing session via brain transcript
+    let brain_logs = home.join(".gemini").join("antigravity-cli").join("brain").join("live-uuid-2").join(".system_generated").join("logs");
+    std::fs::create_dir_all(&brain_logs).unwrap();
+    std::fs::write(brain_logs.join("transcript_full.jsonl"), b"test").unwrap();
+    assert!(cli.is_session_alive("live-uuid-2"));
+}
+
+#[tokio::test]
+async fn test_run_in_pty_session_fails_fast_on_expired_session() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let home = temp_dir.path();
+    unsafe {
+        std::env::set_var("HOME", home.to_string_lossy().to_string());
+    }
+
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        working_dir: home.to_path_buf(),
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let start = std::time::Instant::now();
+    let res = cli.send("hello", Some("expired-uuid-9999"), false, home.to_path_buf()).await;
+    assert!(res.is_err());
+    let err = res.err().unwrap();
+    assert!(err.contains("expired or not found in Antigravity storage"));
+    assert!(start.elapsed().as_secs() < 5);
+}
+

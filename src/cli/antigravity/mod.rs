@@ -54,6 +54,17 @@ impl AntigravityCli {
         }
     }
 
+    pub fn is_session_alive(&self, session_id: &str) -> bool {
+        if session_id.is_empty() {
+            return false;
+        }
+        let env = self.build_env();
+        let root = events::agy_state_root(Some(&env));
+        let conv_db = root.join("conversations").join(format!("{}.db", session_id));
+        let transcript = root.join("brain").join(session_id).join(".system_generated").join("logs").join("transcript_full.jsonl");
+        conv_db.exists() || transcript.exists()
+    }
+
     pub async fn discover_models(&self) -> Vec<String> {
         discovery::discover_models("agy").await
     }

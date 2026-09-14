@@ -40,6 +40,8 @@ pub mod forum_tests;
 #[cfg(test)]
 pub mod ask_abort_tests;
 #[cfg(test)]
+pub mod session_init_tests;
+#[cfg(test)]
 pub mod test_helpers;
 #[cfg(test)]
 pub static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());

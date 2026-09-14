@@ -1,12 +1,5 @@
-//! # Antigravity CLI Provider implementation
-//!
-//! This module implements the `AgentProvider` trait for `AntigravityCli`,
-//! managing execution environment propagation, PTY session lifecycle hooks,
-//! and response transcript extraction.
-
-//! 
-//! ## Search Tags
-//! #provider
+//! # Antigravity CLI Provider
+//! Implements the AgentProvider trait for AntigravityCli, managing execution environments, PTY lifecycles, and logs.
 
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::{AgentProvider, CliResponse, StreamEvent};
@@ -44,6 +37,17 @@ impl AntigravityCli {
         self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
 
+    async fn init_pty_if_needed(&self, sid: &str) -> Result<(), String> {
+        let u = self.sessions.holders.lock().await.get_mut(sid)
+            .map(|h| { let init = !h.initialized; h.initialized = true; init })
+            .unwrap_or(false);
+        if u {
+            wait_for_pty_prompt(&self.sessions, sid).await?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+        Ok(())
+    }
+
     async fn run_in_pty_session(
         &self,
         session_id: &str,
@@ -56,17 +60,12 @@ impl AntigravityCli {
         sessions.set_running(&sid_str, true).await;
 
         let res = async {
-            self.ensure_interactive_session(session_id, agy_ws, env).await?;
-
-            let needs_init = self.sessions.holders.lock().await
-                .get_mut(session_id)
-                .map(|h| { let u = !h.initialized; h.initialized = true; u })
-                .unwrap_or(false);
-
-            if needs_init {
-                wait_for_pty_prompt(&self.sessions, session_id).await?;
-                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            if !self.sessions.is_active(session_id).await && !session_id.starts_with("mock-") && !self.is_session_alive(session_id) {
+                return Err(format!("Session {} is expired or not found in Antigravity storage", session_id));
             }
+
+            self.ensure_interactive_session(session_id, agy_ws, env).await?;
+            self.init_pty_if_needed(session_id).await?;
 
             let p = events::agy_state_root(Some(env)).join("brain").join(session_id)
                 .join(".system_generated/logs/transcript_full.jsonl");
@@ -235,7 +234,7 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
         let dead = h.child.try_wait().ok().flatten().is_some();
         let s = String::from_utf8_lossy(&out);
         let clean = strip_ansi(&s);
-        if clean.contains("\r>") || clean.contains("\n>") || clean.contains("\n> ") || clean.contains("\r> ") || clean.contains("\n >") || s.contains("\r>") || s.contains("\n>") || dead {
+        if clean.contains('>') || dead {
             drop(hs);
             tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
             return Ok(());
@@ -246,10 +245,7 @@ async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) ->
     let last_out = if let Some(h) = mgr.holders.lock().await.get(sid) {
         String::from_utf8_lossy(&h.output.lock().await).to_string()
     } else {
-        "No holder found".to_string()
+        "None".into()
     };
-    Err(format!("Timeout waiting for interactive session initialization. PTY output so far: {}", last_out))
+    Err(format!("Timeout waiting for session init. PTY: {}", last_out))
 }
-
-
-
