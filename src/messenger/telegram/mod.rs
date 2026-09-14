@@ -250,7 +250,10 @@ pub mod callbacks_effort;
 pub mod media;
 pub mod commands_model;
 pub mod commands_registry;
+pub mod auth;
 pub mod handler;
 pub(crate) use handler::handle_message;
+#[cfg(test)]
+pub mod lock_bypass_tests;
 
 pub use runner::run_bot;

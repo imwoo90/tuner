@@ -5,7 +5,6 @@
 
 use teloxide::prelude::*;
 
-#[allow(dead_code)]
 pub(crate) fn is_lock_free_command(text: &str) -> bool {
     let cmd = text.split_whitespace().next().unwrap_or("");
     matches!(
