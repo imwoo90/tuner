@@ -6,7 +6,7 @@
 use teloxide::prelude::*;
 
 pub(crate) fn is_lock_free_command(text: &str) -> bool {
-    let cmd = text.split_whitespace().next().unwrap_or("");
+    let cmd = text.trim();
     matches!(
         cmd,
         "/status"

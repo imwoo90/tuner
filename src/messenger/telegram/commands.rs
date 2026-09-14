@@ -63,11 +63,12 @@ async fn handle_info_commands(
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
-    if text == "/help" || text == "/start" {
+    let trimmed = text.trim();
+    if trimmed == "/help" || trimmed == "/start" {
         let _ = handle_help_command(bot, msg).await;
         return Ok(true);
     }
-    if text == "/status" || text == "/diagnose" {
+    if trimmed == "/status" || trimmed == "/diagnose" {
         let agy_status = match std::process::Command::new("agy").arg("--version").output() {
             Ok(out) => {
                 let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -93,7 +94,8 @@ async fn handle_info_commands(
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
-    if text == "/restart" {
+    let trimmed = text.trim();
+    if trimmed == "/restart" {
         let _ = send_reply(bot, msg, t!("bot.restart")).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         std::process::exit(42);
@@ -114,11 +116,12 @@ pub(crate) async fn handle_commands(
     if handle_info_commands(bot, msg, text, config, sessions, cli).await? {
         return Ok(true);
     }
-    if text.trim() == "/usage" {
+    let trimmed = text.trim();
+    if trimmed == "/usage" {
         super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).await?;
         return Ok(true);
     }
-    if text.starts_with("/new") || text.starts_with("/reset") || text == "/stop" || text == "/stop_all" || text == "/abort" {
+    if text.starts_with("/new") || text.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {
         return handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).await;
     }
     if text.starts_with("/model") {
@@ -136,15 +139,15 @@ pub(crate) async fn handle_commands(
         let _ = crate::telegram::lang::handle_lang_command(bot, msg, args, config, sessions).await;
         return Ok(true);
     }
-    if text == "/memory" {
+    if trimmed == "/memory" {
         let _ = handle_memory_command(bot, msg, config).await;
         return Ok(true);
     }
-    if text == "/cron" {
+    if trimmed == "/cron" {
         let _ = handle_cron_command(bot, msg, cron_manager).await;
         return Ok(true);
     }
-    if text == "/upgrade" {
+    if trimmed == "/upgrade" {
         let _ = super::upgrade::handle_upgrade_command(bot, msg).await;
         return Ok(true);
     }

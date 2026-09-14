@@ -32,9 +32,12 @@ mod tests {
         assert!(!is_lock_free_command("/effort"));
         assert!(!is_lock_free_command("/lang"));
 
-        // Regular chat text
+        // Regular chat text and commands with prompt text
         assert!(!is_lock_free_command("Hello assistant!"));
         assert!(!is_lock_free_command("Please help me debug this"));
+        assert!(!is_lock_free_command("/status 뒤에 프롬프트 테스트"));
+        assert!(!is_lock_free_command("/help me please"));
+        assert!(!is_lock_free_command("/stop doing that"));
     }
 
     fn setup() -> (
