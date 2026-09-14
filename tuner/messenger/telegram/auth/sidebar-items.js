@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["auto_register_owner","validate_and_auth_message"]};

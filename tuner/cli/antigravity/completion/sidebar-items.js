@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_completion_step","check_log_completion_in_file","is_completion_entry"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_bot_commands","is_lock_free_command","register_commands"]};

@@ -249,8 +249,12 @@
 <a href=#249 id=249 data-nosnippet>249</a><span class="kw">pub mod </span>callbacks_effort;
 <a href=#250 id=250 data-nosnippet>250</a><span class="kw">pub mod </span>media;
 <a href=#251 id=251 data-nosnippet>251</a><span class="kw">pub mod </span>commands_model;
-<a href=#252 id=252 data-nosnippet>252</a><span class="kw">pub mod </span>handler;
-<a href=#253 id=253 data-nosnippet>253</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>handler::handle_message;
-<a href=#254 id=254 data-nosnippet>254</a>
-<a href=#255 id=255 data-nosnippet>255</a><span class="kw">pub use </span>runner::run_bot;
+<a href=#252 id=252 data-nosnippet>252</a><span class="kw">pub mod </span>commands_registry;
+<a href=#253 id=253 data-nosnippet>253</a><span class="kw">pub mod </span>auth;
+<a href=#254 id=254 data-nosnippet>254</a><span class="kw">pub mod </span>handler;
+<a href=#255 id=255 data-nosnippet>255</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>handler::handle_message;
+<a href=#256 id=256 data-nosnippet>256</a><span class="attr">#[cfg(test)]
+<a href=#257 id=257 data-nosnippet>257</a></span><span class="kw">pub mod </span>lock_bypass_tests;
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a><span class="kw">pub use </span>runner::run_bot;
 </code></pre></div></section></main></body></html>
