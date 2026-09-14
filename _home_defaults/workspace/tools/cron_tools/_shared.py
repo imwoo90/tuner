@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
+import sys
 from pathlib import Path
 from typing import Any
 
-from ductor_bot._home_defaults.workspace.tools._tool_shared import (
+# Ensure tools directory is in sys.path
+_TOOLS_DIR = Path(__file__).resolve().parent.parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+
+from _tool_shared import (
     available_ids,
     find_by_id,
     load_collection_or_default,
@@ -19,10 +24,17 @@ from ductor_bot._home_defaults.workspace.tools._tool_shared import (
 # Re-export so existing tool scripts keep working with ``from _shared import sanitize_name``
 sanitize_name = sanitize_name
 
-TUNER_HOME = Path(os.environ.get("TUNER_HOME", "~/.tuner")).expanduser()
+_WORKSPACE_DIR = _TOOLS_DIR.parent
+_PROFILE_DIR = _WORKSPACE_DIR.parent
+
+if (_PROFILE_DIR / "cron_jobs.json").exists() or (_PROFILE_DIR / "config").exists():
+    TUNER_HOME = _PROFILE_DIR
+else:
+    TUNER_HOME = Path(os.environ.get("TUNER_HOME", "~/.tuner")).expanduser()
+
 CONFIG_PATH = TUNER_HOME / "config" / "config.json"
 JOBS_PATH = TUNER_HOME / "cron_jobs.json"
-CRON_TASKS_DIR = TUNER_HOME / "workspace" / "cron_tasks"
+CRON_TASKS_DIR = _WORKSPACE_DIR / "cron_tasks"
 
 # Provider rule files — only create for authenticated providers.
 _RULE_FILENAMES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
