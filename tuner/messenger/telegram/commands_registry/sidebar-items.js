@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_bot_commands","is_lock_free_command","register_commands"]};
+window.SIDEBAR_ITEMS = {"fn":["escape_non_workflow_slash","get_bot_commands","is_lock_free_command","is_workflow_slash_command","register_commands"]};
