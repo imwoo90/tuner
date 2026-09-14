@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_media_group_message","handle_message","handle_pure_text_message","handle_single_media_message","resolve_active_lang","route_media_message"]};
+window.SIDEBAR_ITEMS = {"fn":["dispatch_lock_free","handle_media_group_message","handle_message","handle_pure_text_message","handle_single_media_message","normalize_command_text","resolve_active_lang","route_media_message"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["global_chat_rate_limiter"],"static":["INSTANCE"],"struct":["ChatRateLimiter"]};
