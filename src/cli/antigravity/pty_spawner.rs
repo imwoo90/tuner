@@ -176,3 +176,34 @@ fn spawn_drain_task(
         }
     })
 }
+
+pub(crate) fn strip_ansi(s: &str) -> String {
+    static ANSI_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = ANSI_RE.get_or_init(|| regex::Regex::new(r"\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])").unwrap());
+    re.replace_all(s, "").to_string()
+}
+
+pub(crate) async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs() < 15 {
+        let mut hs = mgr.holders.lock().await;
+        let h = hs.get_mut(sid).ok_or("No holder")?;
+        let out = h.output.lock().await.clone();
+        let dead = h.child.try_wait().ok().flatten().is_some();
+        let s = String::from_utf8_lossy(&out);
+        let clean = strip_ansi(&s);
+        if clean.contains('>') || dead {
+            drop(hs);
+            tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
+            return Ok(());
+        }
+        drop(hs);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+    let last_out = if let Some(h) = mgr.holders.lock().await.get(sid) {
+        String::from_utf8_lossy(&h.output.lock().await).to_string()
+    } else {
+        "None".into()
+    };
+    Err(format!("Timeout waiting for session init. PTY: {}", last_out))
+}

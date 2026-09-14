@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command;
+#[allow(unused_imports)]
+pub(crate) use super::pty_spawner::strip_ansi;
 
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
@@ -42,7 +44,7 @@ impl AntigravityCli {
             .map(|h| { let init = !h.initialized; h.initialized = true; init })
             .unwrap_or(false);
         if u {
-            wait_for_pty_prompt(&self.sessions, sid).await?;
+            super::pty_spawner::wait_for_pty_prompt(&self.sessions, sid).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         }
         Ok(())
@@ -155,10 +157,12 @@ impl AgentProvider for AntigravityCli {
         let final_session_id = if let Some(sid) = resume_session {
             Some(sid.to_string())
         } else {
-            events::resolve_brain_dir(&agy_ws, Some(&env))
-                .as_ref()
-                .and_then(|d| d.file_name())
-                .map(|name| name.to_string_lossy().to_string())
+            events::extract_conversation_id(&stdout_str).or_else(|| {
+                events::resolve_brain_dir(&agy_ws, Some(&env))
+                    .as_ref()
+                    .and_then(|d| d.file_name())
+                    .map(|name| name.to_string_lossy().to_string())
+            })
         };
 
         let resolved_brain_dir = if let Some(ref sid) = final_session_id {
@@ -219,33 +223,3 @@ impl AgentProvider for AntigravityCli {
     }
 }
 
-pub(crate) fn strip_ansi(s: &str) -> String {
-    static ANSI_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = ANSI_RE.get_or_init(|| regex::Regex::new(r"\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])").unwrap());
-    re.replace_all(s, "").to_string()
-}
-
-async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
-    let start = std::time::Instant::now();
-    while start.elapsed().as_secs() < 15 {
-        let mut hs = mgr.holders.lock().await;
-        let h = hs.get_mut(sid).ok_or("No holder")?;
-        let out = h.output.lock().await.clone();
-        let dead = h.child.try_wait().ok().flatten().is_some();
-        let s = String::from_utf8_lossy(&out);
-        let clean = strip_ansi(&s);
-        if clean.contains('>') || dead {
-            drop(hs);
-            tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
-            return Ok(());
-        }
-        drop(hs);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-    let last_out = if let Some(h) = mgr.holders.lock().await.get(sid) {
-        String::from_utf8_lossy(&h.output.lock().await).to_string()
-    } else {
-        "None".into()
-    };
-    Err(format!("Timeout waiting for session init. PTY: {}", last_out))
-}

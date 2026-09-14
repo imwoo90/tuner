@@ -39,6 +39,8 @@ pub mod trust_tests;
 pub mod error_parser;
 #[cfg(test)]
 pub mod error_parser_tests;
+#[cfg(test)]
+pub mod provider_json_tests;
 
 #[derive(Clone)]
 pub struct AntigravityCli {
@@ -109,6 +111,11 @@ impl AntigravityCli {
             for param in params {
                 cmd.push(param.clone());
             }
+        }
+
+        if !cmd.contains(&"--output-format".to_string()) {
+            cmd.push("--output-format".to_string());
+            cmd.push("json".to_string());
         }
 
         let final_prompt = self.format_prompt(prompt);

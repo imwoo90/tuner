@@ -16,7 +16,7 @@ pub fn parse_antigravity_json(raw: &str) -> String {
     match serde_json::from_str::<serde_json::Value>(trimmed) {
         Ok(parsed) => match parsed {
             serde_json::Value::Object(obj) => {
-                for key in &["content", "result", "text", "message"] {
+                for key in &["content", "result", "text", "message", "response"] {
                     if let Some(val) = obj.get(*key).and_then(|v| v.as_str()) {
                         if !val.is_empty() {
                             return val.to_string();
@@ -208,6 +208,22 @@ fn remove_html_comments_and_nbsp(s: &str) -> String {
         }
     }
     result.replace("&nbsp;", "").replace("&#160;", "")
+}
+
+pub fn extract_conversation_id(stdout: &str) -> Option<String> {
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('{') {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if let Some(cid) = val.get("conversation_id").and_then(|s| s.as_str()) {
+                    if !cid.is_empty() {
+                        return Some(cid.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 

@@ -192,8 +192,7 @@ impl SessionManager {
     pub async fn is_active(&self, session_id: &str) -> bool {
         let mut h = self.holders.lock().await;
         if let Some(holder) = h.get_mut(session_id) {
-            if holder.child.try_wait().map(|s| s.is_none()).unwrap_or(false) { return true; }
-            h.remove(session_id);
+            return holder.child.try_wait().map(|s| s.is_none()).unwrap_or(false);
         }
         false
     }

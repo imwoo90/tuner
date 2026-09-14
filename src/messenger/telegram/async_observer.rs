@@ -23,20 +23,20 @@ pub(crate) fn spawn_session_async_observer(
     sessions: Arc<SessionManager>,
     config: CliConfig,
 ) {
-    let mut lock = WATCHED_SESSIONS.lock().unwrap();
-    if lock.contains(&session_id) {
-        return;
-    }
-    lock.insert(session_id.clone());
-    drop(lock);
-
     let chat_id = msg.chat.id;
     let thread_id = msg.thread_id.map(|t| t.0.0);
+    let key = format!("{}:{}:{:?}", session_id, chat_id.0, thread_id);
+    let mut lock = WATCHED_SESSIONS.lock().unwrap();
+    if lock.contains(&key) {
+        return;
+    }
+    lock.insert(key.clone());
+    drop(lock);
 
     tokio::spawn(async move {
         run_observer_loop(bot, chat_id, thread_id, session_id.clone(), cli, sessions, config).await;
         let mut lock = WATCHED_SESSIONS.lock().unwrap();
-        lock.remove(&session_id);
+        lock.remove(&key);
     });
 }
 
@@ -58,16 +58,30 @@ async fn handle_async_turn_output(
         let mut msg_req = bot.send_message(chat_id, chunk)
             .parse_mode(teloxide::types::ParseMode::Html);
         if let Some(t) = thread_id { msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
-        if let Ok(sent) = msg_req.await {
-            super::history::log_telegram_message(
-                &config.working_dir,
-                session_id,
-                "bot",
-                Some(sent.id.0),
-                txt,
-                true,
-                None,
-            );
+        match msg_req.await {
+            Ok(sent) => {
+                super::history::log_telegram_message(
+                    &config.working_dir,
+                    session_id,
+                    "bot",
+                    Some(sent.id.0),
+                    txt,
+                    true,
+                    None,
+                );
+            }
+            Err(e) => {
+                eprintln!("❌ [tuner] Failed to send async turn output: {:?}", e);
+                super::history::log_telegram_message(
+                    &config.working_dir,
+                    session_id,
+                    "bot",
+                    None,
+                    txt,
+                    false,
+                    Some(&e.to_string()),
+                );
+            }
         }
     }
 

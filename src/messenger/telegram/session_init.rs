@@ -60,7 +60,10 @@ async fn boot_fresh_session(
     let provider = &config.provider;
     let startup_prompt = crate::t!("bot.session_init_prompt");
     let ws = cli.agy_workspace();
-    match cli.send(&startup_prompt, None, false, ws).await {
+    let mut session_cli = cli.clone();
+    session_cli.config.chat_id = msg.chat.id.0;
+    session_cli.config.topic_id = msg.thread_id.map(|t| t.0.0 as i64);
+    match session_cli.send(&startup_prompt, None, false, ws).await {
         Ok(res) => {
             if let Some(ref new_sid) = res.session_id {
                 sess.set_session_id(provider, new_sid);
