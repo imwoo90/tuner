@@ -13,11 +13,7 @@ async fn send_reply(
     msg: &Message,
     text: impl Into<String>,
 ) -> Result<Message, teloxide::RequestError> {
-    let mut req = bot.send_message(msg.chat.id, text);
-    if let Some(tid) = msg.thread_id {
-        req = req.message_thread_id(tid);
-    }
-    req.await
+    super::commands::send_reply(bot, msg, text).await
 }
 
 fn group_discovered_models(raw_models: &[String]) -> Vec<(String, Vec<String>)> {
@@ -111,7 +107,9 @@ async fn handle_model_command_empty(
     if let Some(tid) = msg.thread_id {
         req = req.message_thread_id(tid);
     }
-    let _ = req.reply_markup(markup).await;
+    if let Err(e) = req.reply_markup(markup).await {
+        eprintln!("❌ [tuner] Failed to send model select keyboard: {:?}", e);
+    }
     Ok(())
 }
 
@@ -157,6 +155,14 @@ pub(crate) async fn handle_model_command(
     }
 }
 
+fn build_effort_keyboard() -> teloxide::types::InlineKeyboardMarkup {
+    teloxide::types::InlineKeyboardMarkup::new(vec![vec![
+        teloxide::types::InlineKeyboardButton::callback("High", "effort:high"),
+        teloxide::types::InlineKeyboardButton::callback("Medium", "effort:medium"),
+        teloxide::types::InlineKeyboardButton::callback("Low", "effort:low"),
+    ]])
+}
+
 pub(crate) async fn handle_effort_command(
     bot: &Bot,
     msg: &Message,
@@ -171,19 +177,15 @@ pub(crate) async fn handle_effort_command(
     
     if args.is_empty() {
         let current_effort = sess.effort.as_deref().unwrap_or("default");
-        let keyboard = vec![
-            vec![
-                teloxide::types::InlineKeyboardButton::callback("High", "effort:high"),
-                teloxide::types::InlineKeyboardButton::callback("Medium", "effort:medium"),
-                teloxide::types::InlineKeyboardButton::callback("Low", "effort:low"),
-            ]
-        ];
-        let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
-        let mut req = bot.send_message(msg.chat.id, format!("Current reasoning effort is `{}`. Select a new reasoning effort level:", current_effort));
+        let markup = build_effort_keyboard();
+        let text = format!("Current reasoning effort is `{}`. Select a new reasoning effort level:", current_effort);
+        let mut req = bot.send_message(msg.chat.id, text);
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }
-        let _ = req.reply_markup(markup).await;
+        if let Err(e) = req.reply_markup(markup).await {
+            eprintln!("❌ [tuner] Failed to send effort select keyboard: {:?}", e);
+        }
     } else {
         let level = args.trim().to_lowercase();
         if level == "high" || level == "medium" || level == "low" {

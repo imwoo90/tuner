@@ -101,6 +101,79 @@ impl Drop for TelegramTypingGuard {
     }
 }
 
+pub(crate) fn clear_old_progress_reaction(last_mid: i32, chat_id: ChatId, tok: String) {
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!("https://api.telegram.org/bot{}/setMessageReaction", tok);
+        let body = serde_json::json!({
+            "chat_id": chat_id.0,
+            "message_id": last_mid,
+            "reaction": []
+        });
+        let _ = client.post(&url).json(&body).send().await;
+    });
+}
+
+pub(crate) fn set_progress_reaction(msg_id_val: i32, chat_id: ChatId, tok: String) {
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!("https://api.telegram.org/bot{}/setMessageReaction", tok);
+        let body = serde_json::json!({
+            "chat_id": chat_id.0,
+            "message_id": msg_id_val,
+            "reaction": [
+                {
+                    "type": "emoji",
+                    "emoji": "⏳"
+                }
+            ]
+        });
+        let _ = client.post(&url).json(&body).send().await;
+    });
+}
+
+/// Background loop handle for periodic ChatAction::Typing during async turns.
+pub struct AsyncTypingHandle {
+    handle: JoinHandle<()>,
+}
+
+impl AsyncTypingHandle {
+    pub fn new(bot: Bot, chat_id: ChatId, thread_id: Option<i32>) -> Self {
+        let handle = tokio::spawn(async move {
+            let mut req = bot.send_chat_action(chat_id, ChatAction::Typing);
+            if let Some(t) = thread_id {
+                req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t)));
+            }
+            if let Err(e) = req.await {
+                eprintln!("⚠️ [tuner] Async typing send_chat_action failed (chat: {}, thread: {:?}): {:?}", chat_id, thread_id, e);
+            }
+
+            loop {
+                tokio::time::sleep(Duration::from_secs(4)).await;
+                let mut req = bot.send_chat_action(chat_id, ChatAction::Typing);
+                if let Some(t) = thread_id {
+                    req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t)));
+                }
+                if let Err(e) = req.await {
+                    eprintln!("⚠️ [tuner] Async typing periodic send_chat_action failed (chat: {}, thread: {:?}): {:?}", chat_id, thread_id, e);
+                }
+            }
+        });
+
+        Self { handle }
+    }
+
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
+}
+
+impl Drop for AsyncTypingHandle {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,4 +190,14 @@ mod tests {
         drop(guard);
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+
+    #[tokio::test]
+    async fn test_async_typing_handle_lifecycle() {
+        let bot = Bot::new("123456:ABC-DEF");
+        let handle = AsyncTypingHandle::new(bot, ChatId(12345), Some(999));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        handle.abort();
+        drop(handle);
+    }
 }
+

@@ -27,26 +27,35 @@ async fn send_single_chunk(
     chunk: &str,
     is_first: bool,
 ) -> Result<teloxide::types::Message, teloxide::RequestError> {
-    if let Some(mid) = msg_id {
-        if is_first {
-            bot.edit_message_text(chat_id, mid, chunk)
-                .parse_mode(teloxide::types::ParseMode::Html)
-                .await
-        } else {
-            let mut req = bot.send_message(chat_id, chunk)
+    let limiter = super::rate_limiter::global_chat_rate_limiter();
+    let chunk_str = chunk.to_string();
+    limiter.execute_rate_limited(chat_id, || {
+        let chunk_clone = chunk_str.clone();
+        async move {
+            if is_first {
+                if let Some(mid) = msg_id {
+                    let edit_res = bot.edit_message_text(chat_id, mid, chunk_clone.clone())
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .await;
+                    if let Ok(edited) = edit_res {
+                        return Ok(edited);
+                    } else if let Err(e) = edit_res {
+                        eprintln!("⚠️ [tuner] edit_message_text failed, falling back to send_message: {:?}", e);
+                    }
+                }
+            }
+            let mut req = bot.send_message(chat_id, chunk_clone)
                 .parse_mode(teloxide::types::ParseMode::Html);
-            if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
+            if let Some(tid) = thread_id {
+                req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
+            }
             req.await
         }
-    } else {
-        let mut req = bot.send_message(chat_id, chunk)
-            .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
-        req.await
-    }
+    }).await
 }
 
-async fn send_chunks_to_telegram(
+
+pub(crate) async fn send_chunks_to_telegram(
     bot: &Bot,
     chat_id: ChatId,
     msg_id: Option<teloxide::types::MessageId>,
@@ -67,6 +76,7 @@ async fn send_chunks_to_telegram(
                 sent_msg_id = Some(sent.id.0);
             }
             Err(e) => {
+                eprintln!("❌ [tuner] Failed to send stream chunk {}/{} (chat: {}, thread: {:?}): {:?}", i + 1, chunks.len(), chat_id, thread_id, e);
                 final_success = false;
                 final_error = Some(e.to_string());
             }
@@ -125,38 +135,19 @@ pub(crate) async fn handle_stream_result(
 }
 
 
-fn clear_old_progress_reaction(last_mid: i32, chat_id: ChatId, tok: String) {
-    tokio::spawn(async move {
-        let client = reqwest::Client::new();
-        let url = format!("https://api.telegram.org/bot{}/setMessageReaction", tok);
-        let body = serde_json::json!({
-            "chat_id": chat_id.0,
-            "message_id": last_mid,
-            "reaction": []
-        });
-        let _ = client.post(&url).json(&body).send().await;
-    });
+
+
+fn truncate_streaming_preview(delta: &str) -> String {
+    if delta.chars().count() > 3900 {
+        let tail: String = delta.chars().rev().take(3800).collect();
+        let tail: String = tail.chars().rev().collect();
+        format!("...[중간 생략]...\n{}", tail)
+    } else {
+        delta.to_string()
+    }
 }
 
-fn set_progress_reaction(msg_id_val: i32, chat_id: ChatId, tok: String) {
-    tokio::spawn(async move {
-        let client = reqwest::Client::new();
-        let url = format!("https://api.telegram.org/bot{}/setMessageReaction", tok);
-        let body = serde_json::json!({
-            "chat_id": chat_id.0,
-            "message_id": msg_id_val,
-            "reaction": [
-                {
-                    "type": "emoji",
-                    "emoji": "⏳"
-                }
-            ]
-        });
-        let _ = client.post(&url).json(&body).send().await;
-    });
-}
-
-async fn handle_text_delta(
+pub(crate) async fn handle_text_delta(
     bot: &Bot,
     chat_id: ChatId,
     thread_id: Option<i32>,
@@ -166,17 +157,37 @@ async fn handle_text_delta(
     last_edit: &mut Instant,
 ) -> Result<(), teloxide::RequestError> {
     *last_text = delta.to_string();
+    let preview = truncate_streaming_preview(delta);
+    let limiter = super::rate_limiter::global_chat_rate_limiter();
+
     if let Some(mid) = *pub_msg_id {
         if last_edit.elapsed() >= Duration::from_secs(2) {
-            let _ = bot.edit_message_text(chat_id, mid, delta).await;
+            let res = limiter.execute_rate_limited(chat_id, || {
+                let d = preview.clone();
+                async move { bot.edit_message_text(chat_id, mid, d).await }
+            }).await;
+            if let Err(e) = res {
+                eprintln!("❌ [tuner] Failed to edit streaming message (chat: {}, msg: {}): {:?}", chat_id, mid, e);
+            }
             *last_edit = Instant::now();
         }
     } else {
-        let mut req = bot.send_message(chat_id, delta);
-        if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
-        if let Ok(sent) = req.await {
-            *pub_msg_id = Some(sent.id);
-            *last_edit = Instant::now();
+        let res = limiter.execute_rate_limited(chat_id, || {
+            let d = preview.clone();
+            async move {
+                let mut req = bot.send_message(chat_id, d);
+                if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
+                req.await
+            }
+        }).await;
+        match res {
+            Ok(sent) => {
+                *pub_msg_id = Some(sent.id);
+                *last_edit = Instant::now();
+            }
+            Err(e) => {
+                eprintln!("❌ [tuner] Failed to send streaming initial message (chat: {}, thread: {:?}): {:?}", chat_id, thread_id, e);
+            }
         }
     }
     Ok(())
@@ -242,7 +253,7 @@ pub(crate) async fn consume_stream(
     let mut cleared_old_reaction = false;
     if let Some(last_mid) = session_data.last_progress_msg_id {
         let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-        clear_old_progress_reaction(last_mid, chat_id, tok);
+        super::typing::clear_old_progress_reaction(last_mid, chat_id, tok);
         updated.last_progress_msg_id = None;
         cleared_old_reaction = true;
     }
@@ -263,7 +274,7 @@ pub(crate) async fn consume_stream(
     if let Some(mid) = pub_msg_id {
         if last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for") {
             let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-            set_progress_reaction(mid.0, chat_id, tok);
+            super::typing::set_progress_reaction(mid.0, chat_id, tok);
             updated.last_progress_msg_id = Some(mid.0);
         }
     }

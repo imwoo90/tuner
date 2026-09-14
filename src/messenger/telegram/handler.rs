@@ -171,6 +171,29 @@ async fn resolve_active_lang(
         .unwrap_or_else(|| "en".to_string())
 }
 
+fn normalize_command_text(raw_text: &str, bot_username: Option<&str>) -> String {
+    reply::strip_mention(raw_text, bot_username)
+        .replace("/teamwork_preview", "/teamwork-preview")
+        .replace("/grill_me", "/grill-me")
+}
+
+async fn dispatch_lock_free(
+    bot: Bot,
+    msg: Message,
+    text: String,
+    config: Arc<CliConfig>,
+    sessions: Arc<SessionManager>,
+    cli: Arc<AntigravityCli>,
+    cron_manager: Arc<CronManager>,
+    topic_cache: Arc<TopicNameCache>,
+) {
+    if let Err(e) = super::commands::handle_commands(
+        &bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache,
+    ).await {
+        eprintln!("❌ [tuner] Error handling lock-free command '{}' (chat: {}, thread: {:?}): {:?}", text, msg.chat.id, msg.thread_id.map(|t| t.0.0), e);
+    }
+}
+
 pub(crate) async fn handle_message(
     bot: Bot,
     msg: Message,
@@ -191,15 +214,11 @@ pub(crate) async fn handle_message(
     let active_lang = resolve_active_lang(&sessions, &config, msg.chat.id.0, topic_id).await;
 
     let raw_text = msg.text().or(msg.caption()).unwrap_or("");
-    let text = reply::strip_mention(raw_text, bot_info.username.as_deref())
-        .replace("/teamwork_preview", "/teamwork-preview")
-        .replace("/grill_me", "/grill-me");
+    let text = normalize_command_text(raw_text, bot_info.username.as_deref());
 
     if super::commands_registry::is_lock_free_command(&text) {
         let fut = crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
-            let _ = super::commands::handle_commands(
-                &bot, &msg, &text, &config, &sessions, &cli, &cron_manager, &topic_cache,
-            ).await;
+            dispatch_lock_free(bot, msg, text, config, sessions, cli, cron_manager, topic_cache).await;
         });
         if cfg!(test) { fut.await; } else { tokio::spawn(fut); }
         return Ok(());

@@ -25,11 +25,24 @@ pub(crate) async fn send_reply(
     msg: &Message,
     text: impl Into<String>,
 ) -> Result<Message, teloxide::RequestError> {
-    let mut req = bot.send_message(msg.chat.id, text);
-    if let Some(tid) = msg.thread_id {
-        req = req.message_thread_id(tid);
+    let limiter = super::rate_limiter::global_chat_rate_limiter();
+    let text_str = text.into();
+    let res = limiter.execute_rate_limited(msg.chat.id, || {
+        let mut req = bot.send_message(msg.chat.id, text_str.clone());
+        if let Some(tid) = msg.thread_id {
+            req = req.message_thread_id(tid);
+        }
+        async move { req.await }
+    }).await;
+    if let Err(ref e) = res {
+        eprintln!(
+            "❌ [tuner] Failed to send reply (chat: {}, thread: {:?}): {:?}",
+            msg.chat.id,
+            msg.thread_id.map(|t| t.0.0),
+            e
+        );
     }
-    req.await
+    res
 }
 
 async fn handle_help_command(
@@ -167,7 +180,9 @@ async fn handle_cron_command(
             if let Some(tid) = msg.thread_id {
                 req = req.message_thread_id(tid);
             }
-            let _ = req.reply_markup(markup).await;
+            if let Err(e) = req.reply_markup(markup).await {
+                eprintln!("❌ [tuner] Failed to send cron reply markup: {:?}", e);
+            }
         }
         Err(e) => {
             eprintln!("❌ [tuner] handle_cron_command error: {}", e);
@@ -267,7 +282,9 @@ async fn handle_memory_command(
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }
-        let _ = req.await;
+        if let Err(e) = req.await {
+            eprintln!("❌ [tuner] Failed to send memory chunk: {:?}", e);
+        }
     }
     Ok(())
 }

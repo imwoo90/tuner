@@ -73,6 +73,7 @@ pub mod commands_usage_tests;
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;
 pub mod typing;
+pub mod rate_limiter;
 
 
 pub use reply::get_topic_id;

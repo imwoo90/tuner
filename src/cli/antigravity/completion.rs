@@ -36,18 +36,26 @@ pub(crate) fn is_completion_entry(line: &str) -> bool {
 pub(crate) fn check_log_completion_in_file(path: &std::path::Path, current_size: u64) -> Result<Option<u64>, String> {
     if let Ok(metadata) = std::fs::metadata(path) {
         let file_size = metadata.len();
-        if file_size > current_size {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                let mut parser_pos = 0;
-                for line in content.lines() {
-                    let bytes_len = line.len() + 1;
-                    if parser_pos >= current_size && is_completion_entry(line) {
-                        return Ok(None);
+        let start_pos = if file_size < current_size { 0 } else { current_size };
+        if file_size > start_pos {
+            use std::io::{Read, Seek, SeekFrom};
+            if let Ok(mut file) = std::fs::File::open(path) {
+                if file.seek(SeekFrom::Start(start_pos)).is_ok() {
+                    let mut buffer = Vec::new();
+                    if file.read_to_end(&mut buffer).is_ok() {
+                        if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
+                            let text = String::from_utf8_lossy(&buffer[..=last_nl]);
+                            for line in text.lines() {
+                                if is_completion_entry(line) {
+                                    return Ok(None);
+                                }
+                            }
+                            return Ok(Some(start_pos + last_nl as u64 + 1));
+                        }
                     }
-                    parser_pos += bytes_len as u64;
                 }
             }
-            return Ok(Some(file_size));
+            return Ok(Some(start_pos));
         }
     }
     Ok(Some(current_size))

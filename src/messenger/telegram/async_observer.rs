@@ -5,7 +5,6 @@
 //! agent is idle, and dispatches new messages to Telegram.
 
 use teloxide::prelude::*;
-use teloxide::types::ChatAction;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, LazyLock};
 use crate::config::CliConfig;
@@ -43,54 +42,32 @@ pub(crate) fn spawn_session_async_observer(
 async fn handle_async_turn_output(
     bot: &Bot,
     chat_id: ChatId,
+    msg_id: Option<teloxide::types::MessageId>,
     thread_id: Option<i32>,
     session_id: &str,
     config: &CliConfig,
     txt: &str,
 ) {
-    let mut action_req = bot.send_chat_action(chat_id, ChatAction::Typing);
-    if let Some(t) = thread_id { action_req = action_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
-    let _ = action_req.await;
-
     let html_text = super::formatting::markdown_to_telegram_html(txt);
     let chunks = super::formatting::split_html_message(&html_text, 4000);
     let topic_id = thread_id.map(|t| t as i64);
-    for chunk in &chunks {
-        let mut msg_req = bot.send_message(chat_id, chunk)
-            .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(t) = thread_id { msg_req = msg_req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(t))); }
-        match msg_req.await {
-            Ok(sent) => {
-                super::history::log_telegram_message(
-                    &config.working_dir,
-                    session_id,
-                    topic_id,
-                    None,
-                    "bot",
-                    Some(sent.id.0),
-                    txt,
-                    true,
-                    None,
-                );
-            }
-            Err(e) => {
-                eprintln!("❌ [tuner] Failed to send async turn output: {:?}", e);
-                super::history::log_telegram_message(
-                    &config.working_dir,
-                    session_id,
-                    topic_id,
-                    None,
-                    "bot",
-                    None,
-                    txt,
-                    false,
-                    Some(&e.to_string()),
-                );
-            }
-        }
-    }
+
+    let (final_success, final_error, sent_msg_id) =
+        super::stream::send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
 
     let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, txt, config).await;
+
+    super::history::log_telegram_message(
+        &config.working_dir,
+        session_id,
+        topic_id,
+        None,
+        "bot",
+        sent_msg_id,
+        txt,
+        final_success,
+        final_error.as_deref(),
+    );
 }
 
 fn create_brain_dir_watcher(
@@ -111,38 +88,127 @@ fn create_brain_dir_watcher(
     None
 }
 
+struct ActiveAsyncTurn {
+    _guard: tokio::sync::OwnedMutexGuard<()>,
+    typing: super::typing::AsyncTypingHandle,
+    last_activity: std::time::Instant,
+    pub_msg_id: Option<teloxide::types::MessageId>,
+    last_edit: std::time::Instant,
+    last_text: String,
+}
+
+async fn dispatch_terminal_event(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    session_id: &str,
+    cli: &AntigravityCli,
+    sessions: &SessionManager,
+    config: &CliConfig,
+    delta: crate::cli::antigravity::log_parser::ParsedLogDelta,
+    active_turn: &mut Option<ActiveAsyncTurn>,
+) {
+    let topic_id = thread_id.map(|t| t as i64);
+    if let Some(ref txt) = delta.final_content {
+        let pub_msg_id = active_turn.as_ref().and_then(|t| t.pub_msg_id);
+        if let Some(turn) = active_turn { turn.typing.abort(); }
+        let lock_arc = sessions.lock_pool.get((chat_id.0, topic_id));
+        let _fallback = if active_turn.is_none() {
+            Some(lock_arc.lock().await)
+        } else { None };
+        handle_async_turn_output(bot, chat_id, pub_msg_id, thread_id, session_id, config, txt).await;
+        *active_turn = None;
+    }
+
+    if let Some(ask) = delta.ask_question {
+        if let Some(turn) = active_turn { turn.typing.abort(); }
+        let sess_data = crate::session::data::SessionData {
+            session_id: Some(session_id.to_string()),
+            ..Default::default()
+        };
+        let _ = super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, &sess_data, config, cli).await;
+        *active_turn = None;
+    }
+}
+
+fn ensure_active_turn(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    sessions: &SessionManager,
+    active_turn: &mut Option<ActiveAsyncTurn>,
+) {
+    let topic_id = thread_id.map(|t| t as i64);
+    if active_turn.is_none() {
+        let lock = sessions.lock_pool.get((chat_id.0, topic_id));
+        if let Ok(guard) = lock.try_lock_owned() {
+            let typing = super::typing::AsyncTypingHandle::new(bot.clone(), chat_id, thread_id);
+            *active_turn = Some(ActiveAsyncTurn {
+                _guard: guard,
+                typing,
+                last_activity: std::time::Instant::now(),
+                pub_msg_id: None,
+                last_edit: std::time::Instant::now(),
+                last_text: String::new(),
+            });
+        }
+    } else if let Some(turn) = active_turn {
+        turn.last_activity = std::time::Instant::now();
+    }
+}
+
+async fn update_active_turn_progress(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    progress_text: &str,
+    active_turn: &mut Option<ActiveAsyncTurn>,
+) {
+    if let Some(turn) = active_turn {
+        let _ = super::stream::handle_text_delta(
+            bot,
+            chat_id,
+            thread_id,
+            progress_text,
+            &mut turn.last_text,
+            &mut turn.pub_msg_id,
+            &mut turn.last_edit,
+        ).await;
+    }
+}
+
 async fn check_and_dispatch_delta(
     bot: &Bot,
     chat_id: ChatId,
     thread_id: Option<i32>,
     session_id: &str,
     cli: &AntigravityCli,
+    sessions: &SessionManager,
     config: &CliConfig,
     transcript_path: &std::path::Path,
     last_size: &mut u64,
     parser: &mut crate::cli::antigravity::log_parser::AntigravityLogParser,
+    active_turn: &mut Option<ActiveAsyncTurn>,
 ) {
-    if let Ok(meta) = std::fs::metadata(transcript_path) {
-        let curr_size = meta.len();
-        if curr_size > *last_size {
-            let (new_size, formatted_txt, ask_data) = parser.parse_log_delta(transcript_path, Some(*last_size));
-            *last_size = new_size;
-            *parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
+    let Ok(meta) = std::fs::metadata(transcript_path) else { return; };
+    let curr_size = meta.len();
+    if curr_size <= *last_size { return; }
 
-            if let Some(ref txt) = formatted_txt {
-                handle_async_turn_output(bot, chat_id, thread_id, session_id, config, txt).await;
-            }
+    let delta = parser.parse_log_delta_structured(transcript_path, Some(*last_size));
+    *last_size = delta.new_size;
+    *parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
 
-            if let Some(ask) = ask_data {
-                let sess_data = crate::session::data::SessionData {
-                    session_id: Some(session_id.to_string()),
-                    ..Default::default()
-                };
-                let _ = super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, &sess_data, config, cli).await;
-            }
-        }
+    if !delta.has_activity { return; }
+
+    ensure_active_turn(bot, chat_id, thread_id, sessions, active_turn);
+
+    if delta.final_content.is_some() || delta.ask_question.is_some() {
+        dispatch_terminal_event(bot, chat_id, thread_id, session_id, cli, sessions, config, delta, active_turn).await;
+    } else if let Some(ref progress_text) = delta.formatted {
+        update_active_turn_progress(bot, chat_id, thread_id, progress_text, active_turn).await;
     }
 }
+
 
 async fn handle_running_state_check(
     cli: &AntigravityCli,
@@ -175,7 +241,7 @@ async fn run_observer_loop(
     thread_id: Option<i32>,
     session_id: String,
     cli: AntigravityCli,
-    _sessions: Arc<SessionManager>,
+    sessions: Arc<SessionManager>,
     config: CliConfig,
 ) {
     let env = cli.build_env();
@@ -191,8 +257,9 @@ async fn run_observer_loop(
     let watcher = create_brain_dir_watcher(&brain_dir, fs_tx);
 
     let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(4));
-
     let mut was_running = false;
+    let mut active_turn: Option<ActiveAsyncTurn> = None;
+
     loop {
         tokio::select! {
             _ = fallback.tick() => {}
@@ -208,10 +275,21 @@ async fn run_observer_loop(
         }
 
         if handle_running_state_check(&cli, &session_id, &transcript_path, &mut was_running, &mut last_size, &mut parser).await {
+            active_turn = None;
             continue;
         }
 
-        check_and_dispatch_delta(&bot, chat_id, thread_id, &session_id, &cli, &config, &transcript_path, &mut last_size, &mut parser).await;
+        if let Some(ref turn) = active_turn {
+            if turn.last_activity.elapsed() > std::time::Duration::from_secs(60) {
+                active_turn = None;
+            }
+        }
+
+        check_and_dispatch_delta(
+            &bot, chat_id, thread_id, &session_id, &cli, &sessions, &config,
+            &transcript_path, &mut last_size, &mut parser, &mut active_turn,
+        ).await;
     }
     drop(watcher);
 }
+
