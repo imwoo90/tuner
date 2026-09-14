@@ -144,7 +144,7 @@ pub(crate) async fn handle_commands(
         return Ok(true);
     }
     if trimmed == "/cron" {
-        let _ = handle_cron_command(bot, msg, cron_manager).await;
+        let _ = handle_cron_command(bot, msg, cron_manager, topic_cache).await;
         return Ok(true);
     }
     if trimmed == "/upgrade" {
@@ -158,13 +158,21 @@ async fn handle_cron_command(
     bot: &Bot,
     msg: &Message,
     cron_manager: &crate::cron::manager::CronManager,
+    topic_cache: &super::TopicNameCache,
 ) -> Result<(), teloxide::RequestError> {
-    if let Ok((txt, markup)) = crate::telegram::cron_selector::build_cron_page(cron_manager, 0, None).await {
-        let mut req = bot.send_message(msg.chat.id, txt);
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
+    match crate::telegram::cron_selector::build_cron_page(cron_manager, 0, None, Some(topic_cache)).await {
+        Ok((txt, markup)) => {
+            let mut req = bot.send_message(msg.chat.id, txt)
+                .parse_mode(teloxide::types::ParseMode::Html);
+            if let Some(tid) = msg.thread_id {
+                req = req.message_thread_id(tid);
+            }
+            let _ = req.reply_markup(markup).await;
         }
-        let _ = req.reply_markup(markup).await;
+        Err(e) => {
+            eprintln!("❌ [tuner] handle_cron_command error: {}", e);
+            let _ = send_reply(bot, msg, &format!("❌ Failed to load cron jobs: {}", e)).await;
+        }
     }
     Ok(())
 }

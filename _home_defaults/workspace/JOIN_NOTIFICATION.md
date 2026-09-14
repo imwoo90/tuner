@@ -4,6 +4,7 @@ Welcome! I'm your AI assistant. Here's what you need to know:
 - `/new` — Start fresh conversation (clears context)
 - `/stop` — Cancel running task
 - `/model` — Switch AI model
+- `/usage` — Check model quota & limits
 - `/help` — All commands
 
 Send any message to begin.

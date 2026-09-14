@@ -34,6 +34,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("lang", "Change active language for this session"),
         ("status", "Show bot status and diagnostics report"),
         ("memory", "Print workspace MAINMEMORY.md contents"),
+        ("cron", "Manage scheduled cron tasks"),
         ("restart", "Trigger clean restart of tuner service"),
         ("plan", "Request step-by-step plan before execution"),
         ("grill_me", "Start interactive interview alignment"),

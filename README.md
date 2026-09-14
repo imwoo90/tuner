@@ -69,11 +69,13 @@ Connecting Tuner to Telegram takes just 3 simple steps:
 |---|---|
 | `/new` \| `/reset` | Clear the current conversation and start a fresh session. |
 | `/status` | Generate bot health reports, agy CLI installation info, and active session model. |
+| `/usage` | Query active model quotas, token/request usage, and 5-hour/weekly reset limits. |
 | `/model` | Toggle the active LLM model for the current topic via an inline selector. |
 | `/effort` | Select the reasoning effort level (high, medium, low) for the current LLM model. |
 | `/lang` | Select the active session language (English, Korean, etc.) via an inline keyboard. |
 | `/upgrade` | Check GitHub Releases and perform an in-place executable upgrade. |
 | `/memory` | Output the current content of the workspace `MAINMEMORY.md` file. |
+| `/cron` | Manage and inspect scheduled background cron tasks. |
 | `/stop` | Gracefully cancel active agent CLI processes running in the current chat topic. |
 | `/abort` | Forcefully terminate all running workers and background tasks. |
 | `/restart` | Request a clean restart of the `tuner` bot daemon process. |

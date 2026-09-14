@@ -150,8 +150,18 @@ Press Esc or q to exit
         assert!(is_lock_free_command("/stop"));
         assert!(is_lock_free_command("/abort"));
 
-        // Bot commands must include "usage"
+        // Bot commands must include "usage" and "cron"
         let cmds = get_bot_commands();
         assert!(cmds.iter().any(|c| c.command == "usage"));
+        assert!(cmds.iter().any(|c| c.command == "cron"));
+    }
+
+    #[test]
+    fn test_load_home_defaults_cron_jobs() {
+        let content = std::fs::read_to_string("_home_defaults/cron_jobs.json").unwrap();
+        let jobs_res: Result<crate::cron::manager::CronJob, _> =
+            serde_json::from_str(&serde_json::from_str::<serde_json::Value>(&content).unwrap()["jobs"][0].to_string());
+        println!("Jobs parse result: {:?}", jobs_res);
+        assert!(jobs_res.is_ok());
     }
 }

@@ -99,6 +99,37 @@ async fn handle_options_and_upgrade_callbacks(
     Ok(false)
 }
 
+async fn handle_ask_callbacks(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    d: &str,
+    cli: &AntigravityCli,
+    sessions: &std::sync::Arc<SessionManager>,
+    config: &CliConfig,
+) -> bool {
+    if d.starts_with("ask_ans:") {
+        handle_ask_answer_callback(bot, msg, d, cli, sessions, config).await;
+        true
+    } else if d.starts_with("ask_mul:") {
+        handle_ask_multi_callback(bot, msg, d, &cli.sessions).await;
+        true
+    } else if d.starts_with("ask_sub:") {
+        handle_ask_submit_callback(bot, msg, d, cli, sessions, config).await;
+        true
+    } else if d.starts_with("ask_write:") {
+        handle_ask_write_callback(bot, msg, d, cli).await;
+        true
+    } else if d.starts_with("ask_prev:") {
+        handle_ask_prev_callback(bot, msg, d, cli, sessions, config).await;
+        true
+    } else if d.starts_with("ask_skip:") {
+        handle_ask_skip_callback(bot, msg, d, cli, sessions, config).await;
+        true
+    } else {
+        false
+    }
+}
+
 async fn handle_callback_query_inner(
     bot: teloxide::Bot,
     q: teloxide::types::CallbackQuery,
@@ -106,6 +137,7 @@ async fn handle_callback_query_inner(
     sessions: std::sync::Arc<SessionManager>,
     cron: std::sync::Arc<CronManager>,
     cli: std::sync::Arc<AntigravityCli>,
+    topic_cache: std::sync::Arc<super::TopicNameCache>,
 ) -> Result<(), teloxide::RequestError> {
     use teloxide::prelude::*;
     if let Some(ref d) = q.data {
@@ -113,19 +145,12 @@ async fn handle_callback_query_inner(
             if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
                 // Handled
             } else if d.starts_with("crn:") {
-                let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron).await;
-            } else if d.starts_with("ask_ans:") {
-                handle_ask_answer_callback(&bot, msg, d, &cli, &sessions, &config).await;
-            } else if d.starts_with("ask_mul:") {
-                handle_ask_multi_callback(&bot, msg, d, &cli.sessions).await;
-            } else if d.starts_with("ask_sub:") {
-                handle_ask_submit_callback(&bot, msg, d, &cli, &sessions, &config).await;
-            } else if d.starts_with("ask_write:") {
-                handle_ask_write_callback(&bot, msg, d, &cli).await;
-            } else if d.starts_with("ask_prev:") {
-                handle_ask_prev_callback(&bot, msg, d, &cli, &sessions, &config).await;
-            } else if d.starts_with("ask_skip:") {
-                handle_ask_skip_callback(&bot, msg, d, &cli, &sessions, &config).await;
+                let caller_topic_id = crate::telegram::get_topic_id(msg);
+                let _ = crate::telegram::cron_selector::handle_cron_callback(
+                    &bot, msg.chat.id, msg.id, d, &cron, caller_topic_id, Some(&topic_cache),
+                ).await;
+            } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
+                // Handled
             } else if let Some(token) = d.strip_prefix("dl_files:") {
                 handle_dl_files_callback(&bot, msg, token).await;
             }
@@ -154,8 +179,9 @@ pub(crate) async fn handle_callback_query(
     sessions: std::sync::Arc<SessionManager>,
     cron: std::sync::Arc<CronManager>,
     cli: std::sync::Arc<AntigravityCli>,
+    topic_cache: std::sync::Arc<super::TopicNameCache>,
 ) -> Result<(), teloxide::RequestError> {
-    handle_callback_query_inner(bot, q, config, sessions, cron, cli).await
+    handle_callback_query_inner(bot, q, config, sessions, cron, cli, topic_cache).await
 }
 
 async fn handle_upgrade_changelog(

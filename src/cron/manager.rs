@@ -40,18 +40,27 @@ pub struct CronJob {
     pub provider: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_default")]
     pub cli_parameters: Vec<String>,
     pub quiet_start: Option<u32>,
     pub quiet_end: Option<u32>,
     pub dependency: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_default")]
     pub chat_id: i64,
     pub topic_id: Option<i64>,
     #[serde(default = "default_tg")]
     pub transport: String,
     #[serde(default)]
     pub silent_on_success: bool,
+}
+
+fn deserialize_null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + serde::Deserialize<'de>,
+{
+    let opt = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 fn default_true() -> bool {
@@ -220,5 +229,20 @@ impl CronManager {
             self.save(&jobs)?;
         }
         Ok(())
+    }
+
+    pub async fn update_job_target(&self, job_id: &str, chat_id: i64, topic_id: Option<i64>) -> Result<bool, String> {
+        let _guard = self.lock.lock().await;
+        let mut jobs = self.load()?;
+        let mut changed = false;
+        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
+            job.chat_id = chat_id;
+            job.topic_id = topic_id;
+            changed = true;
+        }
+        if changed {
+            self.save(&jobs)?;
+        }
+        Ok(changed)
     }
 }

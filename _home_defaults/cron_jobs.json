@@ -19,7 +19,7 @@
       "quiet_start": null,
       "quiet_end": null,
       "dependency": null,
-      "chat_id": null,
+      "chat_id": 0,
       "topic_id": null,
       "transport": "tg",
       "silent_on_success": false

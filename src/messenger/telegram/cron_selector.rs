@@ -16,6 +16,7 @@ use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId};
 
 use crate::cron::manager::{CronJob, CronManager};
 use crate::t;
+use super::TopicNameCache;
 
 const PAGE_SIZE: usize = 4;
 
@@ -27,11 +28,28 @@ fn fingerprint(job_id: &str) -> String {
     format!("{:08x}", hasher.finish())
 }
 
+fn format_target_topic(job: &CronJob, topic_cache: Option<&TopicNameCache>) -> String {
+    if job.chat_id == 0 {
+        return t!("bot.cron_target_unset");
+    }
+    if let Some(tid) = job.topic_id {
+        if let Some(cache) = topic_cache {
+            if let Some(name) = cache.find_by_id(job.chat_id, tid) {
+                return format!("<code>#{}</code>", html_escape::encode_safe(&name));
+            }
+        }
+        format!("<code>Topic #{}</code>", tid)
+    } else {
+        t!("bot.cron_target_main_chat")
+    }
+}
+
 fn format_job_and_button(
     job: &CronJob,
     number: usize,
     idx: usize,
     current_page: usize,
+    topic_cache: Option<&TopicNameCache>,
 ) -> (String, InlineKeyboardButton) {
     let status = if job.enabled {
         t!("bot.cron_active")
@@ -45,14 +63,17 @@ fn format_job_and_button(
         last_run_val.to_string()
     };
     let number_str = number.to_string();
+    let target = format_target_topic(job, topic_cache);
+    let model = job.model.as_deref().unwrap_or("default");
     let line = t!(
         "bot.cron_job_line",
         number = number_str,
-        title = job.title,
+        title = html_escape::encode_safe(&job.title),
         status = status,
-        schedule = job.schedule,
-        last_run = last_run,
-        folder = job.task_folder
+        schedule = html_escape::encode_safe(&job.schedule),
+        target = target,
+        model = html_escape::encode_safe(model),
+        last_run = html_escape::encode_safe(&last_run)
     );
     let button_text = if job.enabled {
         t!("bot.cron_deactivate_num", number = number_str)
@@ -93,6 +114,7 @@ pub(crate) async fn build_cron_page(
     manager: &CronManager,
     page: usize,
     note: Option<&str>,
+    topic_cache: Option<&TopicNameCache>,
 ) -> Result<(String, InlineKeyboardMarkup), String> {
     let jobs = manager.list_jobs().await?;
     if jobs.is_empty() {
@@ -111,7 +133,7 @@ pub(crate) async fn build_cron_page(
 
     for (idx, job) in page_jobs.iter().enumerate() {
         let number = start + idx + 1;
-        let (line, button) = format_job_and_button(job, number, idx, current_page);
+        let (line, button) = format_job_and_button(job, number, idx, current_page, topic_cache);
         lines.push(line);
         keyboard.push(vec![button]);
     }
@@ -131,34 +153,50 @@ pub(crate) async fn build_cron_page(
     Ok((lines.join("\n"), InlineKeyboardMarkup::new(keyboard)))
 }
 
+async fn apply_toggle(
+    manager: &CronManager,
+    job: &CronJob,
+    caller_chat_id: Option<i64>,
+    caller_topic_id: Option<i64>,
+    topic_cache: Option<&TopicNameCache>,
+) -> Result<String, String> {
+    let new_state = !job.enabled;
+    let mut auto_bound = false;
+    if new_state && job.chat_id == 0 {
+        if let Some(cid) = caller_chat_id {
+            let _ = manager.update_job_target(&job.id, cid, caller_topic_id).await;
+            auto_bound = true;
+        }
+    }
+    let _ = manager.set_enabled(&job.id, new_state).await?;
+    let state_str = if new_state { t!("bot.cron_state_enabled") } else { t!("bot.cron_state_disabled") };
+    if auto_bound {
+        let mut upd = job.clone();
+        if let Some(cid) = caller_chat_id { upd.chat_id = cid; upd.topic_id = caller_topic_id; }
+        let target = format_target_topic(&upd, topic_cache);
+        Ok(t!("bot.cron_toggle_success_target", title = upd.title, state = state_str, target = target))
+    } else {
+        Ok(t!("bot.cron_toggle_success", title = job.title, state = state_str))
+    }
+}
+
 async fn handle_toggle_action(
     manager: &CronManager,
     parts: &[&str],
     page: usize,
+    caller_chat_id: Option<i64>,
+    caller_topic_id: Option<i64>,
+    topic_cache: Option<&TopicNameCache>,
 ) -> Result<Option<String>, String> {
-    if parts.len() >= 4 {
-        let slot: usize = parts[2].parse().unwrap_or(0);
-        let fp = parts[3];
-        let jobs = manager.list_jobs().await?;
-        let start = page * PAGE_SIZE;
-        if let Some(job) = jobs.get(start + slot) {
-            if fingerprint(&job.id) == fp {
-                let new_state = !job.enabled;
-                let _ = manager.set_enabled(&job.id, new_state).await?;
-                let state_str = if new_state {
-                    t!("bot.cron_state_enabled")
-                } else {
-                    t!("bot.cron_state_disabled")
-                };
-                return Ok(Some(t!(
-                    "bot.cron_toggle_success",
-                    title = job.title,
-                    state = state_str
-                )));
-            } else {
-                return Ok(Some(t!("bot.cron_toggle_mismatch")));
-            }
+    if parts.len() < 4 { return Ok(None); }
+    let slot: usize = parts[2].parse().unwrap_or(0);
+    let fp = parts[3];
+    let jobs = manager.list_jobs().await?;
+    if let Some(job) = jobs.get(page * PAGE_SIZE + slot) {
+        if fingerprint(&job.id) == fp {
+            return apply_toggle(manager, job, caller_chat_id, caller_topic_id, topic_cache).await.map(Some);
         }
+        return Ok(Some(t!("bot.cron_toggle_mismatch")));
     }
     Ok(None)
 }
@@ -169,6 +207,8 @@ pub(crate) async fn handle_cron_callback(
     message_id: MessageId,
     data: &str,
     manager: &CronManager,
+    caller_topic_id: Option<i64>,
+    topic_cache: Option<&TopicNameCache>,
 ) -> Result<(), String> {
     let parts: Vec<&str> = data["crn:".len()..].split(':').collect();
     if parts.is_empty() {
@@ -180,14 +220,14 @@ pub(crate) async fn handle_cron_callback(
     match action {
         "p" => {
             let next_page = if page > 0 { page - 1 } else { 0 };
-            update_message(bot, chat_id, message_id, manager, next_page, None).await?;
+            update_message(bot, chat_id, message_id, manager, next_page, None, topic_cache).await?;
         }
         "n" => {
-            update_message(bot, chat_id, message_id, manager, page + 1, None).await?;
+            update_message(bot, chat_id, message_id, manager, page + 1, None, topic_cache).await?;
         }
         "r" => {
             let note = t!("bot.cron_refreshed_note");
-            update_message(bot, chat_id, message_id, manager, page, Some(&note)).await?;
+            update_message(bot, chat_id, message_id, manager, page, Some(&note), topic_cache).await?;
         }
         "ao" | "af" => {
             let enabled = action == "ao";
@@ -198,11 +238,13 @@ pub(crate) async fn handle_cron_callback(
             } else {
                 t!("bot.cron_all_disabled_note", count = changed_count_str)
             };
-            update_message(bot, chat_id, message_id, manager, page, Some(&note)).await?;
+            update_message(bot, chat_id, message_id, manager, page, Some(&note), topic_cache).await?;
         }
         "t" => {
-            let toggle_note = handle_toggle_action(manager, &parts, page).await?;
-            update_message(bot, chat_id, message_id, manager, page, toggle_note.as_deref()).await?;
+            let toggle_note = handle_toggle_action(
+                manager, &parts, page, Some(chat_id.0), caller_topic_id, topic_cache,
+            ).await?;
+            update_message(bot, chat_id, message_id, manager, page, toggle_note.as_deref(), topic_cache).await?;
         }
         _ => {}
     }
@@ -217,9 +259,11 @@ async fn update_message(
     manager: &CronManager,
     page: usize,
     note: Option<&str>,
+    topic_cache: Option<&TopicNameCache>,
 ) -> Result<(), String> {
-    let (text, markup) = build_cron_page(manager, page, note).await?;
+    let (text, markup) = build_cron_page(manager, page, note, topic_cache).await?;
     let _ = bot.edit_message_text(chat_id, message_id, text)
+        .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(markup)
         .await;
     Ok(())
