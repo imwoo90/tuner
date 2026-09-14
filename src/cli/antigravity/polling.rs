@@ -183,29 +183,42 @@ pub(crate) async fn wait_for_log_completion(
     transcript_path: Option<PathBuf>,
     mut current_size: u64,
 ) -> Result<(), String> {
-    let timeout = tokio::time::Duration::from_secs(300);
+    let inactivity_timeout = tokio::time::Duration::from_secs(300);
+    let max_total_timeout = tokio::time::Duration::from_secs(3600);
     let start = std::time::Instant::now();
+    let mut last_activity = std::time::Instant::now();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let _watcher = setup_path_watcher(transcript_path.as_ref(), tx);
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
 
     let mut rx_closed = false;
-    while start.elapsed() < timeout {
+    while last_activity.elapsed() < inactivity_timeout && start.elapsed() < max_total_timeout {
+        let prev_size = current_size;
         if let Some(()) = check_completion_step(sessions, session_id, transcript_path.as_ref(), &mut current_size).await? {
             return Ok(());
+        }
+        if current_size > prev_size {
+            last_activity = std::time::Instant::now();
         }
         tokio::select! {
             res = rx.recv(), if !rx_closed => {
                 if res.is_none() {
                     rx_closed = true;
+                } else {
+                    last_activity = std::time::Instant::now();
                 }
             }
             _ = interval.tick() => {}
         }
     }
-    Err("Timed out waiting for completion".to_string())
+    if start.elapsed() >= max_total_timeout {
+        Err("Exceeded maximum execution duration of 3600s".to_string())
+    } else {
+        Err("Timed out waiting for completion (inactivity)".to_string())
+    }
 }
+
 
 fn is_completion_entry(line: &str) -> bool {
     if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
