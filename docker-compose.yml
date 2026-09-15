@@ -2,6 +2,7 @@ services:
   tuner-sandbox:
     image: tuner-tuner-sandbox
     container_name: tuner-sandbox
+    init: true
     restart: unless-stopped
     working_dir: /workspace
     stdin_open: true
