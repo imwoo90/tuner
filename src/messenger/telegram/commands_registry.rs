@@ -20,6 +20,7 @@ pub(crate) fn is_lock_free_command(text: &str) -> bool {
             | "/stop"
             | "/stop_all"
             | "/abort"
+            | "/remote"
     )
 }
 
@@ -42,6 +43,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("learn", "Record learning or behavior correction"),
         ("teamwork_preview", "Launch collaborative multi-agent simulation"),
         ("usage", "Show model quota and remaining limits"),
+        ("remote", "Manage remote dev services"),
         ("upgrade", "Check for updates and perform self-upgrade"),
     ];
     list.into_iter().map(|(c, d)| teloxide::types::BotCommand {

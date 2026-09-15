@@ -151,6 +151,8 @@ async fn handle_callback_query_inner(
                 ).await;
             } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
                 // Handled
+            } else if d.starts_with("rem:") {
+                super::commands_remote::handle_remote_callback(&bot, msg, d).await;
             } else if let Some(token) = d.strip_prefix("dl_files:") {
                 super::attachments_dl::handle_dl_files_callback(&bot, msg, token).await;
             }

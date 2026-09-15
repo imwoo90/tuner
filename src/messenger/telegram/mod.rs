@@ -69,6 +69,11 @@ pub mod async_observer;
 pub mod commands_usage;
 #[cfg(test)]
 pub mod commands_usage_tests;
+pub mod commands_session;
+pub mod commands_remote_hub;
+pub mod commands_remote;
+#[cfg(test)]
+pub mod commands_remote_tests;
 
 pub(crate) use reply::{build_reply_prompt, parse_model_directive};
 pub use transport::TelegramTransport;

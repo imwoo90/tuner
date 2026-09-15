@@ -17,6 +17,7 @@ use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands_model::{handle_model_command, handle_effort_command};
+use super::commands_session::handle_session_control_commands;
 #[allow(unused_imports)]
 pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command};
 
@@ -62,6 +63,7 @@ async fn handle_help_command(
 • /memory - View persistent MAINMEMORY.md
 • /cron - Manage scheduled cron tasks
 • /usage - View model quota and remaining limits
+• /remote - Manage remote development services
 • /upgrade - Check for updates and self-upgrade
 • /restart - Request clean service restart";
     let _ = send_reply(bot, msg, help_text).await;
@@ -82,13 +84,9 @@ async fn handle_info_commands(
         return Ok(true);
     }
     if trimmed == "/status" || trimmed == "/diagnose" {
-        let agy_status = match std::process::Command::new("agy").arg("--version").output() {
-            Ok(out) => {
-                let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                t!("bot.diagnose_installed", version = ver)
-            }
-            Err(_) => t!("bot.diagnose_not_found"),
-        };
+        let agy_status = std::process::Command::new("agy").arg("--version").output()
+            .map(|o| t!("bot.diagnose_installed", version = String::from_utf8_lossy(&o.stdout).trim()))
+            .unwrap_or_else(|_| t!("bot.diagnose_not_found"));
         let session_count = cli.sessions.active_count().await;
         let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
             t!("bot.diagnose_token_set")
@@ -116,6 +114,29 @@ async fn handle_info_commands(
     Ok(false)
 }
 
+async fn handle_pref_commands(
+    bot: &Bot,
+    msg: &Message,
+    text: &str,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+) -> bool {
+    if let Some(args) = text.strip_prefix("/model") {
+        let _ = handle_model_command(bot, msg, args.trim(), config, sessions, cli).await;
+        return true;
+    }
+    if let Some(args) = text.strip_prefix("/effort") {
+        let _ = handle_effort_command(bot, msg, args.trim(), config, sessions).await;
+        return true;
+    }
+    if let Some(args) = text.strip_prefix("/lang") {
+        let _ = crate::telegram::lang::handle_lang_command(bot, msg, args.trim(), config, sessions).await;
+        return true;
+    }
+    false
+}
+
 pub(crate) async fn handle_commands(
     bot: &Bot,
     msg: &Message,
@@ -134,22 +155,14 @@ pub(crate) async fn handle_commands(
         super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).await?;
         return Ok(true);
     }
+    if trimmed == "/remote" || trimmed.starts_with("/remote ") {
+        super::commands_remote::handle_remote_command(bot, msg).await?;
+        return Ok(true);
+    }
     if text.starts_with("/new") || text.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {
         return handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).await;
     }
-    if text.starts_with("/model") {
-        let args = text["/model".len()..].trim();
-        let _ = handle_model_command(bot, msg, args, config, sessions, cli).await;
-        return Ok(true);
-    }
-    if text.starts_with("/effort") {
-        let args = text["/effort".len()..].trim();
-        let _ = handle_effort_command(bot, msg, args, config, sessions).await;
-        return Ok(true);
-    }
-    if text.starts_with("/lang") {
-        let args = text["/lang".len()..].trim();
-        let _ = crate::telegram::lang::handle_lang_command(bot, msg, args, config, sessions).await;
+    if handle_pref_commands(bot, msg, text, config, sessions, cli).await {
         return Ok(true);
     }
     if trimmed == "/memory" {
@@ -194,73 +207,8 @@ async fn handle_cron_command(
 
 
 
-async fn handle_new_command(
-    bot: &Bot,
-    msg: &Message,
-    args: &str,
-    mut topic_id: Option<i64>,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-    topic_cache: &super::TopicNameCache,
-) -> Result<(), teloxide::RequestError> {
-    let parts: Vec<&str> = args.split_whitespace().collect();
-    if parts.len() > 1 {
-        let name = parts[1];
-        if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, name) {
-            topic_id = Some(resolved_tid);
-        } else {
-            let _ = send_reply(bot, msg, t!("bot.unknown_topic", name = name)).await;
-            return Ok(());
-        }
-    }
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
-    if let Ok(Some(existing_sess)) = sessions.get_active(&key).await {
-        let old_sid = existing_sess.get_session_id(&config.provider);
-        if !old_sid.is_empty() {
-            cli.sessions.terminate(&old_sid).await;
-        }
-    }
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
-    let mut sess = sessions.reset_provider_session(&key, &config.provider, model).await.unwrap();
-    let _ = crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await;
-    Ok(())
-}
 
-async fn handle_session_control_commands(
-    bot: &Bot,
-    msg: &Message,
-    text: &str,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-    topic_cache: &super::TopicNameCache,
-) -> Result<bool, teloxide::RequestError> {
-    let args = text.trim();
-    let cmd = args.split_whitespace().next().unwrap_or("");
-    let topic_id = crate::telegram::get_topic_id(msg);
 
-    if cmd == "/new" || cmd == "/reset" {
-        handle_new_command(bot, msg, args, topic_id, config, sessions, cli, topic_cache).await?;
-        return Ok(true);
-    }
-    if cmd == "/stop" {
-        let interrupted = cli.sessions.interrupt(msg.chat.id.0, topic_id).await;
-        let reply_text = if interrupted {
-            t!("bot.stop_interrupted")
-        } else {
-            t!("bot.stop_none")
-        };
-        let _ = send_reply(bot, msg, reply_text).await;
-        return Ok(true);
-    }
-    if cmd == "/stop_all" || cmd == "/abort" {
-        cli.sessions.terminate_all().await;
-        let _ = send_reply(bot, msg, t!("bot.stop_all_success")).await;
-        return Ok(true);
-    }
-    Ok(false)
-}
 
 
 
