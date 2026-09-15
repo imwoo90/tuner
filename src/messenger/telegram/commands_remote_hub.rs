@@ -86,7 +86,12 @@ pub fn extract_antigravity_url() -> Option<String> {
     if let Ok(cached) = std::fs::read_to_string(cache_file) {
         let trimmed = cached.trim();
         if trimmed.starts_with("https://antigravity.google.com/r/") {
-            return Some(trimmed.to_string());
+            let normalized = if trimmed.ends_with("-v1") {
+                format!("{}-v2", &trimmed[..trimmed.len() - 3])
+            } else {
+                trimmed.to_string()
+            };
+            return Some(normalized);
         }
     }
 
@@ -96,8 +101,13 @@ pub fn extract_antigravity_url() -> Option<String> {
         if let Ok(bytes) = std::fs::read(&tmp_screen) {
             let text = String::from_utf8_lossy(&bytes);
             if let Some(pos) = text.find("https://antigravity.google.com/r/") {
-                let url: String = text[pos..].chars().take_while(|c| !c.is_whitespace() && *c != '\0').collect();
-                if !url.is_empty() {
+                let raw_url: String = text[pos..].chars().take_while(|c| !c.is_whitespace() && *c != '\0').collect();
+                if !raw_url.is_empty() {
+                    let url = if raw_url.ends_with("-v1") {
+                        format!("{}-v2", &raw_url[..raw_url.len() - 3])
+                    } else {
+                        raw_url
+                    };
                     let _ = std::fs::write(cache_file, &url);
                     return Some(url);
                 }
