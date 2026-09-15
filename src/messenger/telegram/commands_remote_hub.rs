@@ -1,12 +1,10 @@
 //! # Remote Hub Services Detector and Runner
 //!
-//! Handles background process inspection, screen-based session spawning,
-//! and network status checks for Antigravity Remote, Tailscale, and SSH.
-//!
-//! ## Search Tags
+//! Handles background process inspection, screen spawning, and network status.
 //! #remote-detector, #screen-spawn, #network-inspection
 
 use std::net::TcpStream;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -19,6 +17,8 @@ pub enum ServiceStatus {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RemoteHubStatus {
+    pub profile: String,
+    pub remote_workspace: PathBuf,
     pub antigravity: ServiceStatus,
     pub antigravity_url: Option<String>,
     pub antigravity_uptime: Option<String>,
@@ -26,6 +26,23 @@ pub struct RemoteHubStatus {
     pub tailscale: ServiceStatus,
     pub tailscale_ip: Option<String>,
     pub ssh: ServiceStatus,
+}
+
+pub fn resolve_profile_info(working_dir: &Path) -> (String, PathBuf, String, String) {
+    let profile = working_dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .filter(|n| *n != "profiles" && !n.is_empty())
+        .unwrap_or("default")
+        .to_string();
+    let remote_ws = working_dir
+        .parent()
+        .map(|p| p.join("remote_workspace"))
+        .unwrap_or_else(|| working_dir.join("remote_workspace"));
+    let screen_name = format!("tuner-agy-remote-{}", profile);
+    let instance_name = format!("{}-remote", profile);
+    (profile, remote_ws, screen_name, instance_name)
 }
 
 pub fn binary_exists(name: &str) -> bool {
@@ -36,44 +53,40 @@ pub fn binary_exists(name: &str) -> bool {
     }
     let home = std::env::var("HOME").unwrap_or_default();
     if !home.is_empty() {
-        if std::path::Path::new(&format!("{}/.local/bin/{}", home, name)).exists() {
-            return true;
-        }
-        if std::path::Path::new(&format!("{}/.gemini/antigravity-cli/bin/{}", home, name)).exists() {
-            return true;
+        for p in [".local/bin", ".gemini/antigravity-cli/bin"] {
+            if Path::new(&format!("{}/{}/{}", home, p, name)).exists() {
+                return true;
+            }
         }
     }
     false
 }
 
-pub fn find_antigravity_process() -> Option<(u32, String)> {
+pub fn find_antigravity_process(instance_name: &str) -> Option<(u32, String)> {
     let out = Command::new("pgrep").args(["-f", "agy --remote-control"]).output().ok()?;
     if !out.status.success() {
         return None;
     }
-    let pids = String::from_utf8_lossy(&out.stdout);
-    for line in pids.lines() {
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
         if let Ok(pid) = line.trim().parse::<u32>() {
             let cmd_path = format!("/proc/{}/cmdline", pid);
-            if let Ok(cmd_bytes) = std::fs::read(&cmd_path) {
-                let cmd_str = String::from_utf8_lossy(&cmd_bytes);
-                if cmd_str.contains("--remote-control") && !cmd_str.contains("SCREEN") {
-                    let mut uptime = "Active".to_string();
-                    if let Ok(meta) = std::fs::metadata(format!("/proc/{}", pid)) {
-                        if let Ok(mtime) = meta.created().or_else(|_| meta.modified()) {
-                            if let Ok(elapsed) = std::time::SystemTime::now().duration_since(mtime) {
-                                let total_mins = elapsed.as_secs() / 60;
-                                let hours = total_mins / 60;
-                                let mins = total_mins % 60;
-                                uptime = if hours > 0 {
-                                    format!("{}h {}m", hours, mins)
-                                } else {
-                                    format!("{}m", mins)
-                                };
+            if let Ok(bytes) = std::fs::read(&cmd_path) {
+                let s = String::from_utf8_lossy(&bytes);
+                if s.contains("--remote-control") && !s.contains("SCREEN") {
+                    let is_match = s.contains(instance_name)
+                        || (instance_name.starts_with("default") && (s.contains("wimvm-dev") || !s.contains("-remote")));
+                    if is_match {
+                        let mut uptime = "Active".to_string();
+                        if let Ok(meta) = std::fs::metadata(format!("/proc/{}", pid)) {
+                            if let Ok(mtime) = meta.created().or_else(|_| meta.modified()) {
+                                if let Ok(el) = std::time::SystemTime::now().duration_since(mtime) {
+                                    let m = el.as_secs() / 60;
+                                    uptime = if m >= 60 { format!("{}h {}m", m / 60, m % 60) } else { format!("{}m", m) };
+                                }
                             }
                         }
+                        return Some((pid, uptime));
                     }
-                    return Some((pid, uptime));
                 }
             }
         }
@@ -81,48 +94,38 @@ pub fn find_antigravity_process() -> Option<(u32, String)> {
     None
 }
 
-pub fn extract_antigravity_url() -> Option<String> {
-    let cache_file = "/tmp/tuner_agy_url.txt";
-    if let Ok(cached) = std::fs::read_to_string(cache_file) {
-        let trimmed = cached.trim();
-        if trimmed.starts_with("https://antigravity.google.com/r/") {
-            let normalized = if trimmed.ends_with("-v1") {
-                format!("{}-v2", &trimmed[..trimmed.len() - 3])
-            } else {
-                trimmed.to_string()
-            };
-            return Some(normalized);
+pub fn extract_antigravity_url(profile: &str, screen_name: &str) -> Option<String> {
+    let cache_file = format!("/tmp/tuner_agy_url_{}.txt", profile);
+    if let Ok(c) = std::fs::read_to_string(&cache_file) {
+        let t = c.trim();
+        if t.starts_with("https://antigravity.google.com/r/") {
+            let norm = if t.ends_with("-v1") { format!("{}-v2", &t[..t.len() - 3]) } else { t.to_string() };
+            return Some(norm);
         }
     }
 
-    for name in ["tuner-agy-remote", "agy-tuner"] {
-        let tmp_screen = format!("/tmp/screen_{}.txt", name);
-        let _ = Command::new("screen").args(["-S", name, "-X", "hardcopy", &tmp_screen]).output();
-        if let Ok(bytes) = std::fs::read(&tmp_screen) {
-            let text = String::from_utf8_lossy(&bytes);
-            if let Some(pos) = text.find("https://antigravity.google.com/r/") {
-                let raw_url: String = text[pos..].chars().take_while(|c| !c.is_whitespace() && *c != '\0').collect();
-                if !raw_url.is_empty() {
-                    let url = if raw_url.ends_with("-v1") {
-                        format!("{}-v2", &raw_url[..raw_url.len() - 3])
-                    } else {
-                        raw_url
-                    };
-                    let _ = std::fs::write(cache_file, &url);
-                    return Some(url);
-                }
+    let tmp_screen = format!("/tmp/screen_{}.txt", screen_name);
+    let _ = Command::new("screen").args(["-S", screen_name, "-X", "hardcopy", &tmp_screen]).output();
+    if let Ok(bytes) = std::fs::read(&tmp_screen) {
+        let text = String::from_utf8_lossy(&bytes);
+        if let Some(pos) = text.find("https://antigravity.google.com/r/") {
+            let raw: String = text[pos..].chars().take_while(|c| !c.is_whitespace() && *c != '\0').collect();
+            if !raw.is_empty() {
+                let url = if raw.ends_with("-v1") { format!("{}-v2", &raw[..raw.len() - 3]) } else { raw };
+                let _ = std::fs::write(&cache_file, &url);
+                return Some(url);
             }
         }
     }
     None
 }
 
-pub fn check_antigravity_status() -> (ServiceStatus, Option<String>, Option<String>, Option<u32>) {
+pub fn check_antigravity_status(instance_name: &str, profile: &str, screen_name: &str) -> (ServiceStatus, Option<String>, Option<String>, Option<u32>) {
     if !binary_exists("agy") {
         return (ServiceStatus::NotInstalled, None, None, None);
     }
-    if let Some((pid, uptime)) = find_antigravity_process() {
-        (ServiceStatus::Active, extract_antigravity_url(), Some(uptime), Some(pid))
+    if let Some((pid, uptime)) = find_antigravity_process(instance_name) {
+        (ServiceStatus::Active, extract_antigravity_url(profile, screen_name), Some(uptime), Some(pid))
     } else {
         (ServiceStatus::Inactive, None, None, None)
     }
@@ -156,10 +159,13 @@ pub fn check_ssh_status() -> ServiceStatus {
     }
 }
 
-pub fn query_remote_hub_status() -> RemoteHubStatus {
-    let (agy_status, agy_url, agy_uptime, agy_pid) = check_antigravity_status();
+pub fn query_remote_hub_status(working_dir: &Path) -> RemoteHubStatus {
+    let (profile, remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
+    let (agy_status, agy_url, agy_uptime, agy_pid) = check_antigravity_status(&instance_name, &profile, &screen_name);
     let (ts_status, ts_ip) = check_tailscale_status();
     RemoteHubStatus {
+        profile,
+        remote_workspace: remote_ws,
         antigravity: agy_status,
         antigravity_url: agy_url,
         antigravity_uptime: agy_uptime,
@@ -170,10 +176,25 @@ pub fn query_remote_hub_status() -> RemoteHubStatus {
     }
 }
 
-pub async fn start_antigravity_remote() -> Result<String, String> {
-    let _ = stop_antigravity_remote().await;
+pub async fn start_antigravity_remote(working_dir: &Path) -> Result<String, String> {
+    let (profile, remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
+    let _ = stop_antigravity_remote(working_dir).await;
+    let _ = std::fs::create_dir_all(&remote_ws);
+
+    for rule in ["AGENTS.md", "GEMINI.md"] {
+        let dest = remote_ws.join(rule);
+        if !dest.exists() {
+            let src = working_dir.join(rule);
+            if src.exists() {
+                let _ = std::fs::copy(&src, &dest);
+            }
+        }
+    }
+
+    let cmd = format!("agy --remote-control --remote-control-name {}", instance_name);
     let status = Command::new("screen")
-        .args(["-dmS", "tuner-agy-remote", "bash", "-c", "agy --remote-control --remote-control-name wimvm-dev"])
+        .args(["-dmS", &screen_name, "bash", "-c", &cmd])
+        .current_dir(&remote_ws)
         .status()
         .map_err(|e| format!("Spawn error: {}", e))?;
 
@@ -183,29 +204,33 @@ pub async fn start_antigravity_remote() -> Result<String, String> {
 
     for _ in 0..8 {
         tokio::time::sleep(Duration::from_millis(500)).await;
-        if let Some(url) = extract_antigravity_url() {
+        if let Some(url) = extract_antigravity_url(&profile, &screen_name) {
             return Ok(url);
         }
     }
     Ok("https://antigravity.google.com".to_string())
 }
 
-pub async fn stop_antigravity_remote() -> Result<(), String> {
-    let _ = Command::new("screen").args(["-S", "tuner-agy-remote", "-X", "quit"]).output();
-    let _ = Command::new("screen").args(["-S", "agy-tuner", "-X", "quit"]).output();
-    let _ = Command::new("pkill").args(["-15", "-f", "agy --remote-control"]).output();
-    let _ = std::fs::remove_file("/tmp/tuner_agy_url.txt");
-    let _ = std::fs::remove_file("/tmp/screen_tuner-agy-remote.txt");
-    let _ = std::fs::remove_file("/tmp/screen_agy-tuner.txt");
+pub async fn stop_antigravity_remote(working_dir: &Path) -> Result<(), String> {
+    let (profile, _remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
+    let _ = Command::new("screen").args(["-S", &screen_name, "-X", "quit"]).output();
+    if profile == "default" {
+        let _ = Command::new("screen").args(["-S", "tuner-agy-remote", "-X", "quit"]).output();
+        let _ = Command::new("screen").args(["-S", "agy-tuner", "-X", "quit"]).output();
+        let _ = Command::new("pkill").args(["-15", "-f", "wimvm-dev"]).output();
+    }
+    let _ = Command::new("pkill").args(["-15", "-f", &format!("--remote-control-name {}", instance_name)]).output();
+    let _ = std::fs::remove_file(format!("/tmp/tuner_agy_url_{}.txt", profile));
+    let _ = std::fs::remove_file(format!("/tmp/screen_{}.txt", screen_name));
 
     for _ in 0..10 {
         tokio::time::sleep(Duration::from_millis(200)).await;
-        if find_antigravity_process().is_none() {
+        if find_antigravity_process(&instance_name).is_none() {
             return Ok(());
         }
     }
 
-    let _ = Command::new("pkill").args(["-9", "-f", "agy --remote-control"]).output();
+    let _ = Command::new("pkill").args(["-9", "-f", &format!("--remote-control-name {}", instance_name)]).output();
     tokio::time::sleep(Duration::from_millis(150)).await;
     Ok(())
 }

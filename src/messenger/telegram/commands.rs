@@ -156,7 +156,7 @@ pub(crate) async fn handle_commands(
         return Ok(true);
     }
     if trimmed == "/remote" || trimmed.starts_with("/remote ") {
-        super::commands_remote::handle_remote_command(bot, msg).await?;
+        super::commands_remote::handle_remote_command(bot, msg, config).await?;
         return Ok(true);
     }
     if text.starts_with("/new") || text.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {

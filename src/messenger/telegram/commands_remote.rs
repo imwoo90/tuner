@@ -17,12 +17,14 @@ fn build_antigravity_lines(status: &RemoteHubStatus, lines: &mut Vec<String>) {
             if let Some(ref url) = status.antigravity_url {
                 lines.push(format!("  └ 🔗 <b>URL</b>: <code>{}</code>", url));
             }
+            lines.push(format!("  └ 📁 <b>Dir</b>: <code>{}</code>", status.remote_workspace.display()));
             if let (Some(uptime), Some(pid)) = (&status.antigravity_uptime, status.antigravity_pid) {
                 lines.push(format!("  └ ⏱️ <b>Uptime</b>: {} (PID: {})", uptime, pid));
             }
         }
         ServiceStatus::Inactive => {
             lines.push("• <b>Google Antigravity</b> : 🔴 <b>Inactive</b>".to_string());
+            lines.push(format!("  └ 📁 <b>Dir</b>: <code>{}</code>", status.remote_workspace.display()));
         }
         ServiceStatus::NotInstalled => {
             lines.push("• <b>Google Antigravity</b> : ⚠️ <b>Not Installed</b>".to_string());
@@ -101,7 +103,7 @@ fn build_dashboard_keyboard(status: &RemoteHubStatus) -> InlineKeyboardMarkup {
 
 /// Renders HTML formatted dashboard text and inline keyboard markup.
 pub fn render_remote_dashboard(status: &RemoteHubStatus) -> (String, InlineKeyboardMarkup) {
-    let mut lines = vec!["🌐 <b>Remote Services</b>\n".to_string()];
+    let mut lines = vec![format!("🌐 <b>Remote Services</b> [<code>{}</code>]\n", status.profile)];
     build_antigravity_lines(status, &mut lines);
     build_network_lines(status, &mut lines);
     (lines.join("\n"), build_dashboard_keyboard(status))
@@ -111,8 +113,9 @@ pub fn render_remote_dashboard(status: &RemoteHubStatus) -> (String, InlineKeybo
 pub async fn handle_remote_command(
     bot: &Bot,
     msg: &Message,
+    config: &crate::config::CliConfig,
 ) -> Result<(), teloxide::RequestError> {
-    let status = query_remote_hub_status();
+    let status = query_remote_hub_status(&config.working_dir);
     let (text, markup) = render_remote_dashboard(&status);
 
     let mut req = bot.send_message(msg.chat.id, text).parse_mode(ParseMode::Html);
@@ -128,17 +131,18 @@ pub async fn handle_remote_callback(
     bot: &Bot,
     msg: &Message,
     data: &str,
+    config: &crate::config::CliConfig,
 ) {
     match data {
         "rem:agy:start" => {
-            let _ = start_antigravity_remote().await;
+            let _ = start_antigravity_remote(&config.working_dir).await;
         }
         "rem:agy:stop" => {
-            let _ = stop_antigravity_remote().await;
+            let _ = stop_antigravity_remote(&config.working_dir).await;
         }
         "rem:agy:restart" => {
-            let _ = stop_antigravity_remote().await;
-            let _ = start_antigravity_remote().await;
+            let _ = stop_antigravity_remote(&config.working_dir).await;
+            let _ = start_antigravity_remote(&config.working_dir).await;
         }
         "rem:ts:start" => {
             let _ = std::process::Command::new("tailscale").arg("up").output();
@@ -146,7 +150,7 @@ pub async fn handle_remote_callback(
         _ => {}
     }
 
-    let status = query_remote_hub_status();
+    let status = query_remote_hub_status(&config.working_dir);
     let (text, markup) = render_remote_dashboard(&status);
 
     let _ = bot

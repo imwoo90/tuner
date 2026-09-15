@@ -47,6 +47,11 @@ impl DuctorPaths {
         self.profile_join("workspace")
     }
 
+    /// Dedicated remote development workspace directory: `~/.tuner/profiles/<profile_name>/remote_workspace`
+    pub fn remote_workspace(&self) -> PathBuf {
+        self.profile_join("remote_workspace")
+    }
+
     /// Configuration directory: `~/.tuner/config`
     pub fn config_dir(&self) -> PathBuf {
         self.tuner_home.join("config")

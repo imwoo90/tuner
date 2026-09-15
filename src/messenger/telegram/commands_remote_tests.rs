@@ -5,6 +5,8 @@ use super::commands_remote::{
 #[test]
 fn test_render_remote_dashboard_all_active() {
     let status = RemoteHubStatus {
+        profile: "default".to_string(),
+        remote_workspace: std::path::PathBuf::from("/home/wimvm/.tuner/profiles/default/remote_workspace"),
         antigravity: ServiceStatus::Active,
         antigravity_url: Some("https://antigravity.google.com/r/test-uuid-v2".to_string()),
         antigravity_uptime: Some("1h 25m".to_string()),
@@ -42,6 +44,8 @@ fn test_render_remote_dashboard_all_active() {
 #[test]
 fn test_render_remote_dashboard_inactive_antigravity() {
     let status = RemoteHubStatus {
+        profile: "default".to_string(),
+        remote_workspace: std::path::PathBuf::from("/home/wimvm/.tuner/profiles/default/remote_workspace"),
         antigravity: ServiceStatus::Inactive,
         antigravity_url: None,
         antigravity_uptime: None,
@@ -69,6 +73,8 @@ fn test_render_remote_dashboard_inactive_antigravity() {
 #[test]
 fn test_render_remote_dashboard_not_installed() {
     let status = RemoteHubStatus {
+        profile: "default".to_string(),
+        remote_workspace: std::path::PathBuf::from("/home/wimvm/.tuner/profiles/default/remote_workspace"),
         antigravity: ServiceStatus::NotInstalled,
         antigravity_url: None,
         antigravity_uptime: None,
@@ -93,4 +99,22 @@ fn test_binary_exists_common_commands() {
     assert!(binary_exists("ls") || binary_exists("sh"));
     // definitely nonexistent binary
     assert!(!binary_exists("definitely_nonexistent_binary_xyz_12345"));
+}
+
+#[test]
+fn test_resolve_profile_info() {
+    use std::path::Path;
+    let p_default = Path::new("/home/wimvm/.tuner/profiles/default/workspace");
+    let (profile, remote_ws, screen_name, instance_name) = super::commands_remote_hub::resolve_profile_info(p_default);
+    assert_eq!(profile, "default");
+    assert_eq!(remote_ws, Path::new("/home/wimvm/.tuner/profiles/default/remote_workspace"));
+    assert_eq!(screen_name, "tuner-agy-remote-default");
+    assert_eq!(instance_name, "default-remote");
+
+    let p_seojin = Path::new("/home/wimvm/.tuner/profiles/seojin/workspace");
+    let (profile_s, remote_ws_s, screen_name_s, instance_name_s) = super::commands_remote_hub::resolve_profile_info(p_seojin);
+    assert_eq!(profile_s, "seojin");
+    assert_eq!(remote_ws_s, Path::new("/home/wimvm/.tuner/profiles/seojin/remote_workspace"));
+    assert_eq!(screen_name_s, "tuner-agy-remote-seojin");
+    assert_eq!(instance_name_s, "seojin-remote");
 }
