@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_new_command","handle_session_control_commands"]};
