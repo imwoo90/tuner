@@ -156,7 +156,7 @@
 <a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
 <a href=#157 id=157 data-nosnippet>157</a>    }
 <a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">if </span>trimmed == <span class="string">"/remote" </span>|| trimmed.starts_with(<span class="string">"/remote "</span>) {
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">super</span>::commands_remote::handle_remote_command(bot, msg).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">super</span>::commands_remote::handle_remote_command(bot, msg, config).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
 <a href=#161 id=161 data-nosnippet>161</a>    }
 <a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">if </span>text.starts_with(<span class="string">"/new"</span>) || text.starts_with(<span class="string">"/reset"</span>) || trimmed == <span class="string">"/stop" </span>|| trimmed == <span class="string">"/stop_all" </span>|| trimmed == <span class="string">"/abort" </span>{
