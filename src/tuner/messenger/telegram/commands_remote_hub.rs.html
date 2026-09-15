@@ -191,7 +191,7 @@
 <a href=#191 id=191 data-nosnippet>191</a>        }
 <a href=#192 id=192 data-nosnippet>192</a>    }
 <a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>cmd = <span class="macro">format!</span>(<span class="string">"agy --remote-control --remote-control-name {}"</span>, instance_name);
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>cmd = <span class="macro">format!</span>(<span class="string">"agy --remote-control --remote-control-name {} --add-dir {}"</span>, instance_name, remote_ws.display());
 <a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>status = Command::new(<span class="string">"screen"</span>)
 <a href=#196 id=196 data-nosnippet>196</a>        .args([<span class="string">"-dmS"</span>, <span class="kw-2">&amp;</span>screen_name, <span class="string">"bash"</span>, <span class="string">"-c"</span>, <span class="kw-2">&amp;</span>cmd])
 <a href=#197 id=197 data-nosnippet>197</a>        .current_dir(<span class="kw-2">&amp;</span>remote_ws)
