@@ -76,6 +76,7 @@ Connecting Tuner to Telegram takes just 3 simple steps:
 | `/upgrade` | Check GitHub Releases and perform an in-place executable upgrade. |
 | `/memory` | Output the current content of the workspace `MAINMEMORY.md` file. |
 | `/cron` | Manage and inspect scheduled background cron tasks. |
+| `/remote` | Inspect and manage remote access services (Antigravity Remote, Tailscale, SSH) via an interactive dashboard. |
 | `/stop` | Gracefully cancel active agent CLI processes running in the current chat topic. |
 | `/abort` | Forcefully terminate all running workers and background tasks. |
 | `/restart` | Request a clean restart of the `tuner` bot daemon process. |
