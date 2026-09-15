@@ -85,6 +85,7 @@ Connecting Tuner to Telegram takes just 3 simple steps:
 | `/goal` | Launch a long-running, thorough task (e.g. overnight thorough execution). |
 | `/learn` | Capture behavioral corrections or feedback and bind them to agent memory. |
 | `/teamwork_preview` | Run a collaborative multi-agent simulation workflow. |
+| `/boost` | Launch deep reasoning and multi-perspective verification pipeline for complex tasks. |
 
 ---
 

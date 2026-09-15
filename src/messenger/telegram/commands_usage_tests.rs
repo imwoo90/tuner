@@ -150,10 +150,11 @@ Press Esc or q to exit
         assert!(is_lock_free_command("/stop"));
         assert!(is_lock_free_command("/abort"));
 
-        // Bot commands must include "usage" and "cron"
+        // Bot commands must include "usage" and "cron" and "boost"
         let cmds = get_bot_commands();
         assert!(cmds.iter().any(|c| c.command == "usage"));
         assert!(cmds.iter().any(|c| c.command == "cron"));
+        assert!(cmds.iter().any(|c| c.command == "boost"));
     }
 
     #[test]
