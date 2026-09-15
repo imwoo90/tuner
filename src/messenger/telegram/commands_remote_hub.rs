@@ -193,10 +193,19 @@ pub async fn start_antigravity_remote() -> Result<String, String> {
 pub async fn stop_antigravity_remote() -> Result<(), String> {
     let _ = Command::new("screen").args(["-S", "tuner-agy-remote", "-X", "quit"]).output();
     let _ = Command::new("screen").args(["-S", "agy-tuner", "-X", "quit"]).output();
-    let _ = Command::new("pkill").args(["-f", "agy --remote-control"]).output();
+    let _ = Command::new("pkill").args(["-15", "-f", "agy --remote-control"]).output();
     let _ = std::fs::remove_file("/tmp/tuner_agy_url.txt");
     let _ = std::fs::remove_file("/tmp/screen_tuner-agy-remote.txt");
     let _ = std::fs::remove_file("/tmp/screen_agy-tuner.txt");
-    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        if find_antigravity_process().is_none() {
+            return Ok(());
+        }
+    }
+
+    let _ = Command::new("pkill").args(["-9", "-f", "agy --remote-control"]).output();
+    tokio::time::sleep(Duration::from_millis(150)).await;
     Ok(())
 }
