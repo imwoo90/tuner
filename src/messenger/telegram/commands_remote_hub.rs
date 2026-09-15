@@ -191,7 +191,7 @@ pub async fn start_antigravity_remote(working_dir: &Path) -> Result<String, Stri
         }
     }
 
-    let cmd = format!("agy --remote-control --remote-control-name {}", instance_name);
+    let cmd = format!("agy --remote-control --remote-control-name {} --add-dir {}", instance_name, remote_ws.display());
     let status = Command::new("screen")
         .args(["-dmS", &screen_name, "bash", "-c", &cmd])
         .current_dir(&remote_ws)
