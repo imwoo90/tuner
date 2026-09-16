@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["create_zip_archive","handle_dl_files_callback"]};
+window.SIDEBAR_ITEMS = {"fn":["create_zip_archive","handle_dl_files_callback","send_multi_attachments","send_single_attachment"]};
