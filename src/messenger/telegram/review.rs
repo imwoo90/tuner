@@ -1,17 +1,10 @@
-//! # In-App File Review Manager and Web Server
+//! # In-App File Review Manager
 //!
-//! Provides ephemeral, secure file snapshot sessions for Telegram WebApp and mobile code review.
-//! Automatically captures referenced files, serves a mobile-responsive dark-mode viewer via Axum,
-//! and connects to Cloudflare Quick Tunnels for instant external HTTPS access without configuration.
+//! Provides ephemeral, secure file snapshot sessions for Telegram WebApp and mobile file review.
+//! Captures referenced code, text, images, video, and audio files, preparing sessions for the
+//! mobile-responsive dark-mode viewer and direct download.
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::{Html, IntoResponse, Response},
-    routing::get,
-    Json, Router,
-};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -24,6 +17,8 @@ pub struct ReviewFile {
     pub content: String,
     pub size_bytes: usize,
     pub language: String,
+    #[serde(default)]
+    pub is_binary: bool,
 }
 
 const SESSION_TTL: Duration = Duration::from_secs(1800); // 30 minutes
@@ -56,25 +51,11 @@ impl ReviewManager {
 
     pub async fn create_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
         let mut files = Vec::new();
+        let mut used_names = HashSet::new();
+
         for path in paths {
-            if !path.is_file() {
-                continue;
-            }
-            if let Ok(metadata) = std::fs::metadata(path) {
-                if metadata.len() > 1_000_000 {
-                    continue;
-                }
-            }
-            if let Ok(content) = std::fs::read_to_string(path) {
-                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("file").to_string();
-                let language = detect_language(path);
-                files.push(ReviewFile {
-                    filename,
-                    path: path.to_string_lossy().to_string(),
-                    size_bytes: content.len(),
-                    content,
-                    language,
-                });
+            if let Some(file) = process_path_for_review(path, &mut used_names) {
+                files.push(file);
             }
         }
 
@@ -89,10 +70,13 @@ impl ReviewManager {
         let now = Instant::now();
         map.retain(|_, v| now.duration_since(v.created_at) < SESSION_TTL);
 
-        map.insert(token.clone(), SessionEntry {
-            created_at: now,
-            files,
-        });
+        map.insert(
+            token.clone(),
+            SessionEntry {
+                created_at: now,
+                files,
+            },
+        );
 
         Some((token, count))
     }
@@ -104,69 +88,116 @@ impl ReviewManager {
         map.get(token).map(|e| e.files.clone())
     }
 
+    pub async fn get_file_path(&self, token: &str, filename: &str) -> Option<PathBuf> {
+        let files = self.get_files(token).await?;
+        for f in files {
+            if f.filename == filename {
+                let p = PathBuf::from(&f.path);
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+        None
+    }
+
     pub async fn get_html(&self, token: &str) -> Option<String> {
         let files = self.get_files(token).await?;
         let json_data = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
-        let safe_json = json_data.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT");
+        let safe_json = json_data
+            .replace("</script", "<\\/script")
+            .replace("</SCRIPT", "<\\/SCRIPT");
         let template = include_str!("review_viewer.html");
-        let rendered = template.replace("__FILES_JSON__", &safe_json);
+        let rendered = template
+            .replace("__FILES_JSON__", &safe_json)
+            .replace("__TOKEN__", token);
         Some(rendered)
     }
 
     pub async fn ensure_server_running(&self) -> u16 {
-        let mut port_guard = self.server_port.lock().await;
-        if let Some(port) = *port_guard {
-            return port;
-        }
-
-        let listener = match tokio::net::TcpListener::bind("0.0.0.0:8743").await {
-            Ok(l) => l,
-            Err(_) => tokio::net::TcpListener::bind("0.0.0.0:0").await.expect("Failed to bind ephemeral port"),
-        };
-
-        let port = listener.local_addr().map(|a| a.port()).unwrap_or(8743);
-        *port_guard = Some(port);
-
-        let app = Router::new()
-            .route("/review/:token", get(handle_review_page))
-            .route("/review/:token/json", get(handle_review_json))
-            .route("/health", get(handle_health));
-
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.ok();
-        });
-
-        port
+        super::review_server::ensure_server_running(&self.server_port).await
     }
 
     pub async fn warmup(&self) {
-        let port = self.ensure_server_running().await;
-        let mut tunnel_guard = self.tunnel_url.lock().await;
-        if tunnel_guard.is_none() {
-            if let Some(url) = spawn_quick_tunnel(port).await {
-                *tunnel_guard = Some(url);
-            }
-        }
+        super::review_server::warmup(&self.server_port, &self.tunnel_url).await
     }
 
     pub async fn get_review_url(&self, token: &str) -> String {
-        let port = self.ensure_server_running().await;
-        let mut tunnel_guard = self.tunnel_url.lock().await;
-        if let Some(ref base) = *tunnel_guard {
-            return format!("{}/review/{}", base, token);
-        }
-
-        if let Some(url) = spawn_quick_tunnel(port).await {
-            *tunnel_guard = Some(url.clone());
-            format!("{}/review/{}", url, token)
-        } else {
-            format!("http://127.0.0.1:{}/review/{}", port, token)
-        }
+        super::review_server::get_review_url(&self.server_port, &self.tunnel_url, token).await
     }
 }
 
-fn detect_language(path: &StdPath) -> String {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+fn resolve_unique_filename(path: &StdPath, used_names: &mut HashSet<String>) -> String {
+    let mut filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file")
+        .to_string();
+
+    if used_names.contains(&filename) {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("file");
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| format!(".{}", e))
+            .unwrap_or_default();
+        let mut counter = 2;
+        loop {
+            let candidate = format!("{}_{}{}", stem, counter, ext);
+            if !used_names.contains(&candidate) {
+                filename = candidate;
+                break;
+            }
+            counter += 1;
+        }
+    }
+    used_names.insert(filename.clone());
+    filename
+}
+
+fn process_path_for_review(path: &StdPath, used_names: &mut HashSet<String>) -> Option<ReviewFile> {
+    if !path.is_file() {
+        return None;
+    }
+    let filename = resolve_unique_filename(path, used_names);
+    let language = detect_language(path);
+    let metadata = std::fs::metadata(path).ok();
+    let size_bytes = metadata.as_ref().map(|m| m.len() as usize).unwrap_or(0);
+
+    let is_media = matches!(language.as_str(), "video" | "audio" | "image" | "pdf");
+    let (content, is_binary) = if is_media {
+        (String::new(), true)
+    } else if size_bytes > 10_000_000 {
+        (
+            format!("// File exceeds 10MB ({} bytes). Download directly to inspect.", size_bytes),
+            false,
+        )
+    } else {
+        match std::fs::read_to_string(path) {
+            Ok(text) => (text, false),
+            Err(_) => (String::new(), true),
+        }
+    };
+
+    Some(ReviewFile {
+        filename,
+        path: path.to_string_lossy().to_string(),
+        size_bytes: if is_binary { size_bytes } else { content.len() },
+        content,
+        language,
+        is_binary,
+    })
+}
+
+pub fn detect_language(path: &StdPath) -> String {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
     match ext.as_str() {
         "rs" => "rust",
         "toml" => "toml",
@@ -182,77 +213,12 @@ fn detect_language(path: &StdPath) -> String {
         "sql" => "sql",
         "c" | "h" => "c",
         "cpp" | "hpp" | "cc" => "cpp",
+        "mp4" | "mov" | "webm" | "mkv" | "avi" | "m4v" => "video",
+        "mp3" | "wav" | "ogg" | "m4a" | "flac" | "aac" => "audio",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" => "image",
+        "svg" => "svg",
+        "pdf" => "pdf",
         _ => "plaintext",
-    }.to_string()
-}
-
-async fn handle_review_page(Path(token): Path<String>) -> Response {
-    let mgr = global_review_manager();
-    if let Some(html) = mgr.get_html(&token).await {
-        Html(html).into_response()
-    } else {
-        (StatusCode::NOT_FOUND, "Review session not found or expired").into_response()
     }
-}
-
-async fn handle_review_json(Path(token): Path<String>) -> Response {
-    let mgr = global_review_manager();
-    if let Some(files) = mgr.get_files(&token).await {
-        Json(files).into_response()
-    } else {
-        (StatusCode::NOT_FOUND, "Session not found").into_response()
-    }
-}
-
-async fn handle_health() -> &'static str {
-    "OK"
-}
-
-async fn spawn_quick_tunnel(port: u16) -> Option<String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let bin_candidates = [
-        PathBuf::from(&home).join(".tuner/bin/cloudflared"),
-        PathBuf::from("/usr/local/bin/cloudflared"),
-        PathBuf::from("/usr/bin/cloudflared"),
-    ];
-
-    let cloudflared_bin = bin_candidates.iter().find(|p| p.is_file())?.clone();
-    let mut cmd = tokio::process::Command::new(cloudflared_bin);
-    cmd.args(["tunnel", "--url", &format!("http://127.0.0.1:{}", port)])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-
-    let mut child = cmd.spawn().ok()?;
-    let stderr = child.stderr.take()?;
-    let mut reader = tokio::io::BufReader::new(stderr);
-    let mut line = String::new();
-
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(10) {
-        use tokio::io::AsyncBufReadExt;
-        line.clear();
-        if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
-            break;
-        }
-        if let Some(pos) = line.find("https://") {
-            let sub = &line[pos..];
-            if let Some(end) = sub.find(".trycloudflare.com") {
-                let url = &sub[..end + ".trycloudflare.com".len()];
-                let trimmed = url.trim().to_string();
-                tokio::spawn(async move {
-                    use tokio::io::AsyncBufReadExt;
-                    let mut discard = String::new();
-                    while let Ok(n) = reader.read_line(&mut discard).await {
-                        if n == 0 {
-                            break;
-                        }
-                        discard.clear();
-                    }
-                    let _ = child.wait().await;
-                });
-                return Some(trimmed);
-            }
-        }
-    }
-    None
+    .to_string()
 }

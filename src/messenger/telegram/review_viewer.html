@@ -261,6 +261,65 @@
       max-width: 100%;
       height: auto;
     }
+
+    /* Media Container Styling */
+    .media-container {
+      flex: 1;
+      overflow: auto;
+      background: #090d12;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .media-container video {
+      max-width: 100%;
+      max-height: calc(100vh - 140px);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      outline: none;
+      background: #000;
+    }
+    .media-container audio {
+      width: 90%;
+      max-width: 500px;
+      margin: 40px 0;
+      outline: none;
+    }
+    .media-container img {
+      max-width: 100%;
+      max-height: calc(100vh - 140px);
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+    .binary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 40px;
+      text-align: center;
+      max-width: 440px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+    .binary-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    .binary-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .binary-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -272,6 +331,7 @@
     <div class="header-actions">
       <button class="btn btn-toggle" id="btn-toggle-view" style="display:none;" onclick="toggleMarkdownView()">📝 코드</button>
       <button class="btn" id="btn-copy" onclick="copyCurrentCode()">📋 복사</button>
+      <button class="btn" id="btn-download" onclick="downloadCurrentFile()">📥 다운로드</button>
       <button class="btn" id="btn-close" onclick="closeViewer()">✕ 닫기</button>
     </div>
   </header>
@@ -291,9 +351,11 @@
   </div>
 
   <div class="markdown-container" id="markdown-container" style="display:none;"></div>
+  <div class="media-container" id="media-container" style="display:none;"></div>
 
   <script id="files-data" type="application/json">__FILES_JSON__</script>
   <script>
+    const TOKEN = "__TOKEN__";
     let FILES = [];
     try {
       FILES = JSON.parse(document.getElementById('files-data').textContent);
@@ -302,6 +364,24 @@
     }
     let activeIndex = 0;
     let isMarkdownRendered = true;
+
+    function getFileIcon(f) {
+      if (f.language === 'video') return '🎬';
+      if (f.language === 'audio') return '🎵';
+      if (f.language === 'image' || f.language === 'svg') return '🖼️';
+      if (f.language === 'markdown') return '📝';
+      if (f.is_binary) return '📦';
+      return '📄';
+    }
+
+    function stopMediaPlayback() {
+      const mc = document.getElementById('media-container');
+      if (!mc) return;
+      const video = mc.querySelector('video');
+      if (video) { video.pause(); video.src = ''; }
+      const audio = mc.querySelector('audio');
+      if (audio) { audio.pause(); audio.src = ''; }
+    }
 
     function init() {
       if (window.Telegram && window.Telegram.WebApp) {
@@ -336,7 +416,8 @@
         tab.className = `tab-item ${idx === 0 ? 'active' : ''}`;
         tab.id = `tab-${idx}`;
         tab.onclick = () => selectFile(idx);
-        tab.innerHTML = `<span>📄 ${escapeHtml(f.filename)}</span><span class="tab-size">${formatBytes(f.size_bytes)}</span>`;
+        const icon = getFileIcon(f);
+        tab.innerHTML = `<span>${icon} ${escapeHtml(f.filename)}</span><span class="tab-size">${formatBytes(f.size_bytes)}</span>`;
         tabsContainer.appendChild(tab);
       });
 
@@ -347,6 +428,7 @@
 
     function selectFile(idx) {
       if (idx < 0 || idx >= FILES.length) return;
+      stopMediaPlayback();
       activeIndex = idx;
 
       FILES.forEach((_, i) => {
@@ -356,46 +438,108 @@
 
       const file = FILES[idx];
       document.getElementById('file-path').innerText = file.path || file.filename;
-      
-      const lines = file.content.split('\n');
-      const lineCount = lines.length;
-      document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
 
-      // Line numbers for raw code view
-      document.getElementById('line-numbers').innerText = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
-
-      // Direct syntax highlighting without dataset.highlighted interference
-      const codeEl = document.getElementById('code-view');
-      codeEl.className = 'hljs';
-      if (file.language) {
-        codeEl.classList.add(`language-${file.language}`);
-      }
-      let highlighted = '';
-      try {
-        if (file.language && hljs.getLanguage(file.language)) {
-          highlighted = hljs.highlight(file.content, { language: file.language }).value;
-        } else {
-          highlighted = hljs.highlightAuto(file.content).value;
-        }
-      } catch (e) {
-        highlighted = escapeHtml(file.content);
-      }
-      codeEl.innerHTML = highlighted;
-
-      // Check if markdown
-      const isMd = file.language === 'markdown';
+      const copyBtn = document.getElementById('btn-copy');
       const toggleBtn = document.getElementById('btn-toggle-view');
+      const codeContainer = document.getElementById('code-container');
+      const mdContainer = document.getElementById('markdown-container');
+      const mediaContainer = document.getElementById('media-container');
 
-      if (isMd) {
-        toggleBtn.style.display = 'inline-flex';
-        if (isMarkdownRendered) {
-          showMarkdownView(file.content);
+      const encodedFilename = encodeURIComponent(file.filename);
+      const mediaUrl = `/review/${TOKEN}/media/${encodedFilename}`;
+
+      if (file.language === 'video') {
+        document.getElementById('file-stats').innerText = `Video · ${formatBytes(file.size_bytes)}`;
+        copyBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        codeContainer.style.display = 'none';
+        mdContainer.style.display = 'none';
+        mediaContainer.style.display = 'flex';
+        mediaContainer.innerHTML = `
+          <video controls playsinline preload="metadata" src="${mediaUrl}">
+            브라우저가 비디오 재생을 지원하지 않습니다.
+          </video>
+        `;
+      } else if (file.language === 'audio') {
+        document.getElementById('file-stats').innerText = `Audio · ${formatBytes(file.size_bytes)}`;
+        copyBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        codeContainer.style.display = 'none';
+        mdContainer.style.display = 'none';
+        mediaContainer.style.display = 'flex';
+        mediaContainer.innerHTML = `
+          <audio controls preload="metadata" src="${mediaUrl}">
+            브라우저가 오디오 재생을 지원하지 않습니다.
+          </audio>
+        `;
+      } else if (file.language === 'image') {
+        document.getElementById('file-stats').innerText = `Image · ${formatBytes(file.size_bytes)}`;
+        copyBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        codeContainer.style.display = 'none';
+        mdContainer.style.display = 'none';
+        mediaContainer.style.display = 'flex';
+        mediaContainer.innerHTML = `
+          <img src="${mediaUrl}" alt="${escapeHtml(file.filename)}" />
+        `;
+      } else if (file.is_binary) {
+        document.getElementById('file-stats').innerText = `Binary · ${formatBytes(file.size_bytes)}`;
+        copyBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        codeContainer.style.display = 'none';
+        mdContainer.style.display = 'none';
+        mediaContainer.style.display = 'flex';
+        mediaContainer.innerHTML = `
+          <div class="binary-card">
+            <div class="binary-icon">📦</div>
+            <div class="binary-name">${escapeHtml(file.filename)}</div>
+            <div class="binary-desc">이 파일은 바이너리 파일로 직접 텍스트 미리보기를 지원하지 않습니다.</div>
+            <button class="btn" style="background:#238636;color:#fff;padding:8px 16px;font-size:13px;" onclick="downloadCurrentFile()">📥 파일 다운로드</button>
+          </div>
+        `;
+      } else {
+        // Text / Code / Markdown
+        copyBtn.style.display = 'inline-flex';
+        mediaContainer.style.display = 'none';
+        mediaContainer.innerHTML = '';
+
+        const lines = file.content.split('\n');
+        const lineCount = lines.length;
+        document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
+
+        // Line numbers for raw code view
+        document.getElementById('line-numbers').innerText = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+
+        // Direct syntax highlighting
+        const codeEl = document.getElementById('code-view');
+        codeEl.className = 'hljs';
+        if (file.language) {
+          codeEl.classList.add(`language-${file.language}`);
+        }
+        let highlighted = '';
+        try {
+          if (file.language && hljs.getLanguage(file.language)) {
+            highlighted = hljs.highlight(file.content, { language: file.language }).value;
+          } else {
+            highlighted = hljs.highlightAuto(file.content).value;
+          }
+        } catch (e) {
+          highlighted = escapeHtml(file.content);
+        }
+        codeEl.innerHTML = highlighted;
+
+        const isMd = file.language === 'markdown';
+        if (isMd) {
+          toggleBtn.style.display = 'inline-flex';
+          if (isMarkdownRendered) {
+            showMarkdownView(file.content);
+          } else {
+            showCodeView();
+          }
         } else {
+          toggleBtn.style.display = 'none';
           showCodeView();
         }
-      } else {
-        toggleBtn.style.display = 'none';
-        showCodeView();
       }
     }
 
@@ -473,7 +617,20 @@
       });
     }
 
+    function downloadCurrentFile() {
+      if (!FILES[activeIndex]) return;
+      const file = FILES[activeIndex];
+      const downloadUrl = `/review/${TOKEN}/download/${encodeURIComponent(file.filename)}`;
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.setAttribute('download', file.filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
     function closeViewer() {
+      stopMediaPlayback();
       if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.close) {
         window.Telegram.WebApp.close();
       } else {

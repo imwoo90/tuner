@@ -31,28 +31,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_review_server_endpoints() {
+    async fn test_video_and_binary_session() {
         let dir = tempdir().unwrap();
-        let sample = dir.path().join("test.py");
-        std::fs::write(&sample, "print('hello from test')").unwrap();
+        let video_file = dir.path().join("sample.mp4");
+        let fake_video_data = vec![0u8; 1024];
+        std::fs::write(&video_file, &fake_video_data).unwrap();
+
+        let mgr = ReviewManager::new();
+        let (token, count) = mgr.create_session(&[video_file.clone()]).await.unwrap();
+        assert_eq!(count, 1);
+
+        let files = mgr.get_files(&token).await.unwrap();
+        assert_eq!(files[0].filename, "sample.mp4");
+        assert_eq!(files[0].language, "video");
+        assert!(files[0].is_binary);
+        assert_eq!(files[0].size_bytes, 1024);
+        assert!(files[0].content.is_empty());
+    }
+
+async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
+    for _ in 0..20 {
+        if let Ok(res) = client.get(format!("http://127.0.0.1:{}/health", port)).send().await {
+            if res.status() == 200 {
+                return;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("Review server health endpoint failed to respond");
+}
+
+    #[tokio::test]
+    async fn test_review_server_and_media_endpoints() {
+        let _lock = super::super::TEST_ENV_MUTEX.lock().unwrap();
+        let dir = tempdir().unwrap();
+        let py_file = dir.path().join("test.py");
+        std::fs::write(&py_file, "print('hello from test')").unwrap();
+        let video_file = dir.path().join("video.mp4");
+        std::fs::write(&video_file, b"fake video byte stream content").unwrap();
 
         let mgr = global_review_manager();
-        let (token, _) = mgr.create_session(&[sample]).await.unwrap();
+        let (token, _) = mgr.create_session(&[py_file, video_file]).await.unwrap();
         let port = mgr.ensure_server_running().await;
 
         let client = reqwest::Client::new();
-        let health_res = client.get(format!("http://127.0.0.1:{}/health", port)).send().await;
-        assert!(health_res.is_ok());
-        assert_eq!(health_res.unwrap().status(), 200);
+        wait_for_server_healthy(port, &client).await;
 
-        let review_res = client.get(format!("http://127.0.0.1:{}/review/{}", port, token)).send().await;
-        assert!(review_res.is_ok());
-        let resp = review_res.unwrap();
-        assert_eq!(resp.status(), 200);
-        let body = resp.text().await.unwrap();
+        // Review page
+        let review_res = client.get(format!("http://127.0.0.1:{}/review/{}", port, token)).send().await.unwrap();
+        assert_eq!(review_res.status(), 200);
+        let body = review_res.text().await.unwrap();
         assert!(body.contains("test.py"));
 
-        let not_found = client.get(format!("http://127.0.0.1:{}/review/invalid-token-12345", port)).send().await;
-        assert_eq!(not_found.unwrap().status(), 404);
+        // Media streaming endpoint
+        let media_res = client.get(format!("http://127.0.0.1:{}/review/{}/media/video.mp4", port, token)).send().await.unwrap();
+        assert_eq!(media_res.status(), 200);
+        assert_eq!(media_res.bytes().await.unwrap(), &b"fake video byte stream content"[..]);
+
+        // Download endpoint
+        let dl_res = client.get(format!("http://127.0.0.1:{}/review/{}/download/video.mp4", port, token)).send().await.unwrap();
+        assert_eq!(dl_res.status(), 200);
+        let disp = dl_res.headers().get("content-disposition").unwrap().to_str().unwrap();
+        assert!(disp.contains("attachment; filename=\"video.mp4\""));
+
+        // Invalid token 404
+        let not_found = client.get(format!("http://127.0.0.1:{}/review/invalid-token-12345", port)).send().await.unwrap();
+        assert_eq!(not_found.status(), 404);
     }
 }

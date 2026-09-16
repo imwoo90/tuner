@@ -71,6 +71,62 @@ pub(crate) fn create_zip_archive(files: &[ReviewFile]) -> Result<Vec<u8>, String
 
 /// Handles the `dl_files:<token>` inline button callback.
 /// Delivers files directly to the calling forum topic (`msg.thread_id`).
+async fn send_single_attachment(bot: &teloxide::Bot, msg: &teloxide::types::Message, path: PathBuf) {
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > 50 * 1024 * 1024 {
+            let text = "⚠️ 파일 크기가 50MB를 초과하여 텔레그램으로 직접 전송할 수 없습니다. 웹 뷰어에서 스트리밍 및 개별 다운로드하세요.";
+            let mut req = bot.send_message(msg.chat.id, text);
+            if let Some(tid) = msg.thread_id {
+                req = req.message_thread_id(tid);
+            }
+            let _ = req.await;
+            return;
+        }
+    }
+    let mut req = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path));
+    if let Some(tid) = msg.thread_id {
+        req = req.message_thread_id(tid);
+    }
+    let _ = req.await;
+}
+
+async fn send_multi_attachments(
+    bot: &teloxide::Bot,
+    msg: &teloxide::types::Message,
+    valid: Vec<ReviewFile>,
+) {
+    match create_zip_archive(&valid) {
+        Ok(zip_bytes) => {
+            if zip_bytes.len() > 50 * 1024 * 1024 {
+                let text = "⚠️ 압축 파일 크기가 50MB를 초과하여 텔레그램으로 전송할 수 없습니다. 웹 뷰어에서 개별 다운로드하세요.";
+                let mut req = bot.send_message(msg.chat.id, text);
+                if let Some(tid) = msg.thread_id {
+                    req = req.message_thread_id(tid);
+                }
+                let _ = req.await;
+                return;
+            }
+            let input_file = teloxide::types::InputFile::memory(zip_bytes).file_name("attachments.zip");
+            let mut req = bot.send_document(msg.chat.id, input_file);
+            if let Some(tid) = msg.thread_id {
+                req = req.message_thread_id(tid);
+            }
+            let _ = req.await;
+        }
+        Err(err) => {
+            eprintln!("❌ Failed to create zip for download: {}", err);
+            for f in valid {
+                let path = PathBuf::from(&f.path);
+                let mut req = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path));
+                if let Some(tid) = msg.thread_id {
+                    req = req.message_thread_id(tid);
+                }
+                let _ = req.await;
+            }
+        }
+    }
+}
+
 pub(crate) async fn handle_dl_files_callback(
     bot: &teloxide::Bot,
     msg: &teloxide::types::Message,
@@ -93,34 +149,9 @@ pub(crate) async fn handle_dl_files_callback(
 
     if valid.len() == 1 {
         let path = PathBuf::from(&valid[0].path);
-        let mut req = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path));
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
-        }
-        let _ = req.await;
-        return;
-    }
-
-    match create_zip_archive(&valid) {
-        Ok(zip_bytes) => {
-            let input_file = teloxide::types::InputFile::memory(zip_bytes).file_name("attachments.zip");
-            let mut req = bot.send_document(msg.chat.id, input_file);
-            if let Some(tid) = msg.thread_id {
-                req = req.message_thread_id(tid);
-            }
-            let _ = req.await;
-        }
-        Err(err) => {
-            eprintln!("❌ Failed to create zip for download: {}", err);
-            for f in valid {
-                let path = PathBuf::from(&f.path);
-                let mut req = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path));
-                if let Some(tid) = msg.thread_id {
-                    req = req.message_thread_id(tid);
-                }
-                let _ = req.await;
-            }
-        }
+        send_single_attachment(bot, msg, path).await;
+    } else {
+        send_multi_attachments(bot, msg, valid).await;
     }
 }
 
@@ -144,6 +175,7 @@ mod tests {
                 content: "hello from first".to_string(),
                 size_bytes: 16,
                 language: "text".to_string(),
+                is_binary: false,
             },
             ReviewFile {
                 filename: "second.txt".to_string(),
@@ -151,6 +183,7 @@ mod tests {
                 content: "hello from second".to_string(),
                 size_bytes: 17,
                 language: "text".to_string(),
+                is_binary: false,
             },
         ];
 
@@ -193,6 +226,7 @@ mod tests {
                 content: "common 1".to_string(),
                 size_bytes: 8,
                 language: "text".to_string(),
+                is_binary: false,
             },
             ReviewFile {
                 filename: "common.txt".to_string(),
@@ -200,6 +234,7 @@ mod tests {
                 content: "common 2".to_string(),
                 size_bytes: 8,
                 language: "text".to_string(),
+                is_binary: false,
             },
         ];
 

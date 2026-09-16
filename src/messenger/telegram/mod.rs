@@ -61,6 +61,7 @@ pub mod runner;
 pub mod attachments;
 pub mod attachments_dl;
 pub mod review;
+pub mod review_server;
 #[cfg(test)]
 pub mod review_tests;
 pub mod media_group;
