@@ -89,4 +89,45 @@ mod tests {
         let interrupted = manager.interrupt(99999, Some(11111)).await;
         assert!(!interrupted);
     }
+
+    #[tokio::test]
+    async fn test_interrupt_cancels_booting_session() {
+        let manager = SessionManager::new();
+        let mut rx = manager.register_boot(12345, Some(67890)).await;
+
+        let interrupted = manager.interrupt(12345, Some(67890)).await;
+        assert!(interrupted, "Interrupt should return true for booting session");
+
+        assert!(rx.try_recv().is_ok(), "Receiver should have received cancellation signal");
+
+        let interrupted_again = manager.interrupt(12345, Some(67890)).await;
+        assert!(!interrupted_again);
+    }
+
+    #[tokio::test]
+    async fn test_terminate_all_cancels_all_booting_sessions() {
+        let manager = SessionManager::new();
+        let rx1 = manager.register_boot(100, Some(1)).await;
+        let rx2 = manager.register_boot(200, None).await;
+
+        manager.terminate_all().await;
+
+        let res1 = rx1.await;
+        let res2 = rx2.await;
+        assert_eq!(res1, Ok(()), "Boot 1 should be explicitly cancelled with Ok(())");
+        assert_eq!(res2, Ok(()), "Boot 2 should be explicitly cancelled with Ok(())");
+    }
+
+    #[tokio::test]
+    async fn test_boot_cancel_rx_distinguishes_send_from_drop() {
+        let manager = SessionManager::new();
+        let rx = manager.register_boot(300, Some(5)).await;
+
+        // Re-registering the same chat/topic drops the old tx without calling send(())
+        let _rx2 = manager.register_boot(300, Some(5)).await;
+
+        // Dropped tx produces Err(RecvError), NOT Ok(())
+        let res = rx.await;
+        assert!(res.is_err(), "Dropped sender should yield Err(RecvError), not Ok(())");
+    }
 }

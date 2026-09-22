@@ -80,7 +80,8 @@ pub(crate) async fn check_completion_step(
                     }
                     return Ok(Some(()));
                 }
-                return Err(format!("Process exited with error status: {:?}", s));
+                let code = exit_status_code(&s).unwrap_or(1);
+                return Err(format!("Process exited with error status: exit code {}", code));
             }
             Err(e) => return Err(format!("Failed to check status: {}", e)),
         }
@@ -98,3 +99,14 @@ pub(crate) async fn check_completion_step(
     }
     Ok(None)
 }
+
+pub(crate) fn exit_status_code(s: &std::process::ExitStatus) -> Option<i32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        s.code().or_else(|| s.signal().map(|sig| 128 + sig))
+    }
+    #[cfg(not(unix))]
+    s.code()
+}
+

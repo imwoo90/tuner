@@ -139,4 +139,76 @@ mod tests {
         // ensuring the daemon never crashes during deserialization.
         assert_eq!(prompt, "replying to future entity");
     }
+
+    #[test]
+    fn test_cli_config_session_expiration_defaults_and_deserialization() {
+        let json = r#"{
+            "idle_timeout_minutes": 120,
+            "daily_reset_hour": 5,
+            "daily_reset_enabled": true,
+            "max_session_messages": 100,
+            "user_timezone": "Asia/Seoul"
+        }"#;
+        let cfg: CliConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.idle_timeout_minutes, 120);
+        assert_eq!(cfg.daily_reset_hour, 5);
+        assert!(cfg.daily_reset_enabled);
+        assert_eq!(cfg.max_session_messages, Some(100));
+        assert_eq!(cfg.user_timezone, Some("Asia/Seoul".to_string()));
+
+        let default_cfg = CliConfig::default();
+        assert_eq!(default_cfg.idle_timeout_minutes, 0);
+        assert_eq!(default_cfg.daily_reset_hour, 4);
+        assert!(!default_cfg.daily_reset_enabled);
+        assert_eq!(default_cfg.max_session_messages, None);
+    }
+
+    #[test]
+    fn test_is_message_not_modified() {
+        use teloxide::RequestError;
+        use teloxide::ApiError;
+        let err_api = RequestError::Api(ApiError::MessageNotModified);
+        assert!(crate::messenger::telegram::stream::is_message_not_modified(&err_api));
+
+        let err_str = RequestError::Io(std::io::Error::new(std::io::ErrorKind::Other, "Bad Request: message is not modified").into());
+        assert!(crate::messenger::telegram::stream::is_message_not_modified(&err_str));
+
+        let err_other = RequestError::Api(ApiError::ChatNotFound);
+        assert!(!crate::messenger::telegram::stream::is_message_not_modified(&err_other));
+    }
+
+    #[tokio::test]
+    async fn test_build_sessions_binds_config_and_enforces_freshness() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        let cache = std::sync::Arc::new(crate::telegram::TopicNameCache::new());
+
+        let mut cfg = CliConfig::default();
+        cfg.idle_timeout_minutes = 60;
+        cfg.daily_reset_hour = 4;
+        cfg.daily_reset_enabled = false;
+        cfg.max_session_messages = Some(5);
+        cfg.user_timezone = Some("UTC".to_string());
+
+        let mgr = crate::messenger::telegram::runner::build_sessions(temp.path().to_path_buf(), cache, &cfg);
+
+        let now = chrono::Utc::now();
+        let mut sess = crate::session::data::SessionData::default();
+        sess.last_active = (now - chrono::Duration::minutes(30)).to_rfc3339();
+
+        let mut ps = crate::session::data::ProviderSessionData::default();
+        ps.message_count = 3;
+        sess.provider_sessions.insert(sess.provider.clone(), ps);
+
+        // Fresh session: updated 30 min ago with 3 messages
+        assert!(mgr.is_fresh(&sess), "Session under idle and message bounds should be fresh");
+
+        // Expired session by idle timeout: updated 90 min ago (limit 60)
+        sess.last_active = (now - chrono::Duration::minutes(90)).to_rfc3339();
+        assert!(!mgr.is_fresh(&sess), "Session exceeding idle_timeout_minutes must expire");
+
+        // Expired session by message count: updated 10 min ago but 6 messages (limit 5)
+        sess.last_active = (now - chrono::Duration::minutes(10)).to_rfc3339();
+        sess.provider_sessions.get_mut(&sess.provider).unwrap().message_count = 6;
+        assert!(!mgr.is_fresh(&sess), "Session exceeding max_session_messages must expire");
+    }
 }

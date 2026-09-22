@@ -106,9 +106,8 @@ pub(crate) async fn send_file_attachments(
 
     if !code_files.is_empty() {
         let mgr = super::review::global_review_manager();
-        if let Some((token, count)) = mgr.create_session(&code_files).await {
-            let review_url = mgr.get_review_url(&token).await;
-            send_review_button(bot, chat_id, thread_id, &token, count, &review_url).await;
+        if let Some((session_id, count)) = mgr.register_session(&code_files).await {
+            send_review_button(bot, chat_id, thread_id, &session_id, count).await;
         }
     }
 }
@@ -117,44 +116,21 @@ async fn send_review_button(
     bot: &Bot,
     chat_id: ChatId,
     thread_id: Option<i32>,
-    token: &str,
+    session_id: &str,
     count: usize,
-    review_url: &str,
 ) {
-    use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo};
-    let is_private = chat_id.0 > 0;
-    let btn_text = if is_private {
-        format!("🔍 참조 파일 {}개 검토 (In-App)", count)
-    } else {
-        format!("🔍 참조 파일 {}개 검토", count)
-    };
-    let review_btn = if review_url.starts_with("https://") {
-        if let Ok(parsed_url) = review_url.parse() {
-            if is_private {
-                InlineKeyboardButton::web_app(btn_text, WebAppInfo { url: parsed_url })
-            } else {
-                InlineKeyboardButton::url(btn_text, parsed_url)
-            }
-        } else {
-            InlineKeyboardButton::callback(btn_text, format!("dl_files:{}", token))
-        }
-    } else {
-        InlineKeyboardButton::callback(btn_text, format!("dl_files:{}", token))
-    };
-
-    let download_btn = InlineKeyboardButton::callback("📥 직접 받기", format!("dl_files:{}", token));
+    use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
+    let review_btn = InlineKeyboardButton::callback(
+        format!("🔍 참조 파일 {}개 검토", count),
+        format!("review:{}", session_id),
+    );
+    let download_btn = InlineKeyboardButton::callback("📥 직접 받기", format!("dl_files:{}", session_id));
     let keyboard = InlineKeyboardMarkup::new(vec![vec![review_btn, download_btn]]);
 
-    let text = if review_url.starts_with("https://") {
-        format!("📁 <b>답변에서 {}개의 파일이 참조되었습니다.</b>", count)
-    } else {
-        format!(
-            "📁 <b>답변에서 {}개의 파일이 참조되었습니다.</b>\n(로컬 뷰어: {})",
-            count, review_url
-        )
-    };
+    let text = format!("📁 <b>답변에서 {}개의 파일이 참조되었습니다.</b>", count);
 
-    let mut msg_req = bot.send_message(chat_id, text)
+    let mut msg_req = bot
+        .send_message(chat_id, text)
         .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(keyboard);
     if let Some(tid) = thread_id {

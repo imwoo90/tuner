@@ -1,15 +1,5 @@
 //! # Telegram Attachment Direct Downloader
-//!
 //! Handles direct downloading of referenced files via Telegram inline callback buttons.
-//! Packages multiple referenced files into a single compressed ZIP archive to avoid chat flooding,
-//! and ensures documents are delivered to the originating forum topic rather than the General topic.
-//!
-//! ## Collaboration Graph
-//! - [`handle_callback_query`](super::callbacks::handle_callback_query): Dispatches `dl_files:<token>` to this module.
-//! - [`ReviewManager`](super::review::ReviewManager): Provides cached file metadata by token.
-//!
-//! ## Search Tags
-//! #attachments, #zip-compression, #direct-download, #topic-routing
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -135,7 +125,15 @@ pub(crate) async fn handle_dl_files_callback(
     let mgr = global_review_manager();
     let files = match mgr.get_files(token).await {
         Some(f) if !f.is_empty() => f,
-        _ => return,
+        _ => {
+            let text = "⚠️ 보관 기간(30일)이 만료되었거나 참조 파일이 삭제되어 다운로드할 수 없습니다.";
+            let mut req = bot.send_message(msg.chat.id, text);
+            if let Some(tid) = msg.thread_id {
+                req = req.message_thread_id(tid);
+            }
+            let _ = req.await;
+            return;
+        }
     };
 
     let valid: Vec<_> = files

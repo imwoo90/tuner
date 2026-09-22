@@ -52,3 +52,141 @@ fn test_build_command_includes_output_format_json() {
     let print_idx = cmd.iter().position(|s| s == "--print").unwrap();
     assert!(idx < print_idx);
 }
+
+static TIMEOUT_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[test]
+fn test_resolve_oneshot_timeout_default() {
+    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let args: Vec<String> = vec!["agy".into(), "--print".into(), "hello".into()];
+    let (duration, display) = AntigravityCli::resolve_oneshot_timeout(&args);
+    assert_eq!(display, 3600);
+    assert_eq!(duration, std::time::Duration::from_secs(3600));
+}
+
+#[test]
+fn test_resolve_oneshot_timeout_from_cmd_args() {
+    let args1: Vec<String> = vec!["agy".into(), "--print-timeout".into(), "600".into()];
+    let (duration1, display1) = AntigravityCli::resolve_oneshot_timeout(&args1);
+    assert_eq!(display1, 600);
+    assert_eq!(duration1, std::time::Duration::from_secs(615));
+
+    let args2: Vec<String> = vec!["agy".into(), "--print-timeout".into(), "1200s".into()];
+    let (duration2, display2) = AntigravityCli::resolve_oneshot_timeout(&args2);
+    assert_eq!(display2, 1200);
+    assert_eq!(duration2, std::time::Duration::from_secs(1215));
+}
+
+#[test]
+fn test_resolve_oneshot_timeout_unlimited() {
+    let args: Vec<String> = vec!["agy".into(), "--print-timeout".into(), "0".into()];
+    let (duration, display) = AntigravityCli::resolve_oneshot_timeout(&args);
+    assert_eq!(display, 0);
+    assert_eq!(duration, std::time::Duration::from_secs(86400));
+}
+
+#[test]
+fn test_resolve_oneshot_timeout_from_env() {
+    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    unsafe {
+        std::env::set_var("TUNER_CLI_TIMEOUT_SECS", "1800");
+    }
+    let args: Vec<String> = vec!["agy".into(), "--print".into(), "hi".into()];
+    let (duration, display) = AntigravityCli::resolve_oneshot_timeout(&args);
+    assert_eq!(display, 1800);
+    assert_eq!(duration, std::time::Duration::from_secs(1800));
+    unsafe {
+        std::env::remove_var("TUNER_CLI_TIMEOUT_SECS");
+    }
+}
+
+#[test]
+fn test_build_command_includes_print_timeout_from_env() {
+    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    unsafe {
+        std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
+    }
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let cmd = cli.build_command("hello test", None, false);
+
+    assert!(cmd.contains(&"--print-timeout".to_string()));
+    let idx = cmd.iter().position(|s| s == "--print-timeout").unwrap();
+    assert_eq!(cmd[idx + 1], "1800s");
+    let print_idx = cmd.iter().position(|s| s == "--print").unwrap();
+    assert!(idx < print_idx);
+    unsafe {
+        std::env::remove_var("TUNER_PRINT_TIMEOUT");
+    }
+}
+
+#[test]
+fn test_build_command_preserves_cli_parameters_print_timeout() {
+    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    unsafe {
+        std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
+    }
+    let mut cli_params = std::collections::HashMap::new();
+    cli_params.insert(
+        "antigravity".to_string(),
+        vec!["--print-timeout".to_string(), "600s".to_string()],
+    );
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        cli_parameters: cli_params,
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let cmd = cli.build_command("hello test", None, false);
+
+    let count = cmd.iter().filter(|&s| s == "--print-timeout").count();
+    assert_eq!(count, 1);
+    let idx = cmd.iter().position(|s| s == "--print-timeout").unwrap();
+    assert_eq!(cmd[idx + 1], "600s");
+    unsafe {
+        std::env::remove_var("TUNER_PRINT_TIMEOUT");
+    }
+}
+
+#[test]
+fn test_resolve_oneshot_timeout_from_cmd_args_equals_syntax() {
+    let args1: Vec<String> = vec!["agy".into(), "--print-timeout=600".into()];
+    let (duration1, display1) = AntigravityCli::resolve_oneshot_timeout(&args1);
+    assert_eq!(display1, 600);
+    assert_eq!(duration1, std::time::Duration::from_secs(615));
+
+    let args2: Vec<String> = vec!["agy".into(), "--print-timeout=1200s".into()];
+    let (duration2, display2) = AntigravityCli::resolve_oneshot_timeout(&args2);
+    assert_eq!(display2, 1200);
+    assert_eq!(duration2, std::time::Duration::from_secs(1215));
+}
+
+#[test]
+fn test_build_command_preserves_cli_parameters_print_timeout_equals_syntax() {
+    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    unsafe {
+        std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
+    }
+    let mut cli_params = std::collections::HashMap::new();
+    cli_params.insert(
+        "antigravity".to_string(),
+        vec!["--print-timeout=600s".to_string()],
+    );
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        cli_parameters: cli_params,
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let cmd = cli.build_command("hello test", None, false);
+
+    assert!(cmd.contains(&"--print-timeout=600s".to_string()));
+    assert!(!cmd.contains(&"--print-timeout".to_string()));
+    unsafe {
+        std::env::remove_var("TUNER_PRINT_TIMEOUT");
+    }
+}
+

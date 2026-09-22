@@ -85,18 +85,14 @@ impl AntigravityCli {
         cmd.push("--add-dir".to_string());
         cmd.push(self.agy_workspace().to_string_lossy().to_string());
 
-        if let Some(ref model) = self.config.model {
-            if model != "antigravity-default" {
-                cmd.push("--model".to_string());
-                cmd.push(model.clone());
-            }
+        if let Some(ref model) = self.config.model.as_deref().filter(|&m| m != "antigravity-default") {
+            cmd.push("--model".to_string());
+            cmd.push(model.to_string());
         }
 
-        if let Some(ref effort) = self.config.effort {
-            if !effort.is_empty() {
-                cmd.push("--effort".to_string());
-                cmd.push(effort.clone());
-            }
+        if let Some(ref effort) = self.config.effort.as_deref().filter(|&e| !e.is_empty()) {
+            cmd.push("--effort".to_string());
+            cmd.push(effort.to_string());
         }
 
         if let Some(session_id) = resume_session {
@@ -116,6 +112,14 @@ impl AntigravityCli {
             }
         }
 
+        let has_print_timeout = cmd.iter().any(|arg| arg == "--print-timeout" || arg.starts_with("--print-timeout="));
+        if !has_print_timeout {
+            if let Ok(timeout_val) = std::env::var("TUNER_PRINT_TIMEOUT") {
+                cmd.push("--print-timeout".to_string());
+                cmd.push(timeout_val);
+            }
+        }
+
         if !cmd.contains(&"--output-format".to_string()) {
             cmd.push("--output-format".to_string());
             cmd.push("json".to_string());
@@ -126,6 +130,32 @@ impl AntigravityCli {
         cmd.push(final_prompt);
 
         cmd
+    }
+
+    pub fn resolve_oneshot_timeout(cmd_args: &[String]) -> (tokio::time::Duration, u64) {
+        let explicit = cmd_args.iter().enumerate().find_map(|(i, arg)| {
+            if arg == "--print-timeout" {
+                cmd_args.get(i + 1)?.trim_end_matches('s').trim().parse::<u64>().ok()
+            } else if let Some(val) = arg.strip_prefix("--print-timeout=") {
+                val.trim_end_matches('s').trim().parse::<u64>().ok()
+            } else {
+                None
+            }
+        });
+        let env_val = std::env::var("TUNER_CLI_TIMEOUT_SECS")
+            .or_else(|_| std::env::var("TUNER_PRINT_TIMEOUT"))
+            .ok()
+            .and_then(|s| s.trim_end_matches('s').trim().parse::<u64>().ok());
+        const DEFAULT_TIMEOUT_SECS: u64 = 3600;
+        let base = explicit.or(env_val).unwrap_or(DEFAULT_TIMEOUT_SECS);
+        let effective = if base == 0 {
+            86400
+        } else if explicit.is_some() {
+            base + 15
+        } else {
+            base
+        };
+        (tokio::time::Duration::from_secs(effective), base)
     }
 
     pub(crate) fn format_prompt(&self, prompt: &str) -> String {

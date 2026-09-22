@@ -125,14 +125,27 @@ impl AntigravityCli {
         let child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
 
-        let res = match tokio::time::timeout(tokio::time::Duration::from_secs(300), child.wait_with_output()).await {
+        #[cfg(unix)]
+        let child_pid = child.id();
+
+        let (duration, display_secs) = Self::resolve_oneshot_timeout(cmd_args);
+
+        let res = match tokio::time::timeout(duration, child.wait_with_output()).await {
             Ok(Ok(o)) => Ok((
                 String::from_utf8_lossy(&o.stdout).into(),
                 String::from_utf8_lossy(&o.stderr).into(),
                 o.status,
             )),
             Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
-            Err(_) => Err("Command timed out after 300 seconds".to_string()),
+            Err(_) => {
+                #[cfg(unix)]
+                if let Some(pid) = child_pid {
+                    let pgid = nix::unistd::Pid::from_raw(-(pid as i32));
+                    let _ = nix::sys::signal::kill(pgid, nix::sys::signal::Signal::SIGKILL);
+                }
+                let timeout_label = if display_secs == 0 { duration.as_secs() } else { display_secs };
+                Err(format!("Command timed out after {} seconds", timeout_label))
+            }
         };
 
         res
@@ -197,7 +210,7 @@ impl AgentProvider for AntigravityCli {
             session_id: final_session_id,
             result: result_text,
             is_error,
-            returncode: status.code(),
+            returncode: super::completion::exit_status_code(&status),
             stderr: stderr_str,
         })
     }

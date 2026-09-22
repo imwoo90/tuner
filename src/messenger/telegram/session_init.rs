@@ -49,21 +49,15 @@ pub(crate) async fn initialize_session_if_needed(
     boot_fresh_session(bot, msg, sessions, sess, cli, config).await
 }
 
-async fn boot_fresh_session(
+async fn handle_boot_response(
     bot: &Bot,
     msg: &Message,
     sessions: &SessionManager,
     sess: &mut SessionData,
-    cli: &AntigravityCli,
-    config: &CliConfig,
+    provider: &str,
+    send_res: Result<crate::cli::CliResponse, String>,
 ) -> Result<String, teloxide::RequestError> {
-    let provider = &config.provider;
-    let startup_prompt = crate::t!("bot.session_init_prompt");
-    let ws = cli.agy_workspace();
-    let mut session_cli = cli.clone();
-    session_cli.config.chat_id = msg.chat.id.0;
-    session_cli.config.topic_id = msg.thread_id.map(|t| t.0.0 as i64);
-    match session_cli.send(&startup_prompt, None, false, ws).await {
+    match send_res {
         Ok(res) => {
             if let Some(ref new_sid) = res.session_id {
                 sess.set_session_id(provider, new_sid);
@@ -92,4 +86,39 @@ async fn boot_fresh_session(
             Ok(String::new())
         }
     }
+}
+
+async fn boot_fresh_session(
+    bot: &Bot,
+    msg: &Message,
+    sessions: &SessionManager,
+    sess: &mut SessionData,
+    cli: &AntigravityCli,
+    config: &CliConfig,
+) -> Result<String, teloxide::RequestError> {
+    let provider = &config.provider;
+    let startup_prompt = crate::t!("bot.session_init_prompt");
+    let ws = cli.agy_workspace();
+    let mut session_cli = cli.clone();
+    let (chat_id, topic_id) = (msg.chat.id.0, msg.thread_id.map(|t| t.0.0 as i64));
+    session_cli.config.chat_id = chat_id;
+    session_cli.config.topic_id = topic_id;
+
+    let mut cancel_rx = cli.sessions.register_boot(chat_id, topic_id).await;
+    let send_fut = session_cli.send(&startup_prompt, None, false, ws);
+    tokio::pin!(send_fut);
+
+    let send_res = tokio::select! {
+        res = &mut send_fut => {
+            cli.sessions.unregister_boot(chat_id, topic_id).await;
+            res
+        }
+        Ok(()) = &mut cancel_rx => {
+            cli.sessions.unregister_boot(chat_id, topic_id).await;
+            eprintln!("⚠️ [tuner] Session boot cancelled by user (/stop) in chat {}, topic {:?}", chat_id, topic_id);
+            return Ok(String::new());
+        }
+    };
+
+    handle_boot_response(bot, msg, sessions, sess, provider, send_res).await
 }

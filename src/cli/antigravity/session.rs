@@ -31,6 +31,7 @@ pub struct SessionManager {
     pub(crate) active_asks: Mutex<HashMap<String, AskState>>,
     pub(crate) interrupted_sessions: Mutex<std::collections::HashSet<String>>,
     pub(crate) interrupt_notify: tokio::sync::Notify,
+    pub(crate) boot_cancels: Mutex<HashMap<(i64, Option<i64>), tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl Default for SessionManager {
@@ -41,6 +42,7 @@ impl Default for SessionManager {
             active_asks: Mutex::new(HashMap::new()),
             interrupted_sessions: Mutex::new(std::collections::HashSet::new()),
             interrupt_notify: tokio::sync::Notify::new(),
+            boot_cancels: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -156,7 +158,20 @@ impl SessionManager {
         self.holders.lock().await.remove(session_id).is_some()
     }
 
+    pub async fn register_boot(&self, chat_id: i64, topic_id: Option<i64>) -> tokio::sync::oneshot::Receiver<()> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.boot_cancels.lock().await.insert((chat_id, topic_id), tx);
+        rx
+    }
+
+    pub async fn unregister_boot(&self, chat_id: i64, topic_id: Option<i64>) {
+        self.boot_cancels.lock().await.remove(&(chat_id, topic_id));
+    }
+
     pub async fn abort(&self, chat_id: i64, topic_id: Option<i64>) -> usize {
+        if let Some(tx) = self.boot_cancels.lock().await.remove(&(chat_id, topic_id)) {
+            let _ = tx.send(());
+        }
         let mut h = self.holders.lock().await;
         let prev = h.len();
         h.retain(|_, val| val.chat_id != Some(chat_id) || val.topic_id != topic_id);
@@ -164,11 +179,21 @@ impl SessionManager {
     }
 
     pub async fn terminate_all(&self) {
+        let mut cancels = self.boot_cancels.lock().await;
+        for (_, tx) in cancels.drain() {
+            let _ = tx.send(());
+        }
         self.interrupted_sessions.lock().await.clear();
         self.holders.lock().await.clear();
     }
 
     pub async fn interrupt(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
+        let mut found = false;
+        if let Some(tx) = self.boot_cancels.lock().await.remove(&(chat_id, topic_id)) {
+            let _ = tx.send(());
+            found = true;
+        }
+
         let matching: Vec<(String, std::os::unix::io::RawFd)> = {
             let holders = self.holders.lock().await;
             holders.iter()
@@ -178,10 +203,9 @@ impl SessionManager {
         };
 
         if matching.is_empty() {
-            return false;
+            return found;
         }
 
-        let mut found = false;
         let mut target_sids = Vec::new();
 
         for (sid, fd) in matching {

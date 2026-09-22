@@ -23,9 +23,17 @@ use super::callbacks;
 use super::handle_message;
 use crate::workspace::paths::DuctorPaths;
 
-fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>) -> SessionManager {
-    SessionManager::new(path, 0, 4, false, "UTC".to_string(), None)
-        .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
+pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>, config: &CliConfig) -> SessionManager {
+    let tz = config.user_timezone.clone().unwrap_or_else(|| "UTC".to_string());
+    SessionManager::new(
+        path,
+        config.idle_timeout_minutes,
+        config.daily_reset_hour,
+        config.daily_reset_enabled,
+        tz,
+        config.max_session_messages,
+    )
+    .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
 }
 
 fn start_schedulers(
@@ -44,9 +52,32 @@ fn start_schedulers(
     )));
     Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
     let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
-    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli, bus)).start();
+    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli.clone(), bus.clone())).start();
     let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
     tokio::spawn(async move { clean.start().await; });
+
+    if cfg.webhooks.enabled {
+        let wh_mgr = Arc::new(crate::webhook::manager::WebhookManager::new(paths.webhooks_path()));
+        let wh_obs = Arc::new(crate::webhook::observer::WebhookObserver::new(
+            wh_mgr,
+            paths.webhooks_path(),
+            cfg.clone(),
+            cli,
+        ));
+        let obs_wire = crate::bus::observers_wire::ObserverManager {
+            heartbeat: None,
+            cron: None,
+            background: None,
+            webhook: Some(wh_obs.clone()),
+        };
+        tokio::spawn(async move {
+            obs_wire.wire_to_bus(bus, None).await;
+            if let Err(e) = wh_obs.start().await {
+                eprintln!("❌ [tuner] Failed to start Webhook server: {}", e);
+            }
+        });
+    }
+
     cron
 }
 
@@ -97,7 +128,7 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
     spawn_restart_watcher(home.clone());
     let topic_cache = Arc::new(TopicNameCache::new());
     let p = paths.sessions_path();
-    let sessions = Arc::new(build_sessions(p, topic_cache.clone()));
+    let sessions = Arc::new(build_sessions(p, topic_cache.clone(), &config_arc));
 
     reply::load_sessions_cache(&sessions, &topic_cache).await;
     let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
@@ -106,8 +137,11 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
-    tokio::spawn(async {
-        super::review::global_review_manager().warmup().await;
+    let review_path = paths.review_sessions_path();
+    tokio::spawn(async move {
+        let mgr = super::review::global_review_manager();
+        mgr.init_storage(review_path).await;
+        mgr.warmup().await;
     });
 
     let handler = dptree::entry()

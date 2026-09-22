@@ -67,6 +67,11 @@ impl DuctorPaths {
         self.profile_join("sessions.json")
     }
 
+    /// Review sessions path
+    pub fn review_sessions_path(&self) -> PathBuf {
+        self.profile_join("review_sessions.json")
+    }
+
     /// Cron jobs path
     pub fn cron_jobs_path(&self) -> PathBuf {
         self.profile_join("cron_jobs.json")

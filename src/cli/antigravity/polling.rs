@@ -12,8 +12,30 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use notify::{Watcher, RecommendedWatcher, RecursiveMode, EventKind};
 
+fn extract_exit_code(msg: &str) -> Option<i32> {
+    let lower = msg.to_lowercase();
+    if let Some(pos) = lower.find("exit code") {
+        let after = &lower[pos + "exit code".len()..];
+        let num: String = after.trim_start_matches(|c: char| c == ':' || c.is_whitespace())
+            .chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(code) = num.parse::<i32>() { return Some(code); }
+    }
+    if let Some(pos) = lower.find("exit status:") {
+        let after = &lower[pos + "exit status:".len()..];
+        let num: String = after.trim().chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(code) = num.parse::<i32>() { return Some(code); }
+    }
+    if let Some(pos) = lower.find("unix_wait_status(") {
+        let after = &lower[pos + "unix_wait_status(".len()..];
+        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(raw) = num.parse::<i32>() { return Some((raw >> 8) & 0xff); }
+    }
+    None
+}
+
 fn err_resp(msg: String, session_id: Option<String>) -> CliResponse {
-    CliResponse { session_id, result: msg.clone(), is_error: true, returncode: None, stderr: msg }
+    let returncode = extract_exit_code(&msg);
+    CliResponse { session_id, result: msg.clone(), is_error: true, returncode, stderr: msg }
 }
 
 fn handle_oneshot_finish(

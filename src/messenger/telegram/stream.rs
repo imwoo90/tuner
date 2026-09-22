@@ -19,6 +19,13 @@ use std::time::{Instant, Duration};
 use super::formatting;
 
 
+pub(crate) fn is_message_not_modified(err: &teloxide::RequestError) -> bool {
+    match err {
+        teloxide::RequestError::Api(teloxide::ApiError::MessageNotModified) => true,
+        other => other.to_string().to_lowercase().contains("message is not modified"),
+    }
+}
+
 async fn send_single_chunk(
     bot: &Bot,
     chat_id: ChatId,
@@ -26,7 +33,7 @@ async fn send_single_chunk(
     thread_id: Option<i32>,
     chunk: &str,
     is_first: bool,
-) -> Result<teloxide::types::Message, teloxide::RequestError> {
+) -> Result<teloxide::types::MessageId, teloxide::RequestError> {
     let limiter = super::rate_limiter::global_chat_rate_limiter();
     let chunk_str = chunk.to_string();
     limiter.execute_rate_limited(chat_id, || {
@@ -35,25 +42,22 @@ async fn send_single_chunk(
             if is_first {
                 if let Some(mid) = msg_id {
                     let edit_res = bot.edit_message_text(chat_id, mid, chunk_clone.clone())
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .await;
-                    if let Ok(edited) = edit_res {
-                        return Ok(edited);
-                    } else if let Err(e) = edit_res {
-                        eprintln!("⚠️ [tuner] edit_message_text failed, falling back to send_message: {:?}", e);
+                        .parse_mode(teloxide::types::ParseMode::Html).await;
+                    match edit_res {
+                        Ok(edited) => return Ok(edited.id),
+                        Err(e) if is_message_not_modified(&e) => return Ok(mid),
+                        Err(e) => eprintln!("⚠️ [tuner] edit_message_text failed, fallback: {:?}", e),
                     }
                 }
             }
-            let mut req = bot.send_message(chat_id, chunk_clone)
-                .parse_mode(teloxide::types::ParseMode::Html);
+            let mut req = bot.send_message(chat_id, chunk_clone).parse_mode(teloxide::types::ParseMode::Html);
             if let Some(tid) = thread_id {
                 req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
             }
-            req.await
+            req.await.map(|m| m.id)
         }
     }).await
 }
-
 
 pub(crate) async fn send_chunks_to_telegram(
     bot: &Bot,
@@ -62,27 +66,21 @@ pub(crate) async fn send_chunks_to_telegram(
     thread_id: Option<i32>,
     chunks: &[String],
 ) -> (bool, Option<String>, Option<i32>) {
-    let mut current_msg_id = msg_id;
-    let mut final_success = true;
-    let mut final_error = None;
-    let mut sent_msg_id = None;
-
+    let (mut cur_id, mut ok, mut err, mut sent_id) = (msg_id, true, None, None);
     for (i, chunk) in chunks.iter().enumerate() {
-        match send_single_chunk(bot, chat_id, current_msg_id, thread_id, chunk, i == 0).await {
-            Ok(sent) => {
-                if current_msg_id.is_none() && i == 0 {
-                    current_msg_id = Some(sent.id);
-                }
-                sent_msg_id = Some(sent.id.0);
+        match send_single_chunk(bot, chat_id, cur_id, thread_id, chunk, i == 0).await {
+            Ok(mid) => {
+                if cur_id.is_none() && i == 0 { cur_id = Some(mid); }
+                sent_id = Some(mid.0);
             }
             Err(e) => {
-                eprintln!("❌ [tuner] Failed to send stream chunk {}/{} (chat: {}, thread: {:?}): {:?}", i + 1, chunks.len(), chat_id, thread_id, e);
-                final_success = false;
-                final_error = Some(e.to_string());
+                eprintln!("❌ [tuner] Stream chunk {}/{} failed: {:?}", i + 1, chunks.len(), e);
+                ok = false;
+                err = Some(e.to_string());
             }
         }
     }
-    (final_success, final_error, sent_msg_id)
+    (ok, err, sent_id)
 }
 
 pub(crate) async fn handle_stream_result(
@@ -167,7 +165,9 @@ pub(crate) async fn handle_text_delta(
                 async move { bot.edit_message_text(chat_id, mid, d).await }
             }).await;
             if let Err(e) = res {
-                eprintln!("❌ [tuner] Failed to edit streaming message (chat: {}, msg: {}): {:?}", chat_id, mid, e);
+                if !is_message_not_modified(&e) {
+                    eprintln!("❌ [tuner] Failed to edit streaming message (chat: {}, msg: {}): {:?}", chat_id, mid, e);
+                }
             }
             *last_edit = Instant::now();
         }

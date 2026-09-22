@@ -4,6 +4,9 @@
 //! Captures referenced code, text, images, video, and audio files, preparing sessions for the
 //! mobile-responsive dark-mode viewer and direct download.
 
+use super::review_store::{
+    check_record_files, default_storage_path, load_records, save_records, ReviewSessionRecord,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -30,6 +33,8 @@ struct SessionEntry {
 
 pub struct ReviewManager {
     sessions: Arc<Mutex<HashMap<String, SessionEntry>>>,
+    records: Arc<Mutex<HashMap<String, ReviewSessionRecord>>>,
+    storage_path: Arc<Mutex<PathBuf>>,
     tunnel_url: Arc<Mutex<Option<String>>>,
     server_port: Arc<Mutex<Option<u16>>>,
 }
@@ -42,14 +47,61 @@ pub fn global_review_manager() -> Arc<ReviewManager> {
 
 impl ReviewManager {
     pub fn new() -> Self {
+        let path = default_storage_path();
+        let loaded = load_records(&path);
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            records: Arc::new(Mutex::new(loaded)),
+            storage_path: Arc::new(Mutex::new(path)),
             tunnel_url: Arc::new(Mutex::new(None)),
             server_port: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn create_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
+    pub async fn init_storage(&self, path: PathBuf) {
+        let loaded = load_records(&path);
+        let mut recs = self.records.lock().await;
+        for (k, v) in loaded {
+            recs.insert(k, v);
+        }
+        let mut p = self.storage_path.lock().await;
+        *p = path;
+    }
+
+    pub async fn register_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
+        let valid_paths: Vec<String> = paths
+            .iter()
+            .filter(|p| p.is_file())
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+
+        if valid_paths.is_empty() {
+            return None;
+        }
+
+        let session_id = hex::encode(rand::random::<[u8; 16]>());
+        let count = valid_paths.len();
+        let record = ReviewSessionRecord {
+            created_at_secs: super::review_store::current_unix_secs(),
+            file_paths: valid_paths,
+        };
+
+        {
+            let mut recs = self.records.lock().await;
+            recs.insert(session_id.clone(), record);
+            let p = self.storage_path.lock().await;
+            save_records(&p, &recs);
+        }
+
+        Some((session_id, count))
+    }
+
+    pub async fn get_session_record(&self, session_id: &str) -> Option<ReviewSessionRecord> {
+        let recs = self.records.lock().await;
+        recs.get(session_id).cloned()
+    }
+
+    pub async fn activate_session(&self, paths: &[PathBuf]) -> Option<String> {
         let mut files = Vec::new();
         let mut used_names = HashSet::new();
 
@@ -64,28 +116,40 @@ impl ReviewManager {
         }
 
         let token = hex::encode(rand::random::<[u8; 16]>());
-        let count = files.len();
-
         let mut map = self.sessions.lock().await;
         let now = Instant::now();
         map.retain(|_, v| now.duration_since(v.created_at) < SESSION_TTL);
+        map.insert(token.clone(), SessionEntry { created_at: now, files });
 
-        map.insert(
-            token.clone(),
-            SessionEntry {
-                created_at: now,
-                files,
-            },
-        );
+        Some(token)
+    }
 
+    pub async fn create_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
+        let (_session_id, count) = self.register_session(paths).await?;
+        let token = self.activate_session(paths).await?;
         Some((token, count))
     }
 
-    pub async fn get_files(&self, token: &str) -> Option<Vec<ReviewFile>> {
+    pub async fn get_files(&self, token_or_id: &str) -> Option<Vec<ReviewFile>> {
         let mut map = self.sessions.lock().await;
         let now = Instant::now();
         map.retain(|_, v| now.duration_since(v.created_at) < SESSION_TTL);
-        map.get(token).map(|e| e.files.clone())
+
+        if let Some(entry) = map.get(token_or_id) {
+            return Some(entry.files.clone());
+        }
+
+        drop(map);
+
+        // Fallback: check if it's a persistent session_id
+        let rec = self.get_session_record(token_or_id).await?;
+        let (valid_paths, _) = check_record_files(&rec);
+        if valid_paths.is_empty() {
+            return None;
+        }
+        let token = self.activate_session(&valid_paths).await?;
+        let map = self.sessions.lock().await;
+        map.get(&token).map(|e| e.files.clone())
     }
 
     pub async fn get_file_path(&self, token: &str, filename: &str) -> Option<PathBuf> {
@@ -135,10 +199,7 @@ fn resolve_unique_filename(path: &StdPath, used_names: &mut HashSet<String>) -> 
         .to_string();
 
     if used_names.contains(&filename) {
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("file");
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
         let ext = path
             .extension()
             .and_then(|e| e.to_str())

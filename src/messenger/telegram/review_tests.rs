@@ -98,4 +98,36 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         let not_found = client.get(format!("http://127.0.0.1:{}/review/invalid-token-12345", port)).send().await.unwrap();
         assert_eq!(not_found.status(), 404);
     }
+
+    #[tokio::test]
+    async fn test_review_store_persistence_and_missing_files() {
+        let dir = tempdir().unwrap();
+        let file1 = dir.path().join("first.rs");
+        let file2 = dir.path().join("second.rs");
+        std::fs::write(&file1, "fn first() {}").unwrap();
+        std::fs::write(&file2, "fn second() {}").unwrap();
+
+        let storage_file = dir.path().join("review_sessions.json");
+        let mgr = ReviewManager::new();
+        mgr.init_storage(storage_file.clone()).await;
+
+        let (session_id, count) = mgr.register_session(&[file1.clone(), file2.clone()]).await.unwrap();
+        assert_eq!(count, 2);
+
+        // Verify record persisted to disk
+        let record = mgr.get_session_record(&session_id).await.unwrap();
+        assert_eq!(record.file_paths.len(), 2);
+
+        // Simulate deleting one file from disk
+        std::fs::remove_file(&file1).unwrap();
+        let (valid_paths, total) = super::super::review_store::check_record_files(&record);
+        assert_eq!(total, 2);
+        assert_eq!(valid_paths.len(), 1);
+        assert_eq!(valid_paths[0], file2);
+
+        // Simulate deleting all files from disk
+        std::fs::remove_file(&file2).unwrap();
+        let (valid_paths_empty, _) = super::super::review_store::check_record_files(&record);
+        assert!(valid_paths_empty.is_empty());
+    }
 }
