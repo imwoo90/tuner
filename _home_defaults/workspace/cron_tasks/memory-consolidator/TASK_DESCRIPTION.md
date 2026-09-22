@@ -2,7 +2,7 @@
 
 ## Goal
 
-Consolidate, compress, and update the long-term memory file `MAINMEMORY.md` of the Wootuner system using the `memory-system` skill to maintain memory consistency and relevance in a secure and isolated manner.
+Consolidate, compress, and update the long-term memory file `MAINMEMORY.md` of the Tuner system using the `memory-system` skill to maintain memory consistency and relevance in a secure and isolated manner.
 
 ## Assignment
 
@@ -16,10 +16,11 @@ Consolidate, compress, and update the long-term memory file `MAINMEMORY.md` of t
    - Analyze the output. If no new logs are returned, proceed directly to step 5 to update the consolidation timestamp.
 3. **Understand Current Memory**:
    - Read the current [MAINMEMORY.md](memory_system/MAINMEMORY.md) file to review existing user details, system architecture, and preferences.
-4. **Extract and Merge Durable Facts**:
-   - Analyze the new logs to extract any **durable facts** (long-term facts about the user, family, system configurations, or preferences).
-   - Merge these facts into the appropriate sections of `MAINMEMORY.md`.
-   - Keep the file compact by removing duplicates, obsolete history, or temporary debugging logs.
+4. **Extract and Merge Durable Facts (Factual Memory vs. Rules Context)**:
+   - Analyze the new logs to extract any **durable factual knowledge** (long-term facts about the user, family, personal finance/assets, vehicle setup, or personal preferences).
+   - **CRITICAL SCOPE BOUNDARY**: Do NOT merge operational behavioral rules, negative constraints ("절대 금지"), positive constraints ("필수 준수"), tool routing rules, or coding/deployment policies into `MAINMEMORY.md`. Such operational directives belong permanently in Antigravity Rules Context (`AGENTS.md` / `GEMINI.md`).
+   - Merge new durable facts into the appropriate sections of `MAINMEMORY.md`.
+   - Keep the file compact by removing duplicates, obsolete history, or temporary logs, strictly staying under the 120-line limit.
 5. **Save and Validate via memory-system**:
    - Write the proposed memory content into a temporary file, then pipe it to the `save-memory` subcommand:
      ```bash

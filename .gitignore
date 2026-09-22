@@ -1,5 +1,5 @@
 /target
-.agents/
+/.agents/
 brain/
 cache/
 __pycache__/

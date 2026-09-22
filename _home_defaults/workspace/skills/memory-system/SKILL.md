@@ -5,13 +5,14 @@ description: Provides deterministic tools and instructions to safely read recent
 
 # memory-system Skill
 
-This skill is designed to manage the compaction and consolidation of the profile's long-term memory ([MAINMEMORY.md](memory_system/MAINMEMORY.md)) in a highly structured, isolated, and verified manner.
+This skill is designed to manage the compaction and consolidation of the profile's long-term factual memory ([MAINMEMORY.md](memory_system/MAINMEMORY.md)) in a highly structured, isolated, and verified manner.
 
 ## Key Capabilities
 
 1. **Profile Isolation (Harnessing)**: The underlying script `memory_tool.py` guarantees that no files outside the current active profile workspace can be accessed.
 2. **Deterministic Verification (Linting)**: Ensures the memory format preserves required headings (`## About the User`, `## Core System Architecture & Roles`, `## Decisions & Preferences`) and remains under the 120-line limit for token efficiency.
 3. **Automated Timestamping**: Automatically updates the last consolidation time in KST.
+4. **Rules vs Memory Scope Enforcement**: Strictly enforces that behavioral guidelines, negative constraints, and positive operational standards remain in Antigravity Rules Context (`AGENTS.md`/`GEMINI.md`), keeping `MAINMEMORY.md` dedicated purely to durable factual knowledge.
 
 ## Helper Script Usage
 
@@ -46,6 +47,7 @@ When running the `memory-consolidator` cron job, follow these steps:
 1. Locate the current workspace root path.
 2. Run `get-logs` to retrieve the recent chat history.
 3. If no new messages are found, only run `save-memory` with the existing `MAINMEMORY.md` content to update the consolidation timestamp.
-4. If new messages exist, analyze them to extract any **durable facts** (long-term facts about user, family, system, or preferences).
-5. Merge the new facts into the existing sections of `MAINMEMORY.md`, ensuring old or temporary logs are discarded to keep the file compact.
+4. If new messages exist, analyze them to extract any **durable factual knowledge** (facts about user identity, family, finance/assets, vehicle setup, education, long-term personal preferences).
+   - **CRITICAL**: Do NOT merge operational behavioral guidelines, negative constraints, positive constraints, or coding/tool rules into `MAINMEMORY.md`. Such operational rules belong in Antigravity Rules Context (`AGENTS.md` / `GEMINI.md`).
+5. Merge the new durable facts into the existing sections of `MAINMEMORY.md`, ensuring old or temporary logs are discarded to keep the file strictly under the 120-line compaction limit.
 6. Run `save-memory` with the updated markdown content.

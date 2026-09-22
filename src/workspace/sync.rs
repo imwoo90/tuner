@@ -10,7 +10,7 @@
 //! #workspace-init, #profile-copy, #environment-setup
 
 use crate::workspace::paths::DuctorPaths;
-use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_rule_files_recursive, walk_and_copy};
+use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_mainmemory_rule, sync_rule_files_recursive, walk_and_copy};
 use std::path::Path;
 
 static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.tuner`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
@@ -58,6 +58,8 @@ fn create_workspace_directories(paths: &DuctorPaths) {
         "output_to_user",
         "tasks",
         "skills",
+        ".agents",
+        ".agents/rules",
     ];
     for rel in &required_workspace_dirs {
         let d = if rel.is_empty() {
@@ -94,6 +96,7 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
     }
 
     create_workspace_directories(paths);
+    let _ = sync_mainmemory_rule(&paths.workspace());
 
     let selector = crate::workspace::rules::RulesSelector::new(paths.clone());
     let _ = selector.deploy_rules();
@@ -160,6 +163,7 @@ pub fn sync_rule_files(root: &Path) -> Result<(), String> {
     }
     sync_group(root)?;
     sync_rule_files_recursive(root)?;
+    let _ = sync_mainmemory_rule(root);
     Ok(())
 }
 

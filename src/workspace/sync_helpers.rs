@@ -216,3 +216,27 @@ pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
+    let mem_path = root.join("memory_system").join("MAINMEMORY.md");
+    if !mem_path.is_file() {
+        return Ok(());
+    }
+    let rules_dir = root.join(".agents").join("rules");
+    let target = rules_dir.join("mainmemory.md");
+    if let Ok(content) = std::fs::read_to_string(&mem_path) {
+        if !content.trim().is_empty() {
+            let header = "---\ntrigger: always_on\ndescription: \"Core factual memory about user, family, assets, vehicle, and preferences\"\n---\n";
+            let full = format!("{}{}", header, content);
+            let needs_write = match std::fs::read_to_string(&target) {
+                Ok(existing) => existing != full,
+                Err(_) => true,
+            };
+            if needs_write {
+                let _ = std::fs::create_dir_all(&rules_dir);
+                let _ = std::fs::write(&target, full);
+            }
+        }
+    }
+    Ok(())
+}

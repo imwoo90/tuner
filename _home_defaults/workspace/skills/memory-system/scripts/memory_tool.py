@@ -127,18 +127,37 @@ def cmd_save_memory(workspace_dir, content_input):
         print("Error: Missing required title '# Main Memory'.", file=sys.stderr)
         sys.exit(1)
 
-    # Verify Headings
-    required_headings = [
-        "## About the User",
-        "## Core System Architecture & Roles",
-        "## Decisions & Preferences"
-    ]
-    
     content_str = "\n".join(lines)
-    for h in required_headings:
-        if h not in content_str:
-            print(f"Error: Missing required section heading '{h}'.", file=sys.stderr)
+
+    # Programmatic Scope Boundary: Prevent operational constraints from leaking into factual memory
+    forbidden_rules_patterns = [
+        (r"절대\s*금지", "절대 금지 (Negative Constraints)"),
+        (r"필수\s*준수", "필수 준수 (Positive Constraints)"),
+        (r"negative\s*constraints", "Negative Constraints"),
+        (r"positive\s*constraints", "Positive Constraints"),
+        (r"비서\s*명칭\s*:", "비서 명칭 (Assistant identity belongs in AGENTS.md rules)"),
+        (r"비서\s*명칭은\s*반드시", "비서 명칭 표기 규칙 (Belongs in AGENTS.md rules)"),
+        (r"접기\s*서식", "텔레그램 접기 서식 규칙 (Belongs in AGENTS.md rules)"),
+    ]
+    for pattern, label in forbidden_rules_patterns:
+        if re.search(pattern, content_str, re.IGNORECASE):
+            print(f"Error: Behavioral rules or constraints ('{label}') must not be stored in MAINMEMORY.md. Keep operational constraints in Antigravity rules context (AGENTS.md / GEMINI.md).", file=sys.stderr)
             sys.exit(1)
+
+    # Verify Required Headings (robust to '&' vs 'and', and profile section variations)
+    if not re.search(r"^##\s+About\s+the\s+User", content_str, re.MULTILINE | re.IGNORECASE):
+        print("Error: Missing required section heading '## About the User'.", file=sys.stderr)
+        sys.exit(1)
+
+    if not re.search(r"^##\s+Decisions\s+(?:&|and)\s+Preferences", content_str, re.MULTILINE | re.IGNORECASE):
+        print("Error: Missing required section heading '## Decisions & Preferences' (or '## Decisions and Preferences').", file=sys.stderr)
+        sys.exit(1)
+
+    has_arch = bool(re.search(r"^##\s+Core\s+System\s+Architecture\s+(?:&|and)\s+Roles", content_str, re.MULTILINE | re.IGNORECASE))
+    has_facts = bool(re.search(r"^##\s+Learned\s+Facts", content_str, re.MULTILINE | re.IGNORECASE))
+    if not (has_arch or has_facts):
+        print("Error: Missing required intermediate section heading ('## Core System Architecture & Roles' or '## Learned Facts').", file=sys.stderr)
+        sys.exit(1)
 
     # Clean existing timestamps if any at the bottom to avoid duplicates
     cleaned_content = re.sub(r"\n*마지막 정리 일시:[^\n\r]*", "", content_str).strip()
@@ -148,10 +167,21 @@ def cmd_save_memory(workspace_dir, content_input):
     timestamp_str = f"마지막 정리 일시: {now_kst.strftime('%Y-%m-%d %H:%M')} KST"
     final_content = f"{cleaned_content}\n\n{timestamp_str}\n"
 
-    # Save file
+    # Save file to Tier 1 factual archive
     memory_file.parent.mkdir(parents=True, exist_ok=True)
     memory_file.write_text(final_content, encoding="utf-8")
-    print(f"Successfully updated MAINMEMORY.md. (Lines: {len(final_content.splitlines())})")
+
+    # Also sync to Tier 0 Antigravity Rules Context (.agents/rules/mainmemory.md) with always_on trigger
+    rules_memory_file = workspace / ".agents" / "rules" / "mainmemory.md"
+    rules_memory_file.parent.mkdir(parents=True, exist_ok=True)
+    rules_header = (
+        "---\n"
+        "trigger: always_on\n"
+        "description: \"Core factual memory about user, family, assets, vehicle, and preferences\"\n"
+        "---\n"
+    )
+    rules_memory_file.write_text(f"{rules_header}{final_content}", encoding="utf-8")
+    print(f"Successfully updated MAINMEMORY.md and .agents/rules/mainmemory.md. (Lines: {len(final_content.splitlines())})")
 
 def main():
     if len(sys.argv) < 3:

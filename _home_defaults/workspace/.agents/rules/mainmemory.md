@@ -1,3 +1,7 @@
+---
+trigger: always_on
+description: "Core factual memory about user, family, assets, vehicle, and preferences"
+---
 # Main Memory
 
 ## About the User
