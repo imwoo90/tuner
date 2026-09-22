@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["detect_rule_filenames","ensure_task_rule_files","init_workspace","inject_runtime_environment","sync_rule_files","watch_rule_files"],"static":["DOCKER_NOTICE","HOST_NOTICE","IDENTITY_MAIN","TRANSPORT_TELEGRAM"]};
+window.SIDEBAR_ITEMS = {"fn":["detect_rule_filenames","ensure_task_rule_files","init_workspace","sync_rule_files","watch_rule_files"]};
