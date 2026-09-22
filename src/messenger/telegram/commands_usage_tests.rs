@@ -165,4 +165,38 @@ Press Esc or q to exit
         println!("Jobs parse result: {:?}", jobs_res);
         assert!(jobs_res.is_ok());
     }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_query_quota_from_pty_real_e2e() {
+        let mut cfg = crate::config::CliConfig::default();
+        cfg.working_dir = std::env::current_dir().unwrap();
+        cfg.permission_mode = "bypassPermissions".to_string();
+        let cli = crate::cli::antigravity::AntigravityCli::new(cfg);
+        let session_id = "test-usage-e2e-session";
+
+        let report = crate::messenger::telegram::commands_usage::query_quota_from_pty(&cli, session_id)
+            .await
+            .expect("query_quota_from_pty should succeed");
+
+        println!("Report: {:?}", report);
+        assert!(report.account.is_some(), "Account should be parsed");
+        assert!(report.gemini.is_some(), "Gemini models should be parsed");
+        assert!(report.claude.is_some(), "Claude models should be parsed");
+
+        let gemini = report.gemini.as_ref().unwrap();
+        assert!(gemini.weekly.is_some(), "Gemini weekly should exist");
+        assert!(gemini.five_hour.is_some(), "Gemini 5-hour should exist");
+
+        let claude = report.claude.as_ref().unwrap();
+        assert!(claude.weekly.is_some(), "Claude weekly should exist");
+        assert!(claude.five_hour.is_some(), "Claude 5-hour should exist");
+
+        let rendered = render_quota_message(&report);
+        println!("Rendered:\n{}", rendered);
+        assert!(rendered.contains("GEMINI MODELS (Flash, Pro)"));
+        assert!(rendered.contains("CLAUDE AND GPT MODELS (Opus, Sonnet, GPT)"));
+
+        cli.sessions.terminate(session_id).await;
+    }
 }
