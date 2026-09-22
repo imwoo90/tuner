@@ -167,9 +167,9 @@ impl DuctorPaths {
         self.tuner_home.join(".env")
     }
 
-    /// Main memory path: `~/.tuner/workspace/memory_system/MAINMEMORY.md`
+    /// Main memory path: `~/.tuner/workspace/.agents/rules/mainmemory.md`
     pub fn mainmemory_path(&self) -> PathBuf {
-        self.memory_system_dir().join("MAINMEMORY.md")
+        self.workspace().join(".agents").join("rules").join("mainmemory.md")
     }
 
     /// Join notification path: `~/.tuner/workspace/JOIN_NOTIFICATION.md`

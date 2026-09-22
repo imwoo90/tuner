@@ -218,23 +218,37 @@ pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
 }
 
 pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
-    let mem_path = root.join("memory_system").join("MAINMEMORY.md");
-    if !mem_path.is_file() {
-        return Ok(());
-    }
     let rules_dir = root.join(".agents").join("rules");
     let target = rules_dir.join("mainmemory.md");
-    if let Ok(content) = std::fs::read_to_string(&mem_path) {
-        if !content.trim().is_empty() {
+    let legacy_dir = root.join("memory_system");
+    let legacy_mem = legacy_dir.join("MAINMEMORY.md");
+
+    // 1. Migration: if legacy regular file exists and target doesn't exist, migrate it
+    if legacy_mem.is_file() && !legacy_mem.is_symlink() && !target.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&legacy_mem) {
             let header = "---\ntrigger: always_on\ndescription: \"Core factual memory about user, family, assets, vehicle, and preferences\"\n---\n";
-            let full = format!("{}{}", header, content);
-            let needs_write = match std::fs::read_to_string(&target) {
-                Ok(existing) => existing != full,
-                Err(_) => true,
+            let clean = if content.starts_with("---") {
+                content
+            } else {
+                format!("{}{}", header, content)
             };
-            if needs_write {
-                let _ = std::fs::create_dir_all(&rules_dir);
-                let _ = std::fs::write(&target, full);
+            let _ = std::fs::create_dir_all(&rules_dir);
+            let _ = std::fs::write(&target, clean);
+        }
+    }
+
+    // 2. Ensure legacy path is a relative symlink to target if legacy_dir exists or target exists
+    if target.is_file() && legacy_dir.is_dir() {
+        let rel_target = std::path::Path::new("../.agents/rules/mainmemory.md");
+        let should_symlink = match std::fs::read_link(&legacy_mem) {
+            Ok(p) => p != rel_target,
+            Err(_) => true,
+        };
+        if should_symlink {
+            let _ = std::fs::remove_file(&legacy_mem);
+            #[cfg(unix)]
+            {
+                let _ = std::os::unix::fs::symlink(rel_target, &legacy_mem);
             }
         }
     }

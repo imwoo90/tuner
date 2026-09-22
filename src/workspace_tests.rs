@@ -50,7 +50,7 @@ mod tests {
         assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/workspace"));
         assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
         assert_eq!(paths.logs_dir(), PathBuf::from("/home/user/.tuner/logs"));
-        assert_eq!(paths.mainmemory_path(), PathBuf::from("/home/user/.tuner/workspace/memory_system/MAINMEMORY.md"));
+        assert_eq!(paths.mainmemory_path(), PathBuf::from("/home/user/.tuner/workspace/.agents/rules/mainmemory.md"));
     }
 
     #[test]

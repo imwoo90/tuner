@@ -33,7 +33,9 @@ def find_last_consolidated_time(memory_file):
 
 def cmd_get_logs(workspace_dir, filter_topic_id=None):
     workspace = Path(workspace_dir).resolve()
-    memory_file = workspace / "memory_system" / "MAINMEMORY.md"
+    memory_file = workspace / ".agents" / "rules" / "mainmemory.md"
+    if not memory_file.exists():
+        memory_file = workspace / "memory_system" / "MAINMEMORY.md"
     
     cutoff = find_last_consolidated_time(memory_file)
     if not cutoff:
@@ -41,7 +43,7 @@ def cmd_get_logs(workspace_dir, filter_topic_id=None):
         cutoff = get_kst_now() - timedelta(days=1)
         print(f"No valid last consolidation timestamp found. Using default cutoff (24h ago): {cutoff.strftime('%Y-%m-%d %H:%M:%S KST')}", file=sys.stderr)
     else:
-        print(f"Using cutoff timestamp from MAINMEMORY.md: {cutoff.strftime('%Y-%m-%d %H:%M:%S KST')}", file=sys.stderr)
+        print(f"Using cutoff timestamp from mainmemory.md: {cutoff.strftime('%Y-%m-%d %H:%M:%S KST')}", file=sys.stderr)
 
     brain_dir = workspace / "brain"
     if not brain_dir.is_dir():
@@ -107,18 +109,25 @@ def cmd_get_logs(workspace_dir, filter_topic_id=None):
 
 def cmd_save_memory(workspace_dir, content_input):
     workspace = Path(workspace_dir).resolve()
-    memory_file = workspace / "memory_system" / "MAINMEMORY.md"
+    rules_memory_file = workspace / ".agents" / "rules" / "mainmemory.md"
 
     # Enforce strict path safety
-    if not memory_file.resolve().parent.is_relative_to(workspace):
+    if not rules_memory_file.resolve().parent.is_relative_to(workspace):
         print("Path safety violation: memory file path is outside workspace.", file=sys.stderr)
         sys.exit(1)
 
+    # Strip existing frontmatter if provided in input
+    clean_input = content_input.strip()
+    if clean_input.startswith("---"):
+        parts = clean_input.split("---", 2)
+        if len(parts) >= 3:
+            clean_input = parts[2].strip()
+
     # Validation Checks (Linting)
-    lines = content_input.splitlines()
+    lines = clean_input.splitlines()
     line_count = len(lines)
     if line_count > 120:
-        print(f"Error: MAINMEMORY.md exceeds the 120-line compaction limit (current lines: {line_count}). Please compress it.", file=sys.stderr)
+        print(f"Error: mainmemory.md exceeds the 120-line compaction limit (current lines: {line_count}). Please compress it.", file=sys.stderr)
         sys.exit(1)
 
     # Verify Title
@@ -141,7 +150,7 @@ def cmd_save_memory(workspace_dir, content_input):
     ]
     for pattern, label in forbidden_rules_patterns:
         if re.search(pattern, content_str, re.IGNORECASE):
-            print(f"Error: Behavioral rules or constraints ('{label}') must not be stored in MAINMEMORY.md. Keep operational constraints in Antigravity rules context (AGENTS.md / GEMINI.md).", file=sys.stderr)
+            print(f"Error: Behavioral rules or constraints ('{label}') must not be stored in mainmemory.md. Keep operational constraints in Antigravity rules context (AGENTS.md / GEMINI.md).", file=sys.stderr)
             sys.exit(1)
 
     # Verify Required Headings (robust to '&' vs 'and', and profile section variations)
@@ -167,12 +176,7 @@ def cmd_save_memory(workspace_dir, content_input):
     timestamp_str = f"마지막 정리 일시: {now_kst.strftime('%Y-%m-%d %H:%M')} KST"
     final_content = f"{cleaned_content}\n\n{timestamp_str}\n"
 
-    # Save file to Tier 1 factual archive
-    memory_file.parent.mkdir(parents=True, exist_ok=True)
-    memory_file.write_text(final_content, encoding="utf-8")
-
-    # Also sync to Tier 0 Antigravity Rules Context (.agents/rules/mainmemory.md) with always_on trigger
-    rules_memory_file = workspace / ".agents" / "rules" / "mainmemory.md"
+    # Save to the single source of truth: .agents/rules/mainmemory.md
     rules_memory_file.parent.mkdir(parents=True, exist_ok=True)
     rules_header = (
         "---\n"
@@ -181,7 +185,26 @@ def cmd_save_memory(workspace_dir, content_input):
         "---\n"
     )
     rules_memory_file.write_text(f"{rules_header}{final_content}", encoding="utf-8")
-    print(f"Successfully updated MAINMEMORY.md and .agents/rules/mainmemory.md. (Lines: {len(final_content.splitlines())})")
+
+    # Maintain backward compatibility: ensure memory_system/MAINMEMORY.md is a relative symlink
+    legacy_dir = workspace / "memory_system"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_symlink = legacy_dir / "MAINMEMORY.md"
+    target_rel = Path("../.agents/rules/mainmemory.md")
+    try:
+        if legacy_symlink.is_symlink():
+            if os.readlink(legacy_symlink) != str(target_rel):
+                legacy_symlink.unlink()
+                legacy_symlink.symlink_to(target_rel)
+        elif legacy_symlink.exists():
+            legacy_symlink.unlink()
+            legacy_symlink.symlink_to(target_rel)
+        else:
+            legacy_symlink.symlink_to(target_rel)
+    except Exception as e:
+        print(f"Warning: Failed to update legacy symlink: {e}", file=sys.stderr)
+
+    print(f"Successfully updated .agents/rules/mainmemory.md (symlink maintained at memory_system/MAINMEMORY.md). (Lines: {len(final_content.splitlines())})")
 
 def main():
     if len(sys.argv) < 3:

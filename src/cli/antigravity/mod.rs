@@ -181,8 +181,23 @@ impl AntigravityCli {
             }
         }
 
-        let mem_path = self.config.working_dir.join("memory_system").join("MAINMEMORY.md");
-        if let Ok(mem) = std::fs::read_to_string(mem_path) {
+        let rule_path = self.config.working_dir.join(".agents").join("rules").join("mainmemory.md");
+        let legacy_path = self.config.working_dir.join("memory_system").join("MAINMEMORY.md");
+        let mem_path = if rule_path.is_file() {
+            rule_path
+        } else {
+            legacy_path
+        };
+        if let Ok(raw_mem) = std::fs::read_to_string(mem_path) {
+            let mem = if raw_mem.starts_with("---") {
+                if let Some(end_idx) = raw_mem[3..].find("---") {
+                    raw_mem[3 + end_idx + 3..].trim_start()
+                } else {
+                    &raw_mem
+                }
+            } else {
+                &raw_mem
+            };
             let mem_trimmed = mem.trim();
             if !mem_trimmed.is_empty() {
                 if !final_prompt.is_empty() {

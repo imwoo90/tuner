@@ -218,11 +218,28 @@ async fn handle_memory_command(
     msg: &Message,
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
-    let memory_path = config.working_dir.join("memory_system/MAINMEMORY.md");
-    let content = std::fs::read_to_string(memory_path)
+    let rule_path = config.working_dir.join(".agents/rules/mainmemory.md");
+    let legacy_path = config.working_dir.join("memory_system/MAINMEMORY.md");
+    let memory_path = if rule_path.is_file() {
+        rule_path
+    } else {
+        legacy_path
+    };
+    let raw_content = std::fs::read_to_string(memory_path)
         .unwrap_or_else(|_| t!("bot.memory_empty"));
+
+    // Strip YAML frontmatter if present for clean chat display
+    let content = if raw_content.starts_with("---") {
+        if let Some(end_idx) = raw_content[3..].find("---") {
+            raw_content[3 + end_idx + 3..].trim_start()
+        } else {
+            &raw_content
+        }
+    } else {
+        &raw_content
+    };
     
-    let html_text = crate::telegram::formatting::markdown_to_telegram_html(&content);
+    let html_text = crate::telegram::formatting::markdown_to_telegram_html(content);
     let chunks = crate::telegram::formatting::split_html_message(&html_text, 4000);
     for chunk in chunks {
         let mut req = bot.send_message(msg.chat.id, chunk)
