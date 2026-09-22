@@ -16,13 +16,6 @@ use crate::workspace::sync_helpers::{
 };
 use std::path::Path;
 
-static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.tuner`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
-
-static HOST_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**WARNING: YOU ARE RUNNING DIRECTLY ON THE HOST SYSTEM. THERE IS NO SANDBOX.**\n\n- Every file operation, command, and script runs on the user's real machine.\n- Be careful with destructive commands (`rm -rf`, `chmod`, etc.).\n- Ask before touching anything outside `workspace/`.\n";
-
-static TRANSPORT_TELEGRAM: &str = "\n\n---\n\n## Messenger Rules\n\n- Replies are Telegram messages (4096-char limit; auto-split is handled).\n- Keep responses mobile-friendly and structured.\n- To send files, use `<file:/absolute/path>`.\n- Save generated deliverables in `output_to_user/`.\n- Do not suggest GUI-only actions like `xdg-open`.\n\n### Quick Reply Buttons\n\nUse button syntax at the end of messages:\n\n- `[button:Label]` markers\n- same line = one row\n- new line = new row\n\nKeep labels short. Callback data is truncated to 64 bytes by the framework.\nDo not place button markers inside code blocks.\n";
-
-static IDENTITY_MAIN: &str = "\n\n---\n\n## Multi-Agent Identity\n\n**You are the MAIN agent (`{name}`).**\n\n- You are the coordinator in a multi-agent system.\n- Each sub-agent has its own bot/chat.\n\n### How the user interacts with sub-agents\n\n1. **Direct chat**: The user opens the sub-agent's bot and chats directly.\n2. **Delegation via you**: The user asks YOU to delegate a task using the agent tools below.\n\nAfter creating a sub-agent, tell the user they can open its chat directly. Do not suggest internal tools to the user.\n\n### Agent tools (for YOUR internal use)\n\n- `python3 tools/agent_tools/ask_agent.py TARGET \"message\"`\n- `python3 tools/agent_tools/ask_agent_async.py TARGET \"message\"`\n- `python3 tools/agent_tools/list_agents.py`\n- `python3 tools/agent_tools/edit_shared_knowledge.py`\n\nResponses come back to YOU, never to the sub-agent. Use async for tasks taking more than a few seconds.\n\nAsynchronous sub-agent tasks run in a session called `ia-{name}`. The user can follow up directly via `@ia-{name} <message>`. Mention this session name when reporting results.\n";
 
 /// Initializes the workspace directory structure and configurations.
 pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
@@ -78,35 +71,6 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
     Ok(())
 }
 
-/// Injects runtime environment notices into CLAUDE.md.
-pub fn inject_runtime_environment(
-    paths: &DuctorPaths,
-    docker_container: Option<&str>,
-) -> Result<(), String> {
-    let env_notice = if let Some(container) = docker_container {
-        DOCKER_NOTICE.replace("{container}", container)
-    } else {
-        HOST_NOTICE.to_string()
-    };
-
-    let identity_notice = IDENTITY_MAIN.replace("{name}", "main");
-    let transport_notice = TRANSPORT_TELEGRAM.to_string();
-
-    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
-    for name in &rule_filenames {
-        let target = paths.workspace().join(name);
-        if target.is_file() {
-            if let Ok(content) = std::fs::read_to_string(&target) {
-                if content.contains("## Multi-Agent Identity") || content.contains("## Runtime Environment") {
-                    continue;
-                }
-                let new_content = format!("{}{}{}{}", content, transport_notice, identity_notice, env_notice);
-                let _ = std::fs::write(&target, new_content);
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Recursively synchronizes existing rule files across the workspace.
 pub fn sync_rule_files(root: &Path) -> Result<(), String> {

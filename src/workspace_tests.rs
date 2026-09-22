@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests {
     use crate::workspace::paths::{resolve_paths, DuctorPaths};
-    use crate::workspace::init::{init_workspace, inject_runtime_environment};
+    use crate::workspace::init::init_workspace;
     use crate::workspace::rules_selector::RulesSelector;
     use crate::workspace::rule_sync::sync_rule_files;
     use crate::workspace::skill_sync::{
@@ -91,21 +91,6 @@ mod tests {
         init_workspace(&paths).unwrap();
     }
 
-    #[test]
-    fn test_inject_runtime_notice() {
-        let tmp = tempdir().unwrap();
-        let fw = tmp.path().join("fw");
-        setup_mock_defaults(&fw);
-
-        let paths = DuctorPaths::new(
-            tmp.path().join("home"),
-            fw.join("workspace"),
-            fw,
-            Some("default".to_string()),
-        );
-
-        inject_runtime_environment(&paths, Some("sandbox")).unwrap();
-    }
 
     #[test]
     fn test_rules_selector_get_variant_suffix() {

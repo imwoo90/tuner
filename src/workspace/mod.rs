@@ -23,7 +23,7 @@ pub mod skills_helpers;
 
 /// Alias module for workspace initialization tests.
 pub mod init {
-    pub use super::sync::{init_workspace, inject_runtime_environment};
+    pub use super::sync::init_workspace;
 }
 
 /// Alias module for rules selector tests.
