@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_interruption","err_resp","handle_oneshot_finish","parse_and_stream","poll_loop_async","setup_path_watcher","spawn_log_polling","wait_for_log_completion"]};
+window.SIDEBAR_ITEMS = {"fn":["check_interruption","err_resp","extract_exit_code","handle_oneshot_finish","parse_and_stream","poll_loop_async","setup_path_watcher","spawn_log_polling","wait_for_log_completion"]};

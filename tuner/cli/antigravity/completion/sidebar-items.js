@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_completion_step","check_log_completion_in_file","is_completion_entry"]};
+window.SIDEBAR_ITEMS = {"fn":["check_completion_step","check_log_completion_in_file","exit_status_code","is_completion_entry"]};

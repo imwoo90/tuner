@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_viewer_buttons","format_activation_toast","handle_review_callback"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["boot_fresh_session","initialize_session_if_needed"]};
+window.SIDEBAR_ITEMS = {"fn":["boot_fresh_session","handle_boot_response","initialize_session_if_needed"]};

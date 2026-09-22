@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["consume_stream","handle_stream_result","handle_text_delta","process_stream_events","send_chunks_to_telegram","send_single_chunk","truncate_streaming_preview"]};
+window.SIDEBAR_ITEMS = {"fn":["consume_stream","handle_stream_result","handle_text_delta","is_message_not_modified","process_stream_events","send_chunks_to_telegram","send_single_chunk","truncate_streaming_preview"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_cli_error"]};
+window.SIDEBAR_ITEMS = {"constant":["ERR_AUTH","ERR_CONTEXT_LIMIT","ERR_NOT_FOUND","ERR_RATE_LIMIT","ERR_UNAVAILABLE","MSG_CODE_3","MSG_MISSING_KEY","MSG_NOT_FOUND","MSG_PERM_DENIED","MSG_TIMEOUT","SUGG_AUTH","SUGG_CONTEXT","SUGG_MODEL_404","SUGG_OVERLOADED","SUGG_QUOTA","SUGG_RETRY_LATER"],"enum":["AgyErrorKind"],"fn":["classify_agy_error","extract_agy_error","format_agy_error","get_error_guidance","has_any","parse_cli_error","try_parse_payload"],"struct":["AgyErrorPayload"]};
