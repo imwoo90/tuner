@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_agreed_decisions","extract_current_progress","extract_fallback_steps","extract_topic_history","extract_topic_objective","is_boilerplate_or_header","is_decision_line","is_greeting","is_meta_cmd","merge_prior_decisions"]};

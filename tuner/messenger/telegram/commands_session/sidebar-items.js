@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_new_command","handle_session_control_commands"]};
+window.SIDEBAR_ITEMS = {"fn":["collect_handover_context","handle_new_command","handle_session_control_commands","resolve_target_topic"]};

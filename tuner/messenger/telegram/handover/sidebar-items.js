@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_topic_handover","format_handover_prompt","format_recent_excerpts","parse_prior_summary","resolve_topic_entries","resolve_topic_name"],"struct":["TopicHandoverContext"]};
