@@ -167,9 +167,9 @@
 <a href=#167 id=167 data-nosnippet>167</a>        <span class="self">self</span>.tuner_home.join(<span class="string">".env"</span>)
 <a href=#168 id=168 data-nosnippet>168</a>    }
 <a href=#169 id=169 data-nosnippet>169</a>
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Main memory path: `~/.tuner/workspace/memory_system/MAINMEMORY.md`
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Main memory path: `~/.tuner/workspace/.agents/rules/mainmemory.md`
 <a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">pub fn </span>mainmemory_path(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PathBuf {
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="self">self</span>.memory_system_dir().join(<span class="string">"MAINMEMORY.md"</span>)
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="self">self</span>.workspace().join(<span class="string">".agents"</span>).join(<span class="string">"rules"</span>).join(<span class="string">"mainmemory.md"</span>)
 <a href=#173 id=173 data-nosnippet>173</a>    }
 <a href=#174 id=174 data-nosnippet>174</a>
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Join notification path: `~/.tuner/workspace/JOIN_NOTIFICATION.md`
