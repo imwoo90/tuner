@@ -82,7 +82,7 @@ pub fn format_recent_excerpts(entries: &[TelegramHistoryEntry], max_count: usize
     clean_entries[start..].iter().map(|e| {
         let role = if e.sender.eq_ignore_ascii_case("user") { "User" } else { "Assistant" };
         let t = e.text.trim();
-        let clean = if t.len() > 250 { format!("{}... [truncated]", &t[..250]) } else { t.to_string() };
+        let clean = if t.chars().count() > 250 { format!("{} [truncated]", truncate_chars(t, 250)) } else { t.to_string() };
         format!("[{}]: {}", role, clean.replace('\n', " "))
     }).collect()
 }

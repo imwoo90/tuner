@@ -160,4 +160,20 @@ mod tests {
         assert!(!handover.handover_prompt.contains(&"B".repeat(500)));
         assert!(handover.handover_prompt.contains("[truncated]"));
     }
+
+    #[test]
+    fn test_handover_multibyte_korean_utf8_truncation() {
+        let tmp = tempdir().unwrap();
+        let ws = tmp.path();
+        let sid = "session-korean-utf8";
+
+        let korean_prompt = "우리가 RusTerm 웹 시리얼 프로젝트를 개발 중이야. 통신 속도는 115200 baud로 확정하고 전송 포맷은 JSON으로 합의했어. 매우 긴 한국어 문장이 포함되어 있으며 150바이트 경계선에서 글자가 잘리더라도 패닉이 발생하지 않아야 합니다. 계속해서 긴 문장을 이어 작성합니다.".repeat(3);
+        log_telegram_message(ws, sid, Some(8), None, "user", Some(1), &korean_prompt, true, None);
+        log_telegram_message(ws, sid, Some(8), None, "bot", Some(2), "네, 확인했습니다.", true, None);
+
+        let res = build_topic_handover(ws, sid, Some(8), None, None, &[]);
+        assert!(res.is_some());
+        let handover = res.unwrap();
+        assert!(!handover.agreed_decisions.is_empty());
+    }
 }

@@ -51,6 +51,15 @@ pub fn is_meta_cmd(text: &str) -> bool {
     matches!(cmd, "/new" | "/reset" | "/stop" | "/abort" | "/stop_all" | "/model" | "/status" | "/usage" | "/memory" | "/help" | "/diagnose" | "/restart" | "/upgrade")
 }
 
+pub fn truncate_chars(s: &str, max_chars: usize) -> String {
+    if s.chars().count() > max_chars {
+        let truncated: String = s.chars().take(max_chars).collect();
+        format!("{}...", truncated)
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn is_greeting(line: &str) -> bool {
     let l = line.trim().to_lowercase();
     matches!(l.as_str(), "hi" | "hello" | "hey" | "안녕" | "안녕하세요" | "시작" | "start" | "hi!" | "hello!" | "안녕하세요!" | "hi tuner" | "hello tuner")
@@ -76,7 +85,7 @@ pub fn extract_topic_objective(entries: &[TelegramHistoryEntry], topic_name: Opt
             } else {
                 e.text.trim().to_string()
             };
-            if combined.len() > 180 { format!("{}...", &combined[..180]) } else { combined }
+            truncate_chars(&combined, 180)
         });
 
     match (topic_name, user_msg) {
@@ -140,7 +149,7 @@ fn extract_fallback_steps(entries: &[TelegramHistoryEntry]) -> Vec<String> {
                 && (clean.starts_with("1.") || clean.starts_with("2.") || clean.contains("Step") || clean.contains("단계"))
                 && clean.len() > 10
             {
-                let item = if clean.len() > 150 { format!("{}...", &clean[..150]) } else { clean.to_string() };
+                let item = truncate_chars(clean, 150);
                 if !steps.contains(&item) { steps.push(item); }
             }
             if steps.len() >= 3 { break; }
@@ -157,7 +166,7 @@ pub fn extract_agreed_decisions(entries: &[TelegramHistoryEntry], prior_decision
         for line in entry.text.lines().rev() {
             let clean = line.trim().trim_start_matches(|c| c == '-' || c == '*' || c == '•').trim();
             if clean.len() >= 6 && is_decision_line(clean) {
-                let item = if clean.len() > 150 { format!("{}...", &clean[..150]) } else { clean.to_string() };
+                let item = truncate_chars(clean, 150);
                 if !decisions.contains(&item) { decisions.push(item); }
             }
             if decisions.len() >= 5 { break; }
@@ -188,7 +197,7 @@ pub fn extract_current_progress(entries: &[TelegramHistoryEntry], prior_prog: Op
             .take(3)
             .collect();
         let text = lines.join(" ");
-        let snip = if text.len() > 200 { format!("{}...", &text[..200]) } else { text };
+        let snip = truncate_chars(&text, 200);
         if !snip.is_empty() { parts.push(format!("Last assistant status: {}", snip)); }
     }
     if let Some(usr) = last_user {
@@ -198,7 +207,7 @@ pub fn extract_current_progress(entries: &[TelegramHistoryEntry], prior_prog: Op
             .take(3)
             .collect();
         let text = lines.join(" ");
-        let snip = if text.len() > 200 { format!("{}...", &text[..200]) } else { text };
+        let snip = truncate_chars(&text, 200);
         if !snip.is_empty() { parts.push(format!("Latest user request: {}", snip)); }
     }
 
