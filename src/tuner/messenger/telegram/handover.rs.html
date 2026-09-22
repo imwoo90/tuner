@@ -82,7 +82,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>    clean_entries[start..].iter().map(|e| {
 <a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>role = <span class="kw">if </span>e.sender.eq_ignore_ascii_case(<span class="string">"user"</span>) { <span class="string">"User" </span>} <span class="kw">else </span>{ <span class="string">"Assistant" </span>};
 <a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>t = e.text.trim();
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>clean = <span class="kw">if </span>t.len() &gt; <span class="number">250 </span>{ <span class="macro">format!</span>(<span class="string">"{}... [truncated]"</span>, <span class="kw-2">&amp;</span>t[..<span class="number">250</span>]) } <span class="kw">else </span>{ t.to_string() };
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>clean = <span class="kw">if </span>t.chars().count() &gt; <span class="number">250 </span>{ <span class="macro">format!</span>(<span class="string">"{} [truncated]"</span>, truncate_chars(t, <span class="number">250</span>)) } <span class="kw">else </span>{ t.to_string() };
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="macro">format!</span>(<span class="string">"[{}]: {}"</span>, role, clean.replace(<span class="string">'\n'</span>, <span class="string">" "</span>))
 <a href=#87 id=87 data-nosnippet>87</a>    }).collect()
 <a href=#88 id=88 data-nosnippet>88</a>}
