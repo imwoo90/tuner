@@ -18,7 +18,7 @@
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub fn </span>markdown_to_telegram_html(text: <span class="kw-2">&amp;</span>str) -&gt; String {
 <a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">let </span>cleaned_text = <span class="kw">super</span>::buttons::strip_button_syntax(text);
 <a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span><span class="kw-2">mut </span>code_blocks: Vec&lt;(String, String)&gt; = Vec::new();
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span><span class="kw-2">mut </span>code_blocks: Vec&lt;(String, String, bool)&gt; = Vec::new();
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">let </span><span class="kw-2">mut </span>inline_codes: Vec&lt;String&gt; = Vec::new();
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span><span class="kw-2">mut </span>links: Vec&lt;(String, String)&gt; = Vec::new();
 <a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span><span class="kw-2">mut </span>table_blocks: Vec&lt;String&gt; = Vec::new();
@@ -83,7 +83,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>
 <a href=#84 id=84 data-nosnippet>84</a><span class="kw">fn </span>extract_entities(
 <a href=#85 id=85 data-nosnippet>85</a>    text: <span class="kw-2">&amp;</span>str,
-<a href=#86 id=86 data-nosnippet>86</a>    code_blocks: <span class="kw-2">&amp;mut </span>Vec&lt;(String, String)&gt;,
+<a href=#86 id=86 data-nosnippet>86</a>    code_blocks: <span class="kw-2">&amp;mut </span>Vec&lt;(String, String, bool)&gt;,
 <a href=#87 id=87 data-nosnippet>87</a>    inline_codes: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
 <a href=#88 id=88 data-nosnippet>88</a>    links: <span class="kw-2">&amp;mut </span>Vec&lt;(String, String)&gt;,
 <a href=#89 id=89 data-nosnippet>89</a>    table_blocks: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
@@ -96,7 +96,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>is_quoted = !prefix_quote.trim().is_empty();
 <a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>sanitized_code = sanitize_code_block(code, is_quoted);
 <a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>idx = code_blocks.len();
-<a href=#99 id=99 data-nosnippet>99</a>        code_blocks.push((lang, sanitized_code));
+<a href=#99 id=99 data-nosnippet>99</a>        code_blocks.push((lang, sanitized_code, is_quoted));
 <a href=#100 id=100 data-nosnippet>100</a>        <span class="macro">format!</span>(<span class="string">"{}{}"</span>, prefix_quote, placeholder(<span class="string">"CB"</span>, idx))
 <a href=#101 id=101 data-nosnippet>101</a>    }).to_string();
 <a href=#102 id=102 data-nosnippet>102</a>
@@ -122,7 +122,7 @@
 <a href=#122 id=122 data-nosnippet>122</a>
 <a href=#123 id=123 data-nosnippet>123</a><span class="kw">fn </span>restore_entities(
 <a href=#124 id=124 data-nosnippet>124</a>    <span class="kw-2">mut </span>text: String,
-<a href=#125 id=125 data-nosnippet>125</a>    code_blocks: <span class="kw-2">&amp;</span>[(String, String)],
+<a href=#125 id=125 data-nosnippet>125</a>    code_blocks: <span class="kw-2">&amp;</span>[(String, String, bool)],
 <a href=#126 id=126 data-nosnippet>126</a>    inline_codes: <span class="kw-2">&amp;</span>[String],
 <a href=#127 id=127 data-nosnippet>127</a>    links: <span class="kw-2">&amp;</span>[(String, String)],
 <a href=#128 id=128 data-nosnippet>128</a>    table_blocks: <span class="kw-2">&amp;</span>[String],
@@ -147,44 +147,49 @@
 <a href=#147 id=147 data-nosnippet>147</a>        text = text.replace(<span class="kw-2">&amp;</span>p, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;code&gt;{}&lt;/code&gt;"</span>, escaped_code));
 <a href=#148 id=148 data-nosnippet>148</a>    }
 <a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">for </span>(i, (lang, code)) <span class="kw">in </span>code_blocks.iter().enumerate() {
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">for </span>(i, (lang, code, is_quoted)) <span class="kw">in </span>code_blocks.iter().enumerate() {
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>p = placeholder(<span class="string">"CB"</span>, i);
 <a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>escaped_code = html_escape::encode_safe(code).to_string();
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>block = <span class="kw">if </span>!lang.is_empty() {
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>raw_block = <span class="kw">if </span>!lang.is_empty() {
 <a href=#154 id=154 data-nosnippet>154</a>            <span class="macro">format!</span>(<span class="string">"&lt;pre&gt;&lt;code class=\"language-{}\"&gt;{}&lt;/code&gt;&lt;/pre&gt;"</span>, html_escape::encode_safe(lang), escaped_code)
 <a href=#155 id=155 data-nosnippet>155</a>        } <span class="kw">else </span>{
 <a href=#156 id=156 data-nosnippet>156</a>            <span class="macro">format!</span>(<span class="string">"&lt;pre&gt;{}&lt;/pre&gt;"</span>, escaped_code)
 <a href=#157 id=157 data-nosnippet>157</a>        };
-<a href=#158 id=158 data-nosnippet>158</a>        text = text.replace(<span class="kw-2">&amp;</span>p, <span class="kw-2">&amp;</span>block);
-<a href=#159 id=159 data-nosnippet>159</a>    }
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a>    text
-<a href=#162 id=162 data-nosnippet>162</a>}
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a><span class="kw">pub fn </span>apply_markdown_formatting(escaped: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>h_re = Regex::new(<span class="string">r"(?m)^#{1,6}\s+(.+)$"</span>).unwrap();
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = h_re.replace_all(escaped, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
-<a href=#167 id=167 data-nosnippet>167</a>
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>bold_re = Regex::new(<span class="string">r"(?s)\*\*(.+?)\*\*"</span>).unwrap();
-<a href=#169 id=169 data-nosnippet>169</a>    out = bold_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'*'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
-<a href=#172 id=172 data-nosnippet>172</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'_'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span>strike_re = Regex::new(<span class="string">r"~~(.+?)~~"</span>).unwrap();
-<a href=#175 id=175 data-nosnippet>175</a>    out = strike_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;s&gt;$1&lt;/s&gt;"</span>).to_string();
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>spoiler_re = Regex::new(<span class="string">r"\|\|(.+?)\|\|"</span>).unwrap();
-<a href=#178 id=178 data-nosnippet>178</a>    out = spoiler_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;tg-spoiler&gt;$1&lt;/tg-spoiler&gt;"</span>).to_string();
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    out = <span class="kw">super</span>::blockquotes::convert_blockquotes(<span class="kw-2">&amp;</span>out);
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>block = <span class="kw">if </span><span class="kw-2">*</span>is_quoted {
+<a href=#159 id=159 data-nosnippet>159</a>            raw_block
+<a href=#160 id=160 data-nosnippet>160</a>        } <span class="kw">else </span>{
+<a href=#161 id=161 data-nosnippet>161</a>            <span class="macro">format!</span>(<span class="string">"&lt;blockquote expandable&gt;{}&lt;/blockquote&gt;"</span>, raw_block)
+<a href=#162 id=162 data-nosnippet>162</a>        };
+<a href=#163 id=163 data-nosnippet>163</a>        text = text.replace(<span class="kw-2">&amp;</span>p, <span class="kw-2">&amp;</span>block);
+<a href=#164 id=164 data-nosnippet>164</a>    }
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>    text
+<a href=#167 id=167 data-nosnippet>167</a>}
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a><span class="kw">pub fn </span>apply_markdown_formatting(escaped: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>h_re = Regex::new(<span class="string">r"(?m)^#{1,6}\s+(.+)$"</span>).unwrap();
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = h_re.replace_all(escaped, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>bold_re = Regex::new(<span class="string">r"(?s)\*\*(.+?)\*\*"</span>).unwrap();
+<a href=#174 id=174 data-nosnippet>174</a>    out = bold_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'*'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
+<a href=#177 id=177 data-nosnippet>177</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'_'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>strike_re = Regex::new(<span class="string">r"~~(.+?)~~"</span>).unwrap();
+<a href=#180 id=180 data-nosnippet>180</a>    out = strike_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;s&gt;$1&lt;/s&gt;"</span>).to_string();
 <a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>hr_re = Regex::new(<span class="string">r"(?m)^[-*]{3,}$"</span>).unwrap();
-<a href=#183 id=183 data-nosnippet>183</a>    out = hr_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"———"</span>).to_string();
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>spoiler_re = Regex::new(<span class="string">r"\|\|(.+?)\|\|"</span>).unwrap();
+<a href=#183 id=183 data-nosnippet>183</a>    out = spoiler_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;tg-spoiler&gt;$1&lt;/tg-spoiler&gt;"</span>).to_string();
 <a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>bullet_re = Regex::new(<span class="string">r"(?m)^[-*]\s+"</span>).unwrap();
-<a href=#186 id=186 data-nosnippet>186</a>    out = bullet_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"• "</span>).to_string();
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>    out
-<a href=#189 id=189 data-nosnippet>189</a>}
+<a href=#185 id=185 data-nosnippet>185</a>    out = <span class="kw">super</span>::blockquotes::convert_blockquotes(<span class="kw-2">&amp;</span>out);
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>hr_re = Regex::new(<span class="string">r"(?m)^[-*]{3,}$"</span>).unwrap();
+<a href=#188 id=188 data-nosnippet>188</a>    out = hr_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"———"</span>).to_string();
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>bullet_re = Regex::new(<span class="string">r"(?m)^[-*]\s+"</span>).unwrap();
+<a href=#191 id=191 data-nosnippet>191</a>    out = bullet_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"• "</span>).to_string();
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    out
+<a href=#194 id=194 data-nosnippet>194</a>}
 </code></pre></div></section></main></body></html>
