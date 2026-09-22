@@ -15,10 +15,10 @@ mod tests {
 
     #[test]
     fn test_format_progress_bar() {
-        assert_eq!(format_progress_bar(0.0), "[░░░░░░░░░░░░░░░░░░░░]");
-        assert_eq!(format_progress_bar(50.0), "[██████████░░░░░░░░░░]");
-        assert_eq!(format_progress_bar(100.0), "[████████████████████]");
-        assert_eq!(format_progress_bar(10.0), "[██░░░░░░░░░░░░░░░░░░]");
+        assert_eq!(format_progress_bar(0.0), "[░░░░░░░░░░]");
+        assert_eq!(format_progress_bar(50.0), "[█████░░░░░]");
+        assert_eq!(format_progress_bar(100.0), "[██████████]");
+        assert_eq!(format_progress_bar(10.0), "[█░░░░░░░░░]");
     }
 
     const SAMPLE_AGY_USAGE: &str = r#"
@@ -97,9 +97,9 @@ Press Esc or q to exit
         assert!(msg.contains("📊 <b>[tuner] Model Quota & Usage</b>"));
         assert!(msg.contains("tester@dev.com"));
         assert!(msg.contains("GEMINI MODELS (Flash, Pro)"));
-        assert!(msg.contains("Weekly Limit: <code>[██████████████████░░]</code> 90.0%"));
+        assert!(msg.contains("Weekly Limit: <code>[█████████░]</code> 90.0%"));
         assert!(msg.contains("Resets in 2 days"));
-        assert!(msg.contains("5-Hour Limit: <code>[████████████████████]</code> 100.0%"));
+        assert!(msg.contains("5-Hour Limit: <code>[██████████]</code> 100.0%"));
     }
 
     #[test]

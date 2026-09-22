@@ -32,7 +32,7 @@ pub struct QuotaReport {
 }
 
 pub fn format_progress_bar(pct: f64) -> String {
-    let total = 20;
+    let total = 10;
     let filled = ((pct / 100.0) * (total as f64)).round().clamp(0.0, total as f64) as usize;
     format!("[{}{}]", "█".repeat(filled), "░".repeat(total - filled))
 }
@@ -113,25 +113,23 @@ pub(crate) async fn query_quota_from_pty(
 
     let mut accumulated = Vec::new();
     let start = std::time::Instant::now();
-    let mut sent_pagedown = false;
 
     while start.elapsed() < Duration::from_millis(3500) {
         tokio::time::sleep(Duration::from_millis(100)).await;
         if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
             accumulated = bytes;
             let text = String::from_utf8_lossy(&accumulated);
-            if text.contains("CLAUDE AND GPT MODELS") {
+            // In a 50-line PTY window, both Gemini and Claude sections fit on the screen without scrolling.
+            // Break early once both sections or modal footer is rendered.
+            let has_footer = text.contains("Press Esc") || text.contains("or q to exit");
+            let has_gemini = text.contains("GEMINI MODELS");
+            let has_claude = text.contains("CLAUDE AND GPT MODELS");
+
+            if has_footer || (has_gemini && has_claude) {
                 let after_claude = text.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
-                if after_claude.contains("Five Hour Limit") && after_claude.contains('%') {
+                if has_footer || after_claude.contains("Limit") || after_claude.contains('%') {
                     break;
                 }
-                if !sent_pagedown {
-                    let _ = cli.sessions.write_to_session(session_id, "\x1b[6~").await;
-                    sent_pagedown = true;
-                }
-            } else if (text.contains("GEMINI MODELS") || text.contains("Models & Quota")) && !sent_pagedown {
-                let _ = cli.sessions.write_to_session(session_id, "\x1b[6~").await;
-                sent_pagedown = true;
             }
         }
     }
