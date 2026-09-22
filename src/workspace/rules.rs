@@ -152,11 +152,18 @@ impl RulesSelector {
         Ok(total_removed)
     }
 
-    /// Removes files with the given name recursively, protecting cron task directories.
+    /// Removes files with the given name recursively, protecting cron task and project directories.
     pub fn remove_files_by_name(&self, filename: &str) -> Result<usize, String> {
         let cron_tasks_path = self.paths.workspace().join("cron_tasks");
+        let projects_path = self.paths.workspace().join("projects");
         let mut count = 0;
-        remove_files_recursively(&self.paths.profile_home(), filename, &cron_tasks_path, &mut count);
+        remove_files_recursively(
+            &self.paths.profile_home(),
+            filename,
+            &cron_tasks_path,
+            &projects_path,
+            &mut count,
+        );
         Ok(count)
     }
 }
@@ -183,25 +190,73 @@ fn find_rules_templates(dir: &Path, candidates: &mut Vec<PathBuf>) {
     }
 }
 
-fn remove_files_recursively(dir: &Path, filename: &str, cron_tasks_path: &Path, count: &mut usize) {
+fn remove_files_recursively(
+    dir: &Path,
+    filename: &str,
+    cron_tasks_path: &Path,
+    projects_path: &Path,
+    count: &mut usize,
+) {
     if !dir.is_dir() { return; }
     if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    if path.starts_with(cron_tasks_path) { continue; }
-                    remove_files_recursively(&path, filename, cron_tasks_path, count);
-                } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if name == filename {
-                        if !path.starts_with(cron_tasks_path) {
-                            if std::fs::remove_file(&path).is_ok() {
-                                *count += 1;
-                            }
-                        }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.starts_with(cron_tasks_path) || path.starts_with(projects_path) {
+                    continue;
+                }
+                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                    if name.starts_with('.') || name == "node_modules" || name == "target" {
+                        continue;
+                    }
+                }
+                remove_files_recursively(&path, filename, cron_tasks_path, projects_path, count);
+            } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name == filename && !path.starts_with(cron_tasks_path) && !path.starts_with(projects_path) {
+                    if std::fs::remove_file(&path).is_ok() {
+                        *count += 1;
                     }
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_cleanup_stale_files_protects_projects_dir() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().join("home");
+        let paths = DuctorPaths::new(
+            home,
+            tmp.path().join("defaults"),
+            tmp.path().join("fw"),
+            Some("default".to_string()),
+        );
+        let profile_ws = paths.workspace();
+        let proj_dir = profile_ws.join("projects").join("my_proj");
+        let cfg_dir = paths.profile_home().join("config");
+        std::fs::create_dir_all(&proj_dir).unwrap();
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+
+        let ws_gemini = profile_ws.join("GEMINI.md");
+        let cfg_gemini = cfg_dir.join("GEMINI.md");
+        let proj_gemini = proj_dir.join("GEMINI.md");
+
+        std::fs::write(&ws_gemini, "ws").unwrap();
+        std::fs::write(&cfg_gemini, "cfg").unwrap();
+        std::fs::write(&proj_gemini, "proj").unwrap();
+
+        let selector = RulesSelector::new(paths);
+        let removed = selector.remove_files_by_name("GEMINI.md").unwrap();
+
+        assert_eq!(removed, 2);
+        assert!(!ws_gemini.exists());
+        assert!(!cfg_gemini.exists());
+        assert!(proj_gemini.exists());
     }
 }

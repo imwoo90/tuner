@@ -30,6 +30,7 @@ docker exec "$CONTAINER_NAME" chmod +x "$CONTAINER_HOME/.tuner/bin/tuner"
 
 # Copy _home_defaults assets
 if [ -d "$DEFAULTS_DIR" ]; then
+    docker exec "$CONTAINER_NAME" rm -rf "$CONTAINER_HOME/.tuner/bin/_home_defaults"
     docker cp "$DEFAULTS_DIR" "$CONTAINER_NAME:$CONTAINER_HOME/.tuner/bin/"
 fi
 

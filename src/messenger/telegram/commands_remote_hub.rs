@@ -181,26 +181,7 @@ pub async fn start_antigravity_remote(working_dir: &Path) -> Result<String, Stri
     let _ = stop_antigravity_remote(working_dir).await;
     let _ = std::fs::create_dir_all(&remote_ws);
 
-    let dest_agents = remote_ws.join("AGENTS.md");
-    if !dest_agents.exists() {
-        let src = working_dir.join("AGENTS.md");
-        if src.exists() {
-            let _ = std::fs::copy(&src, &dest_agents);
-        }
-    }
-    let local_rules = working_dir.join(".agents").join("rules");
-    if local_rules.is_dir() {
-        let remote_rules = remote_ws.join(".agents").join("rules");
-        let _ = std::fs::create_dir_all(&remote_rules);
-        if let Ok(entries) = std::fs::read_dir(&local_rules) {
-            for entry in entries.flatten() {
-                let dest = remote_rules.join(entry.file_name());
-                if !dest.exists() {
-                    let _ = std::fs::copy(entry.path(), dest);
-                }
-            }
-        }
-    }
+    crate::workspace::sync_layout::sync_remote_workspace_rules(working_dir, &remote_ws);
 
     let cmd = format!("agy --remote-control --remote-control-name {} --add-dir {}", instance_name, remote_ws.display());
     let status = Command::new("screen")
