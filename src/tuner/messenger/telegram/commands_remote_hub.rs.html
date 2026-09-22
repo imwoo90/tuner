@@ -181,57 +181,49 @@
 <a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let _ </span>= stop_antigravity_remote(working_dir).<span class="kw">await</span>;
 <a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let _ </span>= std::fs::create_dir_all(<span class="kw-2">&amp;</span>remote_ws);
 <a href=#183 id=183 data-nosnippet>183</a>
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">for </span>rule <span class="kw">in </span>[<span class="string">"AGENTS.md"</span>, <span class="string">"GEMINI.md"</span>] {
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let </span>dest = remote_ws.join(rule);
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">if </span>!dest.exists() {
-<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">let </span>src = working_dir.join(rule);
-<a href=#188 id=188 data-nosnippet>188</a>            <span class="kw">if </span>src.exists() {
-<a href=#189 id=189 data-nosnippet>189</a>                <span class="kw">let _ </span>= std::fs::copy(<span class="kw-2">&amp;</span>src, <span class="kw-2">&amp;</span>dest);
-<a href=#190 id=190 data-nosnippet>190</a>            }
-<a href=#191 id=191 data-nosnippet>191</a>        }
-<a href=#192 id=192 data-nosnippet>192</a>    }
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>cmd = <span class="macro">format!</span>(<span class="string">"agy --remote-control --remote-control-name {} --add-dir {}"</span>, instance_name, remote_ws.display());
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>status = Command::new(<span class="string">"screen"</span>)
-<a href=#196 id=196 data-nosnippet>196</a>        .args([<span class="string">"-dmS"</span>, <span class="kw-2">&amp;</span>screen_name, <span class="string">"bash"</span>, <span class="string">"-c"</span>, <span class="kw-2">&amp;</span>cmd])
-<a href=#197 id=197 data-nosnippet>197</a>        .current_dir(<span class="kw-2">&amp;</span>remote_ws)
-<a href=#198 id=198 data-nosnippet>198</a>        .status()
-<a href=#199 id=199 data-nosnippet>199</a>        .map_err(|e| <span class="macro">format!</span>(<span class="string">"Spawn error: {}"</span>, e))<span class="question-mark">?</span>;
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if </span>!status.success() {
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Screen spawn failed"</span>.to_string());
-<a href=#203 id=203 data-nosnippet>203</a>    }
-<a href=#204 id=204 data-nosnippet>204</a>
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">8 </span>{
-<a href=#206 id=206 data-nosnippet>206</a>        tokio::time::sleep(Duration::from_millis(<span class="number">500</span>)).<span class="kw">await</span>;
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = extract_antigravity_url(<span class="kw-2">&amp;</span>profile, <span class="kw-2">&amp;</span>screen_name) {
-<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(url);
-<a href=#209 id=209 data-nosnippet>209</a>        }
-<a href=#210 id=210 data-nosnippet>210</a>    }
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="prelude-val">Ok</span>(<span class="string">"https://antigravity.google.com"</span>.to_string())
-<a href=#212 id=212 data-nosnippet>212</a>}
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a><span class="kw">pub async fn </span>stop_antigravity_remote(working_dir: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span>(profile, _remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="kw-2">&amp;</span>screen_name, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
-<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">if </span>profile == <span class="string">"default" </span>{
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="string">"tuner-agy-remote"</span>, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="string">"agy-tuner"</span>, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-15"</span>, <span class="string">"-f"</span>, <span class="string">"wimvm-dev"</span>]).output();
-<a href=#221 id=221 data-nosnippet>221</a>    }
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-15"</span>, <span class="string">"-f"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--remote-control-name {}"</span>, instance_name)]).output();
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">let _ </span>= std::fs::remove_file(<span class="macro">format!</span>(<span class="string">"/tmp/tuner_agy_url_{}.txt"</span>, profile));
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let _ </span>= std::fs::remove_file(<span class="macro">format!</span>(<span class="string">"/tmp/screen_{}.txt"</span>, screen_name));
-<a href=#225 id=225 data-nosnippet>225</a>
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10 </span>{
-<a href=#227 id=227 data-nosnippet>227</a>        tokio::time::sleep(Duration::from_millis(<span class="number">200</span>)).<span class="kw">await</span>;
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">if </span>find_antigravity_process(<span class="kw-2">&amp;</span>instance_name).is_none() {
-<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#230 id=230 data-nosnippet>230</a>        }
-<a href=#231 id=231 data-nosnippet>231</a>    }
-<a href=#232 id=232 data-nosnippet>232</a>
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-9"</span>, <span class="string">"-f"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--remote-control-name {}"</span>, instance_name)]).output();
-<a href=#234 id=234 data-nosnippet>234</a>    tokio::time::sleep(Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="prelude-val">Ok</span>(())
-<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">crate</span>::workspace::sync_layout::sync_remote_workspace_rules(working_dir, <span class="kw-2">&amp;</span>remote_ws);
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">let </span>cmd = <span class="macro">format!</span>(<span class="string">"agy --remote-control --remote-control-name {} --add-dir {}"</span>, instance_name, remote_ws.display());
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>status = Command::new(<span class="string">"screen"</span>)
+<a href=#188 id=188 data-nosnippet>188</a>        .args([<span class="string">"-dmS"</span>, <span class="kw-2">&amp;</span>screen_name, <span class="string">"bash"</span>, <span class="string">"-c"</span>, <span class="kw-2">&amp;</span>cmd])
+<a href=#189 id=189 data-nosnippet>189</a>        .current_dir(<span class="kw-2">&amp;</span>remote_ws)
+<a href=#190 id=190 data-nosnippet>190</a>        .status()
+<a href=#191 id=191 data-nosnippet>191</a>        .map_err(|e| <span class="macro">format!</span>(<span class="string">"Spawn error: {}"</span>, e))<span class="question-mark">?</span>;
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if </span>!status.success() {
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Screen spawn failed"</span>.to_string());
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#198 id=198 data-nosnippet>198</a>        tokio::time::sleep(Duration::from_millis(<span class="number">500</span>)).<span class="kw">await</span>;
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = extract_antigravity_url(<span class="kw-2">&amp;</span>profile, <span class="kw-2">&amp;</span>screen_name) {
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(url);
+<a href=#201 id=201 data-nosnippet>201</a>        }
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="prelude-val">Ok</span>(<span class="string">"https://antigravity.google.com"</span>.to_string())
+<a href=#204 id=204 data-nosnippet>204</a>}
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a><span class="kw">pub async fn </span>stop_antigravity_remote(working_dir: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>(profile, _remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="kw-2">&amp;</span>screen_name, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">if </span>profile == <span class="string">"default" </span>{
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="string">"tuner-agy-remote"</span>, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"screen"</span>).args([<span class="string">"-S"</span>, <span class="string">"agy-tuner"</span>, <span class="string">"-X"</span>, <span class="string">"quit"</span>]).output();
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-15"</span>, <span class="string">"-f"</span>, <span class="string">"wimvm-dev"</span>]).output();
+<a href=#213 id=213 data-nosnippet>213</a>    }
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-15"</span>, <span class="string">"-f"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--remote-control-name {}"</span>, instance_name)]).output();
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let _ </span>= std::fs::remove_file(<span class="macro">format!</span>(<span class="string">"/tmp/tuner_agy_url_{}.txt"</span>, profile));
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let _ </span>= std::fs::remove_file(<span class="macro">format!</span>(<span class="string">"/tmp/screen_{}.txt"</span>, screen_name));
+<a href=#217 id=217 data-nosnippet>217</a>
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10 </span>{
+<a href=#219 id=219 data-nosnippet>219</a>        tokio::time::sleep(Duration::from_millis(<span class="number">200</span>)).<span class="kw">await</span>;
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if </span>find_antigravity_process(<span class="kw-2">&amp;</span>instance_name).is_none() {
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#222 id=222 data-nosnippet>222</a>        }
+<a href=#223 id=223 data-nosnippet>223</a>    }
+<a href=#224 id=224 data-nosnippet>224</a>
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let _ </span>= Command::new(<span class="string">"pkill"</span>).args([<span class="string">"-9"</span>, <span class="string">"-f"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--remote-control-name {}"</span>, instance_name)]).output();
+<a href=#226 id=226 data-nosnippet>226</a>    tokio::time::sleep(Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="prelude-val">Ok</span>(())
+<a href=#228 id=228 data-nosnippet>228</a>}
 </code></pre></div></section></main></body></html>

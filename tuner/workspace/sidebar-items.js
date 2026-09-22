@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["init","paths","rule_sync","rules","rules_check","rules_selector","skill_sync","skills","skills_helpers","sync","sync_helpers"]};
+window.SIDEBAR_ITEMS = {"mod":["init","paths","rule_sync","rules","rules_check","rules_selector","skill_sync","skills","skills_helpers","sync","sync_helpers","sync_layout"]};

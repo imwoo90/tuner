@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_workspace_directories","migrate_legacy_data","sync_constraints_rule","sync_mainmemory_rule","sync_remote_workspace_rules"]};
