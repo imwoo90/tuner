@@ -156,7 +156,14 @@ mod tests {
     fn test_unquoted_code_with_greater_than_preserved() {
         let input = "```rust\nif x > 1 {\n    println!(\"> not a quote\");\n}\n```";
         let html = markdown_to_telegram_html(input);
-        assert_eq!(html, "<pre><code class=\"language-rust\">if x &gt; 1 {\n    println!(&quot;&gt; not a quote&quot;);\n}\n</code></pre>");
+        assert_eq!(html, "<blockquote expandable><pre><code class=\"language-rust\">if x &gt; 1 {\n    println!(&quot;&gt; not a quote&quot;);\n}\n</code></pre></blockquote>");
+    }
+
+    #[test]
+    fn test_unquoted_code_block_auto_expandable() {
+        let input = "```python\nprint('hello world')\n```";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "<blockquote expandable><pre><code class=\"language-python\">print(&#x27;hello world&#x27;)\n</code></pre></blockquote>");
     }
 
     #[test]

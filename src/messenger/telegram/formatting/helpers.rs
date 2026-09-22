@@ -18,7 +18,7 @@ pub fn placeholder(kind: &str, idx: usize) -> String {
 pub fn markdown_to_telegram_html(text: &str) -> String {
     let cleaned_text = super::buttons::strip_button_syntax(text);
 
-    let mut code_blocks: Vec<(String, String)> = Vec::new();
+    let mut code_blocks: Vec<(String, String, bool)> = Vec::new();
     let mut inline_codes: Vec<String> = Vec::new();
     let mut links: Vec<(String, String)> = Vec::new();
     let mut table_blocks: Vec<String> = Vec::new();
@@ -83,7 +83,7 @@ fn sanitize_code_block(code: &str, is_quoted: bool) -> String {
 
 fn extract_entities(
     text: &str,
-    code_blocks: &mut Vec<(String, String)>,
+    code_blocks: &mut Vec<(String, String, bool)>,
     inline_codes: &mut Vec<String>,
     links: &mut Vec<(String, String)>,
     table_blocks: &mut Vec<String>,
@@ -96,7 +96,7 @@ fn extract_entities(
         let is_quoted = !prefix_quote.trim().is_empty();
         let sanitized_code = sanitize_code_block(code, is_quoted);
         let idx = code_blocks.len();
-        code_blocks.push((lang, sanitized_code));
+        code_blocks.push((lang, sanitized_code, is_quoted));
         format!("{}{}", prefix_quote, placeholder("CB", idx))
     }).to_string();
 
@@ -122,7 +122,7 @@ fn extract_entities(
 
 fn restore_entities(
     mut text: String,
-    code_blocks: &[(String, String)],
+    code_blocks: &[(String, String, bool)],
     inline_codes: &[String],
     links: &[(String, String)],
     table_blocks: &[String],
@@ -147,13 +147,18 @@ fn restore_entities(
         text = text.replace(&p, &format!("<code>{}</code>", escaped_code));
     }
 
-    for (i, (lang, code)) in code_blocks.iter().enumerate() {
+    for (i, (lang, code, is_quoted)) in code_blocks.iter().enumerate() {
         let p = placeholder("CB", i);
         let escaped_code = html_escape::encode_safe(code).to_string();
-        let block = if !lang.is_empty() {
+        let raw_block = if !lang.is_empty() {
             format!("<pre><code class=\"language-{}\">{}</code></pre>", html_escape::encode_safe(lang), escaped_code)
         } else {
             format!("<pre>{}</pre>", escaped_code)
+        };
+        let block = if *is_quoted {
+            raw_block
+        } else {
+            format!("<blockquote expandable>{}</blockquote>", raw_block)
         };
         text = text.replace(&p, &block);
     }
