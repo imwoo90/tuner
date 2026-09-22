@@ -125,7 +125,7 @@ impl RulesSelector {
             if self.codex_authenticated || self.antigravity_authenticated {
                 let _ = std::fs::copy(&template, dst_dir.join("AGENTS.md"));
             }
-            if self.gemini_authenticated || self.antigravity_authenticated {
+            if self.gemini_authenticated {
                 let _ = std::fs::copy(&template, dst_dir.join("GEMINI.md"));
             }
         }
@@ -142,7 +142,7 @@ impl RulesSelector {
         if !self.codex_authenticated && !self.antigravity_authenticated {
             stale.push("AGENTS.md");
         }
-        if !self.gemini_authenticated && !self.antigravity_authenticated {
+        if !self.gemini_authenticated {
             stale.push("GEMINI.md");
         }
         let mut total_removed = 0;

@@ -17,6 +17,7 @@ pub mod rules;
 pub mod rules_check;
 pub mod sync;
 pub mod sync_helpers;
+pub mod sync_layout;
 pub mod skills;
 pub mod skills_helpers;
 

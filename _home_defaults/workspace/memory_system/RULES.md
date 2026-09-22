@@ -13,7 +13,7 @@ At the start of new sessions (especially personal or ongoing work), read `MAINME
 
 ## Scope Separation: Memory vs. Rules Context
 
-- **Write to Rules (`AGENTS.md` / `GEMINI.md` / `.agents/rules/`)**:
+- **Write to Rules (`AGENTS.md` / `.agents/rules/constraints.md`)**:
   - Behavioral directives, negative prohibitions ("절대 금지"), positive operational standards ("필수 준수"), tool/workflow rules, and coding/deployment policies.
   - Rules enjoy Antigravity CLI's dedicated 20,000-token rules budget (`defaultRulesBudget`), are injected on every turn, and are 100% immune to conversation compaction. Never place behavioral rules in `MAINMEMORY.md`.
 - **Write to Memory (`MAINMEMORY.md`)**:
@@ -29,7 +29,7 @@ At the start of new sessions (especially personal or ongoing work), read `MAINME
 
 ## When Not to Write to MAINMEMORY.md
 
-- Operational rules or behavioral constraints (put in `AGENTS.md`/`GEMINI.md` instead)
+- Operational rules or behavioral constraints (put in `.agents/rules/constraints.md` instead)
 - One-off throwaway requests
 - Temporary debugging noise
 - Facts already recorded

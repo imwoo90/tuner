@@ -150,7 +150,7 @@ def cmd_save_memory(workspace_dir, content_input):
     ]
     for pattern, label in forbidden_rules_patterns:
         if re.search(pattern, content_str, re.IGNORECASE):
-            print(f"Error: Behavioral rules or constraints ('{label}') must not be stored in mainmemory.md. Keep operational constraints in Antigravity rules context (AGENTS.md / GEMINI.md).", file=sys.stderr)
+            print(f"Error: Behavioral rules or constraints ('{label}') must not be stored in mainmemory.md. Keep operational constraints in Antigravity rules context (AGENTS.md / .agents/rules/constraints.md).", file=sys.stderr)
             sys.exit(1)
 
     # Verify Required Headings (robust to '&' vs 'and', and profile section variations)

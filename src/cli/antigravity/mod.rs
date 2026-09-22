@@ -158,59 +158,57 @@ impl AntigravityCli {
         (tokio::time::Duration::from_secs(effective), base)
     }
 
+fn strip_frontmatter(raw: &str) -> &str {
+    if raw.starts_with("---") {
+        if let Some(end_idx) = raw[3..].find("---") {
+            raw[3 + end_idx + 3..].trim_start()
+        } else {
+            raw
+        }
+    } else {
+        raw
+    }
+}
+
+fn append_section(target: &mut String, content: &str) {
+    let trimmed = content.trim();
+    if !trimmed.is_empty() {
+        if !target.is_empty() {
+            target.push_str("\n\n");
+        }
+        target.push_str(trimmed);
+    }
+}
+
     pub(crate) fn format_prompt(&self, prompt: &str) -> String {
         let mut final_prompt = String::new();
         if let Some(ref sp) = self.config.system_prompt {
-            final_prompt.push_str(sp);
+            Self::append_section(&mut final_prompt, sp);
         }
         if let Some(ref asp) = self.config.append_system_prompt {
-            if !final_prompt.is_empty() {
-                final_prompt.push_str("\n\n");
-            }
-            final_prompt.push_str(asp);
+            Self::append_section(&mut final_prompt, asp);
         }
 
-        let rules_path = self.config.working_dir.join("GEMINI.md");
-        if let Ok(rules) = std::fs::read_to_string(rules_path) {
-            let rules_trimmed = rules.trim();
-            if !rules_trimmed.is_empty() {
-                if !final_prompt.is_empty() {
-                    final_prompt.push_str("\n\n");
-                }
-                final_prompt.push_str(rules_trimmed);
-            }
+        let agents_path = self.config.working_dir.join("AGENTS.md");
+        let legacy_gemini = self.config.working_dir.join("GEMINI.md");
+        let rpath = if agents_path.is_file() { agents_path } else { legacy_gemini };
+        if let Ok(rules) = std::fs::read_to_string(rpath) {
+            Self::append_section(&mut final_prompt, &rules);
         }
 
-        let rule_path = self.config.working_dir.join(".agents").join("rules").join("mainmemory.md");
-        let legacy_path = self.config.working_dir.join("memory_system").join("MAINMEMORY.md");
-        let mem_path = if rule_path.is_file() {
-            rule_path
-        } else {
-            legacy_path
-        };
-        if let Ok(raw_mem) = std::fs::read_to_string(mem_path) {
-            let mem = if raw_mem.starts_with("---") {
-                if let Some(end_idx) = raw_mem[3..].find("---") {
-                    raw_mem[3 + end_idx + 3..].trim_start()
-                } else {
-                    &raw_mem
-                }
-            } else {
-                &raw_mem
-            };
-            let mem_trimmed = mem.trim();
-            if !mem_trimmed.is_empty() {
-                if !final_prompt.is_empty() {
-                    final_prompt.push_str("\n\n");
-                }
-                final_prompt.push_str(mem_trimmed);
-            }
+        let cpath = self.config.working_dir.join(".agents").join("rules").join("constraints.md");
+        if let Ok(raw_c) = std::fs::read_to_string(cpath) {
+            Self::append_section(&mut final_prompt, Self::strip_frontmatter(&raw_c));
         }
 
-        if !final_prompt.is_empty() {
-            final_prompt.push_str("\n\n");
+        let rmem = self.config.working_dir.join(".agents").join("rules").join("mainmemory.md");
+        let lmem = self.config.working_dir.join("memory_system").join("MAINMEMORY.md");
+        let mpath = if rmem.is_file() { rmem } else { lmem };
+        if let Ok(raw_m) = std::fs::read_to_string(mpath) {
+            Self::append_section(&mut final_prompt, Self::strip_frontmatter(&raw_m));
         }
-        final_prompt.push_str(prompt);
+
+        Self::append_section(&mut final_prompt, prompt);
         final_prompt
     }
 

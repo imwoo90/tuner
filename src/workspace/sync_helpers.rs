@@ -73,7 +73,7 @@ fn handle_entry(path: &Path, target: &Path, name: &str, src: &Path, root_src: &P
         }
         let _ = std::fs::copy(path, target);
         if name == "CLAUDE.md" {
-            for mirror in &["AGENTS.md", "GEMINI.md"] {
+            for mirror in &["AGENTS.md"] {
                 let mirror_target = dst.join(mirror);
                 if mirror_target.is_symlink() || mirror_target.is_file() {
                     let _ = std::fs::remove_file(&mirror_target);
@@ -217,40 +217,6 @@ pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
     Ok(())
 }
 
-pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
-    let rules_dir = root.join(".agents").join("rules");
-    let target = rules_dir.join("mainmemory.md");
-    let legacy_dir = root.join("memory_system");
-    let legacy_mem = legacy_dir.join("MAINMEMORY.md");
-
-    // 1. Migration: if legacy regular file exists and target doesn't exist, migrate it
-    if legacy_mem.is_file() && !legacy_mem.is_symlink() && !target.is_file() {
-        if let Ok(content) = std::fs::read_to_string(&legacy_mem) {
-            let header = "---\ntrigger: always_on\ndescription: \"Core factual memory about user, family, assets, vehicle, and preferences\"\n---\n";
-            let clean = if content.starts_with("---") {
-                content
-            } else {
-                format!("{}{}", header, content)
-            };
-            let _ = std::fs::create_dir_all(&rules_dir);
-            let _ = std::fs::write(&target, clean);
-        }
-    }
-
-    // 2. Ensure legacy path is a relative symlink to target if legacy_dir exists or target exists
-    if target.is_file() && legacy_dir.is_dir() {
-        let rel_target = std::path::Path::new("../.agents/rules/mainmemory.md");
-        let should_symlink = match std::fs::read_link(&legacy_mem) {
-            Ok(p) => p != rel_target,
-            Err(_) => true,
-        };
-        if should_symlink {
-            let _ = std::fs::remove_file(&legacy_mem);
-            #[cfg(unix)]
-            {
-                let _ = std::os::unix::fs::symlink(rel_target, &legacy_mem);
-            }
-        }
-    }
-    Ok(())
-}
+pub use crate::workspace::sync_layout::{
+    create_workspace_directories, migrate_legacy_data, sync_constraints_rule, sync_mainmemory_rule,
+};

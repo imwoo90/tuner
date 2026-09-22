@@ -3,9 +3,11 @@ use crate::config::CliConfig;
 
 #[test]
 fn test_antigravity_command_uses_print_and_conversation() {
+    let dir = create_test_dir("print_conv_test");
     let config = CliConfig {
         provider: "antigravity".to_string(),
         model: Some("antigravity-default".to_string()),
+        working_dir: dir,
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -35,9 +37,11 @@ fn test_antigravity_command_grounds_in_workspace() {
 
 #[test]
 fn test_antigravity_command_includes_selected_model() {
+    let dir = create_test_dir("model_test");
     let config = CliConfig {
         provider: "antigravity".to_string(),
         model: Some("claude-sonnet-4-5".to_string()),
+        working_dir: dir,
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -53,9 +57,11 @@ fn test_antigravity_command_includes_selected_model() {
 
 #[test]
 fn test_antigravity_command_continue_and_bypass() {
+    let dir = create_test_dir("continue_bypass_test");
     let config = CliConfig {
         provider: "antigravity".to_string(),
         permission_mode: "bypassPermissions".to_string(),
+        working_dir: dir,
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -68,11 +74,13 @@ fn test_antigravity_command_continue_and_bypass() {
 
 #[test]
 fn test_antigravity_command_includes_cli_parameters() {
+    let dir = create_test_dir("cli_params_test");
     let mut cli_params = std::collections::HashMap::new();
     cli_params.insert("antigravity".to_string(), vec!["--log-file".to_string(), "agy.log".to_string()]);
     let config = CliConfig {
         provider: "antigravity".to_string(),
         cli_parameters: cli_params,
+        working_dir: dir,
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -132,9 +140,15 @@ fn test_antigravity_plain_workspace_unchanged() {
 fn test_format_prompt_injects_workspace_rules_and_memory() {
     let base = create_test_dir("prompt_inject_test");
     
-    // Create GEMINI.md
-    let gemini_path = base.join("GEMINI.md");
-    std::fs::write(&gemini_path, "GEMINI_RULES_CONTENT").unwrap();
+    // Create AGENTS.md
+    let agents_path = base.join("AGENTS.md");
+    std::fs::write(&agents_path, "AGENTS_RULES_CONTENT").unwrap();
+
+    // Create .agents/rules/constraints.md
+    let rules_dir = base.join(".agents").join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    let constraints_path = rules_dir.join("constraints.md");
+    std::fs::write(&constraints_path, "---\ntrigger: always_on\n---\nCONSTRAINTS_CONTENT").unwrap();
     
     // Create memory_system/MAINMEMORY.md
     let mem_dir = base.join("memory_system");
@@ -150,7 +164,21 @@ fn test_format_prompt_injects_workspace_rules_and_memory() {
     let cli = AntigravityCli::new(config);
     let final_prompt = cli.format_prompt("user_prompt");
     
-    assert!(final_prompt.contains("GEMINI_RULES_CONTENT"));
+    assert!(final_prompt.contains("AGENTS_RULES_CONTENT"));
+    assert!(final_prompt.contains("CONSTRAINTS_CONTENT"));
     assert!(final_prompt.contains("MAINMEMORY_CONTENT"));
     assert!(final_prompt.contains("user_prompt"));
+
+    // Also test fallback to GEMINI.md if AGENTS.md is absent
+    let base_fallback = create_test_dir("prompt_inject_gemini_fallback");
+    let gemini_path = base_fallback.join("GEMINI.md");
+    std::fs::write(&gemini_path, "LEGACY_GEMINI_RULES").unwrap();
+    let config_fallback = CliConfig {
+        provider: "antigravity".to_string(),
+        working_dir: base_fallback.clone(),
+        ..Default::default()
+    };
+    let cli_fallback = AntigravityCli::new(config_fallback);
+    let final_prompt_fallback = cli_fallback.format_prompt("user_prompt");
+    assert!(final_prompt_fallback.contains("LEGACY_GEMINI_RULES"));
 }

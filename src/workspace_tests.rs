@@ -177,4 +177,58 @@ mod tests {
 
         cleanup_ductor_links(&paths).unwrap();
     }
+
+    #[test]
+    fn test_deploy_rules_deploys_agents_and_cleans_up_gemini_for_antigravity() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().join("home");
+        let fw = tmp.path().join("fw");
+        let defaults = fw.join("defaults");
+        let ws = defaults.join("workspace");
+        fs::create_dir_all(&ws).unwrap();
+        fs::write(ws.join("RULES.md"), "# Base Rules").unwrap();
+
+        let paths = DuctorPaths::new(
+            home.clone(),
+            defaults,
+            fw,
+            Some("default".to_string()),
+        );
+
+        let profile_ws = paths.workspace();
+        fs::create_dir_all(&profile_ws).unwrap();
+        fs::write(profile_ws.join("GEMINI.md"), "# Old Gemini").unwrap();
+
+        let mut selector = RulesSelector::new(paths.clone());
+        selector.claude_authenticated = false;
+        selector.codex_authenticated = false;
+        selector.gemini_authenticated = false;
+        selector.antigravity_authenticated = true;
+
+        selector.deploy_rules().unwrap();
+
+        assert!(profile_ws.join("AGENTS.md").is_file());
+        assert!(!profile_ws.join("GEMINI.md").exists());
+    }
+
+    #[test]
+    fn test_sync_constraints_rule_creates_and_preserves() {
+        use crate::workspace::sync_helpers::sync_constraints_rule;
+        let tmp = tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        let def_tpl = tmp.path().join("default_constraints.md");
+        fs::write(&def_tpl, "---\ntrigger: always_on\n---\n# Defaults").unwrap();
+
+        sync_constraints_rule(&ws, Some(&def_tpl)).unwrap();
+        let target = ws.join(".agents").join("rules").join("constraints.md");
+        assert!(target.is_file());
+        let content1 = fs::read_to_string(&target).unwrap();
+        assert!(content1.contains("# Defaults"));
+
+        fs::write(&target, "---\ntrigger: always_on\n---\n# My Custom Constraints").unwrap();
+
+        sync_constraints_rule(&ws, Some(&def_tpl)).unwrap();
+        let content2 = fs::read_to_string(&target).unwrap();
+        assert!(content2.contains("# My Custom Constraints"));
+    }
 }

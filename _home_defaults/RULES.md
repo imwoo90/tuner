@@ -7,7 +7,7 @@ The main Telegram assistant usually runs with cwd `workspace/`.
 
 Read in this order:
 
-1. `workspace/GEMINI.md` / `workspace/AGENTS.md` (main behavior + Telegram rules)
+1. `workspace/AGENTS.md` (system constitution) & `workspace/.agents/rules/constraints.md` (operational constraints)
 2. `workspace/tools/RULES.md` (tool routing)
 3. `workspace/memory_system/MAINMEMORY.md` (long-term context)
 4. `config/RULES.md` (only for config changes)

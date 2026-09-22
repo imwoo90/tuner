@@ -10,7 +10,10 @@
 //! #workspace-init, #profile-copy, #environment-setup
 
 use crate::workspace::paths::DuctorPaths;
-use crate::workspace::sync_helpers::{smart_merge_config, sync_group, sync_mainmemory_rule, sync_rule_files_recursive, walk_and_copy};
+use crate::workspace::sync_helpers::{
+    create_workspace_directories, migrate_legacy_data, smart_merge_config, sync_constraints_rule,
+    sync_group, sync_mainmemory_rule, sync_rule_files_recursive, walk_and_copy,
+};
 use std::path::Path;
 
 static DOCKER_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**IMPORTANT: YOU ARE RUNNING INSIDE A DOCKER CONTAINER (`{container}`).**\n\n- Your filesystem is isolated. `/ductor` is the mounted host directory `~/.tuner`.\n- You cannot see or access the host system outside this mount.\n- Feel free to experiment -- the host is protected.\n";
@@ -20,59 +23,6 @@ static HOST_NOTICE: &str = "\n\n---\n\n## Runtime Environment\n\n**WARNING: YOU 
 static TRANSPORT_TELEGRAM: &str = "\n\n---\n\n## Messenger Rules\n\n- Replies are Telegram messages (4096-char limit; auto-split is handled).\n- Keep responses mobile-friendly and structured.\n- To send files, use `<file:/absolute/path>`.\n- Save generated deliverables in `output_to_user/`.\n- Do not suggest GUI-only actions like `xdg-open`.\n\n### Quick Reply Buttons\n\nUse button syntax at the end of messages:\n\n- `[button:Label]` markers\n- same line = one row\n- new line = new row\n\nKeep labels short. Callback data is truncated to 64 bytes by the framework.\nDo not place button markers inside code blocks.\n";
 
 static IDENTITY_MAIN: &str = "\n\n---\n\n## Multi-Agent Identity\n\n**You are the MAIN agent (`{name}`).**\n\n- You are the coordinator in a multi-agent system.\n- Each sub-agent has its own bot/chat.\n\n### How the user interacts with sub-agents\n\n1. **Direct chat**: The user opens the sub-agent's bot and chats directly.\n2. **Delegation via you**: The user asks YOU to delegate a task using the agent tools below.\n\nAfter creating a sub-agent, tell the user they can open its chat directly. Do not suggest internal tools to the user.\n\n### Agent tools (for YOUR internal use)\n\n- `python3 tools/agent_tools/ask_agent.py TARGET \"message\"`\n- `python3 tools/agent_tools/ask_agent_async.py TARGET \"message\"`\n- `python3 tools/agent_tools/list_agents.py`\n- `python3 tools/agent_tools/edit_shared_knowledge.py`\n\nResponses come back to YOU, never to the sub-agent. Use async for tasks taking more than a few seconds.\n\nAsynchronous sub-agent tasks run in a session called `ia-{name}`. The user can follow up directly via `@ia-{name} <message>`. Mention this session name when reporting results.\n";
-
-fn migrate_legacy_data(paths: &DuctorPaths) {
-    if let Some(ref p) = paths.profile {
-        if p == "default" {
-            let legacy_sessions = paths.tuner_home.join("sessions.json");
-            let legacy_workspace = paths.tuner_home.join("workspace");
-            let target_sessions = paths.sessions_path();
-            let target_workspace = paths.workspace();
-
-            if legacy_sessions.is_file() && !target_sessions.exists() {
-                if let Some(parent) = target_sessions.parent() {
-                    let _ = std::fs::create_dir_all(parent);
-                }
-                let _ = std::fs::rename(&legacy_sessions, &target_sessions);
-            }
-            if legacy_workspace.is_dir() && !target_workspace.exists() {
-                if let Some(parent) = target_workspace.parent() {
-                    let _ = std::fs::create_dir_all(parent);
-                }
-                let _ = std::fs::rename(&legacy_workspace, &target_workspace);
-            }
-        }
-    }
-}
-
-fn create_workspace_directories(paths: &DuctorPaths) {
-    let required_workspace_dirs = [
-        "",
-        "memory_system",
-        "cron_tasks",
-        "tools",
-        "tools/user_tools",
-        "tools/cron_tools",
-        "tools/media_tools",
-        "tools/webhook_tools",
-        "output_to_user",
-        "tasks",
-        "skills",
-        ".agents",
-        ".agents/rules",
-    ];
-    for rel in &required_workspace_dirs {
-        let d = if rel.is_empty() {
-            paths.workspace()
-        } else {
-            paths.workspace().join(rel)
-        };
-        if !d.is_dir() {
-            let _ = std::fs::create_dir_all(&d);
-        }
-    }
-    let _ = std::fs::create_dir_all(paths.config_dir());
-}
 
 /// Initializes the workspace directory structure and configurations.
 pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
@@ -97,6 +47,8 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
 
     create_workspace_directories(paths);
     let _ = sync_mainmemory_rule(&paths.workspace());
+    let default_constraints = paths.home_defaults.join("workspace").join(".agents").join("rules").join("constraints.md");
+    let _ = sync_constraints_rule(&paths.workspace(), Some(&default_constraints));
 
     let selector = crate::workspace::rules::RulesSelector::new(paths.clone());
     let _ = selector.deploy_rules();
@@ -164,6 +116,7 @@ pub fn sync_rule_files(root: &Path) -> Result<(), String> {
     sync_group(root)?;
     sync_rule_files_recursive(root)?;
     let _ = sync_mainmemory_rule(root);
+    let _ = sync_constraints_rule(root, None);
     Ok(())
 }
 
