@@ -59,6 +59,7 @@ impl Default for SessionData {
             language: None,
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
+            last_handover_summary: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,
@@ -92,6 +93,8 @@ pub struct SessionData {
     pub last_progress_msg_id: Option<i32>,
     #[serde(default)]
     pub pending_attachments: Vec<String>,
+    #[serde(default)]
+    pub last_handover_summary: Option<String>,
 
     // Legacy fields used for migration
     #[serde(skip_serializing, default)]
@@ -126,6 +129,7 @@ impl SessionData {
             language: None,
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
+            last_handover_summary: None,
             session_id: None,
             message_count: None,
             total_cost_usd: None,

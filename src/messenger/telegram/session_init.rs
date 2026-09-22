@@ -26,6 +26,18 @@ pub(crate) async fn initialize_session_if_needed(
     cli: &AntigravityCli,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
+    initialize_session_with_prompt(bot, msg, sessions, sess, cli, config, None).await
+}
+
+pub(crate) async fn initialize_session_with_prompt(
+    bot: &Bot,
+    msg: &Message,
+    sessions: &SessionManager,
+    sess: &mut SessionData,
+    cli: &AntigravityCli,
+    config: &CliConfig,
+    startup_prompt: Option<&str>,
+) -> Result<String, teloxide::RequestError> {
     let provider = &config.provider;
     let session_id = sess.get_session_id(provider);
     if !session_id.is_empty() {
@@ -46,7 +58,7 @@ pub(crate) async fn initialize_session_if_needed(
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-    boot_fresh_session(bot, msg, sessions, sess, cli, config).await
+    boot_fresh_session(bot, msg, sessions, sess, cli, config, startup_prompt).await
 }
 
 async fn handle_boot_response(
@@ -56,6 +68,7 @@ async fn handle_boot_response(
     sess: &mut SessionData,
     provider: &str,
     send_res: Result<crate::cli::CliResponse, String>,
+    config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
     match send_res {
         Ok(res) => {
@@ -69,12 +82,29 @@ async fn handle_boot_response(
                     res.result.clone()
                 };
 
-                let mut req = bot.send_message(msg.chat.id, reply_text);
+                let mut req = bot.send_message(msg.chat.id, reply_text.clone());
                 if let Some(tid) = msg.thread_id {
                     req = req.message_thread_id(tid);
                 }
-                let _ = req.await?;
+                let sent = req.await;
 
+                let sent_id = sent.as_ref().ok().map(|m| m.id.0);
+                let is_ok = sent.is_ok();
+                let err_str = sent.as_ref().err().map(|e| e.to_string());
+
+                crate::messenger::telegram::history::log_telegram_message(
+                    &config.working_dir,
+                    new_sid,
+                    sess.topic_id,
+                    sess.topic_name.as_deref(),
+                    "bot",
+                    sent_id,
+                    &reply_text,
+                    is_ok,
+                    err_str.as_deref(),
+                );
+
+                sent?;
                 Ok(new_sid.to_string())
             } else {
                 eprintln!("Initialization oneshot did not return a session_id");
@@ -95,17 +125,22 @@ async fn boot_fresh_session(
     sess: &mut SessionData,
     cli: &AntigravityCli,
     config: &CliConfig,
+    startup_prompt: Option<&str>,
 ) -> Result<String, teloxide::RequestError> {
     let provider = &config.provider;
-    let startup_prompt = crate::t!("bot.session_init_prompt");
+    let default_prompt = crate::t!("bot.session_init_prompt");
+    let initial_prompt = startup_prompt.unwrap_or(&default_prompt);
     let ws = cli.agy_workspace();
     let mut session_cli = cli.clone();
-    let (chat_id, topic_id) = (msg.chat.id.0, msg.thread_id.map(|t| t.0.0 as i64));
+    let (chat_id, topic_id) = (
+        msg.chat.id.0,
+        sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64)),
+    );
     session_cli.config.chat_id = chat_id;
     session_cli.config.topic_id = topic_id;
 
     let mut cancel_rx = cli.sessions.register_boot(chat_id, topic_id).await;
-    let send_fut = session_cli.send(&startup_prompt, None, false, ws);
+    let send_fut = session_cli.send(initial_prompt, None, false, ws);
     tokio::pin!(send_fut);
 
     let send_res = tokio::select! {
@@ -120,5 +155,5 @@ async fn boot_fresh_session(
         }
     };
 
-    handle_boot_response(bot, msg, sessions, sess, provider, send_res).await
+    handle_boot_response(bot, msg, sessions, sess, provider, send_res, config).await
 }

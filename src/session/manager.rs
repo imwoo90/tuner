@@ -149,6 +149,7 @@ impl SessionManager {
         current.language = session.language.clone();
         current.effort = session.effort.clone();
         current.pending_attachments = session.pending_attachments.clone();
+        current.last_handover_summary = session.last_handover_summary.clone();
         if session.topic_name.is_some() && current.topic_name.is_none() {
             current.topic_name = session.topic_name.clone();
         }
@@ -199,6 +200,7 @@ impl SessionManager {
                 ex.provider = provider.to_string();
                 ex.model = model.to_string();
                 ex.last_active = Utc::now().to_rfc3339();
+                ex.last_handover_summary = None;
                 ex.clone()
             }
             None => {

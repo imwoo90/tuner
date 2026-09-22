@@ -67,12 +67,8 @@ fn check_file(path: &Path) -> Result<(), String> {
         if trimmed.starts_with("//") {
             doc_chars += line_len;
             // Check for module-level docs
-            if trimmed.starts_with("//!") {
-                let doc_line = if trimmed.starts_with("//! ") {
-                    &trimmed[4..]
-                } else {
-                    &trimmed[3..]
-                };
+            if let Some(rest) = trimmed.strip_prefix("//!") {
+                let doc_line = rest.strip_prefix(' ').unwrap_or(rest);
                 module_docs.push(doc_line.to_string());
             }
             continue;

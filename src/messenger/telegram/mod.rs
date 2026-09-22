@@ -27,6 +27,12 @@ pub mod formatting_tests;
 pub mod reply;
 pub mod session_init;
 pub mod history;
+pub mod handover;
+pub mod handover_helpers;
+#[cfg(test)]
+pub mod handover_tests;
+#[cfg(test)]
+pub mod handover_integration_tests;
 #[cfg(test)]
 pub mod reply_tests;
 #[cfg(test)]
