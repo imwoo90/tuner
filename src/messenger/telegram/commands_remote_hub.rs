@@ -181,8 +181,6 @@ pub async fn start_antigravity_remote(working_dir: &Path) -> Result<String, Stri
     let _ = stop_antigravity_remote(working_dir).await;
     let _ = std::fs::create_dir_all(&remote_ws);
 
-    crate::workspace::sync_layout::sync_remote_workspace_rules(working_dir, &remote_ws);
-
     let cmd = format!("agy --remote-control --remote-control-name {} --add-dir {}", instance_name, remote_ws.display());
     let status = Command::new("screen")
         .args(["-dmS", &screen_name, "bash", "-c", &cmd])

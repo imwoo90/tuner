@@ -219,5 +219,4 @@ pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
 
 pub use crate::workspace::sync_layout::{
     create_workspace_directories, migrate_legacy_data, sync_constraints_rule, sync_mainmemory_rule,
-    sync_remote_workspace_rules,
 };
