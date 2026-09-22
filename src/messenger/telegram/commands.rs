@@ -165,8 +165,8 @@ pub(crate) async fn handle_commands(
     if handle_pref_commands(bot, msg, text, config, sessions, cli).await {
         return Ok(true);
     }
-    if trimmed == "/memory" {
-        let _ = handle_memory_command(bot, msg, config).await;
+    if trimmed == "/memory" || trimmed.starts_with("/memory@") {
+        let _ = handle_memory_command(bot, msg, config, sessions, cli).await;
         return Ok(true);
     }
     if trimmed == "/cron" {
@@ -198,37 +198,42 @@ async fn handle_cron_command(
             }
         }
         Err(e) => {
-            eprintln!("❌ [tuner] handle_cron_command error: {}", e);
-            let _ = send_reply(bot, msg, &format!("❌ Failed to load cron jobs: {}", e)).await;
+            eprintln!("❌ [tuner] Failed to build cron page: {:?}", e);
         }
     }
     Ok(())
 }
 
+async fn try_query_live_memory(
+    bot: &Bot,
+    msg: &Message,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+) -> bool {
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let model = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, model).await {
+        if let Ok(sid) = super::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
+            if !sid.is_empty() && !sid.starts_with("mock-") {
+                let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
+                let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, sessions, sess, config).await;
+                return true;
+            }
+        }
+    }
+    false
+}
 
-
-
-
-
-
-
-
-async fn handle_memory_command(
+async fn send_static_memory_fallback(
     bot: &Bot,
     msg: &Message,
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
     let rule_path = config.working_dir.join(".agents/rules/mainmemory.md");
     let legacy_path = config.working_dir.join("memory_system/MAINMEMORY.md");
-    let memory_path = if rule_path.is_file() {
-        rule_path
-    } else {
-        legacy_path
-    };
-    let raw_content = std::fs::read_to_string(memory_path)
-        .unwrap_or_else(|_| t!("bot.memory_empty"));
-
-    // Strip YAML frontmatter if present for clean chat display
+    let memory_path = if rule_path.is_file() { rule_path } else { legacy_path };
+    let raw_content = std::fs::read_to_string(memory_path).unwrap_or_else(|_| t!("bot.memory_empty"));
     let content = if raw_content.starts_with("---") {
         if let Some(end_idx) = raw_content[3..].find("---") {
             raw_content[3 + end_idx + 3..].trim_start()
@@ -238,19 +243,27 @@ async fn handle_memory_command(
     } else {
         &raw_content
     };
-    
     let html_text = crate::telegram::formatting::markdown_to_telegram_html(content);
-    let chunks = crate::telegram::formatting::split_html_message(&html_text, 4000);
-    for chunk in chunks {
-        let mut req = bot.send_message(msg.chat.id, chunk)
-            .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
-        }
+    for chunk in crate::telegram::formatting::split_html_message(&html_text, 4000) {
+        let mut req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
+        if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
         if let Err(e) = req.await {
             eprintln!("❌ [tuner] Failed to send memory chunk: {:?}", e);
         }
     }
     Ok(())
+}
+
+async fn handle_memory_command(
+    bot: &Bot,
+    msg: &Message,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+) -> Result<(), teloxide::RequestError> {
+    if try_query_live_memory(bot, msg, config, sessions, cli).await {
+        return Ok(());
+    }
+    send_static_memory_fallback(bot, msg, config).await
 }
 
