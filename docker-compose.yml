@@ -14,7 +14,7 @@ services:
       - USER=${USER:-root}
       - TERM=xterm-256color
       - RUST_LOG=info
-      - PATH=${HOME:-/root}/.local/bin:${HOME:-/root}/.gemini/antigravity-cli/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PATH=${HOME:-/root}/.gemini/antigravity-cli/bin:${HOME:-/root}/.local/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       # 1. Source code workspace (relative to repo root)
       - .:/workspace
