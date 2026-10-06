@@ -24,6 +24,7 @@ async fn handle_model_callback(
     model: &str,
     sessions: &SessionManager,
     config: &CliConfig,
+    cli: &AntigravityCli,
 ) {
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
@@ -31,6 +32,10 @@ async fn handle_model_callback(
         s.model = model.to_string();
         s.effort = None;
         let _ = sessions.update_session(&s, 0.0, 0).await;
+        let sid = s.get_session_id(&s.provider);
+        if !sid.is_empty() {
+            cli.sessions.terminate(&sid).await;
+        }
         let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = model)).await;
     }
 }
@@ -61,7 +66,7 @@ async fn handle_options_and_upgrade_callbacks(
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
     if let Some(m) = d.strip_prefix("model:") {
-        handle_model_callback(bot, msg, m, sessions, config).await;
+        handle_model_callback(bot, msg, m, sessions, config, cli).await;
         return Ok(true);
     }
     if let Some(m) = d.strip_prefix("model_base:") {
@@ -71,12 +76,12 @@ async fn handle_options_and_upgrade_callbacks(
     if d.starts_with("model_effort:") {
         let parts: Vec<&str> = d.splitn(3, ':').collect();
         if parts.len() == 3 {
-            handle_model_effort_callback(bot, msg, parts[1], parts[2], sessions, config).await;
+            handle_model_effort_callback(bot, msg, parts[1], parts[2], sessions, config, cli).await;
         }
         return Ok(true);
     }
     if let Some(e) = d.strip_prefix("effort:") {
-        handle_standalone_effort_callback(bot, msg, e, sessions, config).await;
+        handle_standalone_effort_callback(bot, msg, e, sessions, config, cli).await;
         return Ok(true);
     }
     if let Some(m) = d.strip_prefix("lang:") {

@@ -56,23 +56,7 @@ pub async fn handle_model_base_callback(
     
     let mut models = cli.discover_models().await;
     if models.is_empty() {
-        models = vec![
-            "gemini-3.8-flash-high".to_string(),
-            "gemini-3.8-flash-medium".to_string(),
-            "gemini-3.8-flash-low".to_string(),
-            "gemini-3.7-flash-high".to_string(),
-            "gemini-3.7-flash-medium".to_string(),
-            "gemini-3.7-flash-low".to_string(),
-            "gemini-3.6-flash-high".to_string(),
-            "gemini-3.6-flash-medium".to_string(),
-            "gemini-3.6-flash-low".to_string(),
-            "gemini-3.5-flash-high".to_string(),
-            "gemini-3.1-pro-high".to_string(),
-            "claude-sonnet-4-6".to_string(),
-            "claude-opus-4-6-thinking".to_string(),
-            "gpt-oss-120b-medium".to_string(),
-            "antigravity-default".to_string(),
-        ];
+        models = crate::telegram::commands_model::fallback_models();
     }
     
     let efforts = get_efforts_for_base(base, &models);
@@ -82,6 +66,10 @@ pub async fn handle_model_base_callback(
             s.model = base.to_string();
             s.effort = None;
             let _ = sessions.update_session(&s, 0.0, 0).await;
+            let sid = s.get_session_id(&s.provider);
+            if !sid.is_empty() {
+                cli.sessions.terminate(&sid).await;
+            }
             let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = base)).await;
         }
     } else {
@@ -96,6 +84,7 @@ pub async fn handle_model_effort_callback(
     effort: &str,
     sessions: &SessionManager,
     config: &CliConfig,
+    cli: &AntigravityCli,
 ) {
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
@@ -103,6 +92,10 @@ pub async fn handle_model_effort_callback(
         s.model = base.to_string();
         s.effort = Some(effort.to_string());
         let _ = sessions.update_session(&s, 0.0, 0).await;
+        let sid = s.get_session_id(&s.provider);
+        if !sid.is_empty() {
+            cli.sessions.terminate(&sid).await;
+        }
         let display = format!("{} (effort: {})", base, effort);
         let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = display)).await;
     }
@@ -114,12 +107,17 @@ pub async fn handle_standalone_effort_callback(
     effort: &str,
     sessions: &SessionManager,
     config: &CliConfig,
+    cli: &AntigravityCli,
 ) {
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
         s.effort = Some(effort.to_string());
         let _ = sessions.update_session(&s, 0.0, 0).await;
+        let sid = s.get_session_id(&s.provider);
+        if !sid.is_empty() {
+            cli.sessions.terminate(&sid).await;
+        }
         let display_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort);
         let _ = bot.edit_message_text(msg.chat.id, msg.id, display_msg).await;
     }

@@ -93,6 +93,21 @@ fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
     }
 }
 
+fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> {
+    if !t.starts_with('@') { return None; }
+    let dir = t.split_whitespace().next().unwrap_or("");
+    let m = &dir[1..];
+    if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
+        let (canonical, default_eff) = match m {
+            "opus" => ("claude-opus-5-5", Some("high".to_string())),
+            "sonnet" => ("claude-sonnet-5-5", Some("high".to_string())),
+            other => (other, None),
+        };
+        return Some((Some(canonical.to_string()), default_eff, t[dir.len()..].trim()));
+    }
+    None
+}
+
 pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<String>, &str) {
     let t = text.trim();
     if let Some(r) = t.strip_prefix("@model ") {
@@ -125,12 +140,8 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<Strin
             let remaining_text = get_remaining_prompt(rest, consumed_tokens);
             return (Some(model_name), effort, remaining_text);
         }
-    } else if t.starts_with('@') {
-        let dir = t.split_whitespace().next().unwrap_or("");
-        let m = &dir[1..];
-        if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
-            return (Some(m.to_string()), None, t[dir.len()..].trim());
-        }
+    } else if let Some(res) = parse_at_shortcut(t) {
+        return res;
     }
     (None, None, t)
 }

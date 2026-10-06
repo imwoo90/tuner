@@ -127,7 +127,7 @@ async fn handle_pref_commands(
         return true;
     }
     if let Some(args) = text.strip_prefix("/effort") {
-        let _ = handle_effort_command(bot, msg, args.trim(), config, sessions).await;
+        let _ = handle_effort_command(bot, msg, args.trim(), config, sessions, cli).await;
         return true;
     }
     if let Some(args) = text.strip_prefix("/lang") {

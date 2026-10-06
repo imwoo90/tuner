@@ -65,7 +65,44 @@ fn parse_model_effort_args(args: &str) -> (String, Option<String>) {
         effort_part = Some("low".to_string());
         model_part = model_part[..model_part.len() - 4].to_string();
     }
-    (model_part, effort_part)
+
+    let normalized_base = match model_part.as_str() {
+        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
+        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
+        "flash" | "gemini" => "gemini-3.8-flash",
+        "pro" => "gemini-3.1-pro",
+        other => other,
+    };
+    if effort_part.is_none() && (normalized_base.contains("claude-") || normalized_base.contains("opus") || normalized_base.contains("sonnet") || normalized_base.contains("pro")) {
+        effort_part = Some("high".to_string());
+    }
+
+    (normalized_base.to_string(), effort_part)
+}
+
+pub(crate) fn fallback_models() -> Vec<String> {
+    vec![
+        "gemini-3.8-flash-high".to_string(),
+        "gemini-3.8-flash-medium".to_string(),
+        "gemini-3.8-flash-low".to_string(),
+        "gemini-3.7-flash-high".to_string(),
+        "gemini-3.7-flash-medium".to_string(),
+        "gemini-3.7-flash-low".to_string(),
+        "gemini-3.6-flash-high".to_string(),
+        "gemini-3.6-flash-medium".to_string(),
+        "gemini-3.6-flash-low".to_string(),
+        "gemini-3.5-flash-high".to_string(),
+        "gemini-3.1-pro-high".to_string(),
+        "gemini-3.1-pro-low".to_string(),
+        "claude-opus-5-5-high".to_string(),
+        "claude-opus-5-5-medium".to_string(),
+        "claude-opus-5-5-low".to_string(),
+        "claude-sonnet-5-5-high".to_string(),
+        "claude-sonnet-5-5-medium".to_string(),
+        "claude-sonnet-5-5-low".to_string(),
+        "gpt-oss-120b-medium".to_string(),
+        "antigravity-default".to_string(),
+    ]
 }
 
 async fn handle_model_command_empty(
@@ -75,23 +112,7 @@ async fn handle_model_command_empty(
 ) -> Result<(), teloxide::RequestError> {
     let mut models = cli.discover_models().await;
     if models.is_empty() {
-        models = vec![
-            "gemini-3.8-flash-high".to_string(),
-            "gemini-3.8-flash-medium".to_string(),
-            "gemini-3.8-flash-low".to_string(),
-            "gemini-3.7-flash-high".to_string(),
-            "gemini-3.7-flash-medium".to_string(),
-            "gemini-3.7-flash-low".to_string(),
-            "gemini-3.6-flash-high".to_string(),
-            "gemini-3.6-flash-medium".to_string(),
-            "gemini-3.6-flash-low".to_string(),
-            "gemini-3.5-flash-high".to_string(),
-            "gemini-3.1-pro-high".to_string(),
-            "claude-sonnet-4-6".to_string(),
-            "claude-opus-4-6-thinking".to_string(),
-            "gpt-oss-120b-medium".to_string(),
-            "antigravity-default".to_string(),
-        ];
+        models = fallback_models();
     }
     
     let grouped = group_discovered_models(&models);
@@ -119,6 +140,7 @@ async fn handle_model_command_switch(
     args: &str,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
@@ -130,6 +152,11 @@ async fn handle_model_command_switch(
     sess.effort = effort_part.clone();
     let _ = sessions.update_session(&sess, 0.0, 0).await;
     
+    let sid = sess.get_session_id(&sess.provider);
+    if !sid.is_empty() {
+        cli.sessions.terminate(&sid).await;
+    }
+
     let display_model = if let Some(ref eff) = effort_part {
         format!("{} (effort: {})", sess.model, eff)
     } else {
@@ -151,7 +178,7 @@ pub(crate) async fn handle_model_command(
     if args.is_empty() {
         handle_model_command_empty(bot, msg, cli).await
     } else {
-        handle_model_command_switch(bot, msg, args, config, sessions).await
+        handle_model_command_switch(bot, msg, args, config, sessions, cli).await
     }
 }
 
@@ -169,6 +196,7 @@ pub(crate) async fn handle_effort_command(
     args: &str,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
@@ -191,6 +219,10 @@ pub(crate) async fn handle_effort_command(
         if level == "high" || level == "medium" || level == "low" {
             sess.effort = Some(level.clone());
             let _ = sessions.update_session(&sess, 0.0, 0).await;
+            let sid = sess.get_session_id(&sess.provider);
+            if !sid.is_empty() {
+                cli.sessions.terminate(&sid).await;
+            }
             let status_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", level);
             let _ = send_reply(bot, msg, status_msg).await;
         } else {

@@ -16,18 +16,17 @@ pub(crate) use super::pty_spawner::strip_ansi;
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
-        let mut add = |k: &str, v: String| env.insert(k.into(), v);
-        add("TUNER_AGENT_NAME", "main".into());
-        add("TUNER_CHAT_ID", self.config.chat_id.to_string());
-        if let Some(tid) = self.config.topic_id { add("TUNER_TOPIC_ID", tid.to_string()); }
-        add("TUNER_TRANSPORT", self.config.transport.clone());
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let tuner_home = std::path::PathBuf::from(&home).join(".tuner");
-        let shared_memory_path = tuner_home.join("SHAREDMEMORY.md");
-        add("TERM", "dumb".into());
-        add("NO_COLOR", "1".into());
-        add("TUNER_HOME", tuner_home.to_string_lossy().into());
-        add("TUNER_SHARED_MEMORY_PATH", shared_memory_path.to_string_lossy().into());
+        let th = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner");
+        env.extend([
+            ("TUNER_AGENT_NAME".into(), "main".into()),
+            ("TUNER_CHAT_ID".into(), self.config.chat_id.to_string()),
+            ("TUNER_TRANSPORT".into(), self.config.transport.clone()),
+            ("TERM".into(), "dumb".into()),
+            ("NO_COLOR".into(), "1".into()),
+            ("TUNER_SHARED_MEMORY_PATH".into(), th.join("SHAREDMEMORY.md").to_string_lossy().into()),
+            ("TUNER_HOME".into(), th.to_string_lossy().into()),
+        ]);
+        if let Some(tid) = self.config.topic_id { env.insert("TUNER_TOPIC_ID".into(), tid.to_string()); }
         env
     }
 
@@ -35,6 +34,17 @@ impl AntigravityCli {
         let agy_ws = self.agy_workspace();
         let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
         if self.config.permission_mode == "bypassPermissions" { args.push("--dangerously-skip-permissions".into()); }
+
+        let (m, eff) = Self::resolve_cli_model_effort(self.config.model.as_deref(), self.config.effort.as_deref());
+        if let Some(model) = m {
+            args.push("--model".into());
+            args.push(model);
+        }
+        if let Some(effort) = eff {
+            args.push("--effort".into());
+            args.push(effort);
+        }
+
         args.extend(vec!["--prompt-interactive".into(), "".into()]);
         self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
@@ -180,22 +190,16 @@ impl AgentProvider for AntigravityCli {
             self.run_oneshot(&cmd_args, &env, &agy_ws).await?
         };
 
-        let final_session_id = if let Some(sid) = resume_session {
-            Some(sid.to_string())
-        } else {
+        let final_session_id = resume_session.map(str::to_string).or_else(|| {
             events::extract_conversation_id(&stdout_str).or_else(|| {
-                events::resolve_brain_dir(&agy_ws, Some(&env))
-                    .as_ref()
-                    .and_then(|d| d.file_name())
-                    .map(|name| name.to_string_lossy().to_string())
+                events::resolve_brain_dir(&agy_ws, Some(&env))?
+                    .file_name().map(|n| n.to_string_lossy().into())
             })
-        };
+        });
 
-        let resolved_brain_dir = if let Some(ref sid) = final_session_id {
-            Some(events::agy_state_root(Some(&env)).join("brain").join(sid))
-        } else {
-            events::resolve_brain_dir(&agy_ws, Some(&env))
-        };
+        let resolved_brain_dir = final_session_id.as_ref()
+            .map(|sid| events::agy_state_root(Some(&env)).join("brain").join(sid))
+            .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
 
         let result_text = self.resolve_result_text(&agy_ws, &env, &stdout_str, resolved_brain_dir.as_deref());
 

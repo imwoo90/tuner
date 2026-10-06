@@ -134,11 +134,16 @@ async fn handle_model_override(
     eff: Option<&str>,
     sess: &mut crate::session::data::SessionData,
     sessions: &SessionManager,
+    cli: &AntigravityCli,
     empty: bool,
 ) -> Result<bool, teloxide::RequestError> {
     sess.model = mo.to_string();
     sess.effort = eff.map(|s| s.to_string());
     let _ = sessions.update_session(sess, 0.0, 0).await;
+    let sid = sess.get_session_id(&sess.provider);
+    if !sid.is_empty() {
+        cli.sessions.terminate(&sid).await;
+    }
     if empty {
         let display = if let Some(e) = eff {
             format!("{} (effort: {})", mo, e)
@@ -180,6 +185,7 @@ async fn resolve_message_session<'a>(
     text: &'a str,
     config: &CliConfig,
     sessions: &SessionManager,
+    cli: &AntigravityCli,
 ) -> Result<Option<(crate::session::data::SessionData, &'a str)>, teloxide::RequestError> {
     let (m_over, eff_over, current_text) = parse_model_directive(text);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
@@ -188,7 +194,7 @@ async fn resolve_message_session<'a>(
 
     let (mut sess, _) = sessions.resolve_session(&key, &config.provider, &m).await.unwrap();
     if let Some(ref mo) = m_over {
-        if handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions, current_text.is_empty()).await? {
+        if handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions, cli, current_text.is_empty()).await? {
             return Ok(None);
         }
     }
@@ -208,7 +214,7 @@ pub(crate) async fn process_text_with_files(
 ) -> Result<(), teloxide::RequestError> {
     if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, cron_manager, topic_cache).await? { return Ok(()); }
 
-    let Some((mut sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions.as_ref()).await? else {
+    let Some((mut sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions.as_ref(), cli).await? else {
         return Ok(());
     };
 

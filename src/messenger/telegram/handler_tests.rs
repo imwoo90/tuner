@@ -85,7 +85,7 @@ async fn test_telegram_command_model() {
     handle_message(bot.clone(), msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
-    assert_eq!(s_after.model, "sonnet");
+    assert_eq!(s_after.model, "claude-sonnet-5-5");
 
     let msg_interactive = make_msg(r#"{"message_id":6,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model"}"#);
     let res = handle_message(bot, msg_interactive, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;

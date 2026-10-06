@@ -74,6 +74,17 @@ impl AntigravityCli {
         discovery::discover_models("agy").await
     }
 
+    pub(crate) fn resolve_cli_model_effort(model: Option<&str>, effort: Option<&str>) -> (Option<String>, Option<String>) {
+        let Some(m) = model.filter(|&s| s != "antigravity-default") else {
+            return (None, None);
+        };
+        let mut eff = effort.filter(|&e| !e.is_empty()).map(|s| s.to_string());
+        if eff.is_none() && (m.contains("claude-") || m.contains("opus") || m.contains("sonnet") || m.contains("pro")) {
+            eff = Some("high".to_string());
+        }
+        (Some(m.to_string()), eff)
+    }
+
     pub fn build_command(
         &self,
         prompt: &str,
@@ -81,18 +92,17 @@ impl AntigravityCli {
         continue_session: bool,
     ) -> Vec<String> {
         let mut cmd = vec!["agy".to_string()];
-
         cmd.push("--add-dir".to_string());
         cmd.push(self.agy_workspace().to_string_lossy().to_string());
 
-        if let Some(ref model) = self.config.model.as_deref().filter(|&m| m != "antigravity-default") {
+        let (m, eff) = Self::resolve_cli_model_effort(self.config.model.as_deref(), self.config.effort.as_deref());
+        if let Some(model) = m {
             cmd.push("--model".to_string());
-            cmd.push(model.to_string());
+            cmd.push(model);
         }
-
-        if let Some(ref effort) = self.config.effort.as_deref().filter(|&e| !e.is_empty()) {
+        if let Some(effort) = eff {
             cmd.push("--effort".to_string());
-            cmd.push(effort.to_string());
+            cmd.push(effort);
         }
 
         if let Some(session_id) = resume_session {

@@ -31,6 +31,7 @@ pub struct SessionHolder {
     pub master_fd: std::os::unix::io::RawFd,
     pub output: std::sync::Arc<Mutex<Vec<u8>>>,
     pub initialized: bool,
+    pub cmd_args: Vec<String>,
 }
 
 impl Drop for SessionHolder {
@@ -146,6 +147,7 @@ pub fn spawn_session(
         master_fd: master_dup,
         output,
         initialized: false,
+        cmd_args: args.to_vec(),
     })
 }
 
