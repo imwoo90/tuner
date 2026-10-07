@@ -136,7 +136,7 @@ impl SessionManager {
 
         let mut holders = self.holders.lock().await;
         let is_running = holders.get_mut(session_id)
-            .map(|h| h.child.try_wait().map(|s| s.is_none()).unwrap_or(false) && h.cmd_args == cmd_args)
+            .map(|h| h.child.try_wait().map(|s| s.is_none()).unwrap_or(false))
             .unwrap_or(false);
 
         if is_running {

@@ -141,9 +141,7 @@ async fn handle_model_override(
     sess.effort = eff.map(|s| s.to_string());
     let _ = sessions.update_session(sess, 0.0, 0).await;
     let sid = sess.get_session_id(&sess.provider);
-    if !sid.is_empty() {
-        cli.sessions.terminate(&sid).await;
-    }
+    commands_model::apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
     if empty {
         let display = if let Some(e) = eff {
             format!("{} (effort: {})", mo, e)

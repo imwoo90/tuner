@@ -213,36 +213,28 @@ async fn test_write_to_session_bulk_prompt_instantaneous() {
 }
 
 #[tokio::test]
-async fn test_session_manager_respawns_on_args_change() {
+async fn test_session_manager_reuses_running_process() {
     use super::session::SessionManager;
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let env = HashMap::new();
     let manager = SessionManager::new();
 
     let args1 = vec!["--model".to_string(), "gemini-3.8-flash".to_string()];
-    manager.ensure_session("session-respawn", &workspace, "cat", &args1, &env).await.unwrap();
+    manager.ensure_session("session-reuse", &workspace, "cat", &args1, &env).await.unwrap();
 
     let initial_pid = {
         let h = manager.holders.lock().await;
-        h.get("session-respawn").unwrap().child.id().unwrap()
+        h.get("session-reuse").unwrap().child.id().unwrap()
     };
 
-    manager.ensure_session("session-respawn", &workspace, "cat", &args1, &env).await.unwrap();
+    manager.ensure_session("session-reuse", &workspace, "cat", &args1, &env).await.unwrap();
     let reused_pid = {
         let h = manager.holders.lock().await;
-        h.get("session-respawn").unwrap().child.id().unwrap()
+        h.get("session-reuse").unwrap().child.id().unwrap()
     };
     assert_eq!(initial_pid, reused_pid);
 
-    let args2 = vec!["--model".to_string(), "claude-opus-5-5".to_string(), "--effort".to_string(), "high".to_string()];
-    manager.ensure_session("session-respawn", &workspace, "cat", &args2, &env).await.unwrap();
-    let new_pid = {
-        let h = manager.holders.lock().await;
-        h.get("session-respawn").unwrap().child.id().unwrap()
-    };
-    assert_ne!(initial_pid, new_pid);
-
-    manager.terminate("session-respawn").await;
+    manager.terminate("session-reuse").await;
 }
 
 

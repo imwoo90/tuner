@@ -67,9 +67,7 @@ pub async fn handle_model_base_callback(
             s.effort = None;
             let _ = sessions.update_session(&s, 0.0, 0).await;
             let sid = s.get_session_id(&s.provider);
-            if !sid.is_empty() {
-                cli.sessions.terminate(&sid).await;
-            }
+            crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
             let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = base)).await;
         }
     } else {
@@ -93,9 +91,7 @@ pub async fn handle_model_effort_callback(
         s.effort = Some(effort.to_string());
         let _ = sessions.update_session(&s, 0.0, 0).await;
         let sid = s.get_session_id(&s.provider);
-        if !sid.is_empty() {
-            cli.sessions.terminate(&sid).await;
-        }
+        crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
         let display = format!("{} (effort: {})", base, effort);
         let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = display)).await;
     }
@@ -115,9 +111,7 @@ pub async fn handle_standalone_effort_callback(
         s.effort = Some(effort.to_string());
         let _ = sessions.update_session(&s, 0.0, 0).await;
         let sid = s.get_session_id(&s.provider);
-        if !sid.is_empty() {
-            cli.sessions.terminate(&sid).await;
-        }
+        crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
         let display_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort);
         let _ = bot.edit_message_text(msg.chat.id, msg.id, display_msg).await;
     }

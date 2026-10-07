@@ -134,6 +134,23 @@ async fn handle_model_command_empty(
     Ok(())
 }
 
+pub(crate) async fn apply_model_to_active_pty(
+    cli: &AntigravityCli,
+    sid: &str,
+    model: &str,
+    effort: Option<&str>,
+) {
+    if !sid.is_empty() && cli.sessions.is_active(sid).await {
+        let target = if let Some(eff) = effort {
+            format!("{}-{}", model, eff)
+        } else {
+            model.to_string()
+        };
+        let _ = cli.sessions.write_to_session(sid, &format!("/model {}\r", target)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    }
+}
+
 async fn handle_model_command_switch(
     bot: &Bot,
     msg: &Message,
@@ -153,9 +170,7 @@ async fn handle_model_command_switch(
     let _ = sessions.update_session(&sess, 0.0, 0).await;
     
     let sid = sess.get_session_id(&sess.provider);
-    if !sid.is_empty() {
-        cli.sessions.terminate(&sid).await;
-    }
+    apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
 
     let display_model = if let Some(ref eff) = effort_part {
         format!("{} (effort: {})", sess.model, eff)
@@ -220,9 +235,7 @@ pub(crate) async fn handle_effort_command(
             sess.effort = Some(level.clone());
             let _ = sessions.update_session(&sess, 0.0, 0).await;
             let sid = sess.get_session_id(&sess.provider);
-            if !sid.is_empty() {
-                cli.sessions.terminate(&sid).await;
-            }
+            apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
             let status_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", level);
             let _ = send_reply(bot, msg, status_msg).await;
         } else {
