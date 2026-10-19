@@ -170,26 +170,29 @@
 <a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>h_re = Regex::new(<span class="string">r"(?m)^#{1,6}\s+(.+)$"</span>).unwrap();
 <a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = h_re.replace_all(escaped, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
 <a href=#172 id=172 data-nosnippet>172</a>
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>bold_re = Regex::new(<span class="string">r"(?s)\*\*(.+?)\*\*"</span>).unwrap();
-<a href=#174 id=174 data-nosnippet>174</a>    out = bold_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>bi_re = Regex::new(<span class="string">r"\*\*\*([^\*\n]+?)\*\*\*"</span>).unwrap();
+<a href=#174 id=174 data-nosnippet>174</a>    out = bi_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;b&gt;&lt;i&gt;$1&lt;/i&gt;&lt;/b&gt;"</span>).to_string();
 <a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'*'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
-<a href=#177 id=177 data-nosnippet>177</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'_'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>bold_re = Regex::new(<span class="string">r"(?s)\*\*(.+?\*?)\*\*"</span>).unwrap();
+<a href=#177 id=177 data-nosnippet>177</a>    out = bold_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;b&gt;$1&lt;/b&gt;"</span>).to_string();
 <a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>strike_re = Regex::new(<span class="string">r"~~(.+?)~~"</span>).unwrap();
-<a href=#180 id=180 data-nosnippet>180</a>    out = strike_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;s&gt;$1&lt;/s&gt;"</span>).to_string();
+<a href=#179 id=179 data-nosnippet>179</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'*'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
+<a href=#180 id=180 data-nosnippet>180</a>    out = <span class="kw">super</span>::italic::format_italic_delim(<span class="kw-2">&amp;</span>out, <span class="string">'_'</span>, <span class="string">"&lt;i&gt;"</span>, <span class="string">"&lt;/i&gt;"</span>);
 <a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>spoiler_re = Regex::new(<span class="string">r"\|\|(.+?)\|\|"</span>).unwrap();
-<a href=#183 id=183 data-nosnippet>183</a>    out = spoiler_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;tg-spoiler&gt;$1&lt;/tg-spoiler&gt;"</span>).to_string();
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>strike_re = Regex::new(<span class="string">r"~~(.+?)~~"</span>).unwrap();
+<a href=#183 id=183 data-nosnippet>183</a>    out = strike_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;s&gt;$1&lt;/s&gt;"</span>).to_string();
 <a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a>    out = <span class="kw">super</span>::blockquotes::convert_blockquotes(<span class="kw-2">&amp;</span>out);
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>hr_re = Regex::new(<span class="string">r"(?m)^[-*]{3,}$"</span>).unwrap();
-<a href=#188 id=188 data-nosnippet>188</a>    out = hr_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"———"</span>).to_string();
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>spoiler_re = Regex::new(<span class="string">r"\|\|(.+?)\|\|"</span>).unwrap();
+<a href=#186 id=186 data-nosnippet>186</a>    out = spoiler_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"&lt;tg-spoiler&gt;$1&lt;/tg-spoiler&gt;"</span>).to_string();
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>    out = <span class="kw">super</span>::blockquotes::convert_blockquotes(<span class="kw-2">&amp;</span>out);
 <a href=#189 id=189 data-nosnippet>189</a>
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>bullet_re = Regex::new(<span class="string">r"(?m)^[-*]\s+"</span>).unwrap();
-<a href=#191 id=191 data-nosnippet>191</a>    out = bullet_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"• "</span>).to_string();
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>hr_re = Regex::new(<span class="string">r"(?m)^[-*]{3,}$"</span>).unwrap();
+<a href=#191 id=191 data-nosnippet>191</a>    out = hr_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"———"</span>).to_string();
 <a href=#192 id=192 data-nosnippet>192</a>
-<a href=#193 id=193 data-nosnippet>193</a>    out
-<a href=#194 id=194 data-nosnippet>194</a>}
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>bullet_re = Regex::new(<span class="string">r"(?m)^[-*]\s+"</span>).unwrap();
+<a href=#194 id=194 data-nosnippet>194</a>    out = bullet_re.replace_all(<span class="kw-2">&amp;</span>out, <span class="string">"• "</span>).to_string();
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a>    out
+<a href=#197 id=197 data-nosnippet>197</a>}
 </code></pre></div></section></main></body></html>

@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>                </span><span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, w_idx + <span class="number">1</span>)).<span class="kw">await</span>;
 <a href=#56 id=56 data-nosnippet>56</a>                tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
 <a href=#57 id=57 data-nosnippet>57</a>                <span class="comment">// 2. Clear text and submit empty
-<a href=#58 id=58 data-nosnippet>58</a>                </span><span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.len());
+<a href=#58 id=58 data-nosnippet>58</a>                </span><span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.chars().count());
 <a href=#59 id=59 data-nosnippet>59</a>                <span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}\r"</span>, backspaces)).<span class="kw">await</span>;
 <a href=#60 id=60 data-nosnippet>60</a>                tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
 <a href=#61 id=61 data-nosnippet>61</a>                <span class="comment">// 3. Backtrack

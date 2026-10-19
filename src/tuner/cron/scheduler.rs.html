@@ -146,8 +146,8 @@
 <a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">let </span>tz_str = <span class="kw">if </span>job.timezone.is_empty() { <span class="string">"UTC" </span>} <span class="kw">else </span>{ <span class="kw-2">&amp;</span>job.timezone };
 <a href=#147 id=147 data-nosnippet>147</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(tz) = tz_str.parse::&lt;Tz&gt;() {
 <a href=#148 id=148 data-nosnippet>148</a>                <span class="kw">let </span>now_local = now.with_timezone(<span class="kw-2">&amp;</span>tz);
-<a href=#149 id=149 data-nosnippet>149</a>                <span class="kw">let </span>start = NaiveTime::from_hms_opt(qs, <span class="number">0</span>, <span class="number">0</span>).unwrap();
-<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">let </span>end = NaiveTime::from_hms_opt(qe, <span class="number">0</span>, <span class="number">0</span>).unwrap();
+<a href=#149 id=149 data-nosnippet>149</a>                <span class="kw">let </span>start = NaiveTime::from_hms_opt(qs % <span class="number">24</span>, <span class="number">0</span>, <span class="number">0</span>).unwrap();
+<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">let </span>end = NaiveTime::from_hms_opt(qe % <span class="number">24</span>, <span class="number">0</span>, <span class="number">0</span>).unwrap();
 <a href=#151 id=151 data-nosnippet>151</a>                <span class="kw">return </span><span class="kw">crate</span>::heartbeat::quiet::is_within_quiet_hours(<span class="kw-2">&amp;</span>now_local, start, end);
 <a href=#152 id=152 data-nosnippet>152</a>            }
 <a href=#153 id=153 data-nosnippet>153</a>        }
@@ -221,17 +221,17 @@
 <a href=#221 id=221 data-nosnippet>221</a>        }
 <a href=#222 id=222 data-nosnippet>222</a>
 <a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span><span class="kw-2">mut </span>jc = (<span class="kw-2">*</span><span class="self">self</span>.config).clone();
-<a href=#224 id=224 data-nosnippet>224</a>        jc.chat_id = job.chat_id;
-<a href=#225 id=225 data-nosnippet>225</a>        jc.topic_id = job.topic_id;
-<a href=#226 id=226 data-nosnippet>226</a>        jc.transport = job.transport.clone();
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = <span class="kw-2">&amp;</span>job.model { jc.model = <span class="prelude-val">Some</span>(m.clone()); }
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(p) = <span class="kw-2">&amp;</span>job.provider { jc.provider = p.clone(); }
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">if </span>!job.cli_parameters.is_empty() {
-<a href=#230 id=230 data-nosnippet>230</a>            jc.cli_parameters.insert(<span class="string">"antigravity"</span>.to_string(), job.cli_parameters.clone());
-<a href=#231 id=231 data-nosnippet>231</a>        }
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = <span class="kw-2">&amp;</span>job.reasoning_effort {
-<a href=#233 id=233 data-nosnippet>233</a>            jc.cli_parameters.entry(<span class="string">"antigravity"</span>.to_string()).or_default()
-<a href=#234 id=234 data-nosnippet>234</a>                .extend(<span class="macro">vec!</span>[<span class="string">"-c"</span>.to_string(), <span class="macro">format!</span>(<span class="string">"model_reasoning_effort={}"</span>, r)]);
+<a href=#224 id=224 data-nosnippet>224</a>        jc.working_dir = workspace.clone();
+<a href=#225 id=225 data-nosnippet>225</a>        jc.chat_id = job.chat_id;
+<a href=#226 id=226 data-nosnippet>226</a>        jc.topic_id = job.topic_id;
+<a href=#227 id=227 data-nosnippet>227</a>        jc.transport = job.transport.clone();
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = <span class="kw-2">&amp;</span>job.model { jc.model = <span class="prelude-val">Some</span>(m.clone()); }
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(p) = <span class="kw-2">&amp;</span>job.provider { jc.provider = p.clone(); }
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">if </span>!job.cli_parameters.is_empty() {
+<a href=#231 id=231 data-nosnippet>231</a>            jc.cli_parameters.insert(<span class="string">"antigravity"</span>.to_string(), job.cli_parameters.clone());
+<a href=#232 id=232 data-nosnippet>232</a>        }
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = <span class="kw-2">&amp;</span>job.reasoning_effort {
+<a href=#234 id=234 data-nosnippet>234</a>            jc.effort = <span class="prelude-val">Some</span>(r.clone());
 <a href=#235 id=235 data-nosnippet>235</a>        }
 <a href=#236 id=236 data-nosnippet>236</a>
 <a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>job_cli = AntigravityCli::new(jc);

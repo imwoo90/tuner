@@ -26,7 +26,7 @@
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">let </span>last_local = last_active.with_timezone(<span class="kw-2">&amp;</span>tz);
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">let </span>today_reset = <span class="kw">match </span>tz.from_local_datetime(
-<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw-2">&amp;</span>now_local.date_naive().and_hms_opt(daily_reset_hour, <span class="number">0</span>, <span class="number">0</span>).unwrap()
+<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw-2">&amp;</span>now_local.date_naive().and_hms_opt(daily_reset_hour % <span class="number">24</span>, <span class="number">0</span>, <span class="number">0</span>).unwrap()
 <a href=#30 id=30 data-nosnippet>30</a>    ) {
 <a href=#31 id=31 data-nosnippet>31</a>        LocalResult::Single(dt) =&gt; dt,
 <a href=#32 id=32 data-nosnippet>32</a>        LocalResult::Ambiguous(dt1, <span class="kw">_</span>) =&gt; dt1,

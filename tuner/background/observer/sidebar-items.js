@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_TASKS_PER_CHAT"],"fn":["generate_task_id"],"struct":["BackgroundObserver","BackgroundObserverInner","BackgroundTask","TaskGuard"],"type":["ResultHandler"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_TASKS_PER_CHAT"],"fn":["generate_task_id","truncate_prompt_preview"],"struct":["BackgroundObserver","BackgroundObserverInner","BackgroundTask","TaskGuard"],"type":["ResultHandler"]};

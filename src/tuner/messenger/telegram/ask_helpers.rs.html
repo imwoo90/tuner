@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>    tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
 <a href=#61 id=61 data-nosnippet>61</a>    
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">if </span>!prev_text.is_empty() {
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.len());
+<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.chars().count());
 <a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span>backspaces).<span class="kw">await</span>;
 <a href=#65 id=65 data-nosnippet>65</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
 <a href=#66 id=66 data-nosnippet>66</a>    }
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if </span>!prev_text.is_empty() &amp;&amp; w_idx &lt;= options_len {
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, w_idx + <span class="number">1</span>)).<span class="kw">await</span>;
 <a href=#87 id=87 data-nosnippet>87</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.len());
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>backspaces = <span class="string">"\x7F"</span>.repeat(prev_text.chars().count());
 <a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}\r"</span>, backspaces)).<span class="kw">await</span>;
 <a href=#90 id=90 data-nosnippet>90</a>        tokio::time::sleep(tokio::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
 <a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let _ </span>= cli.sessions.write_to_session(sid, <span class="string">"\x1B[D"</span>).<span class="kw">await</span>;

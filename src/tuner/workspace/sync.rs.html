@@ -12,7 +12,7 @@
 <a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span><span class="kw">crate</span>::workspace::paths::DuctorPaths;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::workspace::sync_helpers::{
 <a href=#14 id=14 data-nosnippet>14</a>    create_workspace_directories, migrate_legacy_data, smart_merge_config, sync_constraints_rule,
-<a href=#15 id=15 data-nosnippet>15</a>    sync_group, sync_mainmemory_rule, sync_rule_files_recursive, walk_and_copy,
+<a href=#15 id=15 data-nosnippet>15</a>    sync_group, sync_mainmemory_rule, sync_managed_rule_dirs, walk_and_copy,
 <a href=#16 id=16 data-nosnippet>16</a>};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>std::path::Path;
 <a href=#18 id=18 data-nosnippet>18</a>
@@ -72,13 +72,13 @@
 <a href=#72 id=72 data-nosnippet>72</a>}
 <a href=#73 id=73 data-nosnippet>73</a>
 <a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a><span class="doccomment">/// Recursively synchronizes existing rule files across the workspace.
+<a href=#75 id=75 data-nosnippet>75</a><span class="doccomment">/// Synchronizes rule files across explicitly whitelisted Tuner-managed directories in the profile workspace.
 <a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub fn </span>sync_rule_files(root: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
 <a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">if </span>!root.is_dir() {
 <a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#79 id=79 data-nosnippet>79</a>    }
 <a href=#80 id=80 data-nosnippet>80</a>    sync_group(root)<span class="question-mark">?</span>;
-<a href=#81 id=81 data-nosnippet>81</a>    sync_rule_files_recursive(root)<span class="question-mark">?</span>;
+<a href=#81 id=81 data-nosnippet>81</a>    sync_managed_rule_dirs(root)<span class="question-mark">?</span>;
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let _ </span>= sync_mainmemory_rule(root);
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let _ </span>= sync_constraints_rule(root, <span class="prelude-val">None</span>);
 <a href=#84 id=84 data-nosnippet>84</a>    <span class="prelude-val">Ok</span>(())

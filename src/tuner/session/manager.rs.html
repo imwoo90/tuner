@@ -74,8 +74,8 @@
 <a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>raw_map: HashMap&lt;String, serde_json::Value&gt; = serde_json::from_str(<span class="kw-2">&amp;</span>content).unwrap_or_default();
 <a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = HashMap::new();
 <a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">for </span>(k, v) <span class="kw">in </span>raw_map {
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(pk) = k.parse::&lt;SessionKey&gt;() <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(HashMap::new()); };
-<a href=#78 id=78 data-nosnippet>78</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>sd) = serde_json::from_value::&lt;SessionData&gt;(v) <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(HashMap::new()); };
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(pk) = k.parse::&lt;SessionKey&gt;() <span class="kw">else </span>{ <span class="kw">continue</span>; };
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>sd) = serde_json::from_value::&lt;SessionData&gt;(v) <span class="kw">else </span>{ <span class="kw">continue</span>; };
 <a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">if </span>sd.transport.is_empty() { sd.transport = pk.transport.clone(); }
 <a href=#80 id=80 data-nosnippet>80</a>            sd.migrate_legacy_metrics();
 <a href=#81 id=81 data-nosnippet>81</a>            result.insert(pk.storage_key(), sd);
