@@ -82,13 +82,20 @@ pub(crate) fn build_multi_select_keyboard(
         let is_checked = bitmap.chars().nth(i).unwrap_or('0') == '1';
         let prefix = if is_checked { "✅ " } else { "⬜ " };
         let button_text = format!("{}{}", prefix, opt);
-        let callback_data = format!("ask_mul:{}:{}:{}", sess_id, i, bitmap);
+        let mut callback_data = format!("ask_mul:{}:{}:{}", sess_id, i, bitmap);
+        if callback_data.len() > 64 {
+            callback_data = format!("ask_mul:{}:{}", sess_id, i);
+        }
         keyboard.push(vec![teloxide::types::InlineKeyboardButton::callback(button_text, callback_data)]);
+    }
+    let mut sub_data = format!("ask_sub:{}:{}", sess_id, bitmap);
+    if sub_data.len() > 64 {
+        sub_data = format!("ask_sub:{}", sess_id);
     }
     keyboard.push(vec![
         teloxide::types::InlineKeyboardButton::callback(
             "완료 (Submit)",
-            format!("ask_sub:{}:{}", sess_id, bitmap),
+            sub_data,
         ),
     ]);
     if show_prev {
@@ -112,7 +119,7 @@ pub(crate) async fn handle_ask_multi_callback(
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };
     let Some(idx) = data.split(':').nth(2).and_then(|i| i.parse::<usize>().ok()) else { return; };
-    let Some(bitmap) = data.split(':').nth(3) else { return; };
+    let bitmap_opt = data.split(':').nth(3);
     if let Some(mut state) = sessions.get_ask_state(sid).await {
         let q = &state.questions[state.current_index];
         if let Some(opt) = q.options.get(idx) {
@@ -125,7 +132,8 @@ pub(crate) async fn handle_ask_multi_callback(
                 return;
             }
         }
-        let nb: String = bitmap.chars().enumerate().map(|(i, c)| if i == idx { if c == '1' { '0' } else { '1' } } else { c }).collect();
+        let bm = bitmap_opt.unwrap_or(&state.current_bitmap);
+        let nb: String = bm.chars().enumerate().map(|(i, c)| if i == idx { if c == '1' { '0' } else { '1' } } else { c }).collect();
         state.current_bitmap = nb.clone();
         sessions.set_ask_state(sid, state.clone()).await;
         let markup = build_multi_select_keyboard(sid, &q.options, &nb, state.current_index > 0);

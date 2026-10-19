@@ -55,6 +55,21 @@ struct TaskGuard {
     completed: bool,
 }
 
+fn truncate_prompt_preview(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+    let limit = max_bytes.saturating_sub(3);
+    let mut end = 0;
+    for (idx, ch) in s.char_indices() {
+        if idx + ch.len_utf8() > limit {
+            break;
+        }
+        end = idx + ch.len_utf8();
+    }
+    format!("{}...", &s[..end])
+}
+
 impl Drop for TaskGuard {
     fn drop(&mut self) {
         if !self.completed {
@@ -64,11 +79,7 @@ impl Drop for TaskGuard {
                 chat_id: self.chat_id,
                 message_id: self.message_id,
                 thread_id: self.thread_id,
-                prompt_preview: if self.prompt.len() > 60 {
-                    format!("{}...", &self.prompt[..57])
-                } else {
-                    self.prompt.clone()
-                },
+                prompt_preview: truncate_prompt_preview(&self.prompt, 60),
                 result_text: String::new(),
                 status: BackgroundResultStatus::Aborted,
                 elapsed_seconds: elapsed,
@@ -266,11 +277,7 @@ impl BackgroundObserverInner {
             chat_id: guard.chat_id,
             message_id: guard.message_id,
             thread_id: guard.thread_id,
-            prompt_preview: if guard.prompt.len() > 60 {
-                format!("{}...", &guard.prompt[..57])
-            } else {
-                guard.prompt.clone()
-            },
+            prompt_preview: truncate_prompt_preview(&guard.prompt, 60),
             result_text,
             status,
             elapsed_seconds: elapsed,

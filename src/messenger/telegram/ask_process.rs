@@ -55,7 +55,7 @@ pub(crate) async fn clear_previous_write_in_if_any(
                 let _ = cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
                 tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
                 // 2. Clear text and submit empty
-                let backspaces = "\x7F".repeat(prev_text.len());
+                let backspaces = "\x7F".repeat(prev_text.chars().count());
                 let _ = cli.sessions.write_to_session(sid, &format!("{}\r", backspaces)).await;
                 tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
                 // 3. Backtrack
