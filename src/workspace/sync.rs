@@ -12,7 +12,7 @@
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::sync_helpers::{
     create_workspace_directories, migrate_legacy_data, smart_merge_config, sync_constraints_rule,
-    sync_group, sync_mainmemory_rule, sync_rule_files_recursive, walk_and_copy,
+    sync_group, sync_mainmemory_rule, sync_managed_rule_dirs, walk_and_copy,
 };
 use std::path::Path;
 
@@ -72,13 +72,13 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
 }
 
 
-/// Recursively synchronizes existing rule files across the workspace.
+/// Synchronizes rule files across explicitly whitelisted Tuner-managed directories in the profile workspace.
 pub fn sync_rule_files(root: &Path) -> Result<(), String> {
     if !root.is_dir() {
         return Ok(());
     }
     sync_group(root)?;
-    sync_rule_files_recursive(root)?;
+    sync_managed_rule_dirs(root)?;
     let _ = sync_mainmemory_rule(root);
     let _ = sync_constraints_rule(root, None);
     Ok(())

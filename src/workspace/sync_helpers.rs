@@ -102,27 +102,67 @@ fn handle_entry(path: &Path, target: &Path, name: &str, src: &Path, root_src: &P
     Ok(())
 }
 
-pub fn sync_rule_files_recursive(dir: &Path) -> Result<(), String> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(e) => return Err(format!("Failed to read dir: {}", e)),
-    };
-    let skip_dirs = [".venv", ".git", ".mypy_cache", "__pycache__", "node_modules"];
+/// Explicitly whitelisted single-level system directories inside a profile workspace.
+pub const MANAGED_SINGLE_DIRS: &[&str] = &[
+    "memory_system",
+    "output_to_user",
+    "telegram_files",
+    "matrix_files",
+    "api_files",
+];
 
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if skip_dirs.contains(&name) || name.starts_with('.') {
-                        continue;
+/// Explicitly whitelisted container directories inside a profile workspace whose immediate
+/// child directories (e.g. `cron_tasks/<job>`, `tools/<tool_group>`, `skills/<skill>`) are managed.
+pub const MANAGED_CONTAINER_DIRS: &[&str] = &[
+    "cron_tasks",
+    "tasks",
+    "tools",
+    "skills",
+];
+
+/// Synchronizes rule files ONLY within explicitly whitelisted Tuner-managed profile/workspace
+/// directories. Never traverses user directories such as `projects/` or `scratch/`.
+pub fn sync_managed_rule_dirs(workspace_root: &Path) -> Result<(), String> {
+    if !workspace_root.is_dir() {
+        return Ok(());
+    }
+
+    if let Some(profile_home) = workspace_root.parent() {
+        let cfg_dir = profile_home.join("config");
+        if cfg_dir.is_dir() {
+            sync_group(&cfg_dir)?;
+            sync_group(profile_home)?;
+        }
+    }
+
+    for dir_name in MANAGED_SINGLE_DIRS {
+        let dir_path = workspace_root.join(dir_name);
+        if dir_path.is_dir() && !dir_path.is_symlink() {
+            sync_group(&dir_path)?;
+        }
+    }
+
+    for container_name in MANAGED_CONTAINER_DIRS {
+        let container_path = workspace_root.join(container_name);
+        if container_path.is_dir() && !container_path.is_symlink() {
+            sync_group(&container_path)?;
+            let entries = match std::fs::read_dir(&container_path) {
+                Ok(e) => e,
+                Err(e) => return Err(format!("Failed to read dir: {}", e)),
+            };
+            for entry in entries.flatten() {
+                let child = entry.path();
+                if child.is_dir() && !child.is_symlink() {
+                    if let Some(name) = child.file_name().and_then(|s| s.to_str()) {
+                        if !name.starts_with('.') {
+                            sync_group(&child)?;
+                        }
                     }
                 }
-                sync_group(&path)?;
-                sync_rule_files_recursive(&path)?;
             }
         }
     }
+
     Ok(())
 }
 

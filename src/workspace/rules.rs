@@ -152,18 +152,16 @@ impl RulesSelector {
         Ok(total_removed)
     }
 
-    /// Removes files with the given name recursively, protecting cron task and project directories.
+    /// Removes files with the given name only from explicitly whitelisted profile-managed directories,
+    /// never touching `cron_tasks/*`, `projects/`, `scratch/`, or other user directories.
     pub fn remove_files_by_name(&self, filename: &str) -> Result<usize, String> {
-        let cron_tasks_path = self.paths.workspace().join("cron_tasks");
-        let projects_path = self.paths.workspace().join("projects");
         let mut count = 0;
-        remove_files_recursively(
-            &self.paths.profile_home(),
-            filename,
-            &cron_tasks_path,
-            &projects_path,
-            &mut count,
-        );
+        for dir in managed_profile_rule_dirs(&self.paths) {
+            let file_path = dir.join(filename);
+            if file_path.is_file() && std::fs::remove_file(&file_path).is_ok() {
+                count += 1;
+            }
+        }
         Ok(count)
     }
 }
@@ -190,36 +188,31 @@ fn find_rules_templates(dir: &Path, candidates: &mut Vec<PathBuf>) {
     }
 }
 
-fn remove_files_recursively(
-    dir: &Path,
-    filename: &str,
-    cron_tasks_path: &Path,
-    projects_path: &Path,
-    count: &mut usize,
-) {
-    if !dir.is_dir() { return; }
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path.starts_with(cron_tasks_path) || path.starts_with(projects_path) {
-                    continue;
-                }
-                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if name.starts_with('.') || name == "node_modules" || name == "target" {
-                        continue;
-                    }
-                }
-                remove_files_recursively(&path, filename, cron_tasks_path, projects_path, count);
-            } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name == filename && !path.starts_with(cron_tasks_path) && !path.starts_with(projects_path) {
-                    if std::fs::remove_file(&path).is_ok() {
-                        *count += 1;
-                    }
+fn managed_profile_rule_dirs(paths: &DuctorPaths) -> Vec<PathBuf> {
+    use crate::workspace::sync_helpers::MANAGED_SINGLE_DIRS;
+    let profile_home = paths.profile_home();
+    let ws = paths.workspace();
+    let mut dirs = vec![
+        profile_home.clone(),
+        profile_home.join("config"),
+        ws.clone(),
+    ];
+    for d in MANAGED_SINGLE_DIRS {
+        dirs.push(ws.join(d));
+    }
+    for container in &["tasks", "tools", "skills"] {
+        let c_path = ws.join(container);
+        dirs.push(c_path.clone());
+        if let Ok(entries) = std::fs::read_dir(&c_path) {
+            for entry in entries.flatten() {
+                let child = entry.path();
+                if child.is_dir() && !child.is_symlink() {
+                    dirs.push(child);
                 }
             }
         }
     }
+    dirs
 }
 
 #[cfg(test)]

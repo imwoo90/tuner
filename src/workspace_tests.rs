@@ -114,6 +114,39 @@ mod tests {
     }
 
     #[test]
+    fn test_sync_rule_files_whitelist_protects_projects_and_scratch() {
+        let tmp = tempdir().unwrap();
+        let ws = tmp.path();
+
+        let proj_dir = ws.join("projects").join("rust-agent-native-template");
+        let scratch_dir = ws.join("scratch").join("exp");
+        let managed_tool_dir = ws.join("tools").join("cron_tools");
+        fs::create_dir_all(&proj_dir).unwrap();
+        fs::create_dir_all(&scratch_dir).unwrap();
+        fs::create_dir_all(&managed_tool_dir).unwrap();
+
+        fs::write(proj_dir.join("AGENTS.md"), "proj agents original").unwrap();
+        let ft_old = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+        filetime::set_file_mtime(proj_dir.join("AGENTS.md"), ft_old).unwrap();
+        fs::write(proj_dir.join("GEMINI.md"), "proj gemini newer").unwrap();
+
+        fs::write(scratch_dir.join("AGENTS.md"), "scratch agents original").unwrap();
+        filetime::set_file_mtime(scratch_dir.join("AGENTS.md"), ft_old).unwrap();
+        fs::write(scratch_dir.join("GEMINI.md"), "scratch gemini newer").unwrap();
+
+        fs::write(managed_tool_dir.join("AGENTS.md"), "tool old").unwrap();
+        filetime::set_file_mtime(managed_tool_dir.join("AGENTS.md"), ft_old).unwrap();
+        fs::write(managed_tool_dir.join("CLAUDE.md"), "tool newer").unwrap();
+
+        sync_rule_files(ws).unwrap();
+
+        assert_eq!(fs::read_to_string(proj_dir.join("AGENTS.md")).unwrap(), "proj agents original");
+        assert_eq!(fs::read_to_string(proj_dir.join("GEMINI.md")).unwrap(), "proj gemini newer");
+        assert_eq!(fs::read_to_string(scratch_dir.join("AGENTS.md")).unwrap(), "scratch agents original");
+        assert_eq!(fs::read_to_string(managed_tool_dir.join("AGENTS.md")).unwrap(), "tool newer");
+    }
+
+    #[test]
     fn test_discover_skills_valid_only() {
         let tmp = tempdir().unwrap();
         let skill_dir = tmp.path().join("skill_a");
