@@ -43,25 +43,37 @@ pub fn parse_limit(text: &str, header: &str) -> Option<QuotaLimit> {
     let end_pos = slice.find("\n\n").unwrap_or_else(|| slice.len().min(400));
     let chunk = &slice[..end_pos];
 
-    let pct_pos = chunk.find('%')?;
-    let pct = chunk[..pct_pos]
-        .split_whitespace()
-        .last()?
-        .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
-        .parse::<f64>()
-        .ok()?;
+    if let Some(pct_pos) = chunk.find('%') {
+        let pct = chunk[..pct_pos]
+            .split_whitespace()
+            .last()?
+            .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
+            .parse::<f64>()
+            .ok()?;
 
-    let mut lines = chunk.lines().map(|l| l.trim());
-    lines.next();
-    let mut detail = String::new();
-    for line in lines {
-        if line.is_empty() || line.starts_with('[') || line.starts_with('|') { continue; }
-        if line.contains("Limit") || line.contains("MODELS") || line.contains("Models") { break; }
-        detail = line.to_string();
-        break;
+        let mut lines = chunk.lines().map(|l| l.trim());
+        lines.next();
+        let mut detail = String::new();
+        for line in lines {
+            if line.is_empty() || line.starts_with('[') || line.starts_with('|') { continue; }
+            if line.contains("Limit") || line.contains("MODELS") || line.contains("Models") { break; }
+            detail = line.to_string();
+            break;
+        }
+
+        return Some(QuotaLimit { pct, detail });
     }
 
-    Some(QuotaLimit { pct, detail })
+    for line in chunk.lines().skip(1).map(|l| l.trim()) {
+        if line.starts_with("Disabled") {
+            return Some(QuotaLimit {
+                pct: 0.0,
+                detail: line.to_string(),
+            });
+        }
+    }
+
+    None
 }
 
 pub fn parse_group_block(text: &str, group_marker: &str) -> Option<ModelQuotaGroup> {
@@ -103,6 +115,21 @@ pub fn parse_quota_report(raw: &str) -> QuotaReport {
     QuotaReport { account, gemini, claude, raw_fallback: stripped }
 }
 
+fn is_quota_modal_ready(text: &str) -> bool {
+    let has_footer = ["Press Esc", "or q to exit", "esc Close", "esc to close"]
+        .iter()
+        .any(|p| text.contains(p));
+    if has_footer {
+        return true;
+    }
+    if text.contains("GEMINI MODELS") && text.contains("CLAUDE AND GPT MODELS") {
+        let after = text.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
+        let has_5h = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"].iter().any(|p| after.contains(p));
+        return has_5h && (after.contains("Resets") || after.contains("Disabled"));
+    }
+    false
+}
+
 pub(crate) async fn query_quota_from_pty(
     cli: &AntigravityCli,
     session_id: &str,
@@ -118,18 +145,8 @@ pub(crate) async fn query_quota_from_pty(
         tokio::time::sleep(Duration::from_millis(100)).await;
         if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
             accumulated = bytes;
-            let text = String::from_utf8_lossy(&accumulated);
-            // In a 50-line PTY window, both Gemini and Claude sections fit on the screen without scrolling.
-            // Break early once both sections or modal footer is rendered.
-            let has_footer = text.contains("Press Esc") || text.contains("or q to exit");
-            let has_gemini = text.contains("GEMINI MODELS");
-            let has_claude = text.contains("CLAUDE AND GPT MODELS");
-
-            if has_footer || (has_gemini && has_claude) {
-                let after_claude = text.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
-                if has_footer || after_claude.contains("Limit") || after_claude.contains('%') {
-                    break;
-                }
+            if is_quota_modal_ready(&String::from_utf8_lossy(&accumulated)) {
+                break;
             }
         }
     }
@@ -143,23 +160,22 @@ pub(crate) async fn query_quota_from_pty(
     Ok(parse_quota_report(&text))
 }
 
+fn push_limit_line(out: &mut String, branch: &str, sub: &str, label: &str, lim: &QuotaLimit) {
+    out.push_str(&format!("{} 🔹 {}: <code>{}</code> {:.1}%\n", branch, label, format_progress_bar(lim.pct), lim.pct));
+    if !lim.detail.is_empty() {
+        out.push_str(&format!("{}   └ {}\n", sub, html_escape::encode_safe(&lim.detail)));
+    }
+}
+
 fn render_group_markdown(icon: &str, title: &str, group: &ModelQuotaGroup) -> String {
     let mut out = format!("\n{} <b>{}</b>\n", icon, title);
     match (&group.weekly, &group.five_hour) {
         (Some(w), Some(f)) => {
-            out.push_str(&format!("├ 🔹 Weekly Limit: <code>{}</code> {:.1}%\n", format_progress_bar(w.pct), w.pct));
-            if !w.detail.is_empty() { out.push_str(&format!("│   └ {}\n", html_escape::encode_safe(&w.detail))); }
-            out.push_str(&format!("└ 🔹 5-Hour Limit: <code>{}</code> {:.1}%\n", format_progress_bar(f.pct), f.pct));
-            if !f.detail.is_empty() { out.push_str(&format!("    └ {}\n", html_escape::encode_safe(&f.detail))); }
+            push_limit_line(&mut out, "├", "│", "Weekly Limit", w);
+            push_limit_line(&mut out, "└", " ", "5-Hour Limit", f);
         }
-        (Some(w), None) => {
-            out.push_str(&format!("└ 🔹 Weekly Limit: <code>{}</code> {:.1}%\n", format_progress_bar(w.pct), w.pct));
-            if !w.detail.is_empty() { out.push_str(&format!("    └ {}\n", html_escape::encode_safe(&w.detail))); }
-        }
-        (None, Some(f)) => {
-            out.push_str(&format!("└ 🔹 5-Hour Limit: <code>{}</code> {:.1}%\n", format_progress_bar(f.pct), f.pct));
-            if !f.detail.is_empty() { out.push_str(&format!("    └ {}\n", html_escape::encode_safe(&f.detail))); }
-        }
+        (Some(w), None) => push_limit_line(&mut out, "└", " ", "Weekly Limit", w),
+        (None, Some(f)) => push_limit_line(&mut out, "└", " ", "5-Hour Limit", f),
         (None, None) => {}
     }
     out

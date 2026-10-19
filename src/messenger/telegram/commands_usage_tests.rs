@@ -72,6 +72,17 @@ Press Esc or q to exit
     }
 
     #[test]
+    fn test_parse_quota_report_disabled_five_hour_agy_1_4() {
+        let sample = "Models & Quota\nAccount: u@e.com\nCLAUDE AND GPT MODELS\nWeekly Limit Remaining\n░░░░ 0.00%\nResets in 6d\n\nFive Hour Limit Remaining\nDisabled: Weekly limit hit.\n↑/↓ Scroll · esc Close\n";
+        let report = parse_quota_report(sample);
+        let claude = report.claude.unwrap();
+        assert_eq!(claude.weekly.unwrap().pct, 0.0);
+        let c_five = claude.five_hour.unwrap();
+        assert_eq!(c_five.pct, 0.0);
+        assert!(c_five.detail.starts_with("Disabled:"));
+    }
+
+    #[test]
     fn test_parse_quota_report_with_ansi_escapes() {
         let raw_with_ansi = format!("\x1b[1mAccount:\x1b[0m user@google.com\n\x1b[32mGEMINI MODELS\x1b[0m\nWeekly Limit Remaining: 88.5%\n[█████████████████░░░]\nResets tomorrow\n");
         let report = parse_quota_report(&raw_with_ansi);
@@ -114,6 +125,7 @@ Press Esc or q to exit
         assert!(is_workflow_slash_command("/browser check docs"));
         assert!(is_workflow_slash_command("/boost solve puzzle"));
         assert!(is_workflow_slash_command("/schedule every 10m"));
+        assert!(is_workflow_slash_command("/compact"));
 
         assert!(!is_workflow_slash_command("/etc/nginx/nginx.conf"));
         assert!(!is_workflow_slash_command("/usage"));
@@ -127,6 +139,7 @@ Press Esc or q to exit
         assert_eq!(escape_non_workflow_slash("/goal overnight task"), "/goal overnight task");
         assert_eq!(escape_non_workflow_slash("/plan something"), "/plan something");
         assert_eq!(escape_non_workflow_slash("/learn fix"), "/learn fix");
+        assert_eq!(escape_non_workflow_slash("/compact"), "/compact");
 
         // Non-workflow slash inputs are prepended with a single space
         assert_eq!(escape_non_workflow_slash("/etc/hosts"), " /etc/hosts");
@@ -150,11 +163,12 @@ Press Esc or q to exit
         assert!(is_lock_free_command("/stop"));
         assert!(is_lock_free_command("/abort"));
 
-        // Bot commands must include "usage" and "cron" and "boost"
+        // Bot commands must include "usage", "cron", "boost", and "compact"
         let cmds = get_bot_commands();
         assert!(cmds.iter().any(|c| c.command == "usage"));
         assert!(cmds.iter().any(|c| c.command == "cron"));
         assert!(cmds.iter().any(|c| c.command == "boost"));
+        assert!(cmds.iter().any(|c| c.command == "compact"));
     }
 
     #[test]
