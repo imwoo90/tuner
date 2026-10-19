@@ -141,28 +141,53 @@
       flex: 1;
       overflow: auto;
       background: #090d12;
-      display: flex;
-      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
-      font-size: 12.5px;
-      line-height: 1.5;
+      display: block;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 20px;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      tab-size: 4;
     }
-    .line-numbers {
-      padding: 10px 8px 10px 10px;
+    .code-lines {
+      display: flex;
+      flex-direction: column;
+      min-width: 100%;
+      width: max-content;
+      padding: 10px 0;
+    }
+    .code-line {
+      display: flex;
+      align-items: stretch;
+      min-height: 20px;
+      line-height: 20px;
+    }
+    .code-line:hover {
+      background: #161b2288;
+    }
+    .ln {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      flex-shrink: 0;
+      min-width: 48px;
+      padding: 0 10px 0 12px;
       text-align: right;
-      color: #484f58;
+      color: #6e7681;
       user-select: none;
+      -webkit-user-select: none;
       border-right: 1px solid #21262d;
       background: #0d1117;
-      min-width: 38px;
+      font-variant-numeric: tabular-nums;
     }
-    .code-content {
+    .lc {
       flex: 1;
-      padding: 10px 12px;
-      overflow-x: auto;
+      padding: 0 16px 0 12px;
+      white-space: pre;
       color: #e6edf3;
     }
-    pre { margin: 0; }
-    code.hljs { padding: 0; background: transparent; }
+    pre { margin: 0; font-family: inherit; font-size: inherit; line-height: inherit; }
+    code.hljs { padding: 0; background: transparent; font-family: inherit; font-size: inherit; line-height: inherit; }
 
     /* Markdown Container Styling */
     .markdown-container {
@@ -344,10 +369,7 @@
   </div>
 
   <div class="code-container" id="code-container">
-    <div class="line-numbers" id="line-numbers"></div>
-    <div class="code-content">
-      <pre><code id="code-view"></code></pre>
-    </div>
+    <div class="code-lines hljs" id="code-lines"></div>
   </div>
 
   <div class="markdown-container" id="markdown-container" style="display:none;"></div>
@@ -482,6 +504,16 @@
         mediaContainer.innerHTML = `
           <img src="${mediaUrl}" alt="${escapeHtml(file.filename)}" />
         `;
+      } else if (file.language === 'pdf') {
+        document.getElementById('file-stats').innerText = `PDF · ${formatBytes(file.size_bytes)}`;
+        copyBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        codeContainer.style.display = 'none';
+        mdContainer.style.display = 'none';
+        mediaContainer.style.display = 'flex';
+        mediaContainer.innerHTML = `
+          <iframe src="${mediaUrl}" style="width:100%;height:100%;border:none;border-radius:8px;background:#fff;" title="${escapeHtml(file.filename)}"></iframe>
+        `;
       } else if (file.is_binary) {
         document.getElementById('file-stats').innerText = `Binary · ${formatBytes(file.size_bytes)}`;
         copyBtn.style.display = 'none';
@@ -503,36 +535,44 @@
         mediaContainer.style.display = 'none';
         mediaContainer.innerHTML = '';
 
-        const lines = file.content.split('\n');
+        const normalizedContent = (file.content || '').replace(/\r\n/g, '\n');
+        const lines = normalizedContent.split('\n');
         const lineCount = lines.length;
         document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
 
-        // Line numbers for raw code view
-        document.getElementById('line-numbers').innerText = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
-
-        // Direct syntax highlighting
-        const codeEl = document.getElementById('code-view');
-        codeEl.className = 'hljs';
+        const codeLinesEl = document.getElementById('code-lines');
+        codeLinesEl.className = 'code-lines hljs';
         if (file.language) {
-          codeEl.classList.add(`language-${file.language}`);
+          codeLinesEl.classList.add(`language-${file.language}`);
         }
         let highlighted = '';
         try {
-          if (file.language && hljs.getLanguage(file.language)) {
-            highlighted = hljs.highlight(file.content, { language: file.language }).value;
+          if (file.language && window.hljs && hljs.getLanguage(file.language)) {
+            highlighted = hljs.highlight(normalizedContent, { language: file.language }).value;
+          } else if (window.hljs) {
+            highlighted = hljs.highlightAuto(normalizedContent).value;
           } else {
-            highlighted = hljs.highlightAuto(file.content).value;
+            highlighted = escapeHtml(normalizedContent);
           }
         } catch (e) {
-          highlighted = escapeHtml(file.content);
+          highlighted = escapeHtml(normalizedContent);
         }
-        codeEl.innerHTML = highlighted;
+
+        const highlightedLines = splitHighlightedLines(highlighted);
+        const digits = String(lineCount).length;
+        const minLnWidth = Math.max(48, digits * 9 + 22);
+        codeLinesEl.innerHTML = highlightedLines
+          .map((lineHtml, i) => `<div class="code-line" data-line="${i + 1}"><span class="ln" style="min-width:${minLnWidth}px">${i + 1}</span><span class="lc">${lineHtml.length > 0 ? lineHtml : ' '}</span></div>`)
+          .join('');
+        codeContainer.scrollTop = 0;
+        codeContainer.scrollLeft = 0;
+        mdContainer.scrollTop = 0;
 
         const isMd = file.language === 'markdown';
         if (isMd) {
           toggleBtn.style.display = 'inline-flex';
           if (isMarkdownRendered) {
-            showMarkdownView(file.content);
+            showMarkdownView(normalizedContent);
           } else {
             showCodeView();
           }
@@ -543,12 +583,32 @@
       }
     }
 
+    function splitHighlightedLines(html) {
+      const rawLines = html.split('\n');
+      const openTags = [];
+      const tagRegex = /<\/?span[^>]*>/gi;
+      return rawLines.map(line => {
+        const prefix = openTags.join('');
+        let m;
+        tagRegex.lastIndex = 0;
+        while ((m = tagRegex.exec(line)) !== null) {
+          const tag = m[0];
+          if (tag.startsWith('</')) {
+            openTags.pop();
+          } else if (!tag.endsWith('/>')) {
+            openTags.push(tag);
+          }
+        }
+        const suffix = '</span>'.repeat(openTags.length);
+        return prefix + line + suffix;
+      });
+    }
+
     function showCodeView() {
-      document.getElementById('code-container').style.display = 'flex';
+      document.getElementById('code-container').style.display = 'block';
       document.getElementById('markdown-container').style.display = 'none';
       const toggleBtn = document.getElementById('btn-toggle-view');
       toggleBtn.innerText = '👁️ 렌더';
-      isMarkdownRendered = false;
     }
 
     function showMarkdownView(content) {
@@ -557,7 +617,6 @@
       mdContainer.style.display = 'block';
       const toggleBtn = document.getElementById('btn-toggle-view');
       toggleBtn.innerText = '📝 코드';
-      isMarkdownRendered = true;
 
       if (window.marked) {
         const renderer = new marked.Renderer();
@@ -596,10 +655,11 @@
     function toggleMarkdownView() {
       const file = FILES[activeIndex];
       if (!file || file.language !== 'markdown') return;
+      isMarkdownRendered = !isMarkdownRendered;
       if (isMarkdownRendered) {
-        showCodeView();
+        showMarkdownView((file.content || '').replace(/\r\n/g, '\n'));
       } else {
-        showMarkdownView(file.content);
+        showCodeView();
       }
     }
 

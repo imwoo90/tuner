@@ -59,7 +59,7 @@ pub async fn warmup(server_port: &Arc<Mutex<Option<u16>>>, tunnel_url: &Arc<Mute
     let port = ensure_server_running(server_port).await;
     let mut tunnel_guard = tunnel_url.lock().await;
     if tunnel_guard.is_none() {
-        if let Some(url) = spawn_quick_tunnel(port).await {
+        if let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
             *tunnel_guard = Some(url);
         }
     }
@@ -76,7 +76,7 @@ pub async fn get_review_url(
         return format!("{}/review/{}", base, token);
     }
 
-    if let Some(url) = spawn_quick_tunnel(port).await {
+    if let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
         *tunnel_guard = Some(url.clone());
         format!("{}/review/{}", url, token)
     } else {
@@ -111,11 +111,26 @@ fn parse_tunnel_url(line: &str) -> Option<String> {
 }
 
 pub async fn spawn_quick_tunnel(port: u16) -> Option<String> {
+    spawn_quick_tunnel_tracked(port, None).await
+}
+
+async fn spawn_quick_tunnel_tracked(
+    port: u16,
+    tunnel_url_slot: Option<Arc<Mutex<Option<String>>>>,
+) -> Option<String> {
     let bin = find_cloudflared_bin()?;
     let mut cmd = tokio::process::Command::new(bin);
     cmd.args(["tunnel", "--url", &format!("http://127.0.0.1:{}", port)])
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(target_os = "linux")]
+    unsafe {
+        cmd.pre_exec(|| {
+            nix::libc::prctl(nix::libc::PR_SET_PDEATHSIG, nix::libc::SIGTERM);
+            Ok(())
+        });
+    }
 
     let mut child = cmd.spawn().ok()?;
     let stderr = child.stderr.take()?;
@@ -126,10 +141,12 @@ pub async fn spawn_quick_tunnel(port: u16) -> Option<String> {
     while start.elapsed() < Duration::from_secs(10) {
         use tokio::io::AsyncBufReadExt;
         line.clear();
-        if reader.read_line(&mut line).await.unwrap_or(0) == 0 {
+        let rem = Duration::from_secs(10).saturating_sub(start.elapsed());
+        if tokio::time::timeout(rem, reader.read_line(&mut line)).await.ok().and_then(Result::ok).unwrap_or(0) == 0 {
             break;
         }
         if let Some(url) = parse_tunnel_url(&line) {
+            let url_clone = url.clone();
             tokio::spawn(async move {
                 use tokio::io::AsyncBufReadExt;
                 let mut discard = String::new();
@@ -140,10 +157,17 @@ pub async fn spawn_quick_tunnel(port: u16) -> Option<String> {
                     discard.clear();
                 }
                 let _ = child.wait().await;
+                if let Some(slot) = tunnel_url_slot {
+                    let mut guard = slot.lock().await;
+                    if guard.as_deref() == Some(url_clone.as_str()) {
+                        *guard = None;
+                    }
+                }
             });
             return Some(url);
         }
     }
+    let _ = child.kill().await;
     None
 }
 

@@ -18,13 +18,15 @@ use std::path::PathBuf;
 /// and returns a list of unique safe file paths.
 pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    if let Ok(re) = regex::Regex::new(r"file://[^\s\)]+") {
+    let mut seen_canonical = std::collections::HashSet::new();
+    if let Ok(re) = regex::Regex::new(r#"file://[^\s\)\]`"'>]+"#) {
         for cap in re.captures_iter(text) {
-            let raw = cap[0].trim_end_matches(&['.', ',', ';', '"', '\'', '>', ')'][..]);
+            let raw = cap[0].trim_end_matches(&['.', ',', ';', '"', '\'', '>', ')', '`', ']'][..]);
             if let Ok(parsed_url) = url::Url::parse(raw) {
                 if let Ok(path) = parsed_url.to_file_path() {
                     if path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
-                        if !paths.contains(&path) {
+                        let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                        if seen_canonical.insert(canon) {
                             paths.push(path);
                         }
                     }
@@ -69,9 +71,16 @@ pub(crate) async fn send_file_attachments(
     let mut allowed_roots = vec![
         config.working_dir.clone(),
         home_path.join(".tuner"),
+        home_path.join(".tuner-dev"),
         home_path.join("tuner"),
         home_path.join(".gemini/antigravity-cli"),
     ];
+    if let Ok(th) = std::env::var("TUNER_HOME") {
+        let th_path = PathBuf::from(th);
+        if !allowed_roots.contains(&th_path) {
+            allowed_roots.push(th_path);
+        }
+    }
     if let Ok(cwd) = std::env::current_dir() {
         if !allowed_roots.contains(&cwd) {
             allowed_roots.push(cwd);
@@ -176,5 +185,11 @@ mod tests {
         let paths_punct = extract_file_paths(&text_punct, &allowed_roots);
         assert_eq!(paths_punct.len(), 1);
         assert_eq!(paths_punct[0], file1);
+
+        // Test inline code backtick and bracket cleanup
+        let text_code = format!("Inline `file://{}` and [file://{}]", file1.to_string_lossy(), file1.to_string_lossy());
+        let paths_code = extract_file_paths(&text_code, &allowed_roots);
+        assert_eq!(paths_code.len(), 1);
+        assert_eq!(paths_code[0], file1);
     }
 }

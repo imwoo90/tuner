@@ -6,9 +6,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_review_session_and_render_html() {
         let dir = tempdir().unwrap();
-        let file1 = dir.path().join("main.rs");
+        let file1 = dir.path().join("main.c");
         let file2 = dir.path().join("config.toml");
-        std::fs::write(&file1, "fn main() { println!(\"hello\"); }").unwrap();
+        std::fs::write(&file1, "int main(void) {\n    /* multi-line\n       comment */\n    return 0;\n}").unwrap();
         std::fs::write(&file2, "[app]\nname = \"tuner\"").unwrap();
 
         let mgr = ReviewManager::new();
@@ -19,15 +19,17 @@ mod tests {
 
         let files = mgr.get_files(&token).await.unwrap();
         assert_eq!(files.len(), 2);
-        assert_eq!(files[0].filename, "main.rs");
-        assert_eq!(files[0].language, "rust");
+        assert_eq!(files[0].filename, "main.c");
+        assert_eq!(files[0].language, "c");
         assert_eq!(files[1].filename, "config.toml");
         assert_eq!(files[1].language, "toml");
 
         let html = mgr.get_html(&token).await.unwrap();
         assert!(html.contains("Tuner File Review"));
-        assert!(html.contains("main.rs"));
+        assert!(html.contains("main.c"));
         assert!(html.contains("config.toml"));
+        assert!(html.contains("splitHighlightedLines"));
+        assert!(html.contains("code-lines"));
     }
 
     #[tokio::test]
