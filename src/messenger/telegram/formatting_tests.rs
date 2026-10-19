@@ -227,5 +227,20 @@ mod tests {
             assert!(!chunk.ends_with("&qu"));
         }
     }
+
+    #[test]
+    fn test_bold_italic_and_unmatched_delimiters_never_interleave_tags() {
+        let html1 = markdown_to_telegram_html("***bold italic***");
+        assert_eq!(html1, "<b><i>bold italic</i></b>");
+
+        let html2 = markdown_to_telegram_html("**foo *bar***");
+        assert_eq!(html2, "<b>foo <i>bar</i></b>");
+
+        let html3 = markdown_to_telegram_html("**bold *unmatched** and *other*");
+        assert_eq!(html3, "<b>bold *unmatched</b> and <i>other</i>");
+
+        let html4 = markdown_to_telegram_html("**bold _unmatched** and _other_");
+        assert_eq!(html4, "<b>bold _unmatched</b> and <i>other</i>");
+    }
 }
 

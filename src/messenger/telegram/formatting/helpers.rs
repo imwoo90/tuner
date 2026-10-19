@@ -170,7 +170,10 @@ pub fn apply_markdown_formatting(escaped: &str) -> String {
     let h_re = Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap();
     let mut out = h_re.replace_all(escaped, "<b>$1</b>").to_string();
 
-    let bold_re = Regex::new(r"(?s)\*\*(.+?)\*\*").unwrap();
+    let bi_re = Regex::new(r"\*\*\*([^\*\n]+?)\*\*\*").unwrap();
+    out = bi_re.replace_all(&out, "<b><i>$1</i></b>").to_string();
+
+    let bold_re = Regex::new(r"(?s)\*\*(.+?\*?)\*\*").unwrap();
     out = bold_re.replace_all(&out, "<b>$1</b>").to_string();
 
     out = super::italic::format_italic_delim(&out, '*', "<i>", "</i>");

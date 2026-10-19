@@ -37,24 +37,30 @@ async fn send_single_chunk(
     let limiter = super::rate_limiter::global_chat_rate_limiter();
     let chunk_str = chunk.to_string();
     limiter.execute_rate_limited(chat_id, || {
-        let chunk_clone = chunk_str.clone();
+        let c = chunk_str.clone();
         async move {
-            if is_first {
-                if let Some(mid) = msg_id {
-                    let edit_res = bot.edit_message_text(chat_id, mid, chunk_clone.clone())
-                        .parse_mode(teloxide::types::ParseMode::Html).await;
-                    match edit_res {
-                        Ok(edited) => return Ok(edited.id),
-                        Err(e) if is_message_not_modified(&e) => return Ok(mid),
-                        Err(e) => eprintln!("⚠️ [tuner] edit_message_text failed, fallback: {:?}", e),
-                    }
+            let html = teloxide::types::ParseMode::Html;
+            if let (true, Some(mid)) = (is_first, msg_id) {
+                match bot.edit_message_text(chat_id, mid, c.clone()).parse_mode(html).await {
+                    Ok(ed) => return Ok(ed.id),
+                    Err(e) if is_message_not_modified(&e) => return Ok(mid),
+                    Err(e) => if e.to_string().contains("can't parse entities") {
+                        if let Ok(ed) = bot.edit_message_text(chat_id, mid, c.clone()).await { return Ok(ed.id); }
+                    } else { eprintln!("⚠️ [tuner] edit_message_text fallback: {:?}", e); },
                 }
             }
-            let mut req = bot.send_message(chat_id, chunk_clone).parse_mode(teloxide::types::ParseMode::Html);
-            if let Some(tid) = thread_id {
-                req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
+            let tid = thread_id.map(|t| teloxide::types::ThreadId(teloxide::types::MessageId(t)));
+            let mut req = bot.send_message(chat_id, c.clone()).parse_mode(html);
+            if let Some(t) = tid { req = req.message_thread_id(t); }
+            match req.await {
+                Ok(m) => Ok(m.id),
+                Err(e) if e.to_string().contains("can't parse entities") => {
+                    let mut r = bot.send_message(chat_id, c);
+                    if let Some(t) = tid { r = r.message_thread_id(t); }
+                    r.await.map(|m| m.id)
+                }
+                Err(e) => Err(e),
             }
-            req.await.map(|m| m.id)
         }
     }).await
 }
@@ -93,53 +99,37 @@ pub(crate) async fn handle_stream_result(
     resp: crate::cli::CliResponse,
     config: &CliConfig,
 ) -> Result<Option<String>, teloxide::RequestError> {
-    let mut last_session_id = None;
-    if let Some(ref sid) = resp.session_id {
-        last_session_id = Some(sid.clone());
-    }
+    let last_sid = resp.session_id.clone();
     if resp.stderr == "Interrupted by user (/stop)" {
-        return Ok(last_session_id);
+        return Ok(last_sid);
     }
     let raw_text = if resp.is_error {
-        let code = resp.returncode.unwrap_or(1);
-        let error_msg = if !resp.stderr.is_empty() { &resp.stderr } else { &resp.result };
-        crate::cli::antigravity::error_parser::parse_cli_error(error_msg, code)
+        let err_msg = if !resp.stderr.is_empty() { &resp.stderr } else { &resp.result };
+        crate::cli::antigravity::error_parser::parse_cli_error(err_msg, resp.returncode.unwrap_or(1))
     } else {
         resp.result
     };
-
-    let html_text = formatting::markdown_to_telegram_html(&raw_text);
-    let chunks = formatting::split_html_message(&html_text, 4000);
-
-    let (final_success, final_error, sent_msg_id) =
-        send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
-
+    let chunks = formatting::split_html_message(&formatting::markdown_to_telegram_html(&raw_text), 4000);
+    let (ok, err, sent_id) = send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, &raw_text, config).await;
-
-    if let Some(ref sid) = last_session_id {
-        super::history::log_telegram_message(
-            &config.working_dir,
-            sid,
-            topic_id,
-            topic_name,
-            "bot",
-            sent_msg_id,
-            &raw_text,
-            final_success,
-            final_error.as_deref(),
-        );
+    if let Some(ref sid) = last_sid {
+        super::history::log_telegram_message(&config.working_dir, sid, topic_id, topic_name, "bot", sent_id, &raw_text, ok, err.as_deref());
     }
-    Ok(last_session_id)
+    Ok(last_sid)
 }
 
 
 
 
 fn truncate_streaming_preview(delta: &str) -> String {
-    if delta.chars().count() > 3900 {
-        let tail: String = delta.chars().rev().take(3800).collect();
-        let tail: String = tail.chars().rev().collect();
-        format!("...[중간 생략]...\n{}", tail)
+    if delta.encode_utf16().count() > 3500 {
+        let mut units = 0;
+        let tail: Vec<char> = delta.chars().rev().take_while(|c| {
+            units += c.len_utf16();
+            units <= 3400
+        }).collect();
+        let tail_str: String = tail.into_iter().rev().collect();
+        format!("...[중간 생략]...\n{}", tail_str)
     } else {
         delta.to_string()
     }
@@ -166,7 +156,7 @@ pub(crate) async fn handle_text_delta(
             }).await;
             if let Err(e) = res {
                 if !is_message_not_modified(&e) {
-                    eprintln!("❌ [tuner] Failed to edit streaming message (chat: {}, msg: {}): {:?}", chat_id, mid, e);
+                    eprintln!("❌ [tuner] Edit stream msg failed ({}, {}): {:?}", chat_id, mid, e);
                 }
             }
             *last_edit = Instant::now();
@@ -185,9 +175,7 @@ pub(crate) async fn handle_text_delta(
                 *pub_msg_id = Some(sent.id);
                 *last_edit = Instant::now();
             }
-            Err(e) => {
-                eprintln!("❌ [tuner] Failed to send streaming initial message (chat: {}, thread: {:?}): {:?}", chat_id, thread_id, e);
-            }
+            Err(e) => eprintln!("❌ [tuner] Initial stream msg failed ({}, {:?}): {:?}", chat_id, thread_id, e),
         }
     }
     Ok(())
@@ -198,36 +186,23 @@ async fn process_stream_events(
     chat_id: ChatId,
     thread_id: Option<i32>,
     mut stream: futures::stream::BoxStream<'_, StreamEvent>,
-    session_data: &crate::session::data::SessionData,
+    sdata: &crate::session::data::SessionData,
     config: &CliConfig,
     last_text: &mut String,
     pub_msg_id: &mut Option<teloxide::types::MessageId>,
-    last_session_id: &mut Option<String>,
+    last_sid: &mut Option<String>,
     cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let mut last_edit = Instant::now();
     use futures::StreamExt;
     while let Some(event) = stream.next().await {
         match event {
-            StreamEvent::TextDelta(delta) => {
-                handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?;
-            }
-            StreamEvent::AskQuestion(ask) => {
-                super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, session_data, config, cli).await?;
-            }
+            StreamEvent::TextDelta(delta) => handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?,
+            StreamEvent::AskQuestion(ask) => super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, sdata, config, cli).await?,
             StreamEvent::Result(resp) => {
                 *last_text = resp.result.clone();
-                if let Ok(Some(sid)) = handle_stream_result(
-                    bot,
-                    chat_id,
-                    *pub_msg_id,
-                    thread_id,
-                    session_data.topic_id,
-                    session_data.topic_name.as_deref(),
-                    resp,
-                    config,
-                ).await {
-                    *last_session_id = Some(sid);
+                if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_msg_id, thread_id, sdata.topic_id, sdata.topic_name.as_deref(), resp, config).await {
+                    *last_sid = Some(sid);
                 }
             }
         }
@@ -245,31 +220,17 @@ pub(crate) async fn consume_stream(
     config: &CliConfig,
     cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let mut last_session_id = None;
-    let mut pub_msg_id = None;
-    let mut last_text = String::new();
-
+    let (mut last_sid, mut pub_msg_id, mut last_text) = (None, None, String::new());
     let mut updated = session_data.clone();
-    let mut cleared_old_reaction = false;
+    let mut cleared = false;
     if let Some(last_mid) = session_data.last_progress_msg_id {
         let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
         super::typing::clear_old_progress_reaction(last_mid, chat_id, tok);
         updated.last_progress_msg_id = None;
-        cleared_old_reaction = true;
+        cleared = true;
     }
 
-    process_stream_events(
-        bot,
-        chat_id,
-        thread_id,
-        stream,
-        &session_data,
-        config,
-        &mut last_text,
-        &mut pub_msg_id,
-        &mut last_session_id,
-        cli,
-    ).await?;
+    process_stream_events(bot, chat_id, thread_id, stream, &session_data, config, &mut last_text, &mut pub_msg_id, &mut last_sid, cli).await?;
 
     if let Some(mid) = pub_msg_id {
         if last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for") {
@@ -279,10 +240,8 @@ pub(crate) async fn consume_stream(
         }
     }
 
-    if last_session_id.is_some() || cleared_old_reaction || updated.last_progress_msg_id.is_some() {
-        if let Some(sid) = last_session_id {
-            updated.set_session_id(&config.provider, &sid);
-        }
+    if last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
+        if let Some(sid) = last_sid { updated.set_session_id(&config.provider, &sid); }
         let _ = sessions.update_session(&updated, 0.0, 0).await;
     }
     Ok(())
