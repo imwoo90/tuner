@@ -33,16 +33,12 @@ impl Transport for TelegramTransport {
     }
 
     async fn deliver(&self, envelope: &Envelope) -> Result<(), String> {
-        let chat_id = envelope.chat_id;
-        let topic_id = envelope.topic_id;
+        let chat_id = teloxide::types::ChatId(envelope.chat_id);
+        let thread_id = envelope.topic_id.map(|t| t as i32);
         let html_text = crate::telegram::formatting::markdown_to_telegram_html(&envelope.result_text);
-
-        let mut req = self.bot.send_message(teloxide::types::ChatId(chat_id), html_text)
-            .parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = topic_id {
-            req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
-        }
-        req.await.map(|_| ()).map_err(|e| e.to_string())
+        let chunks = crate::telegram::formatting::splitting::split_html_message(&html_text, 4000);
+        crate::telegram::stream::send_chunks_to_telegram(&self.bot, chat_id, None, thread_id, &chunks).await;
+        Ok(())
     }
 
     async fn deliver_broadcast(&self, envelope: &Envelope) -> Result<(), String> {

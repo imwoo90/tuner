@@ -255,8 +255,8 @@ pub fn is_quiet_hours_at(
     if let (Some(qs), Some(qe)) = (hook.quiet_start, hook.quiet_end) {
         let tz: chrono_tz::Tz = config.user_timezone.as_deref().unwrap_or("UTC").parse().unwrap_or(chrono_tz::UTC);
         if let (Some(start), Some(end)) = (
-            chrono::NaiveTime::from_hms_opt(qs, 0, 0),
-            chrono::NaiveTime::from_hms_opt(qe, 0, 0),
+            chrono::NaiveTime::from_hms_opt(qs % 24, 0, 0),
+            chrono::NaiveTime::from_hms_opt(qe % 24, 0, 0),
         ) {
             return crate::heartbeat::quiet::is_within_quiet_hours(&now.with_timezone(&tz), start, end);
         }
@@ -279,8 +279,10 @@ async fn handle_cron_task_mode(
     }
     if !workspace_dir.is_dir() { return "error:folder_missing".to_string(); }
     let mut tcfg = config.clone();
+    tcfg.working_dir = workspace_dir.clone();
     if let Some(p) = &hook.provider { tcfg.provider = p.clone(); }
     if let Some(m) = &hook.model { tcfg.model = Some(m.clone()); }
+    if let Some(r) = &hook.reasoning_effort { tcfg.effort = Some(r.clone()); }
     if !hook.cli_parameters.is_empty() {
         tcfg.cli_parameters.insert(tcfg.provider.clone(), hook.cli_parameters.clone());
     }

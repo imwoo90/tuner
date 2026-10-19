@@ -88,8 +88,8 @@ impl HeartbeatScheduler {
             self.heartbeat_quiet_start(),
             self.heartbeat_quiet_end(),
         ) {
-            let start = NaiveTime::from_hms_opt(start_h, 0, 0).unwrap();
-            let end = NaiveTime::from_hms_opt(end_h, 0, 0).unwrap();
+            let start = NaiveTime::from_hms_opt(start_h % 24, 0, 0).unwrap();
+            let end = NaiveTime::from_hms_opt(end_h % 24, 0, 0).unwrap();
             return super::quiet::is_within_quiet_hours(now, start, end);
         }
 
@@ -98,7 +98,12 @@ impl HeartbeatScheduler {
 
     /// Checks if a given chat session has active running PTY processes.
     pub async fn is_chat_busy(&self, chat_id: i64) -> bool {
-        let key = crate::session::key::SessionKey::telegram(chat_id, None);
+        self.is_session_busy(chat_id, None).await
+    }
+
+    /// Checks if a given chat/topic session has active running PTY processes.
+    pub async fn is_session_busy(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
+        let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
         if let Ok(Some(sess)) = self.sessions.get_active(&key).await {
             let sid = sess.get_session_id(&self.config.provider);
             if !sid.is_empty() {
@@ -155,7 +160,7 @@ impl HeartbeatScheduler {
                 continue;
             }
 
-            if self.is_chat_busy(session.chat_id).await {
+            if self.is_session_busy(session.chat_id, session.topic_id).await {
                 continue;
             }
 
@@ -182,7 +187,7 @@ impl HeartbeatScheduler {
                 let mut env = crate::bus::adapters::from_heartbeat(
                     session.chat_id,
                     &resp.result,
-                    None,
+                    session.topic_id,
                     Some(&session.transport),
                 );
                 self.bus.submit(&mut env).await;

@@ -217,21 +217,21 @@ mod tests {
     #[test]
     fn test_cron_override_reasoning() {
         let mut cfg = CliConfig::default();
-        cfg.provider = "claude".to_string();
+        cfg.provider = "antigravity".to_string();
+        cfg.model = Some("gemini-3.8-flash".to_string());
 
         let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
-        job.reasoning_effort = Some("high".to_string());
+        job.reasoning_effort = Some("low".to_string());
         
         let mut jc = cfg.clone();
         if let Some(r) = &job.reasoning_effort {
-            jc.cli_parameters.entry("antigravity".to_string()).or_default()
-                .extend(vec!["-c".to_string(), format!("model_reasoning_effort={}", r)]);
+            jc.effort = Some(r.clone());
         }
         let cli = AntigravityCli::new(jc);
         let cmd = cli.build_command("Prompt", None, false);
-        assert!(cmd.contains(&"-c".to_string()));
-        let c_idx = cmd.iter().position(|s| s == "-c").unwrap();
-        assert_eq!(cmd[c_idx + 1], "model_reasoning_effort=high");
+        assert!(cmd.contains(&"--effort".to_string()));
+        let e_idx = cmd.iter().position(|s| s == "--effort").unwrap();
+        assert_eq!(cmd[e_idx + 1], "low");
     }
 
     #[test]

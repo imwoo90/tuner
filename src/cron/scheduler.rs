@@ -146,8 +146,8 @@ impl CronScheduler {
             let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
             if let Ok(tz) = tz_str.parse::<Tz>() {
                 let now_local = now.with_timezone(&tz);
-                let start = NaiveTime::from_hms_opt(qs, 0, 0).unwrap();
-                let end = NaiveTime::from_hms_opt(qe, 0, 0).unwrap();
+                let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap();
+                let end = NaiveTime::from_hms_opt(qe % 24, 0, 0).unwrap();
                 return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
             }
         }
@@ -221,6 +221,7 @@ impl CronScheduler {
         }
 
         let mut jc = (*self.config).clone();
+        jc.working_dir = workspace.clone();
         jc.chat_id = job.chat_id;
         jc.topic_id = job.topic_id;
         jc.transport = job.transport.clone();
@@ -230,8 +231,7 @@ impl CronScheduler {
             jc.cli_parameters.insert("antigravity".to_string(), job.cli_parameters.clone());
         }
         if let Some(r) = &job.reasoning_effort {
-            jc.cli_parameters.entry("antigravity".to_string()).or_default()
-                .extend(vec!["-c".to_string(), format!("model_reasoning_effort={}", r)]);
+            jc.effort = Some(r.clone());
         }
 
         let job_cli = AntigravityCli::new(jc);

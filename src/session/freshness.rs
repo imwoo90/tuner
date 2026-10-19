@@ -26,7 +26,7 @@ pub fn has_crossed_daily_reset(
     let last_local = last_active.with_timezone(&tz);
 
     let today_reset = match tz.from_local_datetime(
-        &now_local.date_naive().and_hms_opt(daily_reset_hour, 0, 0).unwrap()
+        &now_local.date_naive().and_hms_opt(daily_reset_hour % 24, 0, 0).unwrap()
     ) {
         LocalResult::Single(dt) => dt,
         LocalResult::Ambiguous(dt1, _) => dt1,
