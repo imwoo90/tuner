@@ -219,15 +219,15 @@ async fn test_session_manager_reuses_running_process() {
     let env = HashMap::new();
     let manager = SessionManager::new();
 
-    let args1 = vec!["--model".to_string(), "gemini-3.8-flash".to_string()];
-    manager.ensure_session("session-reuse", &workspace, "cat", &args1, &env).await.unwrap();
+    let args1 = vec!["10".to_string()];
+    manager.ensure_session("session-reuse", &workspace, "sleep", &args1, &env).await.unwrap();
 
     let initial_pid = {
         let h = manager.holders.lock().await;
         h.get("session-reuse").unwrap().child.id().unwrap()
     };
 
-    manager.ensure_session("session-reuse", &workspace, "cat", &args1, &env).await.unwrap();
+    manager.ensure_session("session-reuse", &workspace, "sleep", &args1, &env).await.unwrap();
     let reused_pid = {
         let h = manager.holders.lock().await;
         h.get("session-reuse").unwrap().child.id().unwrap()
@@ -237,4 +237,64 @@ async fn test_session_manager_reuses_running_process() {
     manager.terminate("session-reuse").await;
 }
 
+#[test]
+fn test_has_ready_status_bar_distinguishes_unauthed_and_ready_states() {
+    use super::pty_spawner::has_ready_status_bar;
 
+    let unauthed = "────────────────────────────────\n>\n────────────────────────────────\n  ? for shortcuts\r\n";
+    assert!(!has_ready_status_bar(unauthed));
+
+    let ready = "────────────────────────────────\n>\n────────────────────────────────\n  ? for shortcuts                                 Gemini 4 Argon · high\r\n";
+    assert!(has_ready_status_bar(ready));
+}
+
+#[tokio::test]
+async fn test_wait_for_pty_prompt_ignores_early_csi_and_unauthed_bar() {
+    use super::pty_spawner::wait_for_pty_prompt;
+    use super::session::SessionManager;
+
+    let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mgr = std::sync::Arc::new(SessionManager::new());
+    mgr.ensure_session("sess-ready", &ws, "cat", &[], &HashMap::new()).await.unwrap();
+
+    {
+        let hs = mgr.holders.lock().await;
+        let mut out = hs.get("sess-ready").unwrap().output.lock().await;
+        out.extend_from_slice(b"\x1b[>4;2m\x1b[>1u>\n? for shortcuts\r\n");
+    }
+
+    let mgr_bg = mgr.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let hs = mgr_bg.holders.lock().await;
+        if let Some(h) = hs.get("sess-ready") {
+            let mut out = h.output.lock().await;
+            out.extend_from_slice(b"? for shortcuts   Gemini 4 Argon\r\n");
+        }
+    });
+
+    let t0 = std::time::Instant::now();
+    wait_for_pty_prompt(&mgr, "sess-ready").await.unwrap();
+    let elapsed = t0.elapsed().as_millis();
+    assert!(elapsed >= 1200 && elapsed < 3000, "Unexpected elapsed: {}ms", elapsed);
+    mgr.terminate("sess-ready").await;
+}
+
+#[test]
+fn test_extract_pty_turn_error_ignores_prior_and_stale_errors() {
+    use super::completion::extract_pty_turn_error;
+
+    let prior = b"> hi\r\n\xe2\x9a\xa0 Individual quota reached\r\nError ID: err-old-1\r\n";
+    let mut buf = prior.to_vec();
+    let offset = buf.len();
+    buf.extend_from_slice(b"> 2+2?\r\n\xe2\x9a\xa0 Individual quota reached\r\nError ID: err-old-1\r\n");
+    assert!(extract_pty_turn_error(&buf, offset).is_none());
+
+    buf.extend_from_slice(b"\xe2\x9a\xa0 Individual quota reached\r\nError ID: err-new-2\r\n");
+    let err = extract_pty_turn_error(&buf, offset);
+    assert!(err.is_some());
+    assert!(err.unwrap().contains("err-new-2"));
+
+    buf.extend_from_slice(b"> next prompt\r\n");
+    assert!(extract_pty_turn_error(&buf, offset).is_none());
+}

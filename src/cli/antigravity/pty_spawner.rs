@@ -32,6 +32,7 @@ pub struct SessionHolder {
     pub output: std::sync::Arc<Mutex<Vec<u8>>>,
     pub initialized: bool,
     pub cmd_args: Vec<String>,
+    pub turn_start_offset: usize,
 }
 
 impl Drop for SessionHolder {
@@ -119,13 +120,13 @@ pub fn spawn_session(
         .stdin(stdin_redirect)
         .stdout(stdout_redirect)
         .stderr(stderr_redirect)
-        .process_group(0)
         .kill_on_drop(true);
 
+    let _ = slave_raw;
     unsafe {
         cmd.pre_exec(move || {
             let _ = nix::unistd::setsid();
-            let _ = nix::unistd::tcsetpgrp(slave_raw, nix::unistd::getpid());
+            let _ = nix::libc::ioctl(0, nix::libc::TIOCSCTTY as _, 0);
             Ok(())
         });
     }
@@ -147,6 +148,7 @@ pub fn spawn_session(
         master_fd: master_dup,
         output,
         initialized: false,
+        turn_start_offset: 0,
         cmd_args: args.to_vec(),
     })
 }
@@ -160,17 +162,19 @@ fn spawn_drain_task(
         loop {
             match async_master.readable().await {
                 Ok(mut guard) => {
-                    match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            let mut out = output.lock().await;
-                            out.extend_from_slice(&buf[..n]);
-                            guard.clear_ready();
+                    loop {
+                        match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
+                            Ok(0) => return,
+                            Ok(n) => {
+                                let mut out = output.lock().await;
+                                out.extend_from_slice(&buf[..n]);
+                            }
+                            Err(nix::Error::EAGAIN) => {
+                                guard.clear_ready();
+                                break;
+                            }
+                            Err(_) => return,
                         }
-                        Err(nix::Error::EAGAIN) => {
-                            guard.clear_ready();
-                        }
-                        Err(_) => break,
                     }
                 }
                 Err(_) => break,
@@ -181,25 +185,57 @@ fn spawn_drain_task(
 
 pub(crate) fn strip_ansi(s: &str) -> String {
     static ANSI_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = ANSI_RE.get_or_init(|| regex::Regex::new(r"\x1B(?:\[[0-9;?]*[a-zA-Z=hlm]|[\(\)][a-zA-Z0-9])").unwrap());
+    let re = ANSI_RE.get_or_init(|| {
+        regex::Regex::new(r"\x1B(?:\[[0-9:;<=>?]*[ -/]*[@-~]|[\(\)][a-zA-Z0-9]|\][^\x07\x1B]*(?:\x07|\x1B\\))").unwrap()
+    });
     re.replace_all(s, "").to_string()
+}
+
+pub(crate) fn has_ready_status_bar(clean: &str) -> bool {
+    clean.lines().any(|line| {
+        line.trim()
+            .strip_prefix("? for shortcuts")
+            .map(|rest| !rest.trim().is_empty())
+            .unwrap_or(false)
+    })
 }
 
 pub(crate) async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, sid: &str) -> Result<(), String> {
     let start = std::time::Instant::now();
-    while start.elapsed().as_secs() < 15 {
-        let mut hs = mgr.holders.lock().await;
-        let h = hs.get_mut(sid).ok_or("No holder")?;
-        let out = h.output.lock().await.clone();
-        let dead = h.child.try_wait().ok().flatten().is_some();
-        let s = String::from_utf8_lossy(&out);
-        let clean = strip_ansi(&s);
-        if clean.contains('>') || dead {
-            drop(hs);
-            tokio::time::sleep(tokio::time::Duration::from_millis(4000)).await;
+    let mut last_len = 0usize;
+    let mut last_change = start;
+    let mut bar_seen_at: Option<std::time::Instant> = None;
+
+    while start.elapsed().as_secs() < 20 {
+        let (out, dead) = {
+            let mut hs = mgr.holders.lock().await;
+            let h = hs.get_mut(sid).ok_or("No holder")?;
+            let out = h.output.lock().await.clone();
+            let dead = h.child.try_wait().ok().flatten().is_some();
+            (out, dead)
+        };
+        if dead {
             return Ok(());
         }
-        drop(hs);
+        let now = std::time::Instant::now();
+        if out.len() != last_len {
+            last_len = out.len();
+            last_change = now;
+        }
+        let clean = strip_ansi(&String::from_utf8_lossy(&out));
+        if has_ready_status_bar(&clean) {
+            let seen = *bar_seen_at.get_or_insert(now);
+            let since_bar = now.duration_since(seen).as_millis();
+            let idle_ms = now.duration_since(last_change).as_millis();
+            if (since_bar >= 1000 && idle_ms >= 600) || since_bar >= 2500 {
+                return Ok(());
+            }
+        } else if clean.lines().any(|l| l.trim_start().starts_with('>'))
+            && start.elapsed().as_millis() >= 6500
+            && now.duration_since(last_change).as_millis() >= 1000
+        {
+            return Ok(());
+        }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
     let last_out = if let Some(h) = mgr.holders.lock().await.get(sid) {
@@ -209,3 +245,4 @@ pub(crate) async fn wait_for_pty_prompt(mgr: &super::session::SessionManager, si
     };
     Err(format!("Timeout waiting for session init. PTY: {}", last_out))
 }
+

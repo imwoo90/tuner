@@ -61,6 +61,34 @@ pub(crate) fn check_log_completion_in_file(path: &std::path::Path, current_size:
     Ok(Some(current_size))
 }
 
+pub(crate) fn extract_pty_turn_error(raw: &[u8], offset: usize) -> Option<String> {
+    use super::pty_spawner::strip_ansi;
+    let prior = strip_ansi(&String::from_utf8_lossy(raw.get(..offset)?));
+    let clean = strip_ansi(&String::from_utf8_lossy(raw.get(offset..)?));
+    let auth_err = "Authentication expired. Please log back in.";
+    if clean.contains(auth_err) && !prior.contains(auth_err) {
+        return Some(format!(r#"AGY_ERROR: {{"status":"UNAUTHENTICATED","message":"{}"}}"#, auth_err));
+    }
+    let err_idx = clean.rfind("Error ID:")?;
+    let after = &clean[err_idx + "Error ID:".len()..];
+    let nl = after.find('\n')?;
+    let error_id = after[..nl].trim();
+    let has_later_prompt = after[nl + 1..].lines().any(|l| {
+        l.trim_start().strip_prefix("> ").is_some_and(|r| !r.trim().is_empty() && !r.trim_start().starts_with('/'))
+    });
+    if error_id.is_empty() || prior.contains(error_id) || has_later_prompt {
+        return None;
+    }
+    let before = &clean[..err_idx];
+    let msg = before.rfind('⚠').map(|w| {
+        before[w + '⚠'.len_utf8()..].lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
+    }).unwrap_or_else(|| {
+        before.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('>')).last().unwrap_or("Antigravity CLI error").to_string()
+    });
+    let payload = serde_json::json!({ "message": if msg.is_empty() { "Antigravity CLI error" } else { &msg }, "error_id": error_id });
+    Some(format!("AGY_ERROR: {}", payload))
+}
+
 pub(crate) async fn check_completion_step(
     sessions: &super::session::SessionManager,
     session_id: &str,
@@ -70,7 +98,13 @@ pub(crate) async fn check_completion_step(
     let mut holders = sessions.holders.lock().await;
     let is_alive = if let Some(h) = holders.get_mut(session_id) {
         match h.child.try_wait() {
-            Ok(None) => true,
+            Ok(None) => {
+                let pty_out = h.output.lock().await;
+                if let Some(pty_err) = extract_pty_turn_error(&pty_out, h.turn_start_offset) {
+                    return Err(pty_err);
+                }
+                true
+            }
             Ok(Some(s)) => {
                 if s.success() {
                     if let Some(p) = path {
