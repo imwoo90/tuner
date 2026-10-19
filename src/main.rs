@@ -192,7 +192,7 @@ async fn monitor_workers(workers: &mut [(String, tokio::process::Child)], curren
     Ok(())
 }
 
-async fn run_master_mode(config: config::CliConfig) -> Result<(), String> {
+async fn run_master_mode(config: config::CliConfig, paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
     println!("🤖 [tuner] Starting in Master Mode (Supervisor)...");
     let current_exe = std::env::current_exe()
         .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
@@ -204,8 +204,7 @@ async fn run_master_mode(config: config::CliConfig) -> Result<(), String> {
         workers.push((profile.name.clone(), child));
     }
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+    let marker = paths.tuner_home.join("restart-requested");
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
 
     loop {
@@ -260,8 +259,7 @@ async fn main() -> Result<(), String> {
     let worker_profile = args.iter().position(|arg| arg == "--worker")
         .and_then(|pos| args.get(pos + 1).cloned());
 
-    let tuner_home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string())).join(".tuner");
-    let paths = workspace::paths::resolve_paths(Some(tuner_home), None, None, worker_profile.clone());
+    let paths = workspace::paths::resolve_paths(None, None, None, worker_profile.clone());
 
     if args.contains(&"--setup".to_string()) {
         return run_setup_wizard(&paths);
@@ -292,7 +290,7 @@ async fn main() -> Result<(), String> {
         println!("🤖 [tuner] Starting Telegram bot worker for '{}'...", p);
         telegram::run_bot(config, paths).await
     } else {
-        run_master_mode(config).await
+        run_master_mode(config, &paths).await
     }
 }
 

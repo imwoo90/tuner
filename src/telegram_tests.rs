@@ -110,7 +110,7 @@ mod tests {
         let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env) = setup_e2e_env(&temp_dir, "#!/bin/sh\necho '{\"result\":\"ok\",\"is_error\":false}'\n");
         let msg1 = make_message_json(777, 100, "@model opus Hello");
         let _ = handle_message(bot.clone(), msg1, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await;
-        assert_eq!(mgr.get_active(&SessionKey::telegram(777, None)).await.unwrap().unwrap().model, "opus");
+        assert_eq!(mgr.get_active(&SessionKey::telegram(777, None)).await.unwrap().unwrap().model, "claude-opus-5-5");
 
         let msg2 = make_message_json(777, 100, "@opus Hello again");
         let _ = handle_message(bot, msg2, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;

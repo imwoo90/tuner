@@ -66,7 +66,11 @@ async fn handle_help_command(
 • /remote - Manage remote development services
 • /upgrade - Check for updates and self-upgrade
 • /restart - Request clean service restart";
-    let _ = send_reply(bot, msg, help_text).await;
+    let mut req = bot.send_message(msg.chat.id, help_text).parse_mode(teloxide::types::ParseMode::Html);
+    if let Some(tid) = msg.thread_id {
+        req = req.message_thread_id(tid);
+    }
+    let _ = req.await;
     Ok(())
 }
 

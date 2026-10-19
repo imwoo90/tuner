@@ -136,6 +136,7 @@ pub(crate) async fn apply_model_to_active_pty(
     effort: Option<&str>,
 ) {
     if !sid.is_empty() && cli.sessions.is_active(sid).await {
+        let _ = cli.ensure_interactive_ready(sid).await;
         let target = if let Some(eff) = effort {
             format!("{}-{}", model, eff)
         } else {

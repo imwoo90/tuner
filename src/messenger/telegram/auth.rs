@@ -9,15 +9,21 @@ use crate::session::manager::SessionManager;
 use super::topic_cache::{self, TopicNameCache};
 
 pub(crate) fn auto_register_owner(from_id: i64) {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let path = std::path::PathBuf::from(&home).join(".tuner/config/config.json");
+    let tuner_home = std::env::var("TUNER_HOME")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            std::path::PathBuf::from(home).join(".tuner")
+        });
+    let path = tuner_home.join("config/config.json");
     if let Ok(c) = std::fs::read_to_string(&path) {
         if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&c) {
             if let Some(obj) = val.as_object_mut() {
                 obj.insert("allowed_user_ids".to_string(), serde_json::json!([from_id]));
                 if let Ok(pretty) = serde_json::to_string_pretty(&val) {
                     if std::fs::write(&path, pretty).is_ok() {
-                        let restart = std::path::PathBuf::from(&home).join(".tuner/restart-requested");
+                        let restart = tuner_home.join("restart-requested");
                         let _ = std::fs::write(restart, "");
                     }
                 }

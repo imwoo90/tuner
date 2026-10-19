@@ -180,8 +180,13 @@ pub async fn start_antigravity_remote(working_dir: &Path) -> Result<String, Stri
     let (profile, remote_ws, screen_name, instance_name) = resolve_profile_info(working_dir);
     let _ = stop_antigravity_remote(working_dir).await;
     let _ = std::fs::create_dir_all(&remote_ws);
+    crate::cli::antigravity::trust::trust_workspace_in_settings(&remote_ws, None);
 
-    let cmd = format!("agy --remote-control --remote-control-name {} --add-dir {}", instance_name, remote_ws.display());
+    let cmd = format!(
+        "SSH_CONNECTION='127.0.0.1 0 127.0.0.1 22' agy --remote-control --remote-control-name {} --add-dir {}",
+        instance_name,
+        remote_ws.display()
+    );
     let status = Command::new("screen")
         .args(["-dmS", &screen_name, "bash", "-c", &cmd])
         .current_dir(&remote_ws)

@@ -74,8 +74,8 @@ impl SessionManager {
         let raw_map: HashMap<String, serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
         let mut result = HashMap::new();
         for (k, v) in raw_map {
-            let Ok(pk) = k.parse::<SessionKey>() else { return Ok(HashMap::new()); };
-            let Ok(mut sd) = serde_json::from_value::<SessionData>(v) else { return Ok(HashMap::new()); };
+            let Ok(pk) = k.parse::<SessionKey>() else { continue; };
+            let Ok(mut sd) = serde_json::from_value::<SessionData>(v) else { continue; };
             if sd.transport.is_empty() { sd.transport = pk.transport.clone(); }
             sd.migrate_legacy_metrics();
             result.insert(pk.storage_key(), sd);

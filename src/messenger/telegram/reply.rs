@@ -93,21 +93,34 @@ fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
     }
 }
 
+fn normalize_model_alias(name: &str) -> (String, Option<String>) {
+    match name.to_lowercase().as_str() {
+        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => ("claude-opus-5-5".to_string(), Some("high".to_string())),
+        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => ("claude-sonnet-5-5".to_string(), Some("high".to_string())),
+        "argon" | "pro" | "gemini-argon" | "gemini-4-argon" | "gemini-3.1-pro" => ("gemini-4-argon".to_string(), Some("high".to_string())),
+        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => ("gemini-3.8-flash".to_string(), Some("high".to_string())),
+        _ => (name.to_string(), None),
+    }
+}
+
 fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> {
     if !t.starts_with('@') { return None; }
     let dir = t.split_whitespace().next().unwrap_or("");
     let m = &dir[1..];
-    if ["opus", "sonnet", "argon", "flash", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
-        let (canonical, default_eff) = match m {
-            "opus" => ("claude-opus-5-5", Some("high".to_string())),
-            "sonnet" => ("claude-sonnet-5-5", Some("high".to_string())),
-            "argon" => ("gemini-4-argon", Some("high".to_string())),
-            "flash" => ("gemini-3.8-flash", Some("high".to_string())),
-            other => (other, None),
-        };
-        return Some((Some(canonical.to_string()), default_eff, t[dir.len()..].trim()));
+    if ["opus", "sonnet", "argon", "pro", "flash", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
+        let (canonical, default_eff) = normalize_model_alias(m);
+        return Some((Some(canonical), default_eff, t[dir.len()..].trim()));
     }
     None
+}
+
+fn split_legacy_model_effort(m: &str) -> (String, Option<String>) {
+    for (suffix, eff) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
+        if m.ends_with(suffix) {
+            return (m[..m.len() - suffix.len()].to_string(), Some(eff.to_string()));
+        }
+    }
+    (m.to_string(), None)
 }
 
 pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<String>, &str) {
@@ -116,31 +129,22 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<Strin
         let rest = r.trim();
         let parts: Vec<&str> = rest.split_whitespace().collect();
         if !parts.is_empty() {
-            let mut model_name = parts[0].to_string();
-            let mut effort = None;
+            let (mut model_name, suffix_eff) = split_legacy_model_effort(parts[0]);
+            let mut effort = suffix_eff;
             let mut consumed_tokens = 1;
-            
             if parts.len() >= 3 && parts[1] == "--effort" {
                 effort = Some(parts[2].to_string());
                 consumed_tokens = 3;
-            } else if parts.len() >= 2 && (parts[1] == "high" || parts[1] == "medium" || parts[1] == "low") {
+            } else if parts.len() >= 2 && matches!(parts[1], "high" | "medium" | "low") {
                 effort = Some(parts[1].to_string());
                 consumed_tokens = 2;
             }
-
-            if model_name.ends_with("-high") {
-                effort = Some("high".to_string());
-                model_name = model_name[..model_name.len() - 5].to_string();
-            } else if model_name.ends_with("-medium") {
-                effort = Some("medium".to_string());
-                model_name = model_name[..model_name.len() - 7].to_string();
-            } else if model_name.ends_with("-low") {
-                effort = Some("low".to_string());
-                model_name = model_name[..model_name.len() - 4].to_string();
+            let (canonical, default_eff) = normalize_model_alias(&model_name);
+            model_name = canonical;
+            if effort.is_none() {
+                effort = default_eff;
             }
-            
-            let remaining_text = get_remaining_prompt(rest, consumed_tokens);
-            return (Some(model_name), effort, remaining_text);
+            return (Some(model_name), effort, get_remaining_prompt(rest, consumed_tokens));
         }
     } else if let Some(res) = parse_at_shortcut(t) {
         return res;
@@ -201,12 +205,16 @@ pub(crate) async fn send_startup_notification(
                 let active_lang = sess.language.clone().unwrap_or_else(|| "en".to_string());
                 crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
                     let startup_msg = crate::t!("bot.startup_complete");
-                    let mut req = bot.send_message(teloxide::types::ChatId(sess.chat_id), startup_msg);
+                    let chat_id = teloxide::types::ChatId(sess.chat_id);
+                    let mut req = bot.send_message(chat_id, startup_msg.clone());
                     if let Some(tid) = sess.topic_id {
                         req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
                     }
                     match req.await {
                         Ok(_) => println!("🤖 [tuner] Startup notification sent successfully to chat_id: {}", sess.chat_id),
+                        Err(e) if sess.topic_id.is_some() && e.to_string().to_lowercase().contains("thread not found") => {
+                            let _ = bot.send_message(chat_id, startup_msg).await;
+                        }
                         Err(e) => eprintln!("❌ [tuner] Failed to send startup notification to chat_id {}: {:?}", sess.chat_id, e),
                     }
                 }).await;

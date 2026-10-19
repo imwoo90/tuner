@@ -125,7 +125,7 @@ async fn handle_ask_callbacks(
 }
 
 async fn handle_callback_query_inner(
-    bot: teloxide::Bot,
+    bot: Bot,
     q: teloxide::types::CallbackQuery,
     config: std::sync::Arc<CliConfig>,
     sessions: std::sync::Arc<SessionManager>,
@@ -133,18 +133,13 @@ async fn handle_callback_query_inner(
     cli: std::sync::Arc<AntigravityCli>,
     topic_cache: std::sync::Arc<super::TopicNameCache>,
 ) -> Result<(), teloxide::RequestError> {
-    use teloxide::prelude::*;
     if let Some(ref d) = q.data {
         if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref msg)) = q.message {
             if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
-                // Handled
             } else if d.starts_with("crn:") {
-                let caller_topic_id = crate::telegram::get_topic_id(msg);
-                let _ = crate::telegram::cron_selector::handle_cron_callback(
-                    &bot, msg.chat.id, msg.id, d, &cron, caller_topic_id, Some(&topic_cache),
-                ).await;
+                let tid = crate::telegram::get_topic_id(msg);
+                let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron, tid, Some(&topic_cache)).await;
             } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
-                // Handled
             } else if d.starts_with("rem:") {
                 super::commands_remote::handle_remote_callback(&bot, msg, d, &config).await;
             } else if let Some(sid) = d.strip_prefix("review:") {
@@ -160,7 +155,7 @@ async fn handle_callback_query_inner(
 }
 
 pub(crate) async fn handle_callback_query(
-    bot: teloxide::Bot,
+    bot: Bot,
     q: teloxide::types::CallbackQuery,
     config: std::sync::Arc<CliConfig>,
     sessions: std::sync::Arc<SessionManager>,
@@ -168,80 +163,59 @@ pub(crate) async fn handle_callback_query(
     cli: std::sync::Arc<AntigravityCli>,
     topic_cache: std::sync::Arc<super::TopicNameCache>,
 ) -> Result<(), teloxide::RequestError> {
-    handle_callback_query_inner(bot, q, config, sessions, cron, cli, topic_cache).await
+    if !config.allowed_user_ids.is_empty() && !config.allowed_user_ids.contains(&(q.from.id.0 as i64)) {
+        let _ = bot.answer_callback_query(q.id).await;
+        return Ok(());
+    }
+    let lang = if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref m)) = q.message {
+        let key = crate::session::key::SessionKey::telegram(m.chat.id.0, crate::telegram::get_topic_id(m));
+        let dm = config.model.as_deref().unwrap_or("antigravity-default");
+        sessions.resolve_session(&key, &config.provider, dm).await.ok().and_then(|(s, _)| s.language)
+    } else { None }.unwrap_or_else(|| "en".to_string());
+    crate::i18n::TASK_ACTIVE_LANG.scope(lang, handle_callback_query_inner(bot, q, config, sessions, cron, cli, topic_cache)).await
 }
 
-async fn handle_upgrade_changelog(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    tag: &str,
-) -> Result<(), teloxide::RequestError> {
-    let version = tag.trim_start_matches('v');
+async fn handle_upgrade_changelog(bot: &Bot, msg: &Message, tag: &str) -> Result<(), teloxide::RequestError> {
+    let ver = tag.trim_start_matches('v');
     let client = reqwest::Client::builder().user_agent("tuner-updater").build().unwrap();
     let url = format!("https://api.github.com/repos/imwoo90/tuner/releases/tags/{}", tag);
     let mut text = match client.get(&url).send().await {
-        Ok(res) => {
-            if let Ok(release) = res.json::<crate::upgrade::GithubRelease>().await {
-                release.body.unwrap_or_default()
-            } else {
-                String::new()
-            }
-        }
+        Ok(r) => r.json::<crate::upgrade::GithubRelease>().await.ok().and_then(|rel| rel.body).unwrap_or_default(),
         Err(_) => String::new(),
     };
-    if text.is_empty() {
-        text = crate::t!("upgrade_handler.no_changelog", version = version);
-    }
-    let header = crate::t!("upgrade_handler.changelog_header", version = version);
+    if text.is_empty() { text = crate::t!("upgrade_handler.no_changelog", version = ver); }
+    let header = crate::t!("upgrade_handler.changelog_header", version = ver);
     let mut req = bot.send_message(msg.chat.id, format!("{}\n\n{}", header, text));
-    if let Some(tid) = msg.thread_id {
-        req = req.message_thread_id(tid);
-    }
+    if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
     let _ = req.await;
     Ok(())
 }
 
-async fn handle_upgrade_confirm(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    tag: &str,
-) -> Result<(), teloxide::RequestError> {
-    let version = tag.trim_start_matches('v');
-    let progress_text = crate::t!("upgrade_handler.in_progress", version = version);
-    let _ = bot.edit_message_text(msg.chat.id, msg.id, progress_text).await;
-
+async fn handle_upgrade_confirm(bot: &Bot, msg: &Message, tag: &str) -> Result<(), teloxide::RequestError> {
+    let ver = tag.trim_start_matches('v');
+    let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("upgrade_handler.in_progress", version = ver)).await;
     match crate::upgrade::get_latest_release().await {
-        Ok(release) => {
-            if let Some(asset) = release.assets.iter().find(|a| a.name.ends_with(".tar.gz")) {
-                match crate::upgrade::perform_upgrade(&asset.browser_download_url).await {
-                    Ok(()) => {
-                        let success_text = crate::t!("upgrade_handler.restarting");
-                        let _ = bot.edit_message_text(msg.chat.id, msg.id, success_text).await;
-                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                        std::process::exit(42);
-                    }
-                    Err(e) => {
-                        let current = env!("CARGO_PKG_VERSION");
-                        let err_text = crate::t!("upgrade_handler.verification_failed", version = current, details = format!("\nError: {}", e));
-                        let _ = bot.edit_message_text(msg.chat.id, msg.id, err_text).await;
-                    }
+        Ok(rel) => if let Some(a) = rel.assets.iter().find(|a| a.name.ends_with(".tar.gz")) {
+            match crate::upgrade::perform_upgrade(&a.browser_download_url).await {
+                Ok(()) => {
+                    let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("upgrade_handler.restarting")).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    std::process::exit(42);
                 }
-            } else {
-                let _ = bot.edit_message_text(msg.chat.id, msg.id, "Could not find a valid release asset for Linux.").await;
+                Err(e) => {
+                    let err = crate::t!("upgrade_handler.verification_failed", version = env!("CARGO_PKG_VERSION"), details = format!("\nError: {}", e));
+                    let _ = bot.edit_message_text(msg.chat.id, msg.id, err).await;
+                }
             }
-        }
-        Err(e) => {
-            let _ = bot.edit_message_text(msg.chat.id, msg.id, format!("Upgrade aborted: failed to fetch asset URL ({})", e)).await;
-        }
+        } else {
+            let _ = bot.edit_message_text(msg.chat.id, msg.id, "Could not find a valid release asset for Linux.").await;
+        },
+        Err(e) => { let _ = bot.edit_message_text(msg.chat.id, msg.id, format!("Upgrade aborted: failed to fetch asset URL ({})", e)).await; }
     }
     Ok(())
 }
 
-async fn handle_upgrade_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    data: &str,
-) -> Result<(), teloxide::RequestError> {
+async fn handle_upgrade_callback(bot: &Bot, msg: &Message, data: &str) -> Result<(), teloxide::RequestError> {
     if data == "upg:no" {
         let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("upgrade_handler.skipped")).await;
     } else if let Some(tag) = data.strip_prefix("upg:changelog:") {

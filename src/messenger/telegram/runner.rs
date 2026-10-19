@@ -103,9 +103,9 @@ async fn init_telegram_bot(tok: String, profile: Option<String>) -> (Bot, Arc<Bo
     }
 }
 
-fn spawn_restart_watcher(home: String) {
+fn spawn_restart_watcher(tuner_home: std::path::PathBuf) {
     tokio::spawn(async move {
-        let marker = std::path::PathBuf::from(home).join(".tuner/restart-requested");
+        let marker = tuner_home.join("restart-requested");
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
         loop {
             interval.tick().await;
@@ -123,9 +123,8 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
     let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;
     let _ = commands::register_commands(&bot).await;
     let config_arc = Arc::new(config);
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     
-    spawn_restart_watcher(home.clone());
+    spawn_restart_watcher(paths.tuner_home.clone());
     let topic_cache = Arc::new(TopicNameCache::new());
     let p = paths.sessions_path();
     let sessions = Arc::new(build_sessions(p, topic_cache.clone(), &config_arc));

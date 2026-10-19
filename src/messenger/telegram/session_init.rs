@@ -70,41 +70,26 @@ async fn handle_boot_response(
     send_res: Result<crate::cli::CliResponse, String>,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
+    let thread_id = msg.thread_id.map(|t| t.0.0);
     match send_res {
-        Ok(res) => {
-            if let Some(ref new_sid) = res.session_id {
+        Ok(mut res) => {
+            if let Some(ref new_sid) = res.session_id.clone() {
                 sess.set_session_id(provider, new_sid);
                 let _ = sessions.preserve_session_identity(sess).await;
 
-                let reply_text = if res.result.trim().is_empty() {
-                    crate::t!("bot.new_session")
-                } else {
-                    res.result.clone()
-                };
-
-                let mut req = bot.send_message(msg.chat.id, reply_text.clone());
-                if let Some(tid) = msg.thread_id {
-                    req = req.message_thread_id(tid);
+                if res.result.trim().is_empty() && !res.is_error {
+                    res.result = crate::t!("bot.new_session");
                 }
-                let sent = req.await;
-
-                let sent_id = sent.as_ref().ok().map(|m| m.id.0);
-                let is_ok = sent.is_ok();
-                let err_str = sent.as_ref().err().map(|e| e.to_string());
-
-                crate::messenger::telegram::history::log_telegram_message(
-                    &config.working_dir,
-                    new_sid,
+                let _ = super::stream::handle_stream_result(
+                    bot,
+                    msg.chat.id,
+                    None,
+                    thread_id,
                     sess.topic_id,
                     sess.topic_name.as_deref(),
-                    "bot",
-                    sent_id,
-                    &reply_text,
-                    is_ok,
-                    err_str.as_deref(),
-                );
-
-                sent?;
+                    res,
+                    config,
+                ).await;
                 Ok(new_sid.to_string())
             } else {
                 eprintln!("Initialization oneshot did not return a session_id");
@@ -113,6 +98,10 @@ async fn handle_boot_response(
         }
         Err(e) => {
             eprintln!("Initialization oneshot failed: {:?}", e);
+            let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1);
+            let html = super::formatting::markdown_to_telegram_html(&err_msg);
+            let chunks = super::formatting::split_html_message(&html, 4000);
+            let _ = super::stream::send_chunks_to_telegram(bot, msg.chat.id, None, thread_id, &chunks).await;
             Ok(String::new())
         }
     }
@@ -138,6 +127,12 @@ async fn boot_fresh_session(
     );
     session_cli.config.chat_id = chat_id;
     session_cli.config.topic_id = topic_id;
+    if !sess.model.is_empty() && sess.model != "antigravity-default" {
+        session_cli.config.model = Some(sess.model.clone());
+    }
+    if sess.effort.is_some() {
+        session_cli.config.effort = sess.effort.clone();
+    }
 
     let mut cancel_rx = cli.sessions.register_boot(chat_id, topic_id).await;
     let send_fut = session_cli.send(initial_prompt, None, false, ws);
