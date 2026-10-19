@@ -48,7 +48,7 @@ pub fn is_meta_cmd(text: &str) -> bool {
     }
     let raw_cmd = lower.split_whitespace().next().unwrap_or("");
     let cmd = raw_cmd.split('@').next().unwrap_or(raw_cmd);
-    matches!(cmd, "/new" | "/reset" | "/stop" | "/abort" | "/stop_all" | "/model" | "/status" | "/usage" | "/memory" | "/help" | "/diagnose" | "/restart" | "/upgrade")
+    matches!(cmd, "/new" | "/reset" | "/stop" | "/abort" | "/stop_all" | "/model" | "/status" | "/usage" | "/memory" | "/help" | "/diagnose" | "/restart" | "/upgrade" | "/compact")
 }
 
 pub fn truncate_chars(s: &str, max_chars: usize) -> String {

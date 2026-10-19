@@ -213,6 +213,11 @@ impl SessionManager {
             let is_ask = self.is_ask_active(&sid).await;
             if is_running || is_ask {
                 let _ = super::pty_spawner::write_fd(fd, "\x1b");
+                if is_running && !is_ask {
+                    // In agy 1.2.17+, an announcement card (e.g. 'Verbosity now defaults to medium · esc to dismiss')
+                    // on an empty prompt may consume the first Esc; a second Esc ensures the running turn is cancelled.
+                    let _ = super::pty_spawner::write_fd(fd, "\x1b");
+                }
                 if is_running {
                     target_sids.push(sid.clone());
                 }

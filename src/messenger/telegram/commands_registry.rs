@@ -43,6 +43,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("learn", "Record learning or behavior correction"),
         ("teamwork_preview", "Launch collaborative multi-agent simulation"),
         ("boost", "Launch deep reasoning & multi-perspective pipeline"),
+        ("compact", "Condense conversation history to free context"),
         ("usage", "Show model quota and remaining limits"),
         ("remote", "Manage remote dev services"),
         ("upgrade", "Check for updates and perform self-upgrade"),
@@ -67,6 +68,7 @@ pub(crate) fn is_workflow_slash_command(text: &str) -> bool {
             | "/browser"
             | "/boost"
             | "/schedule"
+            | "/compact"
     )
 }
 
