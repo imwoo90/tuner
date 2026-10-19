@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_formatted_progress","process_entry","process_planner_response"],"struct":["AntigravityLogParser","ParsedLogDelta"]};
+window.SIDEBAR_ITEMS = {"fn":["build_formatted_progress","collect_delta_entries","process_entry","process_planner_response"],"struct":["AntigravityLogParser","ParsedLogDelta"]};
