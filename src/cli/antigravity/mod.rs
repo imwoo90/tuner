@@ -79,7 +79,13 @@ impl AntigravityCli {
             return (None, None);
         };
         let mut eff = effort.filter(|&e| !e.is_empty()).map(|s| s.to_string());
-        if eff.is_none() && (m.contains("claude-") || m.contains("opus") || m.contains("sonnet") || m.contains("pro")) {
+        if eff.is_none()
+            && (m.contains("claude-")
+                || m.contains("opus")
+                || m.contains("sonnet")
+                || m.contains("pro")
+                || m.contains("argon"))
+        {
             eff = Some("high".to_string());
         }
         (Some(m.to_string()), eff)

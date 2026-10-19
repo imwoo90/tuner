@@ -182,3 +182,15 @@ fn test_format_prompt_injects_workspace_rules_and_memory() {
     let final_prompt_fallback = cli_fallback.format_prompt("user_prompt");
     assert!(final_prompt_fallback.contains("LEGACY_GEMINI_RULES"));
 }
+
+#[test]
+fn test_resolve_cli_model_effort_argon_defaults_to_high() {
+    let (m, eff) = AntigravityCli::resolve_cli_model_effort(Some("gemini-4-argon"), None);
+    assert_eq!(m.as_deref(), Some("gemini-4-argon"));
+    assert_eq!(eff.as_deref(), Some("high"));
+
+    let (m2, eff2) = AntigravityCli::resolve_cli_model_effort(Some("gemini-4-argon"), Some("low"));
+    assert_eq!(m2.as_deref(), Some("gemini-4-argon"));
+    assert_eq!(eff2.as_deref(), Some("low"));
+}
+

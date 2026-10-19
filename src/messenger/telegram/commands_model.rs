@@ -39,10 +39,20 @@ fn group_discovered_models(raw_models: &[String]) -> Vec<(String, Vec<String>)> 
     map.into_iter().collect()
 }
 
+fn normalize_base_model(m: &str) -> &str {
+    match m {
+        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
+        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
+        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => "gemini-3.8-flash",
+        "argon" | "gemini-argon" | "gemini-4-argon" | "pro" | "gemini-3.1-pro" => "gemini-4-argon",
+        other => other,
+    }
+}
+
 fn parse_model_effort_args(args: &str) -> (String, Option<String>) {
     let mut model_part = args.trim().to_string();
     let mut effort_part = None;
-    
+
     if let Some(pos) = model_part.find("--effort") {
         let effort_val = model_part[pos + 8..].trim();
         effort_part = Some(effort_val.to_string());
@@ -54,46 +64,31 @@ fn parse_model_effort_args(args: &str) -> (String, Option<String>) {
             effort_part = Some(parts[1].clone());
         }
     }
-    
-    if model_part.ends_with("-high") {
-        effort_part = Some("high".to_string());
-        model_part = model_part[..model_part.len() - 5].to_string();
-    } else if model_part.ends_with("-medium") {
-        effort_part = Some("medium".to_string());
-        model_part = model_part[..model_part.len() - 7].to_string();
-    } else if model_part.ends_with("-low") {
-        effort_part = Some("low".to_string());
-        model_part = model_part[..model_part.len() - 4].to_string();
+
+    for (suffix, eff) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
+        if model_part.ends_with(suffix) {
+            effort_part = Some(eff.to_string());
+            model_part.truncate(model_part.len() - suffix.len());
+            break;
+        }
     }
 
-    let normalized_base = match model_part.as_str() {
-        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
-        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
-        "flash" | "gemini" => "gemini-3.8-flash",
-        "pro" => "gemini-3.1-pro",
-        other => other,
-    };
-    if effort_part.is_none() && (normalized_base.contains("claude-") || normalized_base.contains("opus") || normalized_base.contains("sonnet") || normalized_base.contains("pro")) {
+    let base = normalize_base_model(&model_part);
+    if effort_part.is_none() && ["claude-", "opus", "sonnet", "pro", "argon"].iter().any(|k| base.contains(k)) {
         effort_part = Some("high".to_string());
     }
 
-    (normalized_base.to_string(), effort_part)
+    (base.to_string(), effort_part)
 }
 
 pub(crate) fn fallback_models() -> Vec<String> {
     vec![
+        "gemini-4-argon-high".to_string(),
+        "gemini-4-argon-medium".to_string(),
+        "gemini-4-argon-low".to_string(),
         "gemini-3.8-flash-high".to_string(),
         "gemini-3.8-flash-medium".to_string(),
         "gemini-3.8-flash-low".to_string(),
-        "gemini-3.7-flash-high".to_string(),
-        "gemini-3.7-flash-medium".to_string(),
-        "gemini-3.7-flash-low".to_string(),
-        "gemini-3.6-flash-high".to_string(),
-        "gemini-3.6-flash-medium".to_string(),
-        "gemini-3.6-flash-low".to_string(),
-        "gemini-3.5-flash-high".to_string(),
-        "gemini-3.1-pro-high".to_string(),
-        "gemini-3.1-pro-low".to_string(),
         "claude-opus-5-5-high".to_string(),
         "claude-opus-5-5-medium".to_string(),
         "claude-opus-5-5-low".to_string(),

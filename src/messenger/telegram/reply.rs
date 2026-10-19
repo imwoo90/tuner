@@ -97,10 +97,12 @@ fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> 
     if !t.starts_with('@') { return None; }
     let dir = t.split_whitespace().next().unwrap_or("");
     let m = &dir[1..];
-    if ["opus", "sonnet", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
+    if ["opus", "sonnet", "argon", "flash", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
         let (canonical, default_eff) = match m {
             "opus" => ("claude-opus-5-5", Some("high".to_string())),
             "sonnet" => ("claude-sonnet-5-5", Some("high".to_string())),
+            "argon" => ("gemini-4-argon", Some("high".to_string())),
+            "flash" => ("gemini-3.8-flash", Some("high".to_string())),
             other => (other, None),
         };
         return Some((Some(canonical.to_string()), default_eff, t[dir.len()..].trim()));

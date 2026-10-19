@@ -35,13 +35,15 @@ pub fn parse_models(output: &str) -> Vec<String> {
 ///
 /// Returns an empty vector on timeout, command missing, or error.
 pub async fn discover_models(cmd_name: &str) -> Vec<String> {
-    let mut child = match Command::new(cmd_name)
-        .arg("models")
+    let mut cmd = Command::new(cmd_name);
+    cmd.arg("models")
         .env_remove("CODEX_SANDBOX_NETWORK_DISABLED")
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+        .stderr(Stdio::piped());
+    if std::env::var_os("SSH_CONNECTION").is_none() {
+        cmd.env("SSH_CONNECTION", "tuner-headless");
+    }
+    let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };

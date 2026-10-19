@@ -81,11 +81,12 @@ async fn test_telegram_command_model() {
     let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
     assert_eq!(sess.model, "opus");
 
-    let msg = make_msg(r#"{"message_id":5,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model sonnet"}"#);
+    let msg = make_msg(r#"{"message_id":5,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model pro"}"#);
     handle_message(bot.clone(), msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
 
     let s_after = mgr.get_active(&key).await.unwrap().unwrap();
-    assert_eq!(s_after.model, "claude-sonnet-5-5");
+    assert_eq!(s_after.model, "gemini-4-argon");
+    assert_eq!(s_after.effort.as_deref(), Some("high"));
 
     let msg_interactive = make_msg(r#"{"message_id":6,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model"}"#);
     let res = handle_message(bot, msg_interactive, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
