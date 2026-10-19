@@ -162,13 +162,15 @@ pub fn read_transcript_answer(
         }
         if let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped) {
             if let Some(obj) = entry.as_object() {
-                if obj.get("source").and_then(|v| v.as_str()) == Some("MODEL")
+                if obj.get("type").and_then(|v| v.as_str()) == Some("USER_INPUT") {
+                    answer = None;
+                } else if obj.get("source").and_then(|v| v.as_str()) == Some("MODEL")
                     && obj.get("type").and_then(|v| v.as_str()) == Some("PLANNER_RESPONSE")
                     && obj.get("status").and_then(|v| v.as_str()) == Some("DONE")
                 {
                     if let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
                         let content_trimmed = content.trim();
-                        if !content_trimmed.is_empty() {
+                        if !content_trimmed.is_empty() && !is_placeholder_content(content_trimmed) {
                             answer = Some(content_trimmed.to_string());
                         }
                     }

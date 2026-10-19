@@ -99,7 +99,9 @@ pub fn clean_tool_call_args(tc: &serde_json::Value) -> String {
     if let Some(args_map) = args {
         for (k, v) in args_map {
             let omit = ["CodeContent", "ReplacementContent", "ReplacementChunks", "TargetContent"].contains(&k.as_str())
-                || v.as_str().map(|s| s.chars().count() > 200).unwrap_or(false);
+                || v.as_str().map(|s| s.chars().count() > 200).unwrap_or_else(|| {
+                    serde_json::to_string(v).map(|s| s.chars().count() > 200).unwrap_or(false)
+                });
             if omit {
                 clean_args.insert(k.clone(), serde_json::Value::String("<omitted...>".to_string()));
             } else {

@@ -16,7 +16,9 @@ pub(crate) use super::pty_spawner::strip_ansi;
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
-        let th = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner");
+        let th = std::env::var("TUNER_HOME").ok().map(PathBuf::from).unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner")
+        });
         env.extend([
             ("TUNER_AGENT_NAME".into(), "main".into()),
             ("TUNER_CHAT_ID".into(), self.config.chat_id.to_string()),
@@ -123,26 +125,18 @@ impl AntigravityCli {
         #[cfg(unix)]
         cmd.process_group(0);
 
-        let child = cmd.spawn()
-            .map_err(|e| format!("Failed to spawn agy command: {}", e))?;
-
+        let child = cmd.spawn().map_err(|e| format!("Failed to spawn agy command: {}", e))?;
         #[cfg(unix)]
         let child_pid = child.id();
-
         let (duration, display_secs) = Self::resolve_oneshot_timeout(cmd_args);
 
         match tokio::time::timeout(duration, child.wait_with_output()).await {
-            Ok(Ok(o)) => Ok((
-                String::from_utf8_lossy(&o.stdout).into(),
-                String::from_utf8_lossy(&o.stderr).into(),
-                o.status,
-            )),
+            Ok(Ok(o)) => Ok((String::from_utf8_lossy(&o.stdout).into(), String::from_utf8_lossy(&o.stderr).into(), o.status)),
             Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
             Err(_) => {
                 #[cfg(unix)]
                 if let Some(pid) = child_pid {
-                    let pgid = nix::unistd::Pid::from_raw(-(pid as i32));
-                    let _ = nix::sys::signal::kill(pgid, nix::sys::signal::Signal::SIGKILL);
+                    let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-(pid as i32)), nix::sys::signal::Signal::SIGKILL);
                 }
                 let label = if display_secs == 0 { duration.as_secs() } else { display_secs };
                 Err(format!("Command timed out after {} seconds", label))
@@ -151,8 +145,7 @@ impl AntigravityCli {
     }
 
     fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, brain: Option<&Path>) -> String {
-        events::read_transcript_answer(ws, Some(env), brain)
-            .unwrap_or_else(|| events::parse_antigravity_json(stdout))
+        events::read_transcript_answer(ws, Some(env), brain).unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
 }
 
@@ -163,41 +156,36 @@ impl AgentProvider for AntigravityCli {
         prompt: &str,
         resume_session: Option<&str>,
         continue_session: bool,
-        _workspace: PathBuf,
+        ws: PathBuf,
     ) -> Result<CliResponse, String> {
         let env = self.build_env();
-        let agy_ws = self.agy_workspace();
-
+        let agy_ws = if ws.as_os_str().is_empty() || ws == self.config.working_dir { self.agy_workspace() } else { ws };
         super::trust::trust_workspace_in_settings(&agy_ws, None);
 
-        let (stdout_str, stderr_str, status) = if let Some(session_id) = resume_session {
-            self.run_in_pty_session(session_id, prompt, &env, &agy_ws).await?
+        let (stdout_str, stderr_str, status) = if let Some(sid) = resume_session {
+            self.run_in_pty_session(sid, prompt, &env, &agy_ws).await?
         } else {
-            let cmd_args = self.build_command(prompt, resume_session, continue_session);
-            self.run_oneshot(&cmd_args, &env, &agy_ws).await?
+            let args = self.build_command(prompt, resume_session, continue_session);
+            self.run_oneshot(&args, &env, &agy_ws).await?
         };
 
-        let final_session_id = resume_session.map(str::to_string).or_else(|| {
+        let final_sid = resume_session.map(str::to_string).or_else(|| {
             events::extract_conversation_id(&stdout_str).or_else(|| {
-                events::resolve_brain_dir(&agy_ws, Some(&env))?
-                    .file_name().map(|n| n.to_string_lossy().into())
+                events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into())
             })
         });
-
-        let brain_dir = final_session_id.as_ref()
-            .map(|sid| events::agy_state_root(Some(&env)).join("brain").join(sid))
+        let brain = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
             .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
+        let result = self.resolve_result_text(&agy_ws, &env, &stdout_str, brain.as_deref());
 
-        let result = self.resolve_result_text(&agy_ws, &env, &stdout_str, brain_dir.as_deref());
-
-        if resume_session.is_none() {
-            if let Some(ref fid) = final_session_id {
+        if resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1 {
+            if let Some(ref fid) = final_sid {
                 self.ensure_interactive_session(fid, &agy_ws, &env).await?;
             }
         }
 
         Ok(CliResponse {
-            session_id: final_session_id,
+            session_id: final_sid,
             result,
             is_error: !status.success(),
             returncode: super::completion::exit_status_code(&status),
@@ -216,24 +204,15 @@ impl AgentProvider for AntigravityCli {
         let self_arc = std::sync::Arc::new(self.clone());
         let prompt_str = prompt.to_string();
         let resume_id = resume_session.map(str::to_string);
-
         let env = self.build_env();
         let initial_size = resume_id.as_ref().map(|sid| {
-            let p = events::agy_state_root(Some(&env)).join("brain").join(sid)
-                .join(".system_generated/logs/transcript_full.jsonl");
+            let p = events::agy_state_root(Some(&env)).join("brain").join(sid).join(".system_generated/logs/transcript_full.jsonl");
             std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
         }).unwrap_or(0);
-
         let rid = resume_id.clone();
-        let handle = tokio::spawn(async move {
-            self_arc.send(&prompt_str, rid.as_deref(), continue_session, workspace).await
-        });
-
+        let handle = tokio::spawn(async move { self_arc.send(&prompt_str, rid.as_deref(), continue_session, workspace).await });
         super::polling::spawn_log_polling(handle, tx, self.agy_workspace(), env, Some(initial_size), resume_id);
-
-        Ok(Box::pin(futures::stream::unfold(rx, |mut rx| async move {
-            rx.recv().await.map(|ev| (ev, rx))
-        })))
+        Ok(Box::pin(futures::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) })))
     }
 }
 

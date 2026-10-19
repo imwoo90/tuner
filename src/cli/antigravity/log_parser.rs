@@ -62,6 +62,15 @@ fn process_entry(
     let etype = entry.get("type").and_then(|s| s.as_str());
     let status = entry.get("status").and_then(|s| s.as_str());
 
+    if etype == Some("USER_INPUT") {
+        thinking_blocks.clear();
+        tool_calls.clear();
+        tool_completions.clear();
+        *final_content = None;
+        *ask_question = None;
+        return;
+    }
+
     if etype == Some("SYSTEM_MESSAGE") {
         *system_event = true;
     }
@@ -105,55 +114,6 @@ fn build_formatted_progress(
     }
 }
 
-
-fn collect_delta_entries(
-    entries: &[serde_json::Value],
-    seen_final: &mut bool,
-) -> (Option<String>, Option<String>, Option<Vec<crate::cli::AskQuestionData>>, bool) {
-    let mut thinking_blocks = Vec::new();
-    let mut tool_calls = Vec::new();
-    let mut tool_completions = Vec::new();
-    let mut final_content = None;
-    let mut ask_question = None;
-    let mut system_event = false;
-
-    for entry in entries {
-        process_entry(
-            entry,
-            &mut thinking_blocks,
-            &mut tool_calls,
-            &mut tool_completions,
-            &mut final_content,
-            &mut ask_question,
-            &mut system_event,
-        );
-    }
-
-    let has_activity = system_event
-        || !thinking_blocks.is_empty()
-        || !tool_calls.is_empty()
-        || !tool_completions.is_empty()
-        || final_content.is_some()
-        || ask_question.is_some();
-
-    if *seen_final {
-        final_content = None;
-        ask_question = None;
-    } else if final_content.is_some() {
-        *seen_final = true;
-        ask_question = None;
-    }
-
-    let formatted = build_formatted_progress(
-        &thinking_blocks,
-        &tool_calls,
-        &tool_completions,
-        final_content.as_deref(),
-    );
-
-    (formatted, final_content, ask_question, has_activity)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct ParsedLogDelta {
     pub new_size: u64,
@@ -163,13 +123,65 @@ pub struct ParsedLogDelta {
     pub has_activity: bool,
 }
 
+#[derive(Default)]
 pub struct AntigravityLogParser {
     seen_final: bool,
+    thinking_blocks: Vec<String>,
+    tool_calls: Vec<String>,
+    tool_completions: Vec<String>,
 }
 
 impl AntigravityLogParser {
     pub fn new() -> Self {
-        Self { seen_final: false }
+        Self::default()
+    }
+
+    fn reset(&mut self) {
+        self.seen_final = false;
+        self.thinking_blocks.clear();
+        self.tool_calls.clear();
+        self.tool_completions.clear();
+    }
+
+    fn ingest_entries(&mut self, entries: &[serde_json::Value], new_size: u64) -> ParsedLogDelta {
+        let prev_counts = (self.thinking_blocks.len(), self.tool_calls.len(), self.tool_completions.len());
+        let mut final_content = None;
+        let mut ask_question = None;
+        let mut system_event = false;
+
+        for entry in entries {
+            if entry.get("type").and_then(|s| s.as_str()) == Some("USER_INPUT") {
+                self.seen_final = false;
+            }
+            process_entry(
+                entry,
+                &mut self.thinking_blocks,
+                &mut self.tool_calls,
+                &mut self.tool_completions,
+                &mut final_content,
+                &mut ask_question,
+                &mut system_event,
+            );
+        }
+
+        let counts_now = (self.thinking_blocks.len(), self.tool_calls.len(), self.tool_completions.len());
+        let has_activity = system_event || counts_now != prev_counts || final_content.is_some() || ask_question.is_some();
+
+        if self.seen_final {
+            final_content = None;
+            ask_question = None;
+        } else if final_content.is_some() {
+            self.seen_final = true;
+            ask_question = None;
+        }
+
+        let formatted = if has_activity {
+            build_formatted_progress(&self.thinking_blocks, &self.tool_calls, &self.tool_completions, final_content.as_deref())
+        } else {
+            None
+        };
+
+        ParsedLogDelta { new_size, formatted, final_content, ask_question, has_activity }
     }
 
     pub fn parse_log_delta_structured(
@@ -181,32 +193,18 @@ impl AntigravityLogParser {
             Ok(res) => res,
             Err(_) => return ParsedLogDelta { new_size: prev_size.unwrap_or(0), ..Default::default() },
         };
-
         if prev_size.map(|s| new_size < s).unwrap_or(false) {
-            self.seen_final = false;
+            self.reset();
         }
-
         if new_content.is_empty() {
             return ParsedLogDelta { new_size, ..Default::default() };
         }
-
         let entries = parse_entries(&new_content);
         if entries.is_empty() {
             return ParsedLogDelta { new_size, ..Default::default() };
         }
-
-        let (formatted, final_content, ask_question, has_activity) =
-            collect_delta_entries(&entries, &mut self.seen_final);
-
-        ParsedLogDelta {
-            new_size,
-            formatted,
-            final_content,
-            ask_question,
-            has_activity,
-        }
+        self.ingest_entries(&entries, new_size)
     }
-
 
     pub fn parse_log_delta(
         &mut self,
