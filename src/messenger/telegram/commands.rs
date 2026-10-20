@@ -136,7 +136,6 @@ async fn handle_pref_commands(
     false
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_commands(
     bot: &Bot,
     msg: &Message,
@@ -144,9 +143,9 @@ pub(crate) async fn handle_commands(
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
-    cron_manager: &crate::cron::manager::CronManager,
-    topic_cache: &super::TopicNameCache,
+    aux: (&crate::cron::manager::CronManager, &super::TopicNameCache),
 ) -> Result<bool, teloxide::RequestError> {
+    let (cron_manager, topic_cache) = aux;
     if handle_info_commands(bot, msg, text, config, sessions, cli).await? {
         return Ok(true);
     }
@@ -217,7 +216,7 @@ async fn try_query_live_memory(
         && let Ok(sid) = super::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await
             && !sid.is_empty() && !sid.starts_with("mock-") {
                 let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
-                let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, sessions, sess, config).await;
+                let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
                 return true;
             }
     false

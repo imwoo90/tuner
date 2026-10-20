@@ -7,9 +7,31 @@
 #[cfg(test)]
 mod tests {
     use super::super::handover::*;
-    use crate::messenger::telegram::history::log_telegram_message;
     use tempfile::tempdir;
     use std::io::Write;
+
+    #[allow(clippy::too_many_arguments)]
+    fn log_telegram_message(
+        working_dir: &std::path::Path,
+        session_id: &str,
+        topic_id: Option<i64>,
+        topic_name: Option<&str>,
+        sender: &str,
+        message_id: Option<i32>,
+        text: &str,
+        is_success: bool,
+        error: Option<&str>,
+    ) {
+        crate::messenger::telegram::history::log_telegram_message(
+            working_dir,
+            session_id,
+            (topic_id, topic_name),
+            sender,
+            message_id,
+            text,
+            (is_success, error),
+        );
+    }
 
     #[test]
     fn test_extract_topic_history_missing_dir() {

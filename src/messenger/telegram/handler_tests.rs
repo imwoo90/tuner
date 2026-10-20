@@ -1,5 +1,4 @@
 #![allow(clippy::type_complexity)]
-use crate::telegram::handle_message;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::session::key::SessionKey;
@@ -9,6 +8,30 @@ use std::sync::Arc;
 use teloxide::Bot;
 use teloxide::types::Message;
 use crate::telegram::{TopicNameCache, BotInfo};
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_message(
+    bot: Bot,
+    msg: Message,
+    config: Arc<CliConfig>,
+    sessions: Arc<SessionManager>,
+    cli: Arc<AntigravityCli>,
+    cron_manager: Arc<CronManager>,
+    topic_cache: Arc<TopicNameCache>,
+    bot_info: Arc<BotInfo>,
+    media_group_manager: Arc<crate::telegram::media_group::MediaGroupManager>,
+) -> Result<(), teloxide::RequestError> {
+    crate::telegram::handle_message(
+        bot,
+        msg,
+        config,
+        sessions,
+        cli,
+        (cron_manager, topic_cache),
+        (bot_info, media_group_manager),
+    )
+    .await
+}
 
 fn setup() -> (
     Arc<SessionManager>,
@@ -99,7 +122,7 @@ async fn test_telegram_command_status() {
     let (mgr, cfg, cli, bot, _, topic_cache, _, _) = setup();
     let cron_mgr = CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
     let msg = make_msg(r#"{"message_id":7,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/status"}"#);
-    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/status", &cfg, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/status", &cfg, &mgr, &cli, (&cron_mgr, &topic_cache)).await;
     assert!(res.is_ok() && res.unwrap());
 }
 
@@ -114,7 +137,7 @@ async fn test_telegram_command_memory() {
     let cfg_empty_arc = Arc::new(cfg_empty);
     let cron_mgr = CronManager::new(tempfile::NamedTempFile::new().unwrap().path().to_path_buf());
     let msg = make_msg(r#"{"message_id":8,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/memory"}"#);
-    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    let res = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, (&cron_mgr, &topic_cache)).await;
     assert!(res.is_ok() && res.unwrap());
 
     // 2. Test when memory is populated
@@ -123,7 +146,7 @@ async fn test_telegram_command_memory() {
     let mem_file = mem_dir.join("MAINMEMORY.md");
     std::fs::write(&mem_file, "Hello Tuner Memory!").unwrap();
     
-    let res2 = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, &cron_mgr, &topic_cache).await;
+    let res2 = crate::telegram::commands::handle_commands(&bot, &msg, "/memory", &cfg_empty_arc, &mgr, &cli, (&cron_mgr, &topic_cache)).await;
     assert!(res2.is_ok() && res2.unwrap());
 }
 

@@ -6,7 +6,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::telegram::{handle_message, TopicNameCache, BotInfo};
+    use crate::telegram::{TopicNameCache, BotInfo};
     use crate::config::CliConfig;
     use crate::cli::antigravity::AntigravityCli;
     use crate::session::key::SessionKey;
@@ -17,6 +17,30 @@ mod tests {
     use teloxide::types::Message;
     use crate::telegram::TEST_ENV_MUTEX;
     use crate::telegram::test_helpers::helpers::*;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_message(
+        bot: Bot,
+        msg: Message,
+        config: Arc<CliConfig>,
+        sessions: Arc<SessionManager>,
+        cli: Arc<AntigravityCli>,
+        cron_manager: Arc<CronManager>,
+        topic_cache: Arc<TopicNameCache>,
+        bot_info: Arc<BotInfo>,
+        media_group_manager: Arc<crate::telegram::media_group::MediaGroupManager>,
+    ) -> Result<(), teloxide::RequestError> {
+        crate::telegram::handle_message(
+            bot,
+            msg,
+            config,
+            sessions,
+            cli,
+            (cron_manager, topic_cache),
+            (bot_info, media_group_manager),
+        )
+        .await
+    }
 
 
 

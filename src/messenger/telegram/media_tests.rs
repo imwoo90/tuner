@@ -1,12 +1,36 @@
 #![allow(clippy::await_holding_lock, clippy::type_complexity)]
 #[cfg(test)]
 mod tests {
-    use crate::telegram::{handle_message, TEST_ENV_MUTEX};
+    use crate::telegram::TEST_ENV_MUTEX;
     use crate::telegram::test_helpers::helpers::*;
     use crate::session::key::SessionKey as SK;
     use crate::session::manager::SessionManager as SM;
     use std::sync::Arc;
     use teloxide::Bot;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_message(
+        bot: Bot,
+        msg: teloxide::types::Message,
+        config: Arc<crate::config::CliConfig>,
+        sessions: Arc<SM>,
+        cli: Arc<crate::cli::antigravity::AntigravityCli>,
+        cron_manager: Arc<crate::cron::manager::CronManager>,
+        topic_cache: Arc<crate::telegram::TopicNameCache>,
+        bot_info: Arc<crate::telegram::BotInfo>,
+        media_group_manager: Arc<crate::telegram::media_group::MediaGroupManager>,
+    ) -> Result<(), teloxide::RequestError> {
+        crate::telegram::handle_message(
+            bot,
+            msg,
+            config,
+            sessions,
+            cli,
+            (cron_manager, topic_cache),
+            (bot_info, media_group_manager),
+        )
+        .await
+    }
 
     const MOCK_AGY_SCRIPT: &str = r#"#!/usr/bin/env python3
 import sys

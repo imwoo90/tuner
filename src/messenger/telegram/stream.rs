@@ -13,7 +13,6 @@ use crate::cli::StreamEvent;
 use std::time::{Instant, Duration};
 use super::formatting;
 
-
 pub(crate) fn is_message_not_modified(err: &teloxide::RequestError) -> bool {
     match err {
         teloxide::RequestError::Api(teloxide::ApiError::MessageNotModified) => true,
@@ -84,14 +83,12 @@ pub(crate) async fn send_chunks_to_telegram(
     (ok, err, sent_id)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_stream_result(
     bot: &Bot,
     chat_id: ChatId,
     msg_id: Option<teloxide::types::MessageId>,
     thread_id: Option<i32>,
-    topic_id: Option<i64>,
-    topic_name: Option<&str>,
+    topic: (Option<i64>, Option<&str>),
     resp: crate::cli::CliResponse,
     config: &CliConfig,
 ) -> Result<Option<String>, teloxide::RequestError> {
@@ -109,13 +106,18 @@ pub(crate) async fn handle_stream_result(
     let (ok, err, sent_id) = send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, &raw_text, config).await;
     if let Some(ref sid) = last_sid {
-        super::history::log_telegram_message(&config.working_dir, sid, topic_id, topic_name, "bot", sent_id, &raw_text, ok, err.as_deref());
+        super::history::log_telegram_message(
+            &config.working_dir,
+            sid,
+            topic,
+            "bot",
+            sent_id,
+            &raw_text,
+            (ok, err.as_deref()),
+        );
     }
     Ok(last_sid)
 }
-
-
-
 
 fn truncate_streaming_preview(delta: &str) -> String {
     if delta.encode_utf16().count() > 3500 {
@@ -168,19 +170,22 @@ pub(crate) async fn handle_text_delta(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+struct StreamLoopState {
+    last_text: String,
+    pub_id: Option<teloxide::types::MessageId>,
+    last_sid: Option<String>,
+}
+
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
     tid: Option<i32>,
     mut stream: futures::stream::BoxStream<'_, StreamEvent>,
     sdata: &crate::session::data::SessionData,
-    cfg: &CliConfig,
-    last_text: &mut String,
-    pub_id: &mut Option<teloxide::types::MessageId>,
-    last_sid: &mut Option<String>,
-    cli: &crate::cli::antigravity::AntigravityCli,
+    ctx: (&CliConfig, &crate::cli::antigravity::AntigravityCli),
+    state: &mut StreamLoopState,
 ) -> Result<(), teloxide::RequestError> {
+    let (cfg, cli) = ctx;
     let (mut last_edit, mut pending) = (Instant::now(), false);
     let mut tick = tokio::time::interval(Duration::from_millis(700));
     use futures::StreamExt;
@@ -189,22 +194,23 @@ async fn process_stream_events(
             ev = stream.next() => match ev {
                 Some(StreamEvent::TextDelta(d)) => {
                     let prev = last_edit;
-                    handle_text_delta(bot, chat_id, tid, &d, last_text, pub_id, &mut last_edit).await?;
-                    pending = pub_id.is_some() && last_edit == prev;
+                    handle_text_delta(bot, chat_id, tid, &d, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
+                    pending = state.pub_id.is_some() && last_edit == prev;
                 }
                 Some(StreamEvent::AskQuestion(ask)) => super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, cfg, cli).await?,
                 Some(StreamEvent::Result(resp)) => {
                     pending = false;
-                    if !resp.result.is_empty() { *last_text = resp.result.clone(); }
-                    if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_id, tid, sdata.topic_id, sdata.topic_name.as_deref(), resp, cfg).await {
-                        *last_sid = Some(sid);
+                    if !resp.result.is_empty() { state.last_text = resp.result.clone(); }
+                    let topic = (sdata.topic_id, sdata.topic_name.as_deref());
+                    if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, state.pub_id, tid, topic, resp, cfg).await {
+                        state.last_sid = Some(sid);
                     }
                 }
                 None => break,
             },
             _ = tick.tick(), if pending => if last_edit.elapsed() >= Duration::from_secs(2) {
-                let cur = last_text.clone();
-                handle_text_delta(bot, chat_id, tid, &cur, last_text, pub_id, &mut last_edit).await?;
+                let cur = state.last_text.clone();
+                handle_text_delta(bot, chat_id, tid, &cur, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
                 pending = false;
             }
         }
@@ -212,18 +218,21 @@ async fn process_stream_events(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn consume_stream(
     bot: &Bot,
-    chat_id: ChatId,
-    thread_id: Option<i32>,
+    target: (ChatId, Option<i32>),
     stream: futures::stream::BoxStream<'_, StreamEvent>,
     sessions: &crate::session::manager::SessionManager,
     session_data: crate::session::data::SessionData,
     config: &CliConfig,
     cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let (mut last_sid, mut pub_msg_id, mut last_text) = (None, None, String::new());
+    let (chat_id, thread_id) = target;
+    let mut state = StreamLoopState {
+        last_text: String::new(),
+        pub_id: None,
+        last_sid: None,
+    };
     let mut updated = session_data.clone();
     let mut cleared = false;
     if let Some(last_mid) = session_data.last_progress_msg_id {
@@ -233,19 +242,18 @@ pub(crate) async fn consume_stream(
         cleared = true;
     }
 
-    process_stream_events(bot, chat_id, thread_id, stream, &session_data, config, &mut last_text, &mut pub_msg_id, &mut last_sid, cli).await?;
+    process_stream_events(bot, chat_id, thread_id, stream, &session_data, (config, cli), &mut state).await?;
 
-    if let Some(mid) = pub_msg_id
-        && (last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for")) {
+    if let Some(mid) = state.pub_id
+        && (state.last_text.contains("🛠️ **Tool Calls:") || state.last_text.contains("<!-- Waiting for")) {
             let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
             super::typing::set_progress_reaction(mid.0, chat_id, tok);
             updated.last_progress_msg_id = Some(mid.0);
         }
 
-    if last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
-        if let Some(sid) = last_sid { updated.set_session_id(&config.provider, &sid); }
+    if state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
+        if let Some(sid) = state.last_sid { updated.set_session_id(&config.provider, &sid); }
         let _ = sessions.update_session(&updated, 0.0, 0).await;
     }
     Ok(())
 }
-

@@ -19,6 +19,23 @@ use crate::cron::manager::CronManager;
 use crate::telegram::topic_cache::{BotInfo, TopicNameCache};
 use crate::telegram::reply::download_telegram_media;
 
+#[derive(Clone)]
+/// Dependency bundle for media group processing and message routing.
+pub struct MediaGroupDeps {
+    /// Active CLI configuration.
+    pub config: Arc<CliConfig>,
+    /// Active session manager.
+    pub sessions: Arc<SessionManager>,
+    /// Antigravity CLI controller.
+    pub cli: Arc<AntigravityCli>,
+    /// Cron job manager.
+    pub cron_manager: Arc<CronManager>,
+    /// Forum topic name cache.
+    pub topic_cache: Arc<TopicNameCache>,
+    /// Bot identity metadata.
+    pub bot_info: Arc<BotInfo>,
+}
+
 /// Represents `MediaGroupManager` (media group manager).
 pub struct MediaGroupManager {
     buffers: Arc<Mutex<HashMap<String, MediaGroupBuffer>>>,
@@ -44,18 +61,12 @@ impl MediaGroupManager {
     }
 
     /// Executes `add_message` (add message).
-    #[allow(clippy::too_many_arguments)]
     pub async fn add_message(
         &self,
         bot: Bot,
         msg: Message,
         group_id: String,
-        config: Arc<CliConfig>,
-        sessions: Arc<SessionManager>,
-        cli: Arc<AntigravityCli>,
-        cron_manager: Arc<CronManager>,
-        topic_cache: Arc<TopicNameCache>,
-        bot_info: Arc<BotInfo>,
+        deps: MediaGroupDeps,
     ) {
         let buffers = self.buffers.clone();
         let mut tx_to_notify = None;
@@ -67,22 +78,14 @@ impl MediaGroupManager {
                 tx_to_notify = Some(buf.cancel_tx.clone());
             } else {
                 let (tx, rx) = mpsc::channel(10);
-                guard.insert(group_id.clone(), MediaGroupBuffer {
-                    messages: vec![msg.clone()],
-                    cancel_tx: tx,
-                });
-                spawn_timer_task(
-                    group_id,
-                    buffers.clone(),
-                    rx,
-                    bot,
-                    config,
-                    sessions,
-                    cli,
-                    cron_manager,
-                    topic_cache,
-                    bot_info,
+                guard.insert(
+                    group_id.clone(),
+                    MediaGroupBuffer {
+                        messages: vec![msg.clone()],
+                        cancel_tx: tx,
+                    },
                 );
+                spawn_timer_task(group_id, buffers.clone(), rx, bot, deps);
             }
         }
 
@@ -92,18 +95,12 @@ impl MediaGroupManager {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn spawn_timer_task(
     group_id: String,
     buffers: Arc<Mutex<HashMap<String, MediaGroupBuffer>>>,
     mut rx: mpsc::Receiver<()>,
     bot: Bot,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
-    cli: Arc<AntigravityCli>,
-    cron_manager: Arc<CronManager>,
-    topic_cache: Arc<TopicNameCache>,
-    bot_info: Arc<BotInfo>,
+    deps: MediaGroupDeps,
 ) {
     tokio::spawn(async move {
         loop {
@@ -118,16 +115,7 @@ fn spawn_timer_task(
                         guard.remove(&group_id).map(|b| b.messages).unwrap_or_default()
                     };
                     if !messages.is_empty()
-                        && let Err(e) = process_media_group(
-                            bot.clone(),
-                            messages,
-                            config.clone(),
-                            sessions.clone(),
-                            cli.clone(),
-                            cron_manager.clone(),
-                            topic_cache.clone(),
-                            bot_info.clone(),
-                        ).await {
+                        && let Err(e) = process_media_group(bot.clone(), messages, deps.clone()).await {
                             eprintln!("❌ [tuner] process_media_group failed: {:?}", e);
                         }
                     break;
@@ -137,19 +125,13 @@ fn spawn_timer_task(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_media_group(
     bot: Bot,
     messages: Vec<Message>,
-    config: Arc<CliConfig>,
-    sessions: Arc<SessionManager>,
-    cli: Arc<AntigravityCli>,
-    cron_manager: Arc<CronManager>,
-    topic_cache: Arc<TopicNameCache>,
-    _bot_info: Arc<BotInfo>,
+    deps: MediaGroupDeps,
 ) -> Result<(), teloxide::RequestError> {
     let mut downloaded_files = Vec::new();
-    let dest_dir = config.working_dir.join("telegram_files");
+    let dest_dir = deps.config.working_dir.join("telegram_files");
     
     // Sort messages by ID to have deterministic order of files
     let mut sorted_messages = messages;
@@ -181,13 +163,11 @@ pub(crate) async fn process_media_group(
         crate::telegram::process_text_with_files(
             &bot,
             trigger_msg,
-            &caption,
-            &downloaded_files,
-            &config,
-            &sessions,
-            &cli,
-            &cron_manager,
-            &topic_cache,
+            (&caption, &downloaded_files),
+            &deps.config,
+            &deps.sessions,
+            &deps.cli,
+            (&deps.cron_manager, &deps.topic_cache),
         ).await?;
     }
 

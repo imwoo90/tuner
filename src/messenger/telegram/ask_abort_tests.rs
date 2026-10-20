@@ -117,7 +117,7 @@ mod tests {
         assert!(ctx.cli.sessions.is_ask_active(session_id).await);
         let msg = make_message_json(chat_id, 100, "Answer to active ask");
         let mgm = Arc::new(crate::telegram::media_group::MediaGroupManager::new());
-        let res = handle_message(ctx.bot, msg, ctx.cfg, ctx.mgr, ctx.cli.clone(), ctx.cron_mgr, ctx.topic_cache, ctx.bot_info, mgm).await;
+        let res = handle_message(ctx.bot, msg, ctx.cfg, ctx.mgr, ctx.cli.clone(), (ctx.cron_mgr, ctx.topic_cache), (ctx.bot_info, mgm)).await;
         assert!(res.is_ok());
         assert!(ctx.cli.sessions.is_active(session_id).await);
         assert!(!ctx.cli.sessions.is_ask_active(session_id).await);
@@ -152,8 +152,7 @@ mod tests {
             session_id,
             "New message while running",
             &ctx.cli,
-            &ctx.mgr,
-            crate::session::data::SessionData::default(),
+            (&ctx.mgr, crate::session::data::SessionData::default()),
             &ctx.cfg,
         ).await.unwrap();
 

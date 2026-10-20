@@ -76,17 +76,16 @@ async fn collect_handover_context(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_new_command(
     bot: &Bot,
     msg: &Message,
     args: &str,
-    topic_id: Option<i64>,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
     topic_cache: &super::TopicNameCache,
 ) -> Result<(), teloxide::RequestError> {
+    let topic_id = crate::telegram::get_topic_id(msg);
     let target_topic = match resolve_target_topic(msg, args, topic_cache, topic_id) {
         Ok(tid) => tid,
         Err(name) => {
@@ -139,7 +138,7 @@ pub(crate) async fn handle_session_control_commands(
     let topic_id = crate::telegram::get_topic_id(msg);
 
     if cmd == "/new" || cmd == "/reset" {
-        handle_new_command(bot, msg, args, topic_id, config, sessions, cli, topic_cache).await?;
+        handle_new_command(bot, msg, args, config, sessions, cli, topic_cache).await?;
         return Ok(true);
     }
     if cmd == "/stop" {

@@ -77,7 +77,7 @@ mod tests {
 
         let json = r#"{"message_id":901,"date":1,"chat":{"id":123,"type":"supergroup","is_forum":true},"from":{"id":100,"is_bot":false,"first_name":"Tester"},"text":"/status","message_thread_id":456,"is_topic_message":true}"#;
         let msg: teloxide::types::Message = serde_json::from_str(json).unwrap();
-        let res = handle_message(bot, msg, cfg_arc, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
+        let res = handle_message(bot, msg, cfg_arc, mgr, cli, (cron_mgr, topic_cache), (bot_info, mgm)).await;
         assert!(res.is_ok());
     }
 
@@ -89,7 +89,7 @@ mod tests {
 
         let json = r#"{"message_id":902,"date":1,"chat":{"id":123,"type":"supergroup","is_forum":true},"from":{"id":100,"is_bot":false,"first_name":"Tester"},"text":"/stop","message_thread_id":456,"is_topic_message":true}"#;
         let msg: teloxide::types::Message = serde_json::from_str(json).unwrap();
-        let res = handle_message(bot, msg, cfg_arc, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
+        let res = handle_message(bot, msg, cfg_arc, mgr, cli, (cron_mgr, topic_cache), (bot_info, mgm)).await;
         assert!(res.is_ok());
     }
 }

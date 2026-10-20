@@ -21,5 +21,9 @@ max_inline_test_chars = 5000
 # Rule 3: Maximum documentation characters per file (keeps context SNR high for LLMs).
 max_doc_chars = 4000
 
-# Rule 4: Maximum physical characters per individual function (production or test).
+# Rule 4: Maximum physical characters per individual logic function (production or test).
 max_function_chars = 2000
+
+# Rule 4b: Maximum physical characters for declarative UI components (#[component] / rsx! / html! / view!),
+# accommodating utility CSS strings (e.g. Tailwind) without forcing artificial micro-splitting.
+max_ui_component_chars = 3500

@@ -13,8 +13,7 @@
 //! - [`log_parser`] (`log_parser.rs`): Incremental structured log delta parser for CoT and tool calls.
 //! - [`polling`] (`polling.rs`): File-watcher-driven transcript polling and completion loops.
 //! - [`completion`] (`completion.rs`): Turn completion detection and PTY output stability checks.
-//! - [`discovery`] (`discovery.rs`): Dynamic model catalog and quota usage discovery via `agy`.
-//! - [`trust`] (`trust.rs`): Automatic workspace trust directory registration.
+//! - [`trust`] (`trust.rs`): Automatic workspace trust registration and dynamic model discovery.
 //! - [`error_parser`] (`error_parser.rs`): User-friendly classification of CLI quota and runtime errors.
 //!
 //! ## Search Tags
@@ -50,7 +49,10 @@ pub mod log_helpers;
 pub mod log_parser;
 pub mod polling;
 pub mod completion;
-pub mod discovery;
+/// Dynamic model discovery re-exports.
+pub mod discovery {
+    pub use super::trust::{discover_models, parse_models};
+}
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod discovery_tests;

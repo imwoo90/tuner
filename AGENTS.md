@@ -19,23 +19,23 @@ This project strictly adheres to the compiler-enforced **Agent-Native** architec
 Tuner is an asynchronous multi-profile daemon built with Rust, Tokio, Teloxide, and Axum. Its root crate index (`src/main.rs`) organizes the codebase into sixteen top-level domains:
 
 1. **`src/cli/` (`src/cli/mod.rs`)**:
-   - Agent CLI provider abstraction (`CliProvider`, `CliResponse`, `StreamEvent`) and the Google Antigravity PTY driver (`src/cli/antigravity/mod.rs`: `provider.rs`, `session.rs`, `pty_spawner.rs`, `polling.rs`, `completion.rs`, `log_parser.rs`, `log_helpers.rs`, `events.rs`, `discovery.rs`, `trust.rs`, `error_parser.rs`).
+   - Agent CLI provider abstraction (`CliProvider`, `CliResponse`, `StreamEvent`) and the Google Antigravity PTY driver (`src/cli/antigravity/mod.rs`: `provider.rs`, `session.rs`, `pty_spawner.rs`, `polling.rs`, `completion.rs`, `log_parser.rs`, `log_helpers.rs`, `events.rs`, `trust.rs`, `error_parser.rs`).
 2. **`src/messenger/` (`src/messenger/mod.rs`)**:
-   - Messaging frontend adapters anchored by the Telegram bot subsystem (`src/messenger/telegram/mod.rs`), including HTML formatting (`formatting/mod.rs`), streaming progress debouncing (`stream.rs`), idle background turn observation (`async_observer.rs`), interactive `ask_question` menus (`ask_process.rs`, `ask_callbacks.rs`, `ask_helpers.rs`, `multi_select.rs`), web file review viewer (`review.rs`, `review_server.rs`, `review_store.rs`, `review_callback.rs`), and slash commands (`commands.rs`, `commands_model.rs`, `commands_session.rs`, `commands_usage.rs`, `commands_remote.rs`, `commands_remote_hub.rs`, `commands_registry.rs`).
+   - Messaging frontend adapters anchored by the Telegram bot subsystem (`src/messenger/telegram/mod.rs`), including HTML formatting (`formatting/mod.rs`: `helpers.rs`, `splitting.rs`, `table.rs`), streaming progress debouncing (`stream.rs`), idle background turn observation (`async_observer.rs`), interactive `ask_question` menus (`ask_process.rs`, `ask_callbacks.rs`, `ask_helpers.rs`, `multi_select.rs`), web file review viewer (`review.rs`, `review_server.rs`, `review_store.rs`, `review_callback.rs`), and slash commands (`commands.rs`, `commands_model.rs`, `commands_session.rs`, `commands_usage.rs`, `commands_remote.rs`, `commands_remote_hub.rs`, `commands_registry.rs`).
 3. **`src/bus/` (`src/bus/mod.rs`)**:
    - Internal message bus (`bus.rs`), typed routing envelopes (`envelope.rs`), domain adapters (`adapters.rs`), per-topic concurrency locks (`lock_pool.rs`), and observer wiring (`observers_wire.rs`).
 4. **`src/session/` (`src/session/mod.rs`)**:
-   - Persistent chat/topic session lifecycle (`manager.rs`), session state models (`data.rs`), composite keys (`key.rs`), inactivity/daily reset freshness checks (`freshness.rs`), and named session aliases (`named.rs`).
+   - Persistent chat/topic session lifecycle (`manager.rs`), session state models (`data.rs`), composite keys (`key.rs`), inactivity/daily reset freshness checks (`session/mod.rs`), and named session aliases (`named.rs`).
 5. **`src/workspace/` (`src/workspace/mod.rs`)**:
    - Profile path resolution (`paths.rs`), rule template selection (`rules.rs`, `rules_check.rs`), whitelist-based rule synchronization (`sync.rs`, `sync_helpers.rs`, `sync_layout.rs`), and skill symlink mounting (`skills.rs`, `skills_helpers.rs`).
 6. **`src/webhook/` (`src/webhook/mod.rs`)**:
    - Axum HTTP/WebSocket ingress server (`server.rs`), HMAC/Bearer authentication (`auth.rs`), webhook registry (`manager.rs`, `models.rs`), wake file observer (`observer.rs`), and encrypted remote API endpoints (`src/webhook/api/mod.rs`: `crypto.rs`, `handshake.rs`, `websocket.rs`, `session_loop.rs`, `files.rs`, `server.rs`).
 7. **`src/cron/` (`src/cron/mod.rs`) & `src/heartbeat/` (`src/heartbeat/mod.rs`)**:
-   - Timezone-aware periodic job scheduling (`cron/manager.rs`, `cron/scheduler.rs`) and quiet-hour-aware liveness heartbeats (`heartbeat/quiet.rs`, `heartbeat/scheduler.rs`).
+   - Timezone-aware periodic job scheduling (`cron/manager.rs`, `cron/scheduler.rs`) and quiet-hour-aware liveness heartbeats (`heartbeat/mod.rs`, `heartbeat/scheduler.rs`).
 8. **`src/background/` (`src/background/mod.rs`) & `src/cleanup/` (`src/cleanup/mod.rs`)**:
-   - Asynchronous background CLI task execution (`background/models.rs`, `background/observer.rs`, `background/test_utils.rs`) and retention-based storage cleanup (`cleanup/observer.rs`).
+   - Asynchronous background CLI task execution (`background/mod.rs`, `background/observer.rs`) and retention-based storage cleanup (`cleanup/observer.rs`).
 9. **`src/config.rs`, `src/security/` (`src/security/mod.rs`), `src/i18n/` (`src/i18n/mod.rs`), `src/supervisor.rs`, `src/setup.rs`, & `src/upgrade.rs`**:
-   - JSON configuration (`config.rs`), path/credential sandboxing (`security/paths.rs`, `security/content.rs`), localization (`i18n/loader.rs`, `i18n/check.rs`), process supervision (`supervisor.rs`), initial setup (`setup.rs`), and GitHub release self-upgrade (`upgrade.rs`).
+   - JSON configuration (`config.rs`), path/credential sandboxing (`security/mod.rs`, `security/paths.rs`), localization (`i18n/loader.rs`, `i18n/check.rs`), process supervision (`supervisor.rs`), initial setup (`setup.rs`), and GitHub release self-upgrade (`upgrade.rs`).
 
 ---
 

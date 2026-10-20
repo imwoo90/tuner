@@ -30,8 +30,9 @@ To prevent documentation rot and maximize the signal-to-noise ratio (SNR) in LLM
 
 To prevent monoliths and keep files optimized for LLM context windows, strict AST constraints are enforced during `cargo check`, `cargo build`, and `cargo test`:
 
-1. **Rule 1: File-Level Living Wiki Header (Min 100 Chars & Schema Enforcement)**:
+1. **Rule 1: File-Level Living Wiki Header (Min 100 Chars, English-Only & Schema Enforcement)**:
    * Every non-test production `.rs` file must begin with a file-level doc comment (`//!`) of **at least 100 characters**.
+   * **English-Only Documentation & Comments**: All documentation (`//!`, `///`) and inline comments (`//`, `/* */`) MUST be written strictly in concise **English**. English technical prose achieves 2.5x–3x higher LLM tokenizer efficiency than CJK/Hangul scripts and preserves 100% lexical consistency with Rust identifiers and `#search-tags`. Non-English scripts (Hangul/CJK) in comments are rejected at compile time.
    * **Compile-Time Schema Enforcement (`build_linter.rs`)**:
      - `## Overview`: Mandatory for all production files. Details component responsibility in 1-2 concise sentences.
      - `## Search Tags`: Mandatory for all production files. Must include deterministic hashtags (e.g. `#keyword`).
@@ -50,12 +51,13 @@ To prevent monoliths and keep files optimized for LLM context windows, strict AS
 4. **Rule 3: File Documentation Limit (Max 4,000 Characters)**:
    * Total character count of documentation comments (`//`, `///`, `//!`, `/* */`) must not exceed **4,000 characters** (~50–80 lines).
    * Keeps descriptions concise and high-signal, preventing LLM prompt bloat.
-5. **Rule 4: Function Physical Size Limit (Max 2,000 Characters)**:
-   * A single function (production or test, including signature, body, comments, and braces) must not exceed **2,000 characters** (~40–50 physical lines).
-   * Ensures every function fits cleanly on a single screen or within a single context window turn. Oversized test functions must be refactored into smaller test cases or helper assertions.
-   * *Strict Enforcement*: Functions cannot bypass limits via code attributes (`#[allow(...)]`). Decompose into smaller helper functions.
-6. **Anti-Code-Golfing Principle**:
-   * Never compress variable names (e.g. `transaction_context` -> `tc`), eliminate idiomatic whitespace/newlines, or abuse macros to artificially circumvent character limits. Limits exist to force clean architectural decomposition into cohesive submodules and helper functions.
+5. **Rule 4: Function Physical Size & Parameter Discipline (Max 2,000 Chars / UI Components Max 3,500 Chars)**:
+   * A single imperative logic function (production or test, including signature, body, comments, and braces) must not exceed **2,000 characters** (~40–50 physical lines).
+   * **Rule 4b (Declarative UI Component Allowance — Max 3,500 Characters)**: Functions annotated with `#[component]` or containing declarative UI markup macros (`rsx!`, `html!`, `view!`) have an elevated ceiling of **3,500 characters** (`max_ui_component_chars = 3500` in `.agent-lint.toml`). Because declarative markup has low cyclomatic complexity (`CC ≈ 1`) while utility CSS strings (e.g. Tailwind `class: "..."`) consume 40–60% of the character budget, this prevents artificial micro-fragmentation of cohesive UI views while still blocking monolithic God Components.
+   * *Strict Enforcement (No Escape Hatches)*: Functions and `impl` blocks cannot bypass structural complexity limits via `#[allow(clippy::too_many_lines)]` or `#[allow(clippy::too_many_arguments)]`. When decomposing functions, encapsulate related arguments into a cohesive context or accumulator struct rather than passing 8+ primitive parameters.
+6. **Rule 5: Anti-Code-Golfing & Anti-Shallow-Module Principles**:
+   * *Anti-Code-Golfing*: Never compress variable names (e.g. `transaction_context` -> `tc`), eliminate idiomatic whitespace/newlines, or abuse macros to artificially circumvent character limits.
+   * *Anti-Shallow-Module (Ousterhout's Deep Modules)*: Do not over-fragment code into trivial pass-through leaf files (e.g. a file containing only `pub use` re-exports or a 5-line wrapper where the `//!` header is larger than the code). Keep re-exports in `mod.rs` and group cohesive types or small helpers into a shared domain module.
 
 ---
 

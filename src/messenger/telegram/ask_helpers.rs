@@ -132,20 +132,18 @@ async fn update_question_ui(
         .await;
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn advance_ask_state(
     bot: &teloxide::Bot,
     msg: &Message,
     sid: &str,
-    msg_id: Option<i32>,
     mut state: AskState,
     cli: &AntigravityCli,
-    _is_write_in: bool,
-    sessions: &Arc<SessionManager>,
-    sess: SessionData,
+    sess_ctx: (&Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
+    let (sessions, sess) = sess_ctx;
     let chat_id = msg.chat.id;
+    let mid = state.msg_id;
     if state.current_index + 1 < state.questions.len() {
         state.current_index += 1;
         let nq = state.questions[state.current_index].clone();
@@ -153,36 +151,30 @@ async fn advance_ask_state(
         state.current_bitmap = bitmap.clone();
         state.waiting_for_write_in = false;
         cli.sessions.set_ask_state(sid, state).await;
-        if let Some(mid) = msg_id {
-            let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
-            update_question_ui(bot, chat_id, mid, &nq, markup).await;
-        }
+        let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
+        update_question_ui(bot, chat_id, mid, &nq, markup).await;
     } else {
         cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
-        if let Some(mid) = msg_id {
-            let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
-        }
+        let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
         super::ask_process::spawn_cli_stream_in_background(
-            bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone(),
+            bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone(),
         );
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn handle_ask_input(
     bot: &teloxide::Bot,
     msg: &Message,
     session_id: &str,
     current_text: &str,
-    cli: &AntigravityCli,
-    mut state: AskState,
-    sessions: &Arc<SessionManager>,
-    sess: SessionData,
+    cli_and_state: (&AntigravityCli, AskState),
+    sess_ctx: (&Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
-    let msg_id = Some(state.msg_id);
+    let (cli, mut state) = cli_and_state;
+    let mid = state.msg_id;
     let (ip, is_write_in) = determine_and_send_input(session_id, current_text, cli, &state).await;
     
     if state.current_index < state.answers.len() {
@@ -193,28 +185,25 @@ async fn handle_ask_input(
         }
     }
 
-    if let Some(mid) = msg_id
-        && let Some(q) = state.questions.get(state.current_index) {
-            let txt = format!("{}\n\n(Selected: **{}**)", q.question, current_text);
-            let html = super::formatting::markdown_to_telegram_html(&txt);
-            let _ = bot.edit_message_text(msg.chat.id, teloxide::types::MessageId(mid), html)
-                .parse_mode(teloxide::types::ParseMode::Html)
-                .await;
-        }
+    if let Some(q) = state.questions.get(state.current_index) {
+        let txt = format!("{}\n\n(Selected: **{}**)", q.question, current_text);
+        let html = super::formatting::markdown_to_telegram_html(&txt);
+        let _ = bot.edit_message_text(msg.chat.id, teloxide::types::MessageId(mid), html)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await;
+    }
 
-    advance_ask_state(bot, msg, session_id, msg_id, state, cli, is_write_in, sessions, sess, config).await?;
+    advance_ask_state(bot, msg, session_id, state, cli, sess_ctx, config).await?;
     Ok(ip)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn feed_active_session_if_running(
     bot: &teloxide::Bot,
     msg: &Message,
     session_id: &str,
     current_text: &str,
     cli: &AntigravityCli,
-    sessions: &Arc<SessionManager>,
-    sess: SessionData,
+    sess_ctx: (&Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<bool, teloxide::RequestError> {
     let is_active = cli.sessions.is_active(session_id).await;
@@ -223,7 +212,7 @@ pub(crate) async fn feed_active_session_if_running(
 
     if is_active && is_ask
         && let Some(state) = cli.sessions.get_ask_state(session_id).await {
-            let _ = handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).await?;
+            let _ = handle_ask_input(bot, msg, session_id, current_text, (cli, state), sess_ctx, config).await?;
             return Ok(true);
         }
 

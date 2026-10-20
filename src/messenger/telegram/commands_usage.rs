@@ -7,13 +7,13 @@
 //! ## Search Tags
 //! #usage-command, #quota-modal, #token-usage
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use teloxide::prelude::*;
 use crate::config::CliConfig;
-use crate::session::manager::SessionManager;
-use crate::cli::antigravity::AntigravityCli;
+use crate::session::{key::SessionKey, manager::SessionManager};
+use crate::cli::antigravity::{pty_spawner::strip_ansi, AntigravityCli};
 use crate::messenger::telegram::topic_cache::TopicNameCache;
-use crate::cli::antigravity::pty_spawner::strip_ansi;
+use super::commands::send_reply;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Represents `QuotaLimit` (quota limit).
@@ -134,19 +134,51 @@ pub fn parse_quota_report(raw: &str) -> QuotaReport {
     QuotaReport { account, gemini, claude, raw_fallback: stripped }
 }
 
-fn is_quota_modal_ready(text: &str) -> bool {
-    let has_footer = ["Press Esc", "or q to exit", "esc Close", "esc to close"]
-        .iter()
-        .any(|p| text.contains(p));
-    if has_footer {
-        return true;
-    }
-    if text.contains("GEMINI MODELS") && text.contains("CLAUDE AND GPT MODELS") {
-        let after = text.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
-        let has_5h = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"].iter().any(|p| after.contains(p));
-        return has_5h && (after.contains("Resets") || after.contains("Disabled"));
+/// Evaluates whether the Antigravity quota modal has finished loading its model groups.
+pub fn is_quota_modal_ready(text: &str) -> bool {
+    let clean = strip_ansi(text);
+    if clean.contains("GEMINI MODELS") && clean.contains("CLAUDE AND GPT MODELS") {
+        let after = clean.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
+        let has_5h = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"]
+            .iter()
+            .any(|p| after.contains(p));
+        return has_5h
+            && (after.contains("Refreshes")
+                || after.contains("Resets")
+                || after.contains("Disabled"));
     }
     false
+}
+
+async fn read_quota_modal_pass(
+    cli: &AntigravityCli,
+    session_id: &str,
+    settle_ms: u64,
+) -> Result<String, String> {
+    let start_len = cli.sessions.get_output_len(session_id).await.unwrap_or(0);
+    cli.sessions.write_to_session(session_id, "/usage\r").await?;
+
+    let mut acc = Vec::new();
+    let start = Instant::now();
+    let mut ready_at: Option<Instant> = None;
+
+    while start.elapsed() < Duration::from_millis(4000) {
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
+            acc = bytes;
+            let raw = String::from_utf8_lossy(&acc);
+            if is_quota_modal_ready(&raw) {
+                let first = *ready_at.get_or_insert_with(Instant::now);
+                if raw.contains("Loading quota") || settle_ms == 0 || first.elapsed() >= Duration::from_millis(settle_ms) {
+                    break;
+                }
+            }
+        }
+    }
+
+    let _ = cli.sessions.write_to_session(session_id, "\x1b").await;
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    Ok(String::from_utf8_lossy(&acc).to_string())
 }
 
 pub(crate) async fn query_quota_from_pty(
@@ -154,28 +186,22 @@ pub(crate) async fn query_quota_from_pty(
     session_id: &str,
 ) -> Result<QuotaReport, String> {
     cli.ensure_interactive_ready(session_id).await?;
-    let start_len = cli.sessions.get_output_len(session_id).await.unwrap_or(0);
-    cli.sessions.write_to_session(session_id, "/usage\r").await?;
+    let first = read_quota_modal_pass(cli, session_id, 550).await?;
 
-    let mut accumulated = Vec::new();
-    let start = std::time::Instant::now();
-
-    while start.elapsed() < Duration::from_millis(3500) {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
-            accumulated = bytes;
-            if is_quota_modal_ready(&String::from_utf8_lossy(&accumulated)) {
-                break;
-            }
+    // Warm-cache `/usage` draws stale cached values first and updates digits in-place via
+    // cursor diff ~300ms later; re-opening after 550ms forces a clean redraw of fresh quota.
+    let text = if !first.contains("Loading quota") && is_quota_modal_ready(&first) {
+        match read_quota_modal_pass(cli, session_id, 0).await {
+            Ok(second) if is_quota_modal_ready(&second) => second,
+            _ => first,
         }
-    }
+    } else {
+        first
+    };
 
-    let _ = cli.sessions.write_to_session(session_id, "\x1b").await;
-    let text = String::from_utf8_lossy(&accumulated);
     if !text.contains("Models & Quota") && !text.contains("GEMINI MODELS") {
         return Err("Quota modal did not appear or timed out".to_string());
     }
-
     Ok(parse_quota_report(&text))
 }
 
@@ -229,13 +255,13 @@ async fn resolve_session_id(
     sessions: &SessionManager,
     cli: &AntigravityCli,
 ) -> Option<String> {
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let model = config.model.as_deref().unwrap_or("antigravity-default");
+    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
 
-    let (mut sess, _) = match sessions.resolve_session(&key, &config.provider, default_model).await {
+    let (mut sess, _) = match sessions.resolve_session(&key, &config.provider, model).await {
         Ok(s) => s,
         Err(e) => {
-            let _ = super::commands::send_reply(bot, msg, format!("❌ Error resolving session: {}", e)).await;
+            let _ = send_reply(bot, msg, format!("❌ Error resolving session: {}", e)).await;
             return None;
         }
     };
@@ -243,11 +269,11 @@ async fn resolve_session_id(
     match crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
         Ok(s) if !s.is_empty() => Some(s),
         Ok(_) => {
-            let _ = super::commands::send_reply(bot, msg, "❌ Could not initialize session for quota check").await;
+            let _ = send_reply(bot, msg, "❌ Could not initialize session for quota check").await;
             None
         }
         Err(e) => {
-            let _ = super::commands::send_reply(bot, msg, format!("❌ Error initializing session: {}", e)).await;
+            let _ = send_reply(bot, msg, format!("❌ Error initializing session: {}", e)).await;
             None
         }
     }
@@ -257,7 +283,7 @@ async fn send_reply_html(bot: &Bot, msg: &Message, html: &str) {
     let mut req = bot.send_message(msg.chat.id, html).parse_mode(teloxide::types::ParseMode::Html);
     if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
     if req.await.is_err() {
-        let _ = super::commands::send_reply(bot, msg, html).await;
+        let _ = send_reply(bot, msg, html).await;
     }
 }
 
@@ -280,7 +306,7 @@ pub(crate) async fn handle_usage_command(
         Ok(r) => r,
         Err(e) => {
             drop(_g);
-            let _ = super::commands::send_reply(bot, msg, format!("⚠️ Could not retrieve quota from session: {}", e)).await;
+            let _ = send_reply(bot, msg, format!("⚠️ Could not retrieve quota from session: {}", e)).await;
             return Ok(());
         }
     };

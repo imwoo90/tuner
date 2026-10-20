@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use crate::messenger::telegram::commands_usage::{
-        format_progress_bar, parse_quota_report, render_quota_message,
+        format_progress_bar, is_quota_modal_ready, parse_quota_report, render_quota_message,
         ModelQuotaGroup, QuotaLimit, QuotaReport,
     };
     use crate::messenger::telegram::commands_registry::{
@@ -81,6 +81,16 @@ Press Esc or q to exit
         let c_five = claude.five_hour.unwrap();
         assert_eq!(c_five.pct, 0.0);
         assert!(c_five.detail.starts_with("Disabled:"));
+    }
+
+    #[test]
+    fn test_is_quota_modal_ready_ignores_loading_spinner_with_footer() {
+        let loading_frame = "└ Models & Quota\n\n  Account: user@example.com\n\n  ⠷  Loading quota summary...\n\n  ↑/↓ Scroll · pgup/pgdown Page · esc Close\n";
+        assert!(!is_quota_modal_ready(loading_frame));
+
+        let ready_frame_refreshes = "└ Models & Quota\nGEMINI MODELS\nWeekly Limit Remaining\n47.88%\nRefreshes in 85h 0m\nFive Hour Limit Remaining\n91.37%\nRefreshes in 4h 23m\nCLAUDE AND GPT MODELS\nWeekly Limit Remaining\n0.00%\nRefreshes in 15h 16m\nFive Hour Limit Remaining\nRefreshes in 2h 10m\n↑/↓ Scroll · esc Close\n";
+        assert!(is_quota_modal_ready(ready_frame_refreshes));
+        assert!(is_quota_modal_ready(SAMPLE_AGY_USAGE));
     }
 
     #[test]

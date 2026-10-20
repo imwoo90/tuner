@@ -13,7 +13,6 @@
 //! - [`commands`] (`commands.rs`): Primary slash command router.
 //! - [`cron_selector`] (`cron_selector.rs`): Inline keyboard selector for cron tasks.
 //! - [`cron_formatter`] (`cron_formatter.rs`): Human-readable cron schedule formatting.
-//! - [`topic_cache`] (`topic_cache.rs`): Forum topic name cache and synchronization.
 //! - [`stream`] (`stream.rs`): Debounced PTY streaming and collapsible progress updates.
 //! - [`transport`] (`transport.rs`): Adapts bus envelopes into Teloxide API calls.
 //! - [`lang`] (`lang.rs`): Language selection menu and locale persistence.
@@ -103,7 +102,10 @@ pub static TEST_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod commands;
 pub mod cron_selector;
 pub mod cron_formatter;
-pub mod topic_cache;
+/// Forum topic metadata cache re-exports.
+pub mod topic_cache {
+    pub use super::auth::{BotInfo, TopicNameCache};
+}
 pub mod stream;
 pub mod transport;
 pub mod lang;
@@ -148,17 +150,16 @@ pub use reply::get_topic_id;
 
 pub use topic_cache::{BotInfo, TopicNameCache};
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_cli_stream(
     bot: &Bot,
     msg: &Message,
     prompt: &str,
     sid: &str,
     cli: &AntigravityCli,
-    sessions: &SessionManager,
-    sess: SessionData,
+    sess_ctx: (&SessionManager, SessionData),
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
+    let (sessions, sess) = sess_ctx;
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let mut cc = cli.clone();
@@ -170,7 +171,7 @@ pub(crate) async fn run_cli_stream(
             cc.config.effort = Some(effort.clone());
         }
     match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
-        Ok(s) => stream::consume_stream(bot, msg.chat.id, msg.thread_id.map(|t| t.0.0), s, sessions, sess, config, cli).await?,
+        Ok(s) => stream::consume_stream(bot, (msg.chat.id, msg.thread_id.map(|t| t.0.0)), s, sessions, sess, config, cli).await?,
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
             let mut r = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
@@ -181,17 +182,16 @@ pub(crate) async fn run_cli_stream(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn handle_model_override(
     bot: &Bot,
     msg: &Message,
-    mo: &str,
-    eff: Option<&str>,
+    model_and_effort: (&str, Option<&str>),
     sess: &mut crate::session::data::SessionData,
     sessions: &SessionManager,
     cli: &AntigravityCli,
     empty: bool,
 ) -> Result<bool, teloxide::RequestError> {
+    let (mo, eff) = model_and_effort;
     sess.model = mo.to_string();
     sess.effort = eff.map(|s| s.to_string());
     let _ = sessions.update_session(sess, 0.0, 0).await;
@@ -249,25 +249,23 @@ async fn resolve_message_session<'a>(
         return Ok(None);
     };
     if let Some(ref mo) = m_over
-        && handle_model_override(bot, msg, mo, eff_over.as_deref(), &mut sess, sessions, cli, current_text.is_empty()).await? {
+        && handle_model_override(bot, msg, (mo, eff_over.as_deref()), &mut sess, sessions, cli, current_text.is_empty()).await? {
             return Ok(None);
         }
     Ok(Some((sess, current_text)))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_text_with_files(
     bot: &Bot,
     msg: &Message,
-    text: &str,
-    pre_downloaded_files: &[String],
+    payload: (&str, &[String]),
     config: &CliConfig,
     sessions: &std::sync::Arc<SessionManager>,
     cli: &AntigravityCli,
-    cron_manager: &crate::cron::manager::CronManager,
-    topic_cache: &TopicNameCache,
+    aux: (&crate::cron::manager::CronManager, &TopicNameCache),
 ) -> Result<(), teloxide::RequestError> {
-    if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, cron_manager, topic_cache).await? { return Ok(()); }
+    let (text, pre_downloaded_files) = payload;
+    if commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, aux).await? { return Ok(()); }
 
     let Some((mut sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions.as_ref(), cli).await? else {
         return Ok(());
@@ -295,39 +293,15 @@ pub(crate) async fn process_text_with_files(
     history::log_telegram_message(
         &config.working_dir,
         &active_session_id,
-        sess.topic_id,
-        sess.topic_name.as_deref(),
+        (sess.topic_id, sess.topic_name.as_deref()),
         "user",
         Some(msg.id.0),
         text,
-        true,
-        None,
+        (true, None),
     );
-    if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, &escaped_text, cli, sessions, sess.clone(), config).await? { return Ok(()); }
+    if ask_helpers::feed_active_session_if_running(bot, msg, &active_session_id, &escaped_text, cli, (sessions, sess.clone()), config).await? { return Ok(()); }
 
-    run_cli_stream(bot, msg, &prompt, &active_session_id, cli, sessions.as_ref(), sess, config).await
-}
-
-#[allow(dead_code)]
-#[allow(clippy::too_many_arguments)]
-async fn process_text(
-    bot: &Bot,
-    msg: &Message,
-    text: &str,
-    config: &CliConfig,
-    sessions: &std::sync::Arc<SessionManager>,
-    cli: &AntigravityCli,
-    cron_manager: &crate::cron::manager::CronManager,
-    topic_cache: &TopicNameCache,
-) -> Result<(), teloxide::RequestError> {
-    let mut files = Vec::new();
-    if reply::has_media(msg) {
-        let dest_dir = config.working_dir.join("telegram_files");
-        if let Ok(Some(f)) = reply::download_telegram_media(bot, msg, &dest_dir).await {
-            files.push(f);
-        }
-    }
-    process_text_with_files(bot, msg, text, &files, config, sessions, cli, cron_manager, topic_cache).await
+    run_cli_stream(bot, msg, &prompt, &active_session_id, cli, (sessions.as_ref(), sess), config).await
 }
 
 pub mod callbacks_effort;

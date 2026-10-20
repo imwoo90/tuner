@@ -81,8 +81,7 @@ async fn handle_boot_response(
                     msg.chat.id,
                     None,
                     thread_id,
-                    sess.topic_id,
-                    sess.topic_name.as_deref(),
+                    (sess.topic_id, sess.topic_name.as_deref()),
                     res,
                     config,
                 ).await;

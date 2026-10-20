@@ -144,8 +144,10 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
         .branch(Update::filter_message().endpoint(handle_message))
         .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
 
+    let aux_deps = (cron_manager.clone(), topic_cache.clone());
+    let meta_deps = (bot_info.clone(), media_group_manager.clone());
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager])
+        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager, aux_deps, meta_deps])
         .build().dispatch().await;
     Ok(())
 }

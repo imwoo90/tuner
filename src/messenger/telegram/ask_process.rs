@@ -15,11 +15,9 @@ use crate::session::{data::SessionData, manager::SessionManager};
 use super::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
 use super::ask_helpers::find_write_in_index;
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_cli_stream_in_background(
     bot: &Bot,
     msg: &Message,
-    keystrokes: String,
     session_id: String,
     cli: AntigravityCli,
     sessions: std::sync::Arc<SessionManager>,
@@ -29,7 +27,7 @@ pub(crate) fn spawn_cli_stream_in_background(
     let bot_clone = bot.clone();
     let msg_clone = msg.clone();
     tokio::spawn(async move {
-        let _ = super::run_cli_stream(&bot_clone, &msg_clone, &keystrokes, &session_id, &cli, &sessions, sess, &config).await;
+        let _ = super::run_cli_stream(&bot_clone, &msg_clone, "", &session_id, &cli, (&sessions, sess), &config).await;
     });
 }
 
@@ -90,18 +88,17 @@ pub(crate) async fn advance_ask_index_or_finish(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_answer(
     bot: &Bot,
     msg: &Message,
     sid: &str,
-    idx: usize,
-    data: &str,
+    choice: (usize, &str),
     cli: &AntigravityCli,
-    sessions: &std::sync::Arc<SessionManager>,
-    sess: SessionData,
+    sess_ctx: (&std::sync::Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
+    let (idx, data) = choice;
+    let (sessions, sess) = sess_ctx;
     if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
         let mut chosen = format!("Option {}", idx + 1);
         if let Some(current_q) = state.questions.get(state.current_index)
@@ -112,13 +109,11 @@ pub(crate) async fn process_answer(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
-            sess.topic_id,
-            sess.topic_name.as_deref(),
+            (sess.topic_id, sess.topic_name.as_deref()),
             "user",
             Some(msg.id.0),
             &user_action_text,
-            true,
-            None,
+            (true, None),
         );
 
         clear_previous_write_in_if_any(sid, cli, &state, true).await;
@@ -131,37 +126,34 @@ pub(crate) async fn process_answer(
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
             super::ask_helpers::update_telegram_ask_ui(bot, msg, idx, data).await;
             spawn_cli_stream_in_background(
-                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
+                bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
             );
         }
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_submit(
     bot: &Bot,
     msg: &Message,
     sid: &str,
-    ks: &str,
-    opts: &[String],
+    submission: (&str, &[String]),
     cli: &AntigravityCli,
-    sessions: &std::sync::Arc<SessionManager>,
-    sess: SessionData,
+    sess_ctx: (&std::sync::Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
+    let (ks, opts) = submission;
+    let (sessions, sess) = sess_ctx;
     if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
         let user_action_text = format!("Submitted Multi-select: [{}]", opts.join(", "));
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
-            sess.topic_id,
-            sess.topic_name.as_deref(),
+            (sess.topic_id, sess.topic_name.as_deref()),
             "user",
             Some(msg.id.0),
             &user_action_text,
-            true,
-            None,
+            (true, None),
         );
 
         let contains_write_in = opts.iter().any(|opt| {
@@ -180,36 +172,31 @@ pub(crate) async fn process_submit(
             let html = super::formatting::markdown_to_telegram_html(&txt);
             let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(ParseMode::Html).await;
             spawn_cli_stream_in_background(
-                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
+                bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
             );
         }
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn log_ask_question_result(
     config: &CliConfig,
     sess_id: &str,
-    topic_id: Option<i64>,
-    topic_name: Option<&str>,
+    topic: (Option<i64>, Option<&str>),
     msg_id: Option<i32>,
     ask: &AskQuestionData,
-    is_success: bool,
-    error: Option<&str>,
+    status: (bool, Option<&str>),
 ) {
     let options_str = ask.options.join(", ");
     let text_to_log = format!("Question: {}\nOptions: [{}]", ask.question, options_str);
     super::history::log_telegram_message(
         &config.working_dir,
         sess_id,
-        topic_id,
-        topic_name,
+        topic,
         "bot",
         msg_id,
         &text_to_log,
-        is_success,
-        error,
+        status,
     );
 }
 
@@ -243,12 +230,10 @@ pub(crate) async fn handle_stream_ask_question(
     log_ask_question_result(
         config,
         &sess_id,
-        session_data.topic_id,
-        session_data.topic_name.as_deref(),
+        (session_data.topic_id, session_data.topic_name.as_deref()),
         sent_id,
         &ask,
-        ok,
-        err.as_deref(),
+        (ok, err.as_deref()),
     );
     res.map(|s| s.id.0)
 }

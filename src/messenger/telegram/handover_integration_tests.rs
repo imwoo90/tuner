@@ -11,7 +11,6 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::telegram::handle_message;
     use crate::config::CliConfig;
     use crate::cli::antigravity::AntigravityCli;
     use crate::session::key::SessionKey;
@@ -21,8 +20,54 @@ mod tests {
     use teloxide::Bot;
     use teloxide::types::Message;
     use crate::telegram::{TopicNameCache, BotInfo};
-    use crate::messenger::telegram::history::log_telegram_message;
     use tempfile::NamedTempFile;
+
+    #[allow(clippy::too_many_arguments)]
+    fn log_telegram_message(
+        working_dir: &std::path::Path,
+        session_id: &str,
+        topic_id: Option<i64>,
+        topic_name: Option<&str>,
+        sender: &str,
+        message_id: Option<i32>,
+        text: &str,
+        is_success: bool,
+        error: Option<&str>,
+    ) {
+        crate::messenger::telegram::history::log_telegram_message(
+            working_dir,
+            session_id,
+            (topic_id, topic_name),
+            sender,
+            message_id,
+            text,
+            (is_success, error),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_message(
+        bot: Bot,
+        msg: Message,
+        config: Arc<CliConfig>,
+        sessions: Arc<SessionManager>,
+        cli: Arc<AntigravityCli>,
+        cron_manager: Arc<CronManager>,
+        topic_cache: Arc<TopicNameCache>,
+        bot_info: Arc<BotInfo>,
+        media_group_manager: Arc<crate::telegram::media_group::MediaGroupManager>,
+    ) -> Result<(), teloxide::RequestError> {
+        crate::telegram::handle_message(
+            bot,
+            msg,
+            config,
+            sessions,
+            cli,
+            (cron_manager, topic_cache),
+            (bot_info, media_group_manager),
+        )
+        .await
+    }
 
     type Setup = (
         Arc<SessionManager>,

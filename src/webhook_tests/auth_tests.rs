@@ -47,7 +47,13 @@ fn test_validate_hmac_sha256_hex() {
     let cache1 = std::sync::OnceLock::new();
     let cache2 = std::sync::OnceLock::new();
     assert!(validate_hmac_signature(
-        body, &sig, secret, "sha256", "hex", "", "", &cache1, "", &cache2
+        body,
+        &sig,
+        secret,
+        ("sha256", "hex"),
+        "",
+        ("", &cache1),
+        ("", &cache2)
     ));
 }
 
@@ -59,7 +65,13 @@ fn test_validate_hmac_sig_prefix() {
     let cache1 = std::sync::OnceLock::new();
     let cache2 = std::sync::OnceLock::new();
     assert!(validate_hmac_signature(
-        body, &sig, secret, "sha256", "hex", "sha256=", "", &cache1, "", &cache2
+        body,
+        &sig,
+        secret,
+        ("sha256", "hex"),
+        "sha256=",
+        ("", &cache1),
+        ("", &cache2)
     ));
 }
 
@@ -80,12 +92,9 @@ fn test_sig_regex_stripe_style() {
         body,
         &header,
         secret,
-        "sha256",
-        "hex",
+        ("sha256", "hex"),
         "",
-        r"v1=([a-f0-9]+)",
-        &cache1,
-        r"t=(\d+)",
-        &cache2
+        (r"v1=([a-f0-9]+)", &cache1),
+        (r"t=(\d+)", &cache2)
     ));
 }

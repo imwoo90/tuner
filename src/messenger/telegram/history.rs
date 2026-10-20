@@ -50,18 +50,17 @@ pub struct TopicMetadata {
 }
 
 /// Executes `log_telegram_message` (log telegram message).
-#[allow(clippy::too_many_arguments)]
 pub fn log_telegram_message(
     working_dir: &Path,
     session_id: &str,
-    topic_id: Option<i64>,
-    topic_name: Option<&str>,
+    topic: (Option<i64>, Option<&str>),
     sender: &str,
     message_id: Option<i32>,
     text: &str,
-    is_success: bool,
-    error: Option<&str>,
+    status: (bool, Option<&str>),
 ) {
+    let (topic_id, topic_name) = topic;
+    let (is_success, error) = status;
     if session_id.is_empty() {
         return;
     }
@@ -101,9 +100,9 @@ pub fn log_telegram_message(
             .create(true)
             .append(true)
             .open(&file_path)
-        {
-            let _ = writeln!(file, "{}", serialized);
-        }
+    {
+        let _ = writeln!(file, "{}", serialized);
+    }
 }
 
 /// Executes `find_sessions_for_topic` (find sessions for topic).
@@ -116,10 +115,11 @@ pub fn find_sessions_for_topic(working_dir: &Path, target_topic_id: i64) -> Vec<
                 let topic_file = entry.path().join("topic.json");
                 if let Ok(content) = std::fs::read_to_string(&topic_file)
                     && let Ok(meta) = serde_json::from_str::<TopicMetadata>(&content)
-                        && meta.topic_id == Some(target_topic_id)
-                            && let Some(sid) = entry.file_name().to_str() {
-                                matching.push(sid.to_string());
-                            }
+                    && meta.topic_id == Some(target_topic_id)
+                    && let Some(sid) = entry.file_name().to_str()
+                {
+                    matching.push(sid.to_string());
+                }
             }
         }
     }

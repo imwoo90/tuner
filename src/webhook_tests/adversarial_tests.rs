@@ -67,7 +67,13 @@ fn test_validate_hmac_invalid_encoding() {
     let cache1 = std::sync::OnceLock::new();
     let cache2 = std::sync::OnceLock::new();
     let result = validate_hmac_signature(
-        body, sig, "secret", "sha256", "hex", "", "", &cache1, "", &cache2,
+        body,
+        sig,
+        "secret",
+        ("sha256", "hex"),
+        "",
+        ("", &cache1),
+        ("", &cache2),
     );
     assert!(!result, "Invalid hex signature should not validate");
 }

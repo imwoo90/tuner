@@ -124,19 +124,18 @@ fn compute_hmac(algo: &str, secret: &[u8], payload: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// Executes `validate_hmac_signature` (validate hmac signature).
-#[allow(clippy::too_many_arguments)]
 pub fn validate_hmac_signature(
     body: &[u8],
     sig_value: &str,
     secret: &str,
-    hmac_algorithm: &str,
-    hmac_encoding: &str,
+    algo_and_enc: (&str, &str),
     hmac_sig_prefix: &str,
-    hmac_sig_regex: &str,
-    hmac_sig_regex_cached: &std::sync::OnceLock<Option<regex::Regex>>,
-    hmac_payload_prefix_regex: &str,
-    hmac_payload_prefix_regex_cached: &std::sync::OnceLock<Option<regex::Regex>>,
+    sig_regex: (&str, &std::sync::OnceLock<Option<regex::Regex>>),
+    payload_prefix_regex: (&str, &std::sync::OnceLock<Option<regex::Regex>>),
 ) -> bool {
+    let (hmac_algorithm, hmac_encoding) = algo_and_enc;
+    let (hmac_sig_regex, hmac_sig_regex_cached) = sig_regex;
+    let (hmac_payload_prefix_regex, hmac_payload_prefix_regex_cached) = payload_prefix_regex;
     if sig_value.is_empty() || secret.is_empty() {
         return false;
     }
@@ -194,13 +193,13 @@ pub fn validate_hook_auth(
             body,
             sig_value,
             &hook.hmac_secret,
-            &hook.hmac_algorithm,
-            &hook.hmac_encoding,
+            (&hook.hmac_algorithm, &hook.hmac_encoding),
             &hook.hmac_sig_prefix,
-            &hook.hmac_sig_regex,
-            &hook.hmac_sig_regex_cached,
-            &hook.hmac_payload_prefix_regex,
-            &hook.hmac_payload_prefix_regex_cached,
+            (&hook.hmac_sig_regex, &hook.hmac_sig_regex_cached),
+            (
+                &hook.hmac_payload_prefix_regex,
+                &hook.hmac_payload_prefix_regex_cached,
+            ),
         )
     } else {
         let expected = if hook.token.is_empty() {

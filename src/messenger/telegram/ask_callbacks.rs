@@ -35,13 +35,11 @@ async fn handle_write_in_transition(
     super::history::log_telegram_message(
         &config.working_dir,
         sid,
-        topic_id,
-        None,
+        (topic_id, None),
         "user",
         Some(msg.id.0),
         &format!("Selected Option: {} (Waiting for Write-in)", opt),
-        true,
-        None,
+        (true, None),
     );
     let txt = format!("{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요.", msg.text().unwrap_or(""));
     let html = super::formatting::markdown_to_telegram_html(&txt);
@@ -73,7 +71,7 @@ pub(crate) async fn handle_ask_answer_callback(
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-        let _ = process_answer(bot, msg, sid, idx, data, cli, sessions, sess, config).await;
+        let _ = process_answer(bot, msg, sid, (idx, data), cli, (sessions, sess), config).await;
     }
 }
 
@@ -118,7 +116,7 @@ pub(crate) async fn handle_ask_submit_callback(
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-        let _ = process_submit(bot, msg, sid, &ks, &opts, cli, sessions, sess, config).await;
+        let _ = process_submit(bot, msg, sid, (&ks, &opts), cli, (sessions, sess), config).await;
     }
 }
 
@@ -153,13 +151,11 @@ pub(crate) async fn handle_ask_prev_callback(
             super::history::log_telegram_message(
                 &_c.working_dir,
                 sid,
-                topic_id,
-                None,
+                (topic_id, None),
                 "user",
                 Some(msg.id.0),
                 "Clicked [Prev] Button",
-                true,
-                None,
+                (true, None),
             );
             let key = "\x1B[D";
             state.current_index -= 1;
@@ -192,13 +188,11 @@ pub(crate) async fn process_skip(
         super::history::log_telegram_message(
             &config.working_dir,
             sid,
-            sess.topic_id,
-            sess.topic_name.as_deref(),
+            (sess.topic_id, sess.topic_name.as_deref()),
             "user",
             Some(msg.id.0),
             "Clicked [Skip] Button",
-            true,
-            None,
+            (true, None),
         );
 
         clear_previous_write_in_if_any(sid, cli, &state, true).await;
@@ -215,7 +209,7 @@ pub(crate) async fn process_skip(
                 .parse_mode(teloxide::types::ParseMode::Html)
                 .await;
             spawn_cli_stream_in_background(
-                bot, msg, String::new(), sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
+                bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
             );
         }
     }
