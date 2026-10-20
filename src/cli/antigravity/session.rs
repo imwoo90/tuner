@@ -8,14 +8,14 @@
 //! ## Search Tags
 //! #session
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 pub use super::pty_spawner::spawn_session;
 use super::pty_spawner::SessionHolder;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct AskState {
     pub msg_id: i32,
     pub questions: Vec<crate::cli::AskQuestionData>,
@@ -25,26 +25,16 @@ pub struct AskState {
     pub waiting_for_write_in: bool,
 }
 
+#[derive(Default)]
 pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
-    pub(crate) running_runs: Mutex<std::collections::HashSet<String>>,
+    pub(crate) running_runs: Mutex<HashSet<String>>,
+    pub(crate) async_runs: Mutex<HashSet<String>>,
     pub(crate) active_asks: Mutex<HashMap<String, AskState>>,
-    pub(crate) interrupted_sessions: Mutex<std::collections::HashSet<String>>,
+    pub(crate) interrupted_sessions: Mutex<HashSet<String>>,
+    pub(crate) interrupted_at: Mutex<HashMap<String, Instant>>,
     pub(crate) interrupt_notify: tokio::sync::Notify,
     pub(crate) boot_cancels: Mutex<HashMap<(i64, Option<i64>), tokio::sync::oneshot::Sender<()>>>,
-}
-
-impl Default for SessionManager {
-    fn default() -> Self {
-        Self {
-            holders: Mutex::new(HashMap::new()),
-            running_runs: Mutex::new(std::collections::HashSet::new()),
-            active_asks: Mutex::new(HashMap::new()),
-            interrupted_sessions: Mutex::new(std::collections::HashSet::new()),
-            interrupt_notify: tokio::sync::Notify::new(),
-            boot_cancels: Mutex::new(HashMap::new()),
-        }
-    }
 }
 
 fn terminate_duplicates(
@@ -64,60 +54,54 @@ impl SessionManager {
     }
 
     pub async fn active_count(&self) -> usize {
-        let holders = self.holders.lock().await;
-        holders.len()
+        self.holders.lock().await.len()
     }
 
     pub async fn is_running(&self, session_id: &str) -> bool {
-        let runs = self.running_runs.lock().await;
-        runs.contains(session_id)
+        self.running_runs.lock().await.contains(session_id)
     }
 
     pub async fn set_running(&self, session_id: &str, running: bool) {
         let mut runs = self.running_runs.lock().await;
         if running {
             runs.insert(session_id.to_string());
+            self.interrupted_at.lock().await.remove(session_id);
         } else {
             runs.remove(session_id);
         }
     }
 
+    pub async fn set_async_running(&self, sid: &str, running: bool) {
+        let mut runs = self.async_runs.lock().await;
+        if running { runs.insert(sid.to_string()); } else { runs.remove(sid); }
+    }
+
     pub async fn is_ask_active(&self, session_id: &str) -> bool {
-        let asks = self.active_asks.lock().await;
-        asks.contains_key(session_id)
+        self.active_asks.lock().await.contains_key(session_id)
     }
 
     pub async fn set_ask_active(&self, session_id: &str, active: bool) {
         let mut asks = self.active_asks.lock().await;
         if active {
-            asks.entry(session_id.to_string()).or_insert_with(|| AskState {
-                msg_id: 0,
-                questions: Vec::new(),
-                current_index: 0,
-                answers: Vec::new(),
-                current_bitmap: String::new(),
-                waiting_for_write_in: false,
-            });
+            asks.entry(session_id.to_string()).or_default();
         } else {
             asks.remove(session_id);
         }
     }
 
     pub async fn set_ask_state(&self, session_id: &str, state: AskState) {
-        let mut asks = self.active_asks.lock().await;
-        asks.insert(session_id.to_string(), state);
+        self.active_asks.lock().await.insert(session_id.to_string(), state);
     }
 
     pub async fn get_ask_state(&self, session_id: &str) -> Option<AskState> {
-        let asks = self.active_asks.lock().await;
-        asks.get(session_id).cloned()
+        self.active_asks.lock().await.get(session_id).cloned()
     }
 
     pub async fn cleanup_expired(&self) {
         let now = Instant::now();
         self.holders.lock().await.retain(|_, h| {
             h.child.try_wait().map(|s| s.is_none()).unwrap_or(false)
-                && now.duration_since(h.last_active) < std::time::Duration::from_secs(86400)
+                && now.duration_since(h.last_active) < Duration::from_secs(86400)
         });
     }
 
@@ -188,58 +172,43 @@ impl SessionManager {
     }
 
     pub async fn interrupt(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
-        let mut found = false;
-        if let Some(tx) = self.boot_cancels.lock().await.remove(&(chat_id, topic_id)) {
-            let _ = tx.send(());
-            found = true;
-        }
+        let mut found = self.boot_cancels.lock().await.remove(&(chat_id, topic_id))
+            .is_some_and(|tx| { let _ = tx.send(()); true });
 
-        let matching: Vec<(String, std::os::unix::io::RawFd)> = {
-            let holders = self.holders.lock().await;
-            holders.iter()
-                .filter(|(_, h)| h.chat_id == Some(chat_id) && h.topic_id == topic_id)
-                .map(|(sid, h)| (sid.clone(), h.master_fd))
-                .collect()
-        };
+        let matching: Vec<_> = self.holders.lock().await.iter()
+            .filter(|(_, h)| h.chat_id == Some(chat_id) && h.topic_id == topic_id)
+            .map(|(sid, h)| (sid.clone(), h.master_fd)).collect();
 
-        if matching.is_empty() {
-            return found;
-        }
-
-        let mut target_sids = Vec::new();
-
+        let mut sids = Vec::new();
         for (sid, fd) in matching {
-            let is_running = self.is_running(&sid).await;
+            let is_run = self.is_running(&sid).await || self.async_runs.lock().await.remove(&sid);
             let is_ask = self.is_ask_active(&sid).await;
-            if is_running || is_ask {
+            if is_run || is_ask {
                 let _ = super::pty_spawner::write_fd(fd, "\x1b");
-                if is_running && !is_ask {
-                    // In agy 1.2.17+, an announcement card (e.g. 'Verbosity now defaults to medium · esc to dismiss')
-                    // on an empty prompt may consume the first Esc; a second Esc ensures the running turn is cancelled.
-                    let _ = super::pty_spawner::write_fd(fd, "\x1b");
+                if is_run && !is_ask && !cfg!(test) {
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        let _ = super::pty_spawner::write_fd(fd, "\x1b");
+                    });
                 }
-                if is_running {
-                    target_sids.push(sid.clone());
-                }
-                if is_ask {
-                    self.set_ask_active(&sid, false).await;
-                    found = true;
-                }
+                if is_run { sids.push(sid.clone()); }
+                if is_ask { self.set_ask_active(&sid, false).await; found = true; }
             }
         }
 
-        if !target_sids.is_empty() {
-            {
-                let mut interrupted = self.interrupted_sessions.lock().await;
-                for sid in target_sids {
-                    interrupted.insert(sid);
-                }
-            }
+        if !sids.is_empty() {
+            let now = Instant::now();
+            let (mut int_set, mut ts) = (self.interrupted_sessions.lock().await, self.interrupted_at.lock().await);
+            for sid in sids { ts.insert(sid.clone(), now); int_set.insert(sid); }
+            drop((int_set, ts));
             self.interrupt_notify.notify_waiters();
             found = true;
         }
-
         found
+    }
+
+    pub async fn was_recently_interrupted(&self, sid: &str, within: std::time::Duration) -> bool {
+        self.interrupted_at.lock().await.get(sid).is_some_and(|t| t.elapsed() < within)
     }
 
     pub async fn is_interrupted(&self, session_id: &str) -> bool {

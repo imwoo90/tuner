@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, LazyLock};
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
+use crate::cli::antigravity::log_parser::{AntigravityLogParser, ParsedLogDelta};
 use crate::session::manager::SessionManager;
 use notify::{Watcher, RecursiveMode, EventKind};
 
@@ -22,20 +23,15 @@ pub(crate) fn spawn_session_async_observer(
     sessions: Arc<SessionManager>,
     config: CliConfig,
 ) {
-    let chat_id = msg.chat.id;
-    let thread_id = msg.thread_id.map(|t| t.0.0);
+    let (chat_id, thread_id) = (msg.chat.id, msg.thread_id.map(|t| t.0.0));
     let key = format!("{}:{}:{:?}", session_id, chat_id.0, thread_id);
-    let mut lock = WATCHED_SESSIONS.lock().unwrap();
-    if lock.contains(&key) {
-        return;
-    }
-    lock.insert(key.clone());
-    drop(lock);
-
-    tokio::spawn(async move {
-        run_observer_loop(bot, chat_id, thread_id, session_id.clone(), cli, sessions, config).await;
+    {
         let mut lock = WATCHED_SESSIONS.lock().unwrap();
-        lock.remove(&key);
+        if !lock.insert(key.clone()) { return; }
+    }
+    tokio::spawn(async move {
+        run_observer_loop(bot, chat_id, thread_id, session_id, cli, sessions, config).await;
+        WATCHED_SESSIONS.lock().unwrap().remove(&key);
     });
 }
 
@@ -48,26 +44,10 @@ async fn handle_async_turn_output(
     config: &CliConfig,
     txt: &str,
 ) {
-    let html_text = super::formatting::markdown_to_telegram_html(txt);
-    let chunks = super::formatting::split_html_message(&html_text, 4000);
-    let topic_id = thread_id.map(|t| t as i64);
-
-    let (final_success, final_error, sent_msg_id) =
-        super::stream::send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
-
+    let chunks = super::formatting::split_html_message(&super::formatting::markdown_to_telegram_html(txt), 4000);
+    let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(bot, chat_id, msg_id, thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(bot, chat_id, thread_id, txt, config).await;
-
-    super::history::log_telegram_message(
-        &config.working_dir,
-        session_id,
-        topic_id,
-        None,
-        "bot",
-        sent_msg_id,
-        txt,
-        final_success,
-        final_error.as_deref(),
-    );
+    super::history::log_telegram_message(&config.working_dir, session_id, thread_id.map(|t| t as i64), None, "bot", sent_id, txt, ok, err.as_deref());
 }
 
 fn create_brain_dir_watcher(
@@ -105,7 +85,7 @@ async fn dispatch_terminal_event(
     cli: &AntigravityCli,
     sessions: &SessionManager,
     config: &CliConfig,
-    delta: crate::cli::antigravity::log_parser::ParsedLogDelta,
+    delta: ParsedLogDelta,
     active_turn: &mut Option<ActiveAsyncTurn>,
 ) {
     let topic_id = thread_id.map(|t| t as i64);
@@ -131,10 +111,12 @@ async fn dispatch_terminal_event(
     }
 }
 
-fn ensure_active_turn(
+async fn ensure_active_turn(
     bot: &Bot,
     chat_id: ChatId,
     thread_id: Option<i32>,
+    session_id: &str,
+    cli: &AntigravityCli,
     sessions: &SessionManager,
     active_turn: &mut Option<ActiveAsyncTurn>,
 ) {
@@ -142,6 +124,7 @@ fn ensure_active_turn(
     if active_turn.is_none() {
         let lock = sessions.lock_pool.get((chat_id.0, topic_id));
         if let Ok(guard) = lock.try_lock_owned() {
+            cli.sessions.set_async_running(session_id, true).await;
             let typing = super::typing::AsyncTypingHandle::new(bot.clone(), chat_id, thread_id);
             *active_turn = Some(ActiveAsyncTurn {
                 _guard: guard,
@@ -187,7 +170,7 @@ async fn check_and_dispatch_delta(
     config: &CliConfig,
     transcript_path: &std::path::Path,
     last_size: &mut u64,
-    parser: &mut crate::cli::antigravity::log_parser::AntigravityLogParser,
+    parser: &mut AntigravityLogParser,
     active_turn: &mut Option<ActiveAsyncTurn>,
 ) {
     let Ok(meta) = std::fs::metadata(transcript_path) else { return; };
@@ -196,13 +179,14 @@ async fn check_and_dispatch_delta(
 
     let delta = parser.parse_log_delta_structured(transcript_path, Some(*last_size));
     *last_size = delta.new_size;
-    *parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
 
     if !delta.has_activity { return; }
 
-    ensure_active_turn(bot, chat_id, thread_id, sessions, active_turn);
+    ensure_active_turn(bot, chat_id, thread_id, session_id, cli, sessions, active_turn).await;
 
     if delta.final_content.is_some() || delta.ask_question.is_some() {
+        *parser = AntigravityLogParser::new();
+        cli.sessions.set_async_running(session_id, false).await;
         dispatch_terminal_event(bot, chat_id, thread_id, session_id, cli, sessions, config, delta, active_turn).await;
     } else if let Some(ref progress_text) = delta.formatted {
         update_active_turn_progress(bot, chat_id, thread_id, progress_text, active_turn).await;
@@ -216,20 +200,23 @@ async fn handle_running_state_check(
     transcript_path: &std::path::Path,
     was_running: &mut bool,
     last_size: &mut u64,
-    parser: &mut crate::cli::antigravity::log_parser::AntigravityLogParser,
+    parser: &mut AntigravityLogParser,
 ) -> bool {
     let is_running = cli.sessions.is_running(session_id).await;
-    if is_running {
-        *was_running = true;
+    let recent_int = cli.sessions.was_recently_interrupted(session_id, std::time::Duration::from_secs(6)).await;
+    if is_running || recent_int {
+        *was_running = is_running;
+        cli.sessions.set_async_running(session_id, false).await;
         *last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(*last_size);
-        *parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
+        *parser = AntigravityLogParser::new();
         return true;
     }
 
     if *was_running {
         *was_running = false;
+        cli.sessions.set_async_running(session_id, false).await;
         *last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(*last_size);
-        *parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
+        *parser = AntigravityLogParser::new();
         return true;
     }
     false
@@ -238,58 +225,39 @@ async fn handle_running_state_check(
 async fn run_observer_loop(
     bot: Bot,
     chat_id: ChatId,
-    thread_id: Option<i32>,
-    session_id: String,
+    tid: Option<i32>,
+    sid: String,
     cli: AntigravityCli,
     sessions: Arc<SessionManager>,
-    config: CliConfig,
+    cfg: CliConfig,
 ) {
-    let env = cli.build_env();
-    let brain_dir = crate::cli::antigravity::events::agy_state_root(Some(&env))
-        .join("brain")
-        .join(&session_id);
-    let transcript_path = brain_dir.join(".system_generated").join("logs").join("transcript_full.jsonl");
-
-    let mut last_size = std::fs::metadata(&transcript_path).map(|m| m.len()).unwrap_or(0);
-    let mut parser = crate::cli::antigravity::log_parser::AntigravityLogParser::new();
-
+    let bd = crate::cli::antigravity::events::agy_state_root(Some(&cli.build_env())).join("brain").join(&sid);
+    let tp = bd.join(".system_generated").join("logs").join("transcript_full.jsonl");
+    let mut last_size = std::fs::metadata(&tp).map(|m| m.len()).unwrap_or(0);
+    let mut parser = AntigravityLogParser::new();
     let (fs_tx, mut fs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let watcher = create_brain_dir_watcher(&brain_dir, fs_tx);
-
-    let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(4));
-    let mut was_running = false;
-    let mut active_turn: Option<ActiveAsyncTurn> = None;
+    let watcher = create_brain_dir_watcher(&bd, fs_tx);
+    let mut tick = tokio::time::interval(tokio::time::Duration::from_secs(4));
+    let (mut was_running, mut active_turn) = (false, None::<ActiveAsyncTurn>);
 
     loop {
         tokio::select! {
-            _ = fallback.tick() => {}
-            res = fs_rx.recv() => {
-                if res.is_none() {
-                    break;
-                }
-            }
+            _ = cli.sessions.interrupt_notify.notified() => {}
+            _ = tick.tick() => {}
+            res = fs_rx.recv() => if res.is_none() { break; },
         }
-
-        if !cli.sessions.is_active(&session_id).await && !transcript_path.exists() {
-            break;
-        }
-
-        if handle_running_state_check(&cli, &session_id, &transcript_path, &mut was_running, &mut last_size, &mut parser).await {
+        if !cli.sessions.is_active(&sid).await && !tp.exists() { break; }
+        if handle_running_state_check(&cli, &sid, &tp, &mut was_running, &mut last_size, &mut parser).await {
             active_turn = None;
             continue;
         }
-
-        if let Some(ref turn) = active_turn {
-            if turn.last_activity.elapsed() > std::time::Duration::from_secs(60) {
-                active_turn = None;
-            }
+        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > std::time::Duration::from_secs(60)) {
+            cli.sessions.set_async_running(&sid, false).await;
+            active_turn = None;
         }
-
-        check_and_dispatch_delta(
-            &bot, chat_id, thread_id, &session_id, &cli, &sessions, &config,
-            &transcript_path, &mut last_size, &mut parser, &mut active_turn,
-        ).await;
+        check_and_dispatch_delta(&bot, chat_id, tid, &sid, &cli, &sessions, &cfg, &tp, &mut last_size, &mut parser, &mut active_turn).await;
     }
+    cli.sessions.set_async_running(&sid, false).await;
     drop(watcher);
 }
 

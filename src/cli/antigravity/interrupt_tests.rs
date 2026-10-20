@@ -35,6 +35,7 @@ mod tests {
         let interrupted = manager.interrupt(1001, Some(2002)).await;
         assert!(interrupted, "Interrupt should match running session in topic 2002");
         assert!(manager.is_interrupted("sess-int-1").await, "Session should be marked interrupted");
+        assert!(manager.was_recently_interrupted("sess-int-1", Duration::from_secs(6)).await);
 
         // 3. Process must STILL be alive (not SIGKILLed)
         assert!(manager.is_active("sess-int-1").await, "Session process should remain alive");
@@ -44,6 +45,10 @@ mod tests {
         manager.set_running("sess-int-1", false).await;
         let interrupted_again = manager.interrupt(1001, Some(2002)).await;
         assert!(!interrupted_again, "Inactive session should not be interrupted");
+
+        // 5. Starting a new run clears the recent-interrupt cooldown
+        manager.set_running("sess-int-1", true).await;
+        assert!(!manager.was_recently_interrupted("sess-int-1", Duration::from_secs(6)).await);
 
         manager.terminate_all().await;
     }
