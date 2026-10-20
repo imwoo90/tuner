@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["discover_models","parse_models"]};
+window.SIDEBAR_ITEMS = {};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["auto_register_owner","validate_and_auth_message"]};
+window.SIDEBAR_ITEMS = {"fn":["auto_register_owner","handle_forum_topic_events","validate_and_auth_message"],"struct":["BotInfo","TopicNameCache"]};

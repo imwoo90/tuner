@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["models","observer","test_utils"]};
+window.SIDEBAR_ITEMS = {"enum":["BackgroundResultStatus"],"mod":["models","observer","test_utils"],"struct":["BackgroundResult","BackgroundSubmit"]};

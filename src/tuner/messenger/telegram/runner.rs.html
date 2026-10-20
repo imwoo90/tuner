@@ -144,9 +144,11 @@
 <a href=#144 id=144 data-nosnippet>144</a>        .branch(Update::filter_message().endpoint(handle_message))
 <a href=#145 id=145 data-nosnippet>145</a>        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
 <a href=#146 id=146 data-nosnippet>146</a>
-<a href=#147 id=147 data-nosnippet>147</a>    Dispatcher::builder(bot, handler)
-<a href=#148 id=148 data-nosnippet>148</a>        .dependencies(<span class="macro">dptree::deps!</span>[config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager])
-<a href=#149 id=149 data-nosnippet>149</a>        .build().dispatch().<span class="kw">await</span>;
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="prelude-val">Ok</span>(())
-<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">let </span>aux_deps = (cron_manager.clone(), topic_cache.clone());
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>meta_deps = (bot_info.clone(), media_group_manager.clone());
+<a href=#149 id=149 data-nosnippet>149</a>    Dispatcher::builder(bot, handler)
+<a href=#150 id=150 data-nosnippet>150</a>        .dependencies(<span class="macro">dptree::deps!</span>[config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager, aux_deps, meta_deps])
+<a href=#151 id=151 data-nosnippet>151</a>        .build().dispatch().<span class="kw">await</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="prelude-val">Ok</span>(())
+<a href=#153 id=153 data-nosnippet>153</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["find_best_option"],"mod":["blockquotes","buttons","helpers","italic","splitting","table"]};
+window.SIDEBAR_ITEMS = {"fn":["collapse_blank_lines","collect_italic_pairs","convert_blockquotes","find_best_option","format_italic_delim","is_whitespace_or_punct","mask_code","restore_code","strip_button_syntax"],"mod":["blockquotes","buttons","helpers","italic","splitting","table"]};

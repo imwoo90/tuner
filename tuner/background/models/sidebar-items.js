@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BackgroundResultStatus"],"struct":["BackgroundResult","BackgroundSubmit"]};
+window.SIDEBAR_ITEMS = {};

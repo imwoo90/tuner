@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["data","freshness","key","manager","named"]};
+window.SIDEBAR_ITEMS = {"fn":["has_crossed_daily_reset","is_session_fresh"],"mod":["data","freshness","key","manager","named"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["convert_blockquotes"]};
+window.SIDEBAR_ITEMS = {};

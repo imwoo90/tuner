@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["has_crossed_daily_reset","is_session_fresh"]};
+window.SIDEBAR_ITEMS = {};
