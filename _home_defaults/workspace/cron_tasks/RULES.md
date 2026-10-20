@@ -1,7 +1,7 @@
 # Cron Tasks
 
 This directory contains isolated task folders used by scheduled jobs.
-For cron tool commands (add/edit/remove/list), see `tools/cron_tools/CLAUDE.md`.
+For cron tool commands (add/edit/remove/list), see `tools/cron_tools/RULES.md`.
 
 ## MANDATORY WORKFLOW: Creating Cron Jobs
 
@@ -9,10 +9,10 @@ For cron tool commands (add/edit/remove/list), see `tools/cron_tools/CLAUDE.md`.
 
 1. **Which model?** (`--model <name>`)
    - Options:
-     - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model (recommended)
-     - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Flash model
-     - `gemini-3.1-pro` (effort: `high` | `low`) - reasoning model
-     - `claude-sonnet-4-6` - Claude reasoning model
+     - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended)
+     - `gemini-4-argon` (effort: `high` | `medium` | `low`) - Frontier reasoning model
+     - `claude-opus-5-5` - Claude frontier reasoning model
+     - `claude-sonnet-5-5` - Claude reasoning model
    - Default if user doesn't specify: Use global config model
 
 **YOU MUST present these options to the user and wait for their answers BEFORE calling cron_add.py!**
@@ -28,10 +28,10 @@ User: "Create a cron job to check weather every 3 minutes"
 You: "I'll create a cron job to check weather every 3 minutes. Let me configure the execution:
 
 **Model**: Which Antigravity model should execute this task?
-   - `gemini-3.6-flash` (effort: `high` - recommended)
-   - `gemini-3.5-flash` (effort: `high`)
-   - `gemini-3.1-pro` (effort: `high`)
-   - `claude-sonnet-4-6`
+   - `gemini-3.8-flash` (effort: `high` - recommended)
+   - `gemini-4-argon` (effort: `high`)
+   - `claude-opus-5-5`
+   - `claude-sonnet-5-5`
 
 Please specify your choice, or I'll use the global config default."
 

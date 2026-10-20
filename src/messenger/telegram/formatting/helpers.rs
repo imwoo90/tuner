@@ -83,6 +83,41 @@ fn sanitize_code_block(code: &str, is_quoted: bool) -> String {
     result
 }
 
+fn unwrap_carousels(text: &str) -> String {
+    let unwrapped = if let Ok(car_re) = Regex::new(r"(?s)`{4,}carousel[ \t]*\n(.*?)`{4,}") {
+        car_re.replace_all(text, "$1").to_string()
+    } else {
+        text.to_string()
+    };
+    if let Ok(slide_re) = Regex::new(r"(?m)^[ \t]*<!--\s*slide\s*-->[ \t]*\n?") {
+        slide_re.replace_all(&unwrapped, "").to_string()
+    } else {
+        unwrapped
+    }
+}
+
+fn replace_markdown_images(text: &str, links: &mut Vec<(String, String)>) -> String {
+    let Ok(img_re) = Regex::new(r"!\[([^\]]*)\]\(([^)]+)\)") else {
+        return text.to_string();
+    };
+    img_re.replace_all(text, |caps: &Captures| {
+        let caption = caps.get(1).map_or("", |m| m.as_str()).trim();
+        let url = caps.get(2).map_or("", |m| m.as_str()).trim();
+        if url.starts_with('/') || url.starts_with("file://") {
+            if caption.is_empty() {
+                "🖼️".to_string()
+            } else {
+                format!("🖼️ **{}**", caption)
+            }
+        } else {
+            let idx = links.len();
+            let label = if caption.is_empty() { "image".to_string() } else { format!("🖼️ {}", caption) };
+            links.push((label, url.to_string()));
+            placeholder("LK", idx)
+        }
+    }).to_string()
+}
+
 fn extract_entities(
     text: &str,
     code_blocks: &mut Vec<(String, String, bool)>,
@@ -90,8 +125,9 @@ fn extract_entities(
     links: &mut Vec<(String, String)>,
     table_blocks: &mut Vec<String>,
 ) -> String {
-    let mut text_buf = if let Ok(cb_re) = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?```(\w*)\n(.*?)```") {
-        cb_re.replace_all(text, |caps: &Captures| {
+    let cleaned = unwrap_carousels(text);
+    let mut text_buf = if let Ok(cb_re) = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?`{3,}(\w*)\n(.*?)`{3,}") {
+        cb_re.replace_all(&cleaned, |caps: &Captures| {
             let prefix_quote = caps.get(1).map_or("", |m| m.as_str());
             let lang = caps.get(2).map_or("", |m| m.as_str()).to_string();
             let code = caps.get(3).map_or("", |m| m.as_str());
@@ -102,7 +138,7 @@ fn extract_entities(
             format!("{}{}", prefix_quote, placeholder("CB", idx))
         }).to_string()
     } else {
-        text.to_string()
+        cleaned
     };
 
     text_buf = super::table::extract_tables(&text_buf, table_blocks);
@@ -116,6 +152,8 @@ fn extract_entities(
         }).to_string();
     }
 
+    text_buf = replace_markdown_images(&text_buf, links);
+
     if let Ok(link_re) = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)") {
         link_re.replace_all(&text_buf, |caps: &Captures| {
             let link_text = caps.get(1).map_or("", |m| m.as_str()).to_string();
@@ -126,6 +164,21 @@ fn extract_entities(
         }).to_string()
     } else {
         text_buf
+    }
+}
+
+fn format_restored_link(l_text: &str, l_url: &str) -> String {
+    let escaped_text = html_escape::encode_safe(l_text).to_string();
+    let formatted_text = apply_markdown_formatting(&escaped_text);
+    if l_url.starts_with("file://") || (l_url.starts_with('/') && !l_url.starts_with("//")) {
+        if formatted_text.contains("\x00IC") || formatted_text.contains("<code>") {
+            formatted_text
+        } else {
+            format!("<code>{}</code>", escaped_text)
+        }
+    } else {
+        let escaped_url = html_escape::encode_double_quoted_attribute(l_url).to_string();
+        format!("<a href=\"{}\">{}</a>", escaped_url, formatted_text)
     }
 }
 
@@ -144,10 +197,7 @@ fn restore_entities(
 
     for (i, (l_text, l_url)) in links.iter().enumerate() {
         let p = placeholder("LK", i);
-        let escaped_text = html_escape::encode_safe(l_text).to_string();
-        let formatted_text = apply_markdown_formatting(&escaped_text);
-        let escaped_url = html_escape::encode_double_quoted_attribute(l_url).to_string();
-        text = text.replace(&p, &format!("<a href=\"{}\">{}</a>", escaped_url, formatted_text));
+        text = text.replace(&p, &format_restored_link(l_text, l_url));
     }
 
     for (i, code) in inline_codes.iter().enumerate() {

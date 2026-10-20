@@ -20,8 +20,6 @@ pub fn is_zone2_py_file(entry: &Path, src: &Path, root_src: &Path) -> bool {
         let zone2_py_dirs = [
             "workspace/tools/cron_tools",
             "workspace/tools/webhook_tools",
-            "workspace/tools/agent_tools",
-            "workspace/tools/task_tools",
             "workspace/tools/media_tools",
         ];
         return zone2_py_dirs.contains(&rel_str.as_str());
@@ -40,7 +38,6 @@ pub fn walk_and_copy(src: &Path, dst: &Path, root_src: &Path) -> Result<(), Stri
         "RULES-codex-only.md",
         "RULES-gemini-only.md",
         "RULES-all-clis.md",
-        "RULES.md",
     ];
 
     let entries = match std::fs::read_dir(src) {
@@ -57,6 +54,9 @@ pub fn walk_and_copy(src: &Path, dst: &Path, root_src: &Path) -> Result<(), Stri
         if name.starts_with('.') || skip_dirs.contains(&name) || skip_files.contains(&name) {
             continue;
         }
+        if name == "RULES.md" && (src == root_src || src == root_src.join("workspace")) {
+            continue;
+        }
         let target = dst.join(name);
         handle_entry(&path, &target, name, src, root_src, dst)?;
     }
@@ -68,20 +68,17 @@ fn handle_entry(path: &Path, target: &Path, name: &str, src: &Path, root_src: &P
         if !target.is_symlink() {
             walk_and_copy(path, target, root_src)?;
         }
-    } else if name == "CLAUDE.md" || name == "AGENTS.md" || name == "GEMINI.md" {
+    } else if name == "RULES.md" || name == "CLAUDE.md" || name == "AGENTS.md" || name == "GEMINI.md" {
         if target.is_symlink() || target.is_file() {
             let _ = std::fs::remove_file(target);
         }
         let _ = std::fs::copy(path, target);
         if name == "CLAUDE.md" {
-            {
-                let mirror = &"AGENTS.md";
-                let mirror_target = dst.join(mirror);
-                if mirror_target.is_symlink() || mirror_target.is_file() {
-                    let _ = std::fs::remove_file(&mirror_target);
-                }
-                let _ = std::fs::copy(path, &mirror_target);
+            let mirror_target = dst.join("AGENTS.md");
+            if mirror_target.is_symlink() || mirror_target.is_file() {
+                let _ = std::fs::remove_file(&mirror_target);
             }
+            let _ = std::fs::copy(path, &mirror_target);
         }
     } else if is_zone2_py_file(path, src, root_src) {
         if target.is_file() {
@@ -117,7 +114,6 @@ pub const MANAGED_SINGLE_DIRS: &[&str] = &[
 /// child directories (e.g. `cron_tasks/<job>`, `tools/<tool_group>`, `skills/<skill>`) are managed.
 pub const MANAGED_CONTAINER_DIRS: &[&str] = &[
     "cron_tasks",
-    "tasks",
     "tools",
     "skills",
 ];

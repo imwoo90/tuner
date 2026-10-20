@@ -6,15 +6,9 @@ Incoming Telegram files are stored here, grouped by date.
 
 ```text
 telegram_files/
-  _index.yaml
   YYYY-MM-DD/
     ...files...
 ```
-
-## Index
-
-`_index.yaml` is rebuilt automatically and is the fastest overview.
-It includes total count plus per-file metadata (`name`, `type`, `size`, `received`).
 
 ## Processing
 
@@ -31,9 +25,8 @@ Tool scripts require absolute paths (`--file /absolute/path/...`).
 
 ## Rules
 
-- Do not manually edit `_index.yaml`.
 - Do not move/delete files unless user requested it.
-- Auto-cleanup removes files older than `cleanup.media_files_days` (see `config/RULES.md`).
+- Auto-cleanup removes files older than `cleanup.media_files_days` (see `../config/RULES.md`).
   Cleanup is non-recursive (top-level date folders are not auto-pruned).
 
 ## Memory

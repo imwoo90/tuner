@@ -259,5 +259,17 @@ mod tests {
         assert!(!html.contains(">! "));
         assert!(!html.contains("**Thinking Process:**"));
     }
+
+    #[test]
+    fn test_carousel_and_local_image_embeds_formatted_cleanly() {
+        let input = "````carousel\n![3D Isometric View](/home/user/brain/iso.png)\n<!-- slide -->\n```python\nprint(1)\n```\n````\nSee [main.rs](file:///home/user/src/main.rs)";
+        let html = markdown_to_telegram_html(input);
+        assert!(html.contains("🖼️ <b>3D Isometric View</b>"));
+        assert!(!html.contains("language-carousel"));
+        assert!(!html.contains("slide"));
+        assert!(!html.contains("/home/user/brain/iso.png"));
+        assert!(html.contains("<pre><code class=\"language-python\">print(1)\n</code></pre>"));
+        assert!(html.contains("<code>main.rs</code>"));
+    }
 }
 

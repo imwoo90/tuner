@@ -22,7 +22,6 @@ pub fn create_workspace_directories(paths: &DuctorPaths) {
         "tools/media_tools",
         "tools/webhook_tools",
         "output_to_user",
-        "tasks",
         "skills",
         ".agents",
         ".agents/rules",

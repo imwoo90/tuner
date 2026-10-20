@@ -38,7 +38,6 @@ touch ~/.tuner/restart-requested
 
 The bot picks up this marker within seconds and restarts cleanly.
 
-## Output and Memory
+## Memory
 
-- Save user deliverables in `../output_to_user/`.
 - Update `../memory_system/MAINMEMORY.md` silently for durable user facts/preferences.

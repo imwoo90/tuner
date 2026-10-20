@@ -142,13 +142,16 @@ pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
 fn detect_rule_filenames(cron_tasks_dir: &Path) -> Vec<String> {
     let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
     let mut found = Vec::new();
+    let ws_dir = cron_tasks_dir.parent();
     for name in &rule_filenames {
-        if cron_tasks_dir.join(name).is_file() {
+        let in_cron = cron_tasks_dir.join(name).is_file();
+        let in_ws = ws_dir.is_some_and(|w| w.join(name).is_file());
+        if in_cron || in_ws {
             found.push(name.to_string());
         }
     }
     if found.is_empty() {
-        vec!["CLAUDE.md".to_string()]
+        vec!["AGENTS.md".to_string()]
     } else {
         found
     }

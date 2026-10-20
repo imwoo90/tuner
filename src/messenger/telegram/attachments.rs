@@ -11,24 +11,40 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use std::path::PathBuf;
 
-/// Scans text strictly for `file://` URLs, validates that they are files within allowed roots,
-/// and returns a list of unique safe file paths.
+/// Scans text for `file://` URLs and Markdown links/image embeds with absolute paths,
+/// validates that they are files within allowed roots, and returns a list of unique safe file paths.
 pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     let mut seen_canonical = std::collections::HashSet::new();
+    let mut push_if_valid = |path: PathBuf| {
+        if path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
+            let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            if seen_canonical.insert(canon) {
+                paths.push(path);
+            }
+        }
+    };
+
     if let Ok(re) = regex::Regex::new(r#"file://[^\s\)\]`"'>]+"#) {
         for cap in re.captures_iter(text) {
             let raw = cap[0].trim_end_matches(&['.', ',', ';', '"', '\'', '>', ')', '`', ']'][..]);
             if let Ok(parsed_url) = url::Url::parse(raw)
                 && let Ok(path) = parsed_url.to_file_path()
-                    && path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
-                        let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                        if seen_canonical.insert(canon) {
-                            paths.push(path);
-                        }
-                    }
+            {
+                push_if_valid(path);
+            }
         }
     }
+
+    if let Ok(md_re) = regex::Regex::new(r"!?\[[^\]]*\]\((/[^)]+)\)") {
+        for cap in md_re.captures_iter(text) {
+            let raw_target = cap[1].split('#').next().unwrap_or("").trim();
+            if raw_target.starts_with('/') && !raw_target.starts_with("//") {
+                push_if_valid(PathBuf::from(raw_target));
+            }
+        }
+    }
+
     paths
 }
 
@@ -46,11 +62,6 @@ fn is_blacklisted_file(path: &std::path::Path) -> bool {
         return true;
     }
     false
-}
-
-fn is_image_file(path: &std::path::Path) -> bool {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp")
 }
 
 fn build_allowed_roots(config: &CliConfig) -> Vec<PathBuf> {
@@ -80,7 +91,7 @@ fn build_allowed_roots(config: &CliConfig) -> Vec<PathBuf> {
     allowed_roots
 }
 
-/// Helper task to send matching file links as In-App review buttons or photos.
+/// Helper task to register matching file and image links in the In-App review viewer.
 pub(crate) async fn send_file_attachments(
     bot: &Bot,
     chat_id: ChatId,
@@ -89,32 +100,14 @@ pub(crate) async fn send_file_attachments(
     config: &CliConfig,
 ) {
     let allowed_roots = build_allowed_roots(config);
-    let file_paths = extract_file_paths(raw_text, &allowed_roots);
-    let mut images = Vec::new();
-    let mut code_files = Vec::new();
+    let review_files: Vec<PathBuf> = extract_file_paths(raw_text, &allowed_roots)
+        .into_iter()
+        .filter(|path| !is_blacklisted_file(path))
+        .collect();
 
-    for path in file_paths {
-        if is_blacklisted_file(&path) {
-            continue;
-        }
-        if is_image_file(&path) {
-            images.push(path);
-        } else {
-            code_files.push(path);
-        }
-    }
-
-    for img in images {
-        let mut req = bot.send_photo(chat_id, teloxide::types::InputFile::file(&img));
-        if let Some(tid) = thread_id {
-            req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid)));
-        }
-        let _ = req.await;
-    }
-
-    if !code_files.is_empty() {
+    if !review_files.is_empty() {
         let mgr = super::review::global_review_manager();
-        if let Some((session_id, count)) = mgr.register_session(&code_files).await {
+        if let Some((session_id, count)) = mgr.register_session(&review_files).await {
             send_review_button(bot, chat_id, thread_id, &session_id, count).await;
         }
     }
@@ -191,5 +184,25 @@ mod tests {
         let paths_code = extract_file_paths(&text_code, &allowed_roots);
         assert_eq!(paths_code.len(), 1);
         assert_eq!(paths_code[0], file1);
+    }
+
+    #[test]
+    fn test_extract_file_paths_carousel_and_markdown_images() {
+        let dir = tempdir().unwrap();
+        let allowed_roots = vec![dir.path().to_path_buf()];
+        let img1 = dir.path().join("render_iso.png");
+        let img2 = dir.path().join("render_top.png");
+        std::fs::write(&img1, "png1").unwrap();
+        std::fs::write(&img2, "png2").unwrap();
+        let carousel_text = format!(
+            "````carousel\n![Iso View]({})\n<!-- slide -->\n![Top View]({})\n````\nAlso relative ![rel](render_iso.png) and duplicate [iso](file://{})",
+            img1.to_string_lossy(),
+            img2.to_string_lossy(),
+            img1.to_string_lossy()
+        );
+        let paths_carousel = extract_file_paths(&carousel_text, &allowed_roots);
+        assert_eq!(paths_carousel.len(), 2);
+        assert!(paths_carousel.contains(&img1));
+        assert!(paths_carousel.contains(&img2));
     }
 }

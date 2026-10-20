@@ -214,8 +214,13 @@ mod tests {
         );
 
         let profile_ws = paths.workspace();
-        fs::create_dir_all(&profile_ws).unwrap();
+        let out_dir = profile_ws.join("output_to_user");
+        let tools_dir = profile_ws.join("tools").join("cron_tools");
+        fs::create_dir_all(&out_dir).unwrap();
+        fs::create_dir_all(&tools_dir).unwrap();
         fs::write(profile_ws.join("GEMINI.md"), "# Old Gemini").unwrap();
+        fs::write(out_dir.join("AGENTS.md"), "# Legacy output_to_user AGENTS").unwrap();
+        fs::write(tools_dir.join("AGENTS.md"), "# Legacy cron_tools AGENTS").unwrap();
 
         let mut selector = RulesSelector::new(paths.clone());
         selector.claude_authenticated = false;
@@ -227,6 +232,8 @@ mod tests {
 
         assert!(profile_ws.join("AGENTS.md").is_file());
         assert!(!profile_ws.join("GEMINI.md").exists());
+        assert!(!out_dir.join("AGENTS.md").exists());
+        assert!(!tools_dir.join("AGENTS.md").exists());
     }
 
     #[test]

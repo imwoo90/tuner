@@ -112,19 +112,15 @@ impl RulesSelector {
         None
     }
 
-    /// Deploys rule files to matching locations.
+    /// Deploys rule files to the workspace root and cleans up stale/legacy rule files.
     pub fn deploy_rules(&self) -> Result<(), String> {
-        let template_dirs = self.discover_template_directories();
-        for template_dir in template_dirs {
-            let rel_path = match template_dir.strip_prefix(&self.paths.home_defaults) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            let template = match self.get_best_template(&template_dir) {
-                Some(t) => t,
-                None => continue,
-            };
-            let dst_dir = self.paths.profile_home().join(rel_path);
+        let ws_template_dir = self.paths.home_defaults.join("workspace");
+        let template_opt = self
+            .get_best_template(&ws_template_dir)
+            .or_else(|| self.get_best_template(&self.paths.home_defaults));
+
+        if let Some(template) = template_opt {
+            let dst_dir = self.paths.workspace();
             if let Err(e) = std::fs::create_dir_all(&dst_dir) {
                 return Err(format!("Failed to create directory {:?}: {}", dst_dir, e));
             }
@@ -142,7 +138,7 @@ impl RulesSelector {
         Ok(())
     }
 
-    /// Removes rule files for unauthenticated CLI providers.
+    /// Removes rule files for unauthenticated CLI providers and purges legacy subdirectory rule files.
     pub fn cleanup_stale_files(&self) -> Result<usize, String> {
         let mut stale = Vec::new();
         if !self.claude_authenticated {
@@ -158,6 +154,30 @@ impl RulesSelector {
         for filename in stale {
             total_removed += self.remove_files_by_name(filename)?;
         }
+
+        let ws = self.paths.workspace();
+        for dir in managed_profile_rule_dirs(&self.paths) {
+            if dir == ws {
+                continue;
+            }
+            for filename in &["CLAUDE.md", "AGENTS.md", "GEMINI.md"] {
+                let file_path = dir.join(filename);
+                if file_path.is_file() && std::fs::remove_file(&file_path).is_ok() {
+                    total_removed += 1;
+                }
+            }
+        }
+
+        for legacy_dir in &[
+            ws.join("tasks"),
+            ws.join("tools").join("agent_tools"),
+            ws.join("tools").join("task_tools"),
+        ] {
+            if legacy_dir.is_dir() && !legacy_dir.is_symlink() {
+                let _ = std::fs::remove_dir_all(legacy_dir);
+            }
+        }
+
         Ok(total_removed)
     }
 
@@ -206,6 +226,7 @@ fn managed_profile_rule_dirs(paths: &DuctorPaths) -> Vec<PathBuf> {
     for d in MANAGED_SINGLE_DIRS {
         dirs.push(ws.join(d));
     }
+    dirs.push(ws.join("cron_tasks"));
     for container in &["tasks", "tools", "skills"] {
         let c_path = ws.join(container);
         dirs.push(c_path.clone());

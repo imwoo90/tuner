@@ -17,14 +17,10 @@ Edit only when the user asks for behavior changes.
 
 - `provider`: `antigravity`
 - `model`: default model id
+    - `gemini-4-argon` (effort: `high` | `medium` | `low`) - Frontier reasoning & agentic model
     - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended default)
-    - `gemini-3.7-flash` (effort: `high` | `medium` | `low`) - Fast, highly capable agentic model
-    - `gemini-3.6-flash` (effort: `high` | `medium` | `low`) - Compatibility flash model
-    - `gemini-3.5-flash` (effort: `high` | `medium` | `low`) - Compatibility flash model
-    - `gemini-3.1-pro` (effort: `high` | `low`) - Capable reasoning model
-    - `claude-sonnet-4-6` - Claude reasoning model
-    - `claude-opus-4-6-thinking` - Claude deep thinking model
-    - `gpt-oss-120b` (effort: `medium`) - Open weight large model
+    - `claude-opus-5-5` - Claude frontier deep reasoning model
+    - `claude-sonnet-5-5` - Claude reasoning model
 - `effort`: reasoning effort level (`high`, `medium`, `low`) for compatible models
 - `permission_mode`: CLI permission behavior
 
@@ -60,15 +56,7 @@ For user-facing schedules, set `user_timezone` explicitly.
 
 - `cleanup.enabled`
 - `cleanup.media_files_days`
-- `cleanup.output_to_user_days`
 - `cleanup.check_hour`
-
-### File Sending Scope
-
-- `file_access` controls what can be sent via `<file:...>`:
-  - `all` (default)
-  - `home`
-  - `workspace`
 
 ### CLI Parameters
 
@@ -124,10 +112,6 @@ Parameters are inserted before the `--` separator in commands.
 - `timeouts.background`: max seconds for background tasks (default `1800`)
 - `timeouts.subagent`: max seconds for sub-agent tasks (default `3600`)
 - `timeouts.extend_on_activity`: auto-extend timeout when tool activity detected
-
-### Tasks
-
-- `tasks.enabled`: `true`/`false` — enable background task system (DEPRECATED for antigravity)
 
 ### Access Control
 

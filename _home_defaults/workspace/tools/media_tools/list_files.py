@@ -14,13 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
+import mimetypes
 from pathlib import Path
-
-try:
-    import yaml
-except ImportError:
-    yaml = None  # type: ignore[assignment]
 
 _MEDIA_DIRS = ("telegram_files", "matrix_files")
 
@@ -31,29 +26,35 @@ def _get_base_dirs() -> list[Path]:
     return [workspace / d for d in _MEDIA_DIRS if (workspace / d).is_dir()]
 
 
-def _scan_index(base_dir: Path, args: argparse.Namespace) -> list[dict]:
-    """Read _index.yaml from a single media directory and return matching files."""
-    index_path = base_dir / "_index.yaml"
-    if not index_path.exists():
-        return []
-    try:
-        data = yaml.safe_load(index_path.read_text(encoding="utf-8")) or {}
-    except (yaml.YAMLError, OSError):
-        return []
-    tree = data.get("tree", {})
+def _scan_dir(base_dir: Path, args: argparse.Namespace) -> list[dict]:
+    """Scan date subdirectories in a media directory and return matching files."""
     results: list[dict] = []
-    for date_str, files in sorted(tree.items(), reverse=True):
+    date_dirs = sorted(
+        (d for d in base_dir.iterdir() if d.is_dir() and not d.name.startswith(".")),
+        key=lambda d: d.name,
+        reverse=True,
+    )
+    for date_dir in date_dirs:
+        date_str = date_dir.name
         if args.date and date_str != args.date:
             continue
-        for f in files:
-            if args.file_type and not f.get("type", "").startswith(args.file_type):
+        for f in sorted(date_dir.iterdir(), key=lambda p: p.name):
+            if not f.is_file() or f.name.startswith("."):
                 continue
+            mime, _ = mimetypes.guess_type(f.name)
+            mime_str = mime or "application/octet-stream"
+            if args.file_type and not mime_str.startswith(args.file_type):
+                continue
+            try:
+                size = f.stat().st_size
+            except OSError:
+                size = 0
             results.append({
                 "date": date_str,
-                "name": f["name"],
-                "type": f.get("type", "unknown"),
-                "size": f.get("size", 0),
-                "path": str(base_dir / date_str / f["name"]),
+                "name": f.name,
+                "type": mime_str,
+                "size": size,
+                "path": str(f),
                 "source": base_dir.name,
             })
     return results
@@ -66,10 +67,6 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=20, help="Max results")
     args = parser.parse_args()
 
-    if yaml is None:
-        print(json.dumps({"error": "pyyaml not installed (pip install pyyaml)"}))
-        sys.exit(1)
-
     base_dirs = _get_base_dirs()
     if not base_dirs:
         print(json.dumps({"files": [], "total": 0, "note": "No media directories found. No files received yet."}))
@@ -77,7 +74,7 @@ def main() -> None:
 
     all_results: list[dict] = []
     for base_dir in base_dirs:
-        all_results.extend(_scan_index(base_dir, args))
+        all_results.extend(_scan_dir(base_dir, args))
 
     # Sort by date descending, limit
     all_results.sort(key=lambda r: r["date"], reverse=True)
