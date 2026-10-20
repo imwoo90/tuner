@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["trust_workspace_in_settings"]};
+window.SIDEBAR_ITEMS = {"fn":["load_settings_json","trust_workspace_in_settings"]};

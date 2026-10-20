@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ObserverManager"],"trait":["CronObserverTrait","HeartbeatObserverTrait","WebhookObserverTrait"]};
+window.SIDEBAR_ITEMS = {"struct":["ObserverManager"],"trait":["CronObserverTrait","HeartbeatObserverTrait","WebhookObserverTrait"],"type":["WakeHandlerCallback"]};
