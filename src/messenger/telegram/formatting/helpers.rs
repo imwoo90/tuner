@@ -1,9 +1,9 @@
 //! # Telegram Formatting Common Helpers
 //!
+//! ## Overview
 //! Provides shared utilities and regex logic to parse placeholders, process code blocks,
 //! handle specific HTML entity encodings, and strip interactive UI features before delivery.
-
-//! 
+//!
 //! ## Search Tags
 //! #helpers
 
@@ -11,10 +11,12 @@ use regex::{Regex, Captures};
 
 const SENTINEL: char = '\x00';
 
+/// Executes `placeholder` (placeholder).
 pub fn placeholder(kind: &str, idx: usize) -> String {
     format!("{}{}{}{}", SENTINEL, kind, idx, SENTINEL)
 }
 
+/// Executes `markdown_to_telegram_html` (markdown to telegram html).
 pub fn markdown_to_telegram_html(text: &str) -> String {
     let cleaned_text = super::buttons::strip_button_syntax(text);
 
@@ -88,36 +90,43 @@ fn extract_entities(
     links: &mut Vec<(String, String)>,
     table_blocks: &mut Vec<String>,
 ) -> String {
-    let cb_re = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?```(\w*)\n(.*?)```").unwrap();
-    let mut text_buf = cb_re.replace_all(text, |caps: &Captures| {
-        let prefix_quote = caps.get(1).map_or("", |m| m.as_str());
-        let lang = caps.get(2).map_or("", |m| m.as_str()).to_string();
-        let code = caps.get(3).map_or("", |m| m.as_str());
-        let is_quoted = !prefix_quote.trim().is_empty();
-        let sanitized_code = sanitize_code_block(code, is_quoted);
-        let idx = code_blocks.len();
-        code_blocks.push((lang, sanitized_code, is_quoted));
-        format!("{}{}", prefix_quote, placeholder("CB", idx))
-    }).to_string();
+    let mut text_buf = if let Ok(cb_re) = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?```(\w*)\n(.*?)```") {
+        cb_re.replace_all(text, |caps: &Captures| {
+            let prefix_quote = caps.get(1).map_or("", |m| m.as_str());
+            let lang = caps.get(2).map_or("", |m| m.as_str()).to_string();
+            let code = caps.get(3).map_or("", |m| m.as_str());
+            let is_quoted = !prefix_quote.trim().is_empty();
+            let sanitized_code = sanitize_code_block(code, is_quoted);
+            let idx = code_blocks.len();
+            code_blocks.push((lang, sanitized_code, is_quoted));
+            format!("{}{}", prefix_quote, placeholder("CB", idx))
+        }).to_string()
+    } else {
+        text.to_string()
+    };
 
     text_buf = super::table::extract_tables(&text_buf, table_blocks);
 
-    let ic_re = Regex::new(r"`([^`\n]+)`").unwrap();
-    text_buf = ic_re.replace_all(&text_buf, |caps: &Captures| {
-        let code = caps.get(1).map_or("", |m| m.as_str()).to_string();
-        let idx = inline_codes.len();
-        inline_codes.push(code);
-        placeholder("IC", idx)
-    }).to_string();
+    if let Ok(ic_re) = Regex::new(r"`([^`\n]+)`") {
+        text_buf = ic_re.replace_all(&text_buf, |caps: &Captures| {
+            let code = caps.get(1).map_or("", |m| m.as_str()).to_string();
+            let idx = inline_codes.len();
+            inline_codes.push(code);
+            placeholder("IC", idx)
+        }).to_string();
+    }
 
-    let link_re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
-    link_re.replace_all(&text_buf, |caps: &Captures| {
-        let link_text = caps.get(1).map_or("", |m| m.as_str()).to_string();
-        let link_url = caps.get(2).map_or("", |m| m.as_str()).to_string();
-        let idx = links.len();
-        links.push((link_text, link_url));
-        placeholder("LK", idx)
-    }).to_string()
+    if let Ok(link_re) = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)") {
+        link_re.replace_all(&text_buf, |caps: &Captures| {
+            let link_text = caps.get(1).map_or("", |m| m.as_str()).to_string();
+            let link_url = caps.get(2).map_or("", |m| m.as_str()).to_string();
+            let idx = links.len();
+            links.push((link_text, link_url));
+            placeholder("LK", idx)
+        }).to_string()
+    } else {
+        text_buf
+    }
 }
 
 fn restore_entities(
@@ -166,32 +175,42 @@ fn restore_entities(
     text
 }
 
+/// Executes `apply_markdown_formatting` (apply markdown formatting).
 pub fn apply_markdown_formatting(escaped: &str) -> String {
-    let h_re = Regex::new(r"(?m)^#{1,6}\s+(.+)$").unwrap();
-    let mut out = h_re.replace_all(escaped, "<b>$1</b>").to_string();
-
-    let bi_re = Regex::new(r"\*\*\*([^\*\n]+?)\*\*\*").unwrap();
-    out = bi_re.replace_all(&out, "<b><i>$1</i></b>").to_string();
-
-    let bold_re = Regex::new(r"(?s)\*\*(.+?\*?)\*\*").unwrap();
-    out = bold_re.replace_all(&out, "<b>$1</b>").to_string();
+    let mut out = escaped.to_string();
+    let rules = [
+        (r"(?m)^#{1,6}\s+(.+)$", "<b>$1</b>"),
+        (r"\*\*\*([^\*\n]+?)\*\*\*", "<b><i>$1</i></b>"),
+        (r"(?s)\*\*(.+?\*?)\*\*", "<b>$1</b>"),
+    ];
+    for (pat, rep) in rules {
+        if let Ok(re) = Regex::new(pat) {
+            out = re.replace_all(&out, rep).to_string();
+        }
+    }
 
     out = super::italic::format_italic_delim(&out, '*', "<i>", "</i>");
     out = super::italic::format_italic_delim(&out, '_', "<i>", "</i>");
 
-    let strike_re = Regex::new(r"~~(.+?)~~").unwrap();
-    out = strike_re.replace_all(&out, "<s>$1</s>").to_string();
-
-    let spoiler_re = Regex::new(r"\|\|(.+?)\|\|").unwrap();
-    out = spoiler_re.replace_all(&out, "<tg-spoiler>$1</tg-spoiler>").to_string();
+    for (pat, rep) in [
+        (r"~~(.+?)~~", "<s>$1</s>"),
+        (r"\|\|(.+?)\|\|", "<tg-spoiler>$1</tg-spoiler>"),
+    ] {
+        if let Ok(re) = Regex::new(pat) {
+            out = re.replace_all(&out, rep).to_string();
+        }
+    }
 
     out = super::blockquotes::convert_blockquotes(&out);
 
-    let hr_re = Regex::new(r"(?m)^[-*]{3,}$").unwrap();
-    out = hr_re.replace_all(&out, "———").to_string();
-
-    let bullet_re = Regex::new(r"(?m)^[-*]\s+").unwrap();
-    out = bullet_re.replace_all(&out, "• ").to_string();
+    for (pat, rep) in [
+        (r"(?m)^[-*]{3,}$", "———"),
+        (r"(?m)^[-*]\s+", "• "),
+    ] {
+        if let Ok(re) = Regex::new(pat) {
+            out = re.replace_all(&out, rep).to_string();
+        }
+    }
 
     out
 }

@@ -276,7 +276,7 @@ async fn test_wait_for_pty_prompt_ignores_early_csi_and_unauthed_bar() {
     let t0 = std::time::Instant::now();
     wait_for_pty_prompt(&mgr, "sess-ready").await.unwrap();
     let elapsed = t0.elapsed().as_millis();
-    assert!(elapsed >= 1200 && elapsed < 3000, "Unexpected elapsed: {}ms", elapsed);
+    assert!((1200..3000).contains(&elapsed), "Unexpected elapsed: {}ms", elapsed);
     mgr.terminate("sess-ready").await;
 }
 

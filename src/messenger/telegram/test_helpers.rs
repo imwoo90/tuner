@@ -1,4 +1,14 @@
+//! # Telegram E2E Test Environment Helpers
+//!
+//! ## Overview
+//! Provides shared mock environment setup, temporary brain transcript directories, and RAII
+//! environment variable guards for Telegram bot unit and integration tests.
+//!
+//! ## Search Tags
+//! #telegram-test-helpers, #e2e-mock-env, #test-fixtures
+
 #[cfg(test)]
+/// Test module/item.
 pub mod helpers {
     use crate::telegram::{TopicNameCache as TNC, BotInfo as BI};
     use crate::config::CliConfig as CC;
@@ -9,12 +19,14 @@ pub mod helpers {
     use teloxide::Bot;
     use teloxide::types::Message;
 
+    /// Test module/item.
     pub struct EnvGuard {
         p: String,
         h: String,
     }
 
     impl EnvGuard {
+        /// Test module/item.
         pub fn new(temp: &tempfile::TempDir) -> Self {
             let p = std::env::var("PATH").unwrap_or_default();
             let h = std::env::var("HOME").unwrap_or_default();
@@ -36,6 +48,7 @@ pub mod helpers {
         }
     }
 
+    /// Test module/item.
     pub type E2ETestEnv = (
         Arc<SM>,
         Arc<CC>,
@@ -48,12 +61,14 @@ pub mod helpers {
         EnvGuard,
     );
 
+    /// Test module/item.
     pub fn mock_brain_dir(temp_dir: &tempfile::TempDir, sess_id: &str) {
         let p = temp_dir.path().join(format!(".gemini/antigravity-cli/brain/{}/.system_generated/logs", sess_id));
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("transcript_full.jsonl"), "").unwrap();
     }
 
+    /// Test module/item.
     pub fn setup_e2e_env(temp_dir: &tempfile::TempDir, mock_script_code: &str) -> E2ETestEnv {
         let agy_path = temp_dir.path().join("agy");
         std::fs::write(&agy_path, mock_script_code).unwrap();
@@ -83,10 +98,12 @@ pub mod helpers {
         (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, guard)
     }
 
+    /// Test module/item.
     pub fn make_msg(json: &str) -> Message {
         serde_json::from_str(json).unwrap()
     }
 
+    /// Test module/item.
     pub async fn wait_for_prompt(temp: &tempfile::TempDir, pattern: &str) -> String {
         let mut prompt_log = String::new();
         for _ in 0..100 {

@@ -1,4 +1,6 @@
-use crate::bus::envelope::{Envelope, Origin, LockMode, DeliveryMode};
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::type_complexity)]
+use crate::bus::envelope::{Envelope, Origin};
 use crate::bus::bus::{MessageBus, Transport};
 use crate::bus::observers_wire::{
     ObserverManager, HeartbeatObserverTrait, CronObserverTrait, WebhookObserverTrait,

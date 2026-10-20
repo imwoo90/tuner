@@ -3,15 +3,13 @@
 //! ## Overview
 //! Operates the wizard setup CLI prompt. Installs systemd user services.
 //!
-//! ## Collaboration Graph
-//! - Invoked via `--setup` or `--install-systemd` flags.
-//!
 //! ## Search Tags
 //! #wizard-installer, #systemd-setup, #env-loader
 
 use crate::config::CliConfig;
 use std::path::Path;
 
+/// Executes `load_env_file` (load env file).
 pub fn load_env_file(path: &Path) -> Result<(), String> {
     if !path.is_file() {
         return Ok(());
@@ -22,19 +20,18 @@ pub fn load_env_file(path: &Path) -> Result<(), String> {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let line_to_parse = if trimmed.starts_with("export ") {
-            trimmed["export ".len()..].trim()
+        let line_to_parse = if let Some(rest) = trimmed.strip_prefix("export ") {
+            rest.trim()
         } else {
             trimmed
         };
         if let Some(pos) = line_to_parse.find('=') {
             let key = line_to_parse[..pos].trim();
             let mut val = line_to_parse[pos + 1..].trim().to_string();
-            if (val.starts_with('"') && val.ends_with('"')) || (val.starts_with('\'') && val.ends_with('\'')) {
-                if val.len() >= 2 {
+            if ((val.starts_with('"') && val.ends_with('"')) || (val.starts_with('\'') && val.ends_with('\'')))
+                && val.len() >= 2 {
                     val = val[1..val.len() - 1].to_string();
                 }
-            }
             if !key.is_empty() && std::env::var(key).is_err() {
                 unsafe { std::env::set_var(key, val); }
             }
@@ -43,6 +40,7 @@ pub fn load_env_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Executes `install_systemd_service` (install systemd service).
 pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -75,6 +73,7 @@ pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
     Ok(())
 }
 
+/// Executes `override_profile_config` (override profile config).
 pub fn override_profile_config(
     config: &mut CliConfig,
     profile_name: &str,

@@ -1,13 +1,11 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::bus::lock_pool::LockPool;
 use crate::webhook::api::server::ApiServer;
 use crate::webhook::api::websocket::{ApiAbortHandler, ApiMessageHandler, ApiResult};
 use crate::config::ApiConfig;
 use crate::session::key::SessionKey;
 use crate::webhook::api::crypto::E2ESession;
-use serde_json::Value;
-use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 
 #[tokio::test]
 async fn test_lock_pool_no_premature_eviction() {

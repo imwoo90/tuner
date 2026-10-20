@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 #[cfg(test)]
 mod tests {
     use crate::telegram::handle_message;

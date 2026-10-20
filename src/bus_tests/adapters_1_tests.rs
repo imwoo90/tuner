@@ -1,4 +1,5 @@
-use crate::bus::envelope::{Envelope, Origin, LockMode, DeliveryMode};
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::bus::envelope::{Origin, LockMode, DeliveryMode};
 use crate::bus::adapters::{
     from_background_result, from_cron_result, from_heartbeat,
     from_webhook_cron_result, from_webhook_wake, WebhookResult,

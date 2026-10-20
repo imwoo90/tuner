@@ -3,11 +3,14 @@
 //! Integration and unit tests for Axum webhook/api routing, auth, models and session.
 
 #[cfg(test)]
+/// Test module/item.
 pub mod adversarial_tests;
 #[cfg(test)]
-pub mod adversarial_tests_extra;
+/// Test module/item.
+pub mod adversarial_extra_tests;
 #[cfg(test)]
-pub mod adversarial_tests_concurrency;
+/// Test module/item.
+pub mod adversarial_concurrency_tests;
 #[cfg(test)]
 pub mod api_server_tests;
 #[cfg(test)]

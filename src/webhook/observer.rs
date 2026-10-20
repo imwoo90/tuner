@@ -4,9 +4,6 @@
 //! Monitors active webhook connection pools, tracking task durations, checking quiet hours,
 //! and reporting offline triggers.
 //!
-//! ## Collaboration Graph
-//! - Observes websocket connections inside [`SessionLoop`](super::api::session_loop).
-//!
 //! ## Search Tags
 //! #activity-monitor, #quiet-hour-check, #task-durations
 
@@ -19,19 +16,36 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Callback type for webhook execution results.
+pub type WebhookResultHandler = Arc<dyn Fn(WebhookResult) + Send + Sync>;
+
+/// Callback type for webhook wake triggers.
+pub type WebhookWakeHandler = Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>;
+
+/// Represents `WebhookObserver` (webhook observer).
 pub struct WebhookObserver {
+    /// Manager.
     pub manager: Arc<WebhookManager>,
+    /// Webhooks path.
     pub webhooks_path: std::path::PathBuf,
+    /// Config.
     pub config: Arc<crate::config::CliConfig>,
+    /// Cli.
     pub cli: Arc<crate::cli::antigravity::AntigravityCli>,
+    /// Server.
     pub server: Arc<Mutex<Option<WebhookServer>>>,
+    /// Stop watcher tx.
     pub stop_watcher_tx: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    /// Allowed user ids.
     pub allowed_user_ids: Vec<i64>,
-    pub result_handler: Arc<Mutex<Option<Arc<dyn Fn(WebhookResult) + Send + Sync>>>>,
-    pub wake_handler: Arc<Mutex<Option<Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>>>>,
+    /// Result handler.
+    pub result_handler: Arc<Mutex<Option<WebhookResultHandler>>>,
+    /// Wake handler.
+    pub wake_handler: Arc<Mutex<Option<WebhookWakeHandler>>>,
 }
 
 impl WebhookObserver {
+    /// Creates a new instance.
     pub fn new(
         manager: Arc<WebhookManager>,
         webhooks_path: std::path::PathBuf,
@@ -51,6 +65,7 @@ impl WebhookObserver {
         }
     }
 
+    /// Executes `start` (start).
     pub async fn start(&self) -> Result<(), String> {
         if !self.config.webhooks.enabled {
             return Ok(());
@@ -80,7 +95,7 @@ impl WebhookObserver {
         *self.server.lock().await = Some(server);
 
         let (stop_watcher_tx, stop_watcher_rx) = tokio::sync::oneshot::channel::<()>();
-        *self.stop_watcher_tx.lock().unwrap() = Some(stop_watcher_tx);
+        *self.stop_watcher_tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(stop_watcher_tx);
 
         spawn_watcher(
             self.webhooks_path.clone(),
@@ -91,11 +106,12 @@ impl WebhookObserver {
         Ok(())
     }
 
+    /// Executes `stop` (stop).
     pub async fn stop(&self) {
         if let Some(server) = self.server.lock().await.take() {
             server.stop();
         }
-        if let Some(tx) = self.stop_watcher_tx.lock().unwrap().take() {
+        if let Some(tx) = self.stop_watcher_tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = tx.send(());
         }
     }
@@ -158,14 +174,12 @@ fn spawn_watcher(
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    if let Ok(metadata) = std::fs::metadata(&webhooks_path) {
-                        if let Ok(current_mtime) = metadata.modified() {
-                            if Some(current_mtime) != last_mtime {
+                    if let Ok(metadata) = std::fs::metadata(&webhooks_path)
+                        && let Ok(current_mtime) = metadata.modified()
+                            && Some(current_mtime) != last_mtime {
                                 last_mtime = Some(current_mtime);
                                 let _ = manager_reload.reload().await;
                             }
-                        }
-                    }
                 }
                 _ = &mut stop_watcher_rx => {
                     break;
@@ -179,8 +193,8 @@ async fn dispatch_webhook(
     hook_id: String,
     payload: serde_json::Value,
     manager: Arc<WebhookManager>,
-    result_handler: Arc<Mutex<Option<Arc<dyn Fn(WebhookResult) + Send + Sync>>>>,
-    wake_handler: Arc<Mutex<Option<Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>>>>,
+    result_handler: Arc<Mutex<Option<WebhookResultHandler>>>,
+    wake_handler: Arc<Mutex<Option<WebhookWakeHandler>>>,
     allowed_user_ids: Vec<i64>,
     config: Arc<crate::config::CliConfig>,
 ) {
@@ -230,7 +244,7 @@ async fn dispatch_webhook(
 
 async fn handle_wake_mode(
     prompt: &str,
-    wake_handler: &Mutex<Option<Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>>>,
+    wake_handler: &Mutex<Option<WebhookWakeHandler>>,
     allowed_user_ids: &[i64],
     result_text: &mut String,
 ) -> String {
@@ -247,6 +261,7 @@ fn is_quiet_hours(hook: &WebhookEntry, config: &crate::config::CliConfig) -> boo
     is_quiet_hours_at(hook, config, chrono::Utc::now())
 }
 
+/// Executes `is_quiet_hours_at` (is quiet hours at).
 pub fn is_quiet_hours_at(
     hook: &WebhookEntry,
     config: &crate::config::CliConfig,

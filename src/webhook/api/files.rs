@@ -1,8 +1,9 @@
 //! # File Transfers and Helpers
 //!
+//! ## Overview
 //! Handles file sanitization, path verification, downloading, and uploading.
-
-//! 
+//! Validates destination paths, sanitizes filenames, and streams binary attachments over the webhook API.
+//!
 //! ## Search Tags
 //! #files
 
@@ -16,10 +17,14 @@ use axum::{
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Executes `sanitize_filename` (sanitize filename).
 pub fn sanitize_filename(name: &str) -> String {
-    static SANITIZE_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = SANITIZE_RE.get_or_init(|| regex::Regex::new(r#"[\\/<>:"|?*\x00]"#).unwrap());
-    let mut cleaned = re.replace_all(name, "_").into_owned();
+    static SANITIZE_RE: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let mut cleaned = if let Some(re) = SANITIZE_RE.get_or_init(|| regex::Regex::new(r#"[\\/<>:"|?*\x00]"#).ok()) {
+        re.replace_all(name, "_").into_owned()
+    } else {
+        name.to_string()
+    };
     while cleaned.contains("__") {
         cleaned = cleaned.replace("__", "_");
     }
@@ -32,6 +37,7 @@ pub fn sanitize_filename(name: &str) -> String {
     }
 }
 
+/// Executes `prepare_destination` (prepare destination).
 pub fn prepare_destination(base_dir: &Path, file_name: &str) -> PathBuf {
     let now_str = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let day_dir = base_dir.join(now_str);
@@ -54,32 +60,32 @@ pub fn prepare_destination(base_dir: &Path, file_name: &str) -> PathBuf {
     dest
 }
 
+/// Executes `is_image_path` (is image path).
 pub fn is_image_path(path_str: &str) -> bool {
     let path = Path::new(path_str);
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let ext_lower = ext.to_lowercase();
-        match ext_lower.as_str() {
-            "bmp" | "gif" | "jpg" | "jpeg" | "png" | "webp" => true,
-            _ => false,
-        }
+        matches!(ext_lower.as_str(), "bmp" | "gif" | "jpg" | "jpeg" | "png" | "webp")
     } else {
         false
     }
 }
 
+/// Executes `parse_file_refs` (parse file refs).
 pub fn parse_file_refs(text: &str) -> Vec<serde_json::Value> {
-    static REFS_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = REFS_RE.get_or_init(|| regex::Regex::new(r"<file:([^>]+)>").unwrap());
+    static REFS_RE: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let Some(re) = REFS_RE.get_or_init(|| regex::Regex::new(r"<file:([^>]+)>").ok()) else {
+        return Vec::new();
+    };
     let mut refs = Vec::new();
     for cap in re.captures_iter(text) {
         let raw_path = &cap[1];
         let mut path_str = raw_path.replace('\\', "/");
         if path_str.starts_with('/')
             && path_str.len() >= 3
-            && path_str.chars().nth(1).unwrap().is_alphabetic()
             && path_str.chars().nth(2) == Some('/')
+            && let Some(letter) = path_str.chars().nth(1).filter(|c| c.is_alphabetic())
         {
-            let letter = path_str.chars().nth(1).unwrap();
             let rest: String = path_str.chars().skip(2).collect();
             path_str = format!("{}:{}", letter, rest);
         }
@@ -98,6 +104,7 @@ pub fn parse_file_refs(text: &str) -> Vec<serde_json::Value> {
     refs
 }
 
+/// Executes `verify_bearer` (verify bearer).
 pub fn verify_bearer(headers: &HeaderMap, expected_token: &str) -> bool {
     let auth = headers
         .get(header::AUTHORIZATION)
@@ -106,12 +113,13 @@ pub fn verify_bearer(headers: &HeaderMap, expected_token: &str) -> bool {
     crate::webhook::auth::validate_bearer_token(auth, expected_token)
 }
 
+/// Executes `handle_file_download` (handle file download).
 pub async fn handle_file_download(
     State(state): State<Arc<std::sync::Mutex<ApiServerState>>>,
     headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let token = { state.lock().unwrap().config.token.clone() };
+    let token = { state.lock().unwrap_or_else(|e| e.into_inner()).config.token.clone() };
     if !verify_bearer(&headers, &token) {
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
@@ -120,7 +128,7 @@ pub async fn handle_file_download(
     };
     let file_path = PathBuf::from(raw_path);
     let roots = {
-        let s = state.lock().unwrap();
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
         match &s.allowed_roots {
             Some(r) if !r.is_empty() => r.clone(),
             _ => {
@@ -178,11 +186,10 @@ async fn parse_multipart(mut multipart: axum::extract::Multipart) -> Result<Uplo
             if let Ok(bytes) = field.bytes().await {
                 file_bytes = bytes.to_vec();
             }
-        } else if name == "caption" {
-            if let Ok(text) = field.text().await {
+        } else if name == "caption"
+            && let Ok(text) = field.text().await {
                 caption = Some(text);
             }
-        }
     }
 
     if file_bytes.is_empty() {
@@ -196,12 +203,16 @@ async fn parse_multipart(mut multipart: axum::extract::Multipart) -> Result<Uplo
     })
 }
 
+/// Executes `handle_file_upload` (handle file upload).
 pub async fn handle_file_upload(
     State(state): State<Arc<std::sync::Mutex<ApiServerState>>>,
     headers: HeaderMap,
     multipart: axum::extract::Multipart,
 ) -> impl IntoResponse {
-    let token = { state.lock().unwrap().config.token.clone() };
+    let (token, upload_dir) = {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        (s.config.token.clone(), s.upload_dir.clone())
+    };
     if !verify_bearer(&headers, &token) {
         return (
             StatusCode::UNAUTHORIZED,
@@ -210,10 +221,6 @@ pub async fn handle_file_upload(
             .into_response();
     }
 
-    let (upload_dir, _workspace) = {
-        let s = state.lock().unwrap();
-        (s.upload_dir.clone(), s.workspace.clone())
-    };
     let Some(upload_dir) = upload_dir else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

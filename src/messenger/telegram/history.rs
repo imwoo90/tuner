@@ -4,10 +4,6 @@
 //! Manages persistent logging of message histories (role, sender, content, thread details)
 //! into jsonl files for trace audits, session resume context, and debugging.
 //!
-//! ## Collaboration Graph
-//! - Log entries saved under workspace directories.
-//! - Consulted during session initialization to restore history context.
-//!
 //! ## Search Tags
 //! #history-logger, #trace-auditing, #jsonl-logs
 
@@ -18,27 +14,43 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+/// Represents `TelegramHistoryEntry` (telegram history entry).
 pub struct TelegramHistoryEntry {
+    /// Timestamp.
     pub timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    /// Topic id.
     pub topic_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    /// Topic name.
     pub topic_name: Option<String>,
+    /// Sender.
     pub sender: String,
+    /// Message id.
     pub message_id: Option<i32>,
+    /// Text.
     pub text: String,
+    /// Is success.
     pub is_success: bool,
+    /// Error.
     pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+/// Represents `TopicMetadata` (topic metadata).
 pub struct TopicMetadata {
+    /// Session id.
     pub session_id: String,
+    /// Topic id.
     pub topic_id: Option<i64>,
+    /// Topic name.
     pub topic_name: Option<String>,
+    /// Created at.
     pub created_at: String,
 }
 
+/// Executes `log_telegram_message` (log telegram message).
+#[allow(clippy::too_many_arguments)]
 pub fn log_telegram_message(
     working_dir: &Path,
     session_id: &str,
@@ -84,17 +96,17 @@ pub fn log_telegram_message(
         is_success,
         error: error.map(|s| s.to_string()),
     };
-    if let Ok(serialized) = serde_json::to_string(&entry) {
-        if let Ok(mut file) = OpenOptions::new()
+    if let Ok(serialized) = serde_json::to_string(&entry)
+        && let Ok(mut file) = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&file_path)
         {
             let _ = writeln!(file, "{}", serialized);
         }
-    }
 }
 
+/// Executes `find_sessions_for_topic` (find sessions for topic).
 pub fn find_sessions_for_topic(working_dir: &Path, target_topic_id: i64) -> Vec<String> {
     let brain_dir = working_dir.join("brain");
     let mut matching = Vec::new();
@@ -102,15 +114,12 @@ pub fn find_sessions_for_topic(working_dir: &Path, target_topic_id: i64) -> Vec<
         for entry in entries.flatten() {
             if entry.path().is_dir() {
                 let topic_file = entry.path().join("topic.json");
-                if let Ok(content) = std::fs::read_to_string(&topic_file) {
-                    if let Ok(meta) = serde_json::from_str::<TopicMetadata>(&content) {
-                        if meta.topic_id == Some(target_topic_id) {
-                            if let Some(sid) = entry.file_name().to_str() {
+                if let Ok(content) = std::fs::read_to_string(&topic_file)
+                    && let Ok(meta) = serde_json::from_str::<TopicMetadata>(&content)
+                        && meta.topic_id == Some(target_topic_id)
+                            && let Some(sid) = entry.file_name().to_str() {
                                 matching.push(sid.to_string());
                             }
-                        }
-                    }
-                }
             }
         }
     }

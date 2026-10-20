@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)]
 use crate::cli::antigravity::AntigravityCli;
 use crate::config::CliConfig;
 use crate::cli::{AgentProvider, StreamEvent};

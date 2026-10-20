@@ -4,10 +4,6 @@
 //! Routes button click interactions resulting from agent `ask_question` dialogs. Maps choice
 //! coordinates back to active execution flows.
 //!
-//! ## Collaboration Graph
-//! - Receives callbacks from [`super::callbacks`].
-//! - Integrates with [`super::ask_helpers`] to unlock execution.
-//!
 //! ## Search Tags
 //! #ask-callbacks, #interactive-dialogs, #button-mapping
 
@@ -63,9 +59,9 @@ pub(crate) async fn handle_ask_answer_callback(
     let Some(sid) = data.split(':').nth(1) else { return; };
     let Some(idx) = data.split(':').nth(2).and_then(|i| i.parse::<usize>().ok()) else { return; };
     
-    if let Some(state) = cli.sessions.get_ask_state(sid).await {
-        if let Some(current_q) = state.questions.get(state.current_index) {
-            if let Some(opt) = current_q.options.get(idx) {
+    if let Some(state) = cli.sessions.get_ask_state(sid).await
+        && let Some(current_q) = state.questions.get(state.current_index)
+            && let Some(opt) = current_q.options.get(idx) {
                 let is_write_in = opt.to_lowercase().contains("write-in") || opt.contains("직접 입력");
                 if is_write_in {
                     let opt_clone = opt.clone();
@@ -73,8 +69,6 @@ pub(crate) async fn handle_ask_answer_callback(
                     return;
                 }
             }
-        }
-    }
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
@@ -153,8 +147,8 @@ pub(crate) async fn handle_ask_prev_callback(
     _c: &CliConfig,
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };
-    if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
-        if state.current_index > 0 {
+    if let Some(mut state) = cli.sessions.get_ask_state(sid).await
+        && state.current_index > 0 {
             let topic_id = super::get_topic_id(msg);
             super::history::log_telegram_message(
                 &_c.working_dir,
@@ -183,7 +177,6 @@ pub(crate) async fn handle_ask_prev_callback(
                 .reply_markup(markup)
                 .await;
         }
-    }
 }
 
 pub(crate) async fn process_skip(

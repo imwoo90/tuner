@@ -4,10 +4,6 @@
 //! Renders interactive inline menus to configure, enable, or disable cron tasks directly
 //! from chat messages. Translates menu choices into scheduler commands.
 //!
-//! ## Collaboration Graph
-//! - Invoked during Telegram command execution.
-//! - Modifies jobs held in [`CronManager`].
-//!
 //! ## Search Tags
 //! #cron-selector, #interactive-menus, #ui-callbacks
 
@@ -108,7 +104,7 @@ pub(crate) async fn build_cron_page(
         return Ok((text, InlineKeyboardMarkup::new(Vec::<Vec<InlineKeyboardButton>>::new())));
     }
 
-    let total_pages = (jobs.len() + PAGE_SIZE - 1) / PAGE_SIZE;
+    let total_pages = jobs.len().div_ceil(PAGE_SIZE);
     let current_page = page.min(total_pages - 1);
     let start = current_page * PAGE_SIZE;
     let end = (start + PAGE_SIZE).min(jobs.len());
@@ -148,12 +144,11 @@ async fn apply_toggle(
 ) -> Result<String, String> {
     let new_state = !job.enabled;
     let mut auto_bound = false;
-    if new_state && job.chat_id == 0 {
-        if let Some(cid) = caller_chat_id {
+    if new_state && job.chat_id == 0
+        && let Some(cid) = caller_chat_id {
             let _ = manager.update_job_target(&job.id, cid, caller_topic_id).await;
             auto_bound = true;
         }
-    }
     let _ = manager.set_enabled(&job.id, new_state).await?;
     let state_str = if new_state { t!("bot.cron_state_enabled") } else { t!("bot.cron_state_disabled") };
     if auto_bound {

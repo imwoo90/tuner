@@ -1,22 +1,22 @@
 //! # Message Bus and Event Routing Module
 //!
-//! Replaces the Python `ductor_bot.bus` framework in Rust, coordinating
-//! async event routing, prompt injection locks, and transport adaptors.
+//! ## Overview
+//! Coordinates asynchronous event routing, chat/topic lock pooling, and transport delivery
+//! adapters across background runners, cron jobs, heartbeats, and webhooks.
 //!
 //! ## Submodules
+//! - [`envelope`] (`envelope.rs`): Structs and enums defining the bus message envelope format.
+//! - [`adapters`] (`adapters.rs`): Converters mapping domain task results into bus envelopes.
+//! - [`lock_pool`] (`lock_pool.rs`): Per-chat and per-topic async mutex pool.
+//! - [`bus`] (`bus.rs`): Core `MessageBus` dispatching unicast and broadcast events.
+//! - [`observers_wire`] (`observers_wire.rs`): Wiring helpers connecting background observer runtimes to the bus.
 //!
-//! - [`envelope`]: Structs and enums defining the message format.
-//! - [`adapters`]: Converters mapping various domain results into Envelopes.
-//! - [`lock_pool`]: Mutex pool matching chat and topic keys.
-//! - [`bus`]: Core MessageBus dispatching unicast/broadcast events.
-//! - [`observers_wire`]: Hooks connecting background observer runtimes.
-
-//! 
 //! ## Search Tags
-//! #mod
+//! #message-bus, #event-routing, #lock-pool, #transport-adapters
 
 pub mod envelope;
 pub mod adapters;
 pub mod lock_pool;
+#[allow(clippy::module_inception)]
 pub mod bus;
 pub mod observers_wire;

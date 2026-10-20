@@ -4,10 +4,6 @@
 //! Defines the [`SessionData`] struct capturing runtime state, provider, models, and history counts
 //! for active messaging streams.
 //!
-//! ## Collaboration Graph
-//! - Persisted by [`SessionManager`](super::manager::SessionManager).
-//! - Loaded/updated dynamically as CLI streams write output chunks.
-//!
 //! ## Search Tags
 //! #session-data, #model-override, #session-history, #metadata
 
@@ -17,16 +13,22 @@ use serde::{Deserialize, Serialize};
 use crate::session::key::SessionKey;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// Represents `ProviderSessionData` (provider session data).
 pub struct ProviderSessionData {
     #[serde(default)]
+    /// Session id.
     pub session_id: String,
     #[serde(default)]
+    /// Past session ids.
     pub past_session_ids: Vec<String>,
     #[serde(default)]
+    /// Message count.
     pub message_count: i64,
     #[serde(default)]
+    /// Total cost usd.
     pub total_cost_usd: f64,
     #[serde(default)]
+    /// Total tokens.
     pub total_tokens: i64,
 }
 
@@ -69,41 +71,60 @@ impl Default for SessionData {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+/// Represents `SessionData` (session data).
 pub struct SessionData {
     #[serde(default = "default_transport")]
+    /// Transport.
     pub transport: String,
+    /// Chat id.
     pub chat_id: i64,
+    /// Topic id.
     pub topic_id: Option<i64>,
+    /// Topic name.
     pub topic_name: Option<String>,
     #[serde(default = "default_provider")]
+    /// Provider.
     pub provider: String,
     #[serde(default = "default_model")]
+    /// Model.
     pub model: String,
     #[serde(default)]
+    /// Effort.
     pub effort: Option<String>,
     #[serde(default = "default_now_iso")]
+    /// Created at.
     pub created_at: String,
     #[serde(default = "default_now_iso")]
+    /// Last active.
     pub last_active: String,
     #[serde(default)]
+    /// Provider sessions.
     pub provider_sessions: HashMap<String, ProviderSessionData>,
     #[serde(default)]
+    /// Language.
     pub language: Option<String>,
     #[serde(default)]
+    /// Last progress msg id.
     pub last_progress_msg_id: Option<i32>,
     #[serde(default)]
+    /// Pending attachments.
     pub pending_attachments: Vec<String>,
     #[serde(default)]
+    /// Last handover summary.
     pub last_handover_summary: Option<String>,
 
     // Legacy fields used for migration
     #[serde(skip_serializing, default)]
+    /// Session id.
     pub session_id: Option<String>,
     #[serde(skip_serializing, default)]
+    /// Message count.
     pub message_count: Option<i64>,
     #[serde(skip_serializing, default)]
+    /// Total cost usd.
     pub total_cost_usd: Option<f64>,
     #[serde(skip_serializing, default)]
+    /// Total tokens.
     pub total_tokens: Option<i64>,
 }
 
@@ -113,6 +134,7 @@ fn default_model() -> String { "opus".to_string() }
 fn default_now_iso() -> String { Utc::now().to_rfc3339() }
 
 impl SessionData {
+    /// Creates a new instance.
     pub fn new(chat_id: i64, transport: String, topic_id: Option<i64>, provider: String, model: String) -> Self {
         let now = default_now_iso();
         Self {
@@ -137,6 +159,7 @@ impl SessionData {
         }
     }
 
+    /// Executes `session_key` (session key).
     pub fn session_key(&self) -> SessionKey {
         SessionKey {
             transport: self.transport.clone(),
@@ -145,28 +168,31 @@ impl SessionData {
         }
     }
 
+    /// Executes `get_session_id` (get session id).
     pub fn get_session_id(&self, provider: &str) -> String {
         self.provider_sessions.get(provider)
             .map(|ps| ps.session_id.clone())
             .unwrap_or_default()
     }
 
+    /// Executes `set_session_id` (set session id).
     pub fn set_session_id(&mut self, provider: &str, session_id: &str) {
         let ps = self.provider_sessions.entry(provider.to_string()).or_default();
-        if !ps.session_id.is_empty() && ps.session_id != session_id {
-            if !ps.past_session_ids.contains(&ps.session_id) {
+        if !ps.session_id.is_empty() && ps.session_id != session_id
+            && !ps.past_session_ids.contains(&ps.session_id) {
                 ps.past_session_ids.push(ps.session_id.clone());
             }
-        }
         ps.session_id = session_id.to_string();
     }
 
+    /// Executes `get_past_session_ids` (get past session ids).
     pub fn get_past_session_ids(&self, provider: &str) -> Vec<String> {
         self.provider_sessions.get(provider)
             .map(|ps| ps.past_session_ids.clone())
             .unwrap_or_default()
     }
 
+    /// Executes `get_all_session_ids` (get all session ids).
     pub fn get_all_session_ids(&self, provider: &str) -> Vec<String> {
         if let Some(ps) = self.provider_sessions.get(provider) {
             let mut list = ps.past_session_ids.clone();
@@ -179,6 +205,7 @@ impl SessionData {
         }
     }
 
+    /// Executes `migrate_legacy_metrics` (migrate legacy metrics).
     pub fn migrate_legacy_metrics(&mut self) {
         let has_legacy = self.session_id.is_some()
             || self.message_count.is_some()
@@ -202,6 +229,7 @@ impl SessionData {
         }
     }
 
+    /// Executes `clear_provider_session` (clear provider session).
     pub fn clear_provider_session(&mut self, provider: &str) {
         if let Some(ps) = self.provider_sessions.get_mut(provider) {
             if !ps.session_id.is_empty() && !ps.past_session_ids.contains(&ps.session_id) {

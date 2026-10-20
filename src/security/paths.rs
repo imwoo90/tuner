@@ -3,9 +3,6 @@
 //! ## Overview
 //! Inspects path targets, resolving links to verify they lie inside authorized roots.
 //!
-//! ## Collaboration Graph
-//! - Called by Webhook file servers and Cron managers before reading/writing files.
-//!
 //! ## Search Tags
 //! #directory-sandbox, #link-resolution, #security-bounds
 
@@ -15,9 +12,13 @@ use std::fs;
 /// Path validation errors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathValidationError {
+    /// `NullByte` (null byte) variant.
     NullByte(String),
+    /// `ControlCharacters` (control characters) variant.
     ControlCharacters(String),
+    /// `OutsideAllowedRoots` (outside allowed roots) variant.
     OutsideAllowedRoots(PathBuf, Vec<PathBuf>),
+    /// `IoError` (io error) variant.
     IoError(String),
 }
 
@@ -95,11 +96,10 @@ pub fn validate_file_path<P: AsRef<Path>>(
     let resolved = resolve_path(path).map_err(|e| PathValidationError::IoError(e.to_string()))?;
 
     for root in allowed_roots {
-        if let Ok(resolved_root) = resolve_path(root) {
-            if resolved.starts_with(&resolved_root) {
+        if let Ok(resolved_root) = resolve_path(root)
+            && resolved.starts_with(&resolved_root) {
                 return Ok(resolved);
             }
-        }
     }
 
     Err(PathValidationError::OutsideAllowedRoots(

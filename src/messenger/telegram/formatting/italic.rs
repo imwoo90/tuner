@@ -1,9 +1,9 @@
 //! # Telegram HTML Italic Normalizer
 //!
+//! ## Overview
 //! Normalizes markdown italic syntax (asterisks and underscores) to prevent unbalanced tags.
 //! Standardizes them into HTML elements compatible with Teloxide output formatting rules.
-
-//! 
+//!
 //! ## Search Tags
 //! #italic
 
@@ -11,6 +11,7 @@ fn is_whitespace_or_punct(c: char, delim: char) -> bool {
     c.is_whitespace() || (c.is_ascii_punctuation() && c != delim)
 }
 
+/// Executes `format_italic_delim` (format italic delim).
 pub fn format_italic_delim(text: &str, delim: char, tag_open: &str, tag_close: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut open_idx = None;

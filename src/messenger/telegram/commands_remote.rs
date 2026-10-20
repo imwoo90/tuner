@@ -1,5 +1,6 @@
 //! # Remote Development Services Telegram Command Controller
 //!
+//! ## Overview
 //! Renders the `/remote` dashboard message, manages inline action buttons,
 //! and dispatches user actions (start, stop, restart, refresh).
 //!
@@ -68,11 +69,10 @@ fn build_dashboard_keyboard(status: &RemoteHubStatus) -> InlineKeyboardMarkup {
     let mut row1 = Vec::new();
     match status.antigravity {
         ServiceStatus::Active => {
-            if let Some(ref url) = status.antigravity_url {
-                if let Ok(parsed_url) = reqwest::Url::parse(url) {
+            if let Some(ref url) = status.antigravity_url
+                && let Ok(parsed_url) = reqwest::Url::parse(url) {
                     row1.push(InlineKeyboardButton::url("🔗 Web IDE 열기", parsed_url));
                 }
-            }
             row1.push(InlineKeyboardButton::callback("⏹️ Antigravity 중지", "rem:agy:stop"));
         }
         ServiceStatus::Inactive => {

@@ -1,7 +1,11 @@
 //! # Antigravity CLI Log Completion Checker
 //!
+//! ## Overview
 //! Provides utilities to inspect transcript full logs for step completion,
 //! including tool call completion and interactive tool detection.
+//!
+//! ## Search Tags
+//! #completion-checker, #transcript-log, #step-status
 
 use std::path::PathBuf;
 
@@ -39,11 +43,11 @@ pub(crate) fn check_log_completion_in_file(path: &std::path::Path, current_size:
         let start_pos = if file_size < current_size { 0 } else { current_size };
         if file_size > start_pos {
             use std::io::{Read, Seek, SeekFrom};
-            if let Ok(mut file) = std::fs::File::open(path) {
-                if file.seek(SeekFrom::Start(start_pos)).is_ok() {
+            if let Ok(mut file) = std::fs::File::open(path)
+                && file.seek(SeekFrom::Start(start_pos)).is_ok() {
                     let mut buffer = Vec::new();
-                    if file.read_to_end(&mut buffer).is_ok() {
-                        if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
+                    if file.read_to_end(&mut buffer).is_ok()
+                        && let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
                             let text = String::from_utf8_lossy(&buffer[..=last_nl]);
                             for line in text.lines() {
                                 if is_completion_entry(line) {
@@ -52,9 +56,7 @@ pub(crate) fn check_log_completion_in_file(path: &std::path::Path, current_size:
                             }
                             return Ok(Some(start_pos + last_nl as u64 + 1));
                         }
-                    }
                 }
-            }
             return Ok(Some(start_pos));
         }
     }
@@ -83,7 +85,7 @@ pub(crate) fn extract_pty_turn_error(raw: &[u8], offset: usize) -> Option<String
     let msg = before.rfind('⚠').map(|w| {
         before[w + '⚠'.len_utf8()..].lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
     }).unwrap_or_else(|| {
-        before.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('>')).last().unwrap_or("Antigravity CLI error").to_string()
+        before.lines().map(str::trim).rfind(|l| !l.is_empty() && !l.starts_with('>')).unwrap_or("Antigravity CLI error").to_string()
     });
     let payload = serde_json::json!({ "message": if msg.is_empty() { "Antigravity CLI error" } else { &msg }, "error_id": error_id });
     Some(format!("AGY_ERROR: {}", payload))
@@ -107,11 +109,10 @@ pub(crate) async fn check_completion_step(
             }
             Ok(Some(s)) => {
                 if s.success() {
-                    if let Some(p) = path {
-                        if check_log_completion_in_file(p, *size)?.is_none() {
+                    if let Some(p) = path
+                        && check_log_completion_in_file(p, *size)?.is_none() {
                             return Ok(Some(()));
                         }
-                    }
                     return Ok(Some(()));
                 }
                 let code = exit_status_code(&s).unwrap_or(1);

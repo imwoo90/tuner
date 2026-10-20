@@ -1,3 +1,4 @@
+#![allow(clippy::field_reassign_with_default)]
 #[cfg(test)]
 mod tests {
     use crate::cron::manager::{CronJob, CronManager};

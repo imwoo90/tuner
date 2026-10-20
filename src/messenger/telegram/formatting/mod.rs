@@ -1,16 +1,16 @@
-//! # Telegram HTML Formatting and Message Splitting (index.md)
+//! # Telegram HTML Formatting and Message Splitting
 //!
 //! ## Overview
-//! This module converts Markdown formatting to Telegram-compatible HTML tags
-//! and splits long messages safely without breaking HTML tag pairs.
+//! Converts Markdown formatting to Telegram-compatible HTML tags and splits long messages
+//! safely across chunk boundaries without breaking HTML tag pairs.
 //!
-//! ## Module Components
-//! - [`helpers`]: Converts Markdown syntax (links, code blocks) to HTML.
-//! - [`splitting`]: Truncates and chunk payloads to comply with API character limits.
-//! - [`italic`]: Standardizes italic markdown syntax.
-//! - [`blockquotes`]: Groups blockquote lines into tags.
-//! - [`table`]: Formats pipe-tables into monospace blocks.
-//! - [`buttons`]: Strips internal button tags.
+//! ## Submodules
+//! - [`helpers`] (`helpers.rs`): Converts Markdown syntax (links, code blocks, bold) to HTML.
+//! - [`splitting`] (`splitting.rs`): Truncates and chunks HTML payloads to comply with Telegram length limits.
+//! - [`italic`] (`italic.rs`): Standardizes italic markdown syntax without mangling snake_case identifiers.
+//! - [`blockquotes`] (`blockquotes.rs`): Groups blockquote lines into standard and expandable HTML tags.
+//! - [`table`] (`table.rs`): Formats Markdown pipe-tables into aligned monospace blocks.
+//! - [`buttons`] (`buttons.rs`): Extracts and strips inline button markup tags from response text.
 //!
 //! ## Search Tags
 //! #formatting-index, #markdown-to-html, #message-splitting, #ui-formatting
@@ -25,6 +25,7 @@ pub mod buttons;
 pub use helpers::markdown_to_telegram_html;
 pub use splitting::split_html_message;
 
+/// Executes `find_best_option` (find best option).
 pub fn find_best_option(text: &str, options: &[String]) -> Option<usize> {
     let t = text.to_lowercase();
     let words: std::collections::HashSet<_> = t.split(|c: char| !c.is_alphanumeric()).filter(|s| !s.is_empty()).collect();

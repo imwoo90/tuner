@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use crate::telegram::handle_message;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;

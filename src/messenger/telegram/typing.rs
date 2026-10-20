@@ -4,10 +4,6 @@
 //! Periodically sends the "typing..." chat action to Telegram while an agent is generating code
 //! or executing background tasks. Dropped automatically when execution ends.
 //!
-//! ## Collaboration Graph
-//! - Spawned during PTY execution streams.
-//! - Binds directly to the Teloxide client handle.
-//!
 //! ## Search Tags
 //! #typing-indicator, #status-guard, #user-feedback
 
@@ -138,6 +134,7 @@ pub struct AsyncTypingHandle {
 }
 
 impl AsyncTypingHandle {
+    /// Creates a new instance.
     pub fn new(bot: Bot, chat_id: ChatId, thread_id: Option<i32>) -> Self {
         let handle = tokio::spawn(async move {
             let mut req = bot.send_chat_action(chat_id, ChatAction::Typing);
@@ -163,6 +160,7 @@ impl AsyncTypingHandle {
         Self { handle }
     }
 
+    /// Executes `abort` (abort).
     pub fn abort(&self) {
         self.handle.abort();
     }
@@ -175,6 +173,7 @@ impl Drop for AsyncTypingHandle {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

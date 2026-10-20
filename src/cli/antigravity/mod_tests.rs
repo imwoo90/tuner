@@ -14,7 +14,7 @@ fn test_antigravity_command_uses_print_and_conversation() {
     let cmd = cli.build_command("hi there", Some("conv-1"), false);
 
     assert_eq!(cmd[0], "agy");
-    assert_eq!(cmd.iter().filter(|&&ref s| s == "--model").count(), 0);
+    assert_eq!(cmd.iter().filter(|&s| s == "--model").count(), 0);
     assert!(cmd.contains(&"--conversation".to_string()));
     assert!(cmd.contains(&"conv-1".to_string()));
     assert_eq!(cmd[cmd.len() - 2..], ["--print".to_string(), "hi there".to_string()]);

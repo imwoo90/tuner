@@ -1,6 +1,8 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::type_complexity)]
 use crate::bus::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use crate::bus::lock_pool::LockPool;
-use crate::bus::bus::{MessageBus, Transport, PromptInjector, BusHook};
+use crate::bus::bus::{MessageBus, Transport, PromptInjector};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::sleep;

@@ -1,6 +1,10 @@
 //! # Telegram Callback Query Router and Event Handler
 //!
+//! ## Overview
 //! Handles user interaction callbacks triggered from inline keyboard buttons.
+//!
+//! ## Search Tags
+//! #callback-router, #inline-keyboard, #telegram-ui
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -177,7 +181,10 @@ pub(crate) async fn handle_callback_query(
 
 async fn handle_upgrade_changelog(bot: &Bot, msg: &Message, tag: &str) -> Result<(), teloxide::RequestError> {
     let ver = tag.trim_start_matches('v');
-    let client = reqwest::Client::builder().user_agent("tuner-updater").build().unwrap();
+    let client = reqwest::Client::builder()
+        .user_agent("tuner-updater")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let url = format!("https://api.github.com/repos/imwoo90/tuner/releases/tags/{}", tag);
     let mut text = match client.get(&url).send().await {
         Ok(r) => r.json::<crate::upgrade::GithubRelease>().await.ok().and_then(|rel| rel.body).unwrap_or_default(),

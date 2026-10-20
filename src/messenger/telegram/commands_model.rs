@@ -1,7 +1,11 @@
 //! # Telegram Model and Effort Commands
 //!
+//! ## Overview
 //! Handlers for Telegram slash commands `/model` and `/effort` to manage active LLM model selection
 //! and reasoning effort.
+//!
+//! ## Search Tags
+//! #model-command, #effort-command, #pty-model-switch
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -29,12 +33,11 @@ fn group_discovered_models(raw_models: &[String]) -> Vec<(String, Vec<String>)> 
             (m.clone(), None)
         };
         
-        let entry = map.entry(base).or_insert_with(Vec::new);
-        if let Some(eff) = effort {
-            if !entry.contains(&eff) {
+        let entry = map.entry(base).or_default();
+        if let Some(eff) = effort
+            && !entry.contains(&eff) {
                 entry.push(eff);
             }
-        }
     }
     map.into_iter().collect()
 }
@@ -158,7 +161,9 @@ async fn handle_model_command_switch(
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, default_model).await.unwrap();
+    let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await else {
+        return Ok(());
+    };
     
     let (model_part, effort_part) = parse_model_effort_args(args);
     sess.model = model_part;
@@ -212,7 +217,9 @@ pub(crate) async fn handle_effort_command(
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let (mut sess, _) = sessions.resolve_session(&key, &config.provider, default_model).await.unwrap();
+    let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await else {
+        return Ok(());
+    };
     
     if args.is_empty() {
         let current_effort = sess.effort.as_deref().unwrap_or("default");

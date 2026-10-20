@@ -1,7 +1,11 @@
 //! # Telegram Model and Effort Callbacks
 //!
+//! ## Overview
 //! Helper functions to handle Telegram callback queries for selecting base models
 //! and reasoning effort levels.
+//!
+//! ## Search Tags
+//! #effort-callback, #model-selector, #reasoning-effort
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -11,8 +15,7 @@ use crate::cli::antigravity::AntigravityCli;
 fn get_efforts_for_base(base: &str, models: &[String]) -> Vec<String> {
     let mut efforts = Vec::new();
     for m in models {
-        if m.starts_with(base) {
-            let suffix = &m[base.len()..];
+        if let Some(suffix) = m.strip_prefix(base) {
             if suffix == "-high" { efforts.push("high".to_string()); }
             else if suffix == "-medium" { efforts.push("medium".to_string()); }
             else if suffix == "-low" { efforts.push("low".to_string()); }
@@ -43,6 +46,7 @@ async fn render_effort_keyboard(
     Ok(())
 }
 
+/// Executes `handle_model_base_callback` (handle model base callback).
 pub async fn handle_model_base_callback(
     bot: &teloxide::Bot,
     msg: &Message,
@@ -75,6 +79,7 @@ pub async fn handle_model_base_callback(
     }
 }
 
+/// Executes `handle_model_effort_callback` (handle model effort callback).
 pub async fn handle_model_effort_callback(
     bot: &teloxide::Bot,
     msg: &Message,
@@ -97,6 +102,7 @@ pub async fn handle_model_effort_callback(
     }
 }
 
+/// Executes `handle_standalone_effort_callback` (handle standalone effort callback).
 pub async fn handle_standalone_effort_callback(
     bot: &teloxide::Bot,
     msg: &Message,

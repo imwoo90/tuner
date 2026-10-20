@@ -1,9 +1,9 @@
 //! # Adapters Module
 //!
+//! ## Overview
 //! Provides conversion functions to map various domain events and results
 //! (e.g., CronResult, BackgroundResult, InterAgentResult, TaskResult) into unified `Envelope` models.
-
-//! 
+//!
 //! ## Search Tags
 //! #adapters
 
@@ -11,49 +11,85 @@ use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use crate::background::models::{BackgroundResult, BackgroundResultStatus};
 
 #[derive(Debug, Clone)]
+/// Represents `WebhookResult` (webhook result).
 pub struct WebhookResult {
+    /// Hook id.
     pub hook_id: String,
+    /// Hook title.
     pub hook_title: String,
+    /// Result text.
     pub result_text: String,
+    /// Status.
     pub status: String,
 }
 
 #[derive(Debug, Clone)]
+/// Represents `InterAgentResult` (inter agent result).
 pub struct InterAgentResult {
+    /// Task id.
     pub task_id: String,
+    /// Sender.
     pub sender: String,
+    /// Recipient.
     pub recipient: String,
+    /// Message preview.
     pub message_preview: String,
+    /// Result text.
     pub result_text: String,
+    /// Success.
     pub success: bool,
+    /// Error.
     pub error: Option<String>,
+    /// Elapsed seconds.
     pub elapsed_seconds: f64,
+    /// Session name.
     pub session_name: String,
+    /// Provider switch notice.
     pub provider_switch_notice: String,
+    /// Original message.
     pub original_message: String,
+    /// Chat id.
     pub chat_id: i64,
+    /// Topic id.
     pub topic_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
+/// Represents `TaskResult` (task result).
 pub struct TaskResult {
+    /// Task id.
     pub task_id: String,
+    /// Chat id.
     pub chat_id: i64,
+    /// Parent agent.
     pub parent_agent: String,
+    /// Name.
     pub name: String,
+    /// Prompt preview.
     pub prompt_preview: String,
+    /// Result text.
     pub result_text: String,
+    /// Status.
     pub status: String,
+    /// Elapsed seconds.
     pub elapsed_seconds: f64,
+    /// Provider.
     pub provider: String,
+    /// Model.
     pub model: String,
+    /// Session id.
     pub session_id: String,
+    /// Error.
     pub error: String,
+    /// Task folder.
     pub task_folder: String,
+    /// Original prompt.
     pub original_prompt: String,
+    /// Thread id.
     pub thread_id: Option<i64>,
 }
 
+/// Executes `from_background_result` (from background result).
 pub fn from_background_result(result: &BackgroundResult) -> Envelope {
     let status_str = match result.status {
         BackgroundResultStatus::Success => "success".to_string(),
@@ -76,6 +112,7 @@ pub fn from_background_result(result: &BackgroundResult) -> Envelope {
     env
 }
 
+/// Executes `from_cron_result` (from cron result).
 pub fn from_cron_result(
     title: &str,
     result_text: &str,
@@ -101,6 +138,7 @@ pub fn from_cron_result(
     env
 }
 
+/// Executes `from_heartbeat` (from heartbeat).
 pub fn from_heartbeat(
     chat_id: i64,
     alert_text: &str,
@@ -117,6 +155,7 @@ pub fn from_heartbeat(
     env
 }
 
+/// Executes `from_webhook_cron_result` (from webhook cron result).
 pub fn from_webhook_cron_result(result: &WebhookResult) -> Envelope {
     let mut env = Envelope::new(Origin::WebhookCron, 0);
     env.result_text = result.result_text.clone();
@@ -128,6 +167,7 @@ pub fn from_webhook_cron_result(result: &WebhookResult) -> Envelope {
     env
 }
 
+/// Executes `from_webhook_wake` (from webhook wake).
 pub fn from_webhook_wake(chat_id: i64, prompt: &str) -> Envelope {
     let mut env = Envelope::new(Origin::WebhookWake, chat_id);
     env.prompt = prompt.to_string();
@@ -136,6 +176,7 @@ pub fn from_webhook_wake(chat_id: i64, prompt: &str) -> Envelope {
     env
 }
 
+/// Executes `from_interagent_result` (from interagent result).
 pub fn from_interagent_result(
     result: &InterAgentResult,
     chat_id: i64,
@@ -150,9 +191,11 @@ pub fn from_interagent_result(
     env.is_error = !result.success;
     env.lock_mode = if result.success { LockMode::Required } else { LockMode::None };
     
-    if result.success && injection_prompt.is_some() {
+    if result.success
+        && let Some(prompt) = injection_prompt
+    {
         env.needs_injection = true;
-        env.prompt = injection_prompt.unwrap().to_string();
+        env.prompt = prompt.to_string();
     }
 
     env.metadata.insert("sender".to_string(), result.sender.clone());
@@ -168,6 +211,7 @@ pub fn from_interagent_result(
     env
 }
 
+/// Executes `from_task_result` (from task result).
 pub fn from_task_result(result: &TaskResult) -> Envelope {
     let mut env = Envelope::new(Origin::TaskResult, result.chat_id);
     env.topic_id = result.thread_id;
@@ -203,6 +247,7 @@ pub fn from_task_result(result: &TaskResult) -> Envelope {
     env
 }
 
+/// Executes `from_task_question` (from task question).
 pub fn from_task_question(
     task_id: &str,
     question: &str,
@@ -220,6 +265,7 @@ pub fn from_task_question(
     env
 }
 
+/// Executes `from_user_message` (from user message).
 pub fn from_user_message(
     chat_id: i64,
     text: &str,

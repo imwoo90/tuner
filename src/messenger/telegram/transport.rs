@@ -4,10 +4,6 @@
 //! Bridges standard background task output envelopes to Teloxide API calls. Supports text splitting,
 //! quiet hour queuing, and forum topic routing.
 //!
-//! ## Collaboration Graph
-//! - Registers as an observer on the central [`MessageBus`](crate::bus::bus::MessageBus).
-//! - Feeds output strings through [`splitting::split_html_message`](super::formatting::splitting::split_html_message).
-//!
 //! ## Search Tags
 //! #transport-adapter, #message-bus, #quiet-hour-queue, #topic-routing
 
@@ -16,11 +12,13 @@ use crate::bus::bus::Transport;
 use crate::bus::envelope::Envelope;
 use crate::cli::AgentProvider;
 
+/// Represents `TelegramTransport` (telegram transport).
 pub struct TelegramTransport {
     bot: Bot,
 }
 
 impl TelegramTransport {
+    /// Creates a new instance.
     pub fn new(bot: Bot) -> Self {
         Self { bot }
     }
@@ -46,6 +44,7 @@ impl Transport for TelegramTransport {
     }
 }
 
+/// Represents `TelegramPromptInjector` (telegram prompt injector).
 pub struct TelegramPromptInjector {
     cli: std::sync::Arc<crate::cli::antigravity::AntigravityCli>,
     sess: std::sync::Arc<crate::session::manager::SessionManager>,
@@ -53,6 +52,7 @@ pub struct TelegramPromptInjector {
 }
 
 impl TelegramPromptInjector {
+    /// Creates a new instance.
     pub fn new(
         cli: std::sync::Arc<crate::cli::antigravity::AntigravityCli>,
         sess: std::sync::Arc<crate::session::manager::SessionManager>,

@@ -4,9 +4,6 @@
 //! Checks incoming Telegram messages for files, images, or audio clips. Downloads them via HTTP
 //! and stores them inside the workspace's `telegram_files/` directory.
 //!
-//! ## Collaboration Graph
-//! - Integrates with [`process_text_with_files`](super::process_text_with_files) to inject paths into agent inputs.
-//!
 //! ## Search Tags
 //! #attachment-downloads, #media-storage, #file-receiver
 
@@ -22,16 +19,14 @@ pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf>
     if let Ok(re) = regex::Regex::new(r#"file://[^\s\)\]`"'>]+"#) {
         for cap in re.captures_iter(text) {
             let raw = cap[0].trim_end_matches(&['.', ',', ';', '"', '\'', '>', ')', '`', ']'][..]);
-            if let Ok(parsed_url) = url::Url::parse(raw) {
-                if let Ok(path) = parsed_url.to_file_path() {
-                    if path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
+            if let Ok(parsed_url) = url::Url::parse(raw)
+                && let Ok(path) = parsed_url.to_file_path()
+                    && path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
                         let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
                         if seen_canonical.insert(canon) {
                             paths.push(path);
                         }
                     }
-                }
-            }
         }
     }
     paths
@@ -58,14 +53,7 @@ fn is_image_file(path: &std::path::Path) -> bool {
     matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp")
 }
 
-/// Helper task to send matching file links as In-App review buttons or photos.
-pub(crate) async fn send_file_attachments(
-    bot: &Bot,
-    chat_id: ChatId,
-    thread_id: Option<i32>,
-    raw_text: &str,
-    config: &CliConfig,
-) {
+fn build_allowed_roots(config: &CliConfig) -> Vec<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home_path = PathBuf::from(&home);
     let mut allowed_roots = vec![
@@ -81,15 +69,26 @@ pub(crate) async fn send_file_attachments(
             allowed_roots.push(th_path);
         }
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        if !allowed_roots.contains(&cwd) {
+    if let Ok(cwd) = std::env::current_dir()
+        && !allowed_roots.contains(&cwd) {
             allowed_roots.push(cwd);
         }
-    }
     let ws_path = PathBuf::from("/workspace");
     if ws_path.is_dir() && !allowed_roots.contains(&ws_path) {
         allowed_roots.push(ws_path);
     }
+    allowed_roots
+}
+
+/// Helper task to send matching file links as In-App review buttons or photos.
+pub(crate) async fn send_file_attachments(
+    bot: &Bot,
+    chat_id: ChatId,
+    thread_id: Option<i32>,
+    raw_text: &str,
+    config: &CliConfig,
+) {
+    let allowed_roots = build_allowed_roots(config);
     let file_paths = extract_file_paths(raw_text, &allowed_roots);
     let mut images = Vec::new();
     let mut code_files = Vec::new();
@@ -151,6 +150,7 @@ async fn send_review_button(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use tempfile::tempdir;

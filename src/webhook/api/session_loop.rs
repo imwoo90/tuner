@@ -4,9 +4,6 @@
 //! Coordinates bidirectional command streams, handling remote terminal standard I/O channels over
 //! websocket sockets.
 //!
-//! ## Collaboration Graph
-//! - Translates WebSocket frames to stdin/stdout channels for active [`SessionKey`](crate::session::key::SessionKey)s.
-//!
 //! ## Search Tags
 //! #websocket-loop, #remote-stdin, #full-duplex-stream
 
@@ -17,6 +14,7 @@ use futures::stream::StreamExt;
 use serde_json::Value;
 use std::sync::Arc;
 
+/// Executes `run_session_loop` (run session loop).
 pub async fn run_session_loop(
     key: crate::session::key::SessionKey,
     e2e: E2ESession,
@@ -59,11 +57,10 @@ pub async fn run_session_loop(
     let mut active_task: Option<tokio::task::JoinHandle<()>> = None;
 
     while let Some(Ok(msg)) = receiver.next().await {
-        if let Some(ref h) = active_task {
-            if h.is_finished() {
+        if let Some(ref h) = active_task
+            && h.is_finished() {
                 active_task = None;
             }
-        }
         handle_session_frame(
             msg,
             &key,
@@ -79,6 +76,7 @@ pub async fn run_session_loop(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_message_frame(
     decrypted: Value,
     key: &crate::session::key::SessionKey,
@@ -141,6 +139,7 @@ async fn handle_message_frame(
     *active_task = Some(handle);
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_session_frame(
     msg: Message,
     key: &crate::session::key::SessionKey,
@@ -196,6 +195,7 @@ async fn handle_session_frame(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_message_request(
     text: String,
     key: &crate::session::key::SessionKey,
@@ -220,11 +220,11 @@ async fn handle_message_request(
         return;
     }
     let lock = {
-        let s = state.lock().unwrap();
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.lock_pool.get((key.chat_id, key.topic_id))
     };
     let _guard = lock.lock().await;
-    let opt_msg_handler = { state.lock().unwrap().message_handler.clone() };
+    let opt_msg_handler = { state.lock().unwrap_or_else(|e| e.into_inner()).message_handler.clone() };
     if let Some(ref handler) = opt_msg_handler {
         match handler
             .handle_message(key.clone(), text, otd.clone(), ota.clone(), oss.clone())
@@ -276,7 +276,7 @@ fn send_encrypted_response(
 }
 
 async fn handle_abort_helper(state: &Arc<std::sync::Mutex<ApiServerState>>, chat_id: i64) -> usize {
-    let opt_abort = { state.lock().unwrap().abort_handler.clone() };
+    let opt_abort = { state.lock().unwrap_or_else(|e| e.into_inner()).abort_handler.clone() };
     if let Some(ref abort) = opt_abort {
         abort.handle_abort(chat_id).await
     } else {

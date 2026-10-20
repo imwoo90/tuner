@@ -4,9 +4,6 @@
 //! Collects clustered media files sent in rapid succession via Telegram's media groups,
 //! debouncing them into single cohesive events with multiple files.
 //!
-//! ## Collaboration Graph
-//! - Called inside the primary ingress event handler to group file IDs before download.
-//!
 //! ## Search Tags
 //! #media-group, #debouncing, #attachment-aggregator
 
@@ -22,6 +19,7 @@ use crate::cron::manager::CronManager;
 use crate::telegram::topic_cache::{BotInfo, TopicNameCache};
 use crate::telegram::reply::download_telegram_media;
 
+/// Represents `MediaGroupManager` (media group manager).
 pub struct MediaGroupManager {
     buffers: Arc<Mutex<HashMap<String, MediaGroupBuffer>>>,
 }
@@ -31,13 +29,22 @@ struct MediaGroupBuffer {
     cancel_tx: mpsc::Sender<()>,
 }
 
+impl Default for MediaGroupManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MediaGroupManager {
+    /// Creates a new instance.
     pub fn new() -> Self {
         Self {
             buffers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
+    /// Executes `add_message` (add message).
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_message(
         &self,
         bot: Bot,
@@ -54,7 +61,7 @@ impl MediaGroupManager {
         let mut tx_to_notify = None;
 
         {
-            let mut guard = buffers.lock().unwrap();
+            let mut guard = buffers.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(buf) = guard.get_mut(&group_id) {
                 buf.messages.push(msg.clone());
                 tx_to_notify = Some(buf.cancel_tx.clone());
@@ -85,6 +92,7 @@ impl MediaGroupManager {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_timer_task(
     group_id: String,
     buffers: Arc<Mutex<HashMap<String, MediaGroupBuffer>>>,
@@ -106,11 +114,11 @@ fn spawn_timer_task(
                 _ = tokio::time::sleep(Duration::from_millis(1500)) => {
                     // Timeout reached, flush group
                     let messages = {
-                        let mut guard = buffers.lock().unwrap();
+                        let mut guard = buffers.lock().unwrap_or_else(|e| e.into_inner());
                         guard.remove(&group_id).map(|b| b.messages).unwrap_or_default()
                     };
-                    if !messages.is_empty() {
-                        if let Err(e) = process_media_group(
+                    if !messages.is_empty()
+                        && let Err(e) = process_media_group(
                             bot.clone(),
                             messages,
                             config.clone(),
@@ -122,7 +130,6 @@ fn spawn_timer_task(
                         ).await {
                             eprintln!("❌ [tuner] process_media_group failed: {:?}", e);
                         }
-                    }
                     break;
                 }
             }
@@ -130,6 +137,7 @@ fn spawn_timer_task(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_media_group(
     bot: Bot,
     messages: Vec<Message>,

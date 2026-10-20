@@ -1,8 +1,9 @@
 //! # Rules Authentication Checkers
 //!
+//! ## Overview
 //! Helper functions to check authentication status of different providers.
-
-//! 
+//! Verifies CLI binary availability and active authentication credentials before launching agent sessions.
+//!
 //! ## Search Tags
 //! #rules-check
 
@@ -14,6 +15,7 @@ fn get_mtime(p: &Path) -> Option<chrono::DateTime<chrono::Utc>> {
     std::fs::metadata(p).and_then(|m| m.modified()).map(chrono::DateTime::from).ok()
 }
 
+/// Executes `check_claude` (check claude).
 pub fn check_claude(paths: &DuctorPaths) -> AuthResult {
     let home = get_home_dir(paths);
     let claude_dir = home.join(".claude");
@@ -47,6 +49,7 @@ pub fn check_claude(paths: &DuctorPaths) -> AuthResult {
     AuthResult { provider: "claude".to_string(), status, auth_file: None, auth_age: None }
 }
 
+/// Executes `check_codex` (check codex).
 pub fn check_codex(paths: &DuctorPaths) -> AuthResult {
     let home = get_home_dir(paths);
     let codex_home = std::env::var("CODEX_HOME")
@@ -78,6 +81,7 @@ pub fn check_codex(paths: &DuctorPaths) -> AuthResult {
     AuthResult { provider: "codex".to_string(), status, auth_file: None, auth_age: None }
 }
 
+/// Executes `check_gemini` (check gemini).
 pub fn check_gemini(paths: &DuctorPaths) -> AuthResult {
     if !find_gemini_cli() {
         return AuthResult { provider: "gemini".to_string(), status: AuthStatus::NotFound, auth_file: None, auth_age: None };
@@ -106,6 +110,7 @@ pub fn check_gemini(paths: &DuctorPaths) -> AuthResult {
     AuthResult { provider: "gemini".to_string(), status: AuthStatus::Installed, auth_file: None, auth_age: None }
 }
 
+/// Executes `check_antigravity` (check antigravity).
 pub fn check_antigravity(paths: &DuctorPaths) -> AuthResult {
     if std::env::var("TUNER_TEST_MODE").is_ok() {
         return AuthResult { provider: "antigravity".to_string(), status: AuthStatus::NotFound, auth_file: None, auth_age: None };
@@ -132,13 +137,12 @@ fn check_claude_cli_logged_in() -> bool {
     if std::env::var("TUNER_TEST_MODE").is_ok() {
         return false;
     }
-    match std::process::Command::new("claude").args(&["auth", "status"]).output() {
+    match std::process::Command::new("claude").args(["auth", "status"]).output() {
         Ok(output) if output.status.success() => {
-            if let Ok(stdout_str) = std::str::from_utf8(&output.stdout) {
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(stdout_str) {
+            if let Ok(stdout_str) = std::str::from_utf8(&output.stdout)
+                && let Ok(val) = serde_json::from_str::<serde_json::Value>(stdout_str) {
                     return val.get("loggedIn") == Some(&serde_json::Value::Bool(true));
                 }
-            }
             false
         }
         _ => false,
@@ -152,20 +156,18 @@ fn find_gemini_cli() -> bool {
     if std::process::Command::new("gemini").arg("--version").output().is_ok() {
         return true;
     }
-    if let Some(home_str) = std::env::var("HOME").ok() {
+    if let Ok(home_str) = std::env::var("HOME") {
         let home = Path::new(&home_str);
         let versions_dir = home.join(".nvm").join("versions").join("node");
-        if versions_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(versions_dir) {
+        if versions_dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(versions_dir) {
                 for entry in entries {
-                    if let Ok(entry) = entry {
-                        if entry.path().join("bin").join("gemini").is_file() {
+                    if let Ok(entry) = entry
+                        && entry.path().join("bin").join("gemini").is_file() {
                             return true;
                         }
-                    }
                 }
             }
-        }
     }
     false
 }
@@ -175,7 +177,11 @@ fn read_dotenv_has_gemini_keys(path: &Path) -> bool {
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
-            let clean = if trimmed.starts_with("export ") { trimmed["export ".len()..].trim() } else { trimmed };
+            let clean = if let Some(rest) = trimmed.strip_prefix("export ") {
+                rest.trim()
+            } else {
+                trimmed
+            };
             if let Some(idx) = clean.find('=') {
                 let key = clean[..idx].trim();
                 let value = clean[idx + 1..].trim();
@@ -190,39 +196,33 @@ fn read_dotenv_has_gemini_keys(path: &Path) -> bool {
 
 fn config_has_gemini_key(paths: &DuctorPaths) -> bool {
     let path = paths.config_path();
-    if let Ok(content) = std::fs::read_to_string(&path) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(key) = val.get("gemini_api_key").and_then(|v| v.as_str()) {
+    if let Ok(content) = std::fs::read_to_string(&path)
+        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(key) = val.get("gemini_api_key").and_then(|v| v.as_str()) {
                 return !key.trim().is_empty();
             }
-        }
-    }
     false
 }
 
 fn gemini_settings_auth(gemini_home: &Path) -> Option<AuthStatus> {
     let settings_file = gemini_home.join("settings.json");
-    if let Ok(content) = std::fs::read_to_string(&settings_file) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+    if let Ok(content) = std::fs::read_to_string(&settings_file)
+        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
             let selected_type = val.pointer("/security/auth/selectedType").and_then(|v| v.as_str());
             if let Some(sel) = selected_type {
                 if sel == "oauth-personal" {
                     let accounts_file = gemini_home.join("google_accounts.json");
-                    if let Ok(accs_content) = std::fs::read_to_string(&accounts_file) {
-                        if let Ok(accs_val) = serde_json::from_str::<serde_json::Value>(&accs_content) {
-                            if let Some(active) = accs_val.get("active").and_then(|v| v.as_str()) {
-                                if !active.trim().is_empty() {
+                    if let Ok(accs_content) = std::fs::read_to_string(&accounts_file)
+                        && let Ok(accs_val) = serde_json::from_str::<serde_json::Value>(&accs_content)
+                            && let Some(active) = accs_val.get("active").and_then(|v| v.as_str())
+                                && !active.trim().is_empty() {
                                     return Some(AuthStatus::Authenticated);
                                 }
-                            }
-                        }
-                    }
                 } else if sel == "gemini-api-key" || sel == "vertex-ai" || sel == "compute-default-credentials" || sel == "cloud-shell" {
                     return Some(AuthStatus::Authenticated);
                 }
             }
         }
-    }
     None
 }
 

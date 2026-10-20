@@ -1,8 +1,8 @@
 //! # Webhook Authentication and Rate Limiting
 //!
+//! ## Overview
 //! Handles bearer tokens, HMAC signature verification, and sliding-window rate limiting.
-
-//! 
+//!
 //! ## Search Tags
 //! #auth
 
@@ -17,12 +17,14 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, Instant};
 
 #[derive(Clone)]
+/// Represents `RateLimiter` (rate limiter).
 pub struct RateLimiter {
     max_per_minute: usize,
     timestamps: Arc<Mutex<VecDeque<Instant>>>,
 }
 
 impl RateLimiter {
+    /// Creates a new instance.
     pub fn new(max_per_minute: usize) -> Self {
         Self {
             max_per_minute,
@@ -30,6 +32,7 @@ impl RateLimiter {
         }
     }
 
+    /// Executes `check` (check).
     pub async fn check(&self) -> bool {
         let mut ts = self.timestamps.lock().await;
         let now = Instant::now();
@@ -51,11 +54,13 @@ impl RateLimiter {
         }
     }
 
+    /// Executes `reset` (reset).
     pub async fn reset(&self) {
         self.timestamps.lock().await.clear();
     }
 }
 
+/// Executes `safe_compare` (safe compare).
 pub fn safe_compare(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         false
@@ -64,6 +69,7 @@ pub fn safe_compare(a: &[u8], b: &[u8]) -> bool {
     }
 }
 
+/// Executes `validate_bearer_token` (validate bearer token).
 pub fn validate_bearer_token(auth_header: &str, expected_token: &str) -> bool {
     if expected_token.is_empty() {
         return false;
@@ -86,8 +92,8 @@ fn extract_signature(
         let caps = re.captures(sig_value)?;
         caps.get(1).map(|m| m.as_str().to_string())
     } else if !sig_prefix.is_empty() {
-        if sig_value.starts_with(sig_prefix) {
-            Some(sig_value[sig_prefix.len()..].to_string())
+        if let Some(rest) = sig_value.strip_prefix(sig_prefix) {
+            Some(rest.to_string())
         } else {
             Some(sig_value.to_string())
         }
@@ -117,6 +123,8 @@ fn compute_hmac(algo: &str, secret: &[u8], payload: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
+/// Executes `validate_hmac_signature` (validate hmac signature).
+#[allow(clippy::too_many_arguments)]
 pub fn validate_hmac_signature(
     body: &[u8],
     sig_value: &str,
@@ -146,16 +154,14 @@ pub fn validate_hmac_signature(
     if !hmac_payload_prefix_regex.is_empty() {
         let re_opt = hmac_payload_prefix_regex_cached
             .get_or_init(|| regex::Regex::new(hmac_payload_prefix_regex).ok());
-        if let Some(re) = re_opt {
-            if let Some(caps) = re.captures(sig_value) {
-                if let Some(m) = caps.get(1) {
+        if let Some(re) = re_opt
+            && let Some(caps) = re.captures(sig_value)
+                && let Some(m) = caps.get(1) {
                     let mut prefix_bytes = m.as_str().as_bytes().to_vec();
                     prefix_bytes.push(b'.');
                     prefix_bytes.extend_from_slice(body);
                     signed_payload = prefix_bytes;
                 }
-            }
-        }
     }
 
     let decoded_sig = match hmac_encoding {
@@ -175,6 +181,7 @@ pub fn validate_hmac_signature(
     safe_compare(&computed_bytes, &expected_bytes)
 }
 
+/// Executes `validate_hook_auth` (validate hook auth).
 pub fn validate_hook_auth(
     hook: &crate::webhook::models::WebhookEntry,
     auth_header: &str,

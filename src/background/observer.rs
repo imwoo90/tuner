@@ -4,10 +4,6 @@
 //! Tracks and manages all in-flight background tasks, enforcing execution limits per chat,
 //! timing out long-running tasks, and reporting cancellations.
 //!
-//! ## Collaboration Graph
-//! - Spawns asynchronous tasks via tokio join handles.
-//! - Interacts with [`MessageBus`](crate::bus::bus::MessageBus) to broadcast task output.
-//!
 //! ## Search Tags
 //! #task-registry, #drop-guard, #concurrency-limits, #timeout-tracker
 
@@ -23,11 +19,14 @@ use tokio::task::JoinHandle;
 /// Maximum number of active tasks allowed per Telegram chat.
 pub const MAX_TASKS_PER_CHAT: usize = 5;
 
+/// Type alias `ResultHandler` (result handler).
 pub type ResultHandler = Arc<dyn Fn(BackgroundResult) + Send + Sync>;
 
 /// Holds state for an in-flight background task.
 pub struct BackgroundTask {
+    /// Chat id.
     pub chat_id: i64,
+    /// Join handle.
     pub join_handle: Option<JoinHandle<()>>,
 }
 
@@ -84,10 +83,10 @@ impl Drop for TaskGuard {
                 status: BackgroundResultStatus::Aborted,
                 elapsed_seconds: elapsed,
             };
-            if let Some(ref handler) = *self.inner.on_result.lock().unwrap() {
+            if let Some(ref handler) = *self.inner.on_result.lock().unwrap_or_else(|e| e.into_inner()) {
                 handler(result);
             }
-            self.inner.tasks.lock().unwrap().remove(&self.task_id);
+            self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.task_id);
         }
     }
 }
@@ -110,7 +109,7 @@ impl BackgroundObserver {
     where
         F: Fn(BackgroundResult) + Send + Sync + 'static,
     {
-        let mut lock = self.inner.on_result.lock().unwrap();
+        let mut lock = self.inner.on_result.lock().unwrap_or_else(|e| e.into_inner());
         *lock = Some(Arc::new(handler));
     }
 
@@ -121,16 +120,14 @@ impl BackgroundObserver {
         submit: BackgroundSubmit,
         _config: CliConfig,
     ) -> Result<String, String> {
-        let mut tasks = self.inner.tasks.lock().unwrap();
+        let mut tasks = self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner());
         let mut active = 0;
         for task in tasks.values() {
-            if task.chat_id == submit.chat_id {
-                if let Some(ref handle) = task.join_handle {
-                    if !handle.is_finished() {
+            if task.chat_id == submit.chat_id
+                && let Some(ref handle) = task.join_handle
+                    && !handle.is_finished() {
                         active += 1;
                     }
-                }
-            }
         }
         if active >= MAX_TASKS_PER_CHAT {
             return Err("Too many active tasks".to_string());
@@ -155,42 +152,42 @@ impl BackgroundObserver {
 
     /// List active task IDs for a given chat, or all chats if None.
     pub async fn active_tasks(&self, chat_id: Option<i64>) -> Vec<String> {
-        let tasks = self.inner.tasks.lock().unwrap();
+        let tasks = self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner());
         let mut active = Vec::new();
         for (task_id, task) in tasks.iter() {
-            if let Some(ref handle) = task.join_handle {
-                if !handle.is_finished() {
-                    if chat_id.is_none() || chat_id == Some(task.chat_id) {
+            if let Some(ref handle) = task.join_handle
+                && !handle.is_finished()
+                    && (chat_id.is_none() || chat_id == Some(task.chat_id)) {
                         active.push(task_id.clone());
                     }
-                }
-            }
         }
         active
     }
 
     /// Cancel all background tasks for a given chat ID.
     pub async fn cancel_all(&self, chat_id: i64) -> usize {
-        let mut tasks = self.inner.tasks.lock().unwrap();
-        let mut to_abort = Vec::new();
-        for (task_id, task) in tasks.iter() {
-            if task.chat_id == chat_id {
-                if let Some(ref handle) = task.join_handle {
+        let (count, handles) = {
+            let mut tasks = self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner());
+            let mut to_abort = Vec::new();
+            for (task_id, task) in tasks.iter() {
+                if task.chat_id == chat_id
+                    && let Some(ref handle) = task.join_handle
+                {
                     handle.abort();
                     to_abort.push(task_id.clone());
                 }
             }
-        }
-        let count = to_abort.len();
-        let mut handles = Vec::new();
-        for id in &to_abort {
-            if let Some(mut task) = tasks.remove(id) {
-                if let Some(handle) = task.join_handle.take() {
+            let count = to_abort.len();
+            let mut handles = Vec::new();
+            for id in &to_abort {
+                if let Some(mut task) = tasks.remove(id)
+                    && let Some(handle) = task.join_handle.take()
+                {
                     handles.push(handle);
                 }
             }
-        }
-        drop(tasks);
+            (count, handles)
+        };
         for handle in handles {
             let _ = handle.await;
         }
@@ -199,15 +196,17 @@ impl BackgroundObserver {
 
     /// Abort all outstanding background tasks.
     pub async fn shutdown(&self) {
-        let mut tasks = self.inner.tasks.lock().unwrap();
-        let mut handles = Vec::new();
-        for (_, mut task) in tasks.drain() {
-            if let Some(handle) = task.join_handle.take() {
-                handle.abort();
-                handles.push(handle);
+        let handles = {
+            let mut tasks = self.inner.tasks.lock().unwrap_or_else(|e| e.into_inner());
+            let mut handles = Vec::new();
+            for (_, mut task) in tasks.drain() {
+                if let Some(handle) = task.join_handle.take() {
+                    handle.abort();
+                    handles.push(handle);
+                }
             }
-        }
-        drop(tasks);
+            handles
+        };
         for handle in handles {
             let _ = handle.await;
         }
@@ -286,11 +285,11 @@ impl BackgroundObserverInner {
         let mut guard_mut = guard;
         guard_mut.completed = true;
 
-        if let Some(ref handler) = *self.on_result.lock().unwrap() {
+        if let Some(ref handler) = *self.on_result.lock().unwrap_or_else(|e| e.into_inner()) {
             handler(result_delivery);
         }
 
-        self.tasks.lock().unwrap().remove(task_id);
+        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).remove(task_id);
     }
 }
 

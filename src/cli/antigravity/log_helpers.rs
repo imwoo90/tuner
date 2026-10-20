@@ -1,14 +1,15 @@
 //! # Log Helper Utilities for Agent Outputs
 //!
+//! ## Overview
 //! Provides diagnostic utilities to extract raw text blocks from active session log directories,
 //! helping inspect model trace buffers and parser state.
-
-//! 
+//!
 //! ## Search Tags
 //! #log-helpers
 
 use std::path::Path;
 
+/// Executes `read_new_bytes` (read new bytes).
 pub fn read_new_bytes(path: &Path, start_pos: u64) -> Result<(Vec<u8>, u64), String> {
     use std::io::{Read, Seek, SeekFrom};
     let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
@@ -23,14 +24,12 @@ pub fn read_new_bytes(path: &Path, start_pos: u64) -> Result<(Vec<u8>, u64), Str
     Ok((buffer, file_size))
 }
 
+/// Executes `get_new_content_string` (get new content string).
 pub fn get_new_content_string(path: &Path, prev_size: Option<u64>) -> Result<(String, u64), String> {
     let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
     let file_size = metadata.len();
 
-    let mut start_pos = match prev_size {
-        None => 0,
-        Some(size) => size,
-    };
+    let mut start_pos = prev_size.unwrap_or_default();
 
     if file_size < start_pos {
         start_pos = 0;
@@ -52,21 +51,21 @@ pub fn get_new_content_string(path: &Path, prev_size: Option<u64>) -> Result<(St
     }
 }
 
+/// Executes `parse_entries` (parse entries).
 pub fn parse_entries(new_content: &str) -> Vec<serde_json::Value> {
     let mut entries = Vec::new();
     for line in new_content.lines() {
         let stripped = line.trim();
-        if !stripped.is_empty() {
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped) {
-                if entry.is_object() {
+        if !stripped.is_empty()
+            && let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped)
+                && entry.is_object() {
                     entries.push(entry);
                 }
-            }
-        }
     }
     entries
 }
 
+/// Executes `format_thinking` (format thinking).
 pub fn format_thinking(thinking_blocks: &[String]) -> Option<String> {
     if thinking_blocks.is_empty() {
         return None;
@@ -91,6 +90,7 @@ pub fn format_thinking(thinking_blocks: &[String]) -> Option<String> {
     Some(format!("💭 **Thinking Process:**\n{}", blockquote))
 }
 
+/// Executes `format_bullets` (format bullets).
 pub fn format_bullets(title: &str, items: &[String]) -> Option<String> {
     if items.is_empty() {
         return None;
@@ -106,6 +106,7 @@ pub fn format_bullets(title: &str, items: &[String]) -> Option<String> {
     Some(format!("{}**\n{}", title, lines.join("\n")))
 }
 
+/// Executes `clean_tool_call_args` (clean tool call args).
 pub fn clean_tool_call_args(tc: &serde_json::Value) -> String {
     let name = tc.get("name").and_then(|n| n.as_str()).unwrap_or("unknown");
     let args = tc.get("args").and_then(|a| a.as_object());
@@ -131,6 +132,7 @@ pub fn clean_tool_call_args(tc: &serde_json::Value) -> String {
     format!("`{}({})`", name, args_str)
 }
 
+/// Executes `get_friendly_name` (get friendly name).
 pub fn get_friendly_name(t: &str) -> &str {
     match t {
         "RUN_COMMAND" => "run_command (execute)",
@@ -143,10 +145,11 @@ pub fn get_friendly_name(t: &str) -> &str {
     }
 }
 
+/// Executes `parse_ask_question_tool` (parse ask question tool).
 pub fn parse_ask_question_tool(tc: &serde_json::Value) -> Option<Vec<crate::cli::AskQuestionData>> {
     let name = tc.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    if name == "ask_question" {
-        if let Some(args) = tc.get("args") {
+    if name == "ask_question"
+        && let Some(args) = tc.get("args") {
             let questions_array = args.get("questions").and_then(|q| {
                 if q.is_array() {
                     q.as_array().cloned()
@@ -178,11 +181,11 @@ pub fn parse_ask_question_tool(tc: &serde_json::Value) -> Option<Vec<crate::cli:
                 }
             }
         }
-    }
     None
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::io::Write;

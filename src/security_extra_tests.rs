@@ -11,7 +11,7 @@ mod tests {
         let mut result = String::new();
         for c in text.chars() {
             let code = c as u32;
-            if (0x41 <= code && code <= 0x5A) || (0x61 <= code && code <= 0x7A) {
+            if (0x41..=0x5A).contains(&code) || (0x61..=0x7A).contains(&code) {
                 result.push(char::from_u32(code + 0xFEE0).unwrap());
             } else if c == '<' {
                 result.push('\u{FF1C}');

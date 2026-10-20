@@ -1,6 +1,7 @@
 //! # E2E Crypto Session Tests
 //!
 //! Tests Curve25519-XSalsa20-Poly1305 E2E session handshake, encryption, decryption, and integrity check.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::webhook::api::crypto::E2ESession;
 use base64::Engine;

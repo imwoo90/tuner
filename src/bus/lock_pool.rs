@@ -1,9 +1,9 @@
 //! # Lock Pool Module
 //!
+//! ## Overview
 //! Provides a lock management system (`LockPool`) that tracks active asynchronous locks
 //! mapped by chat and topic keys. Supports automatic eviction of idle locks when size limits are exceeded.
-
-//! 
+//!
 //! ## Search Tags
 //! #lock-pool
 
@@ -11,9 +11,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use tokio::sync::Mutex as TokioMutex;
 
+/// Type alias `LockKey` (lock key).
 pub type LockKey = (i64, Option<i64>);
 
+/// Defines the `IntoLockKey` (into lock key) interface.
 pub trait IntoLockKey {
+    /// Executes `into_lock_key` (into lock key).
     fn into_lock_key(self) -> LockKey;
 }
 
@@ -35,6 +38,7 @@ impl IntoLockKey for (i64, i64) {
     }
 }
 
+/// Represents `LockPool` (lock pool).
 pub struct LockPool {
     locks: Mutex<HashMap<LockKey, Weak<TokioMutex<()>>>>,
     _max_locks: usize,
@@ -57,16 +61,15 @@ impl LockPool {
     /// Retrieve or create the Lock associated with the key.
     pub fn get<K: IntoLockKey>(&self, key: K) -> Arc<TokioMutex<()>> {
         let lock_key = key.into_lock_key();
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
 
         // Prune dead references first
         locks.retain(|_, weak| weak.strong_count() > 0);
 
-        if let Some(weak) = locks.get(&lock_key) {
-            if let Some(arc) = weak.upgrade() {
+        if let Some(weak) = locks.get(&lock_key)
+            && let Some(arc) = weak.upgrade() {
                 return arc;
             }
-        }
 
         let new_lock = Arc::new(TokioMutex::new(()));
         locks.insert(lock_key, Arc::downgrade(&new_lock));
@@ -81,7 +84,7 @@ impl LockPool {
     /// Check if the lock for the given key is currently held.
     pub fn is_locked<K: IntoLockKey>(&self, key: K) -> bool {
         let lock_key = key.into_lock_key();
-        let locks = self.locks.lock().unwrap();
+        let locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(weak) = locks.get(&lock_key) {
             if let Some(lock) = weak.upgrade() {
                 lock.try_lock().is_err()
@@ -95,7 +98,7 @@ impl LockPool {
 
     /// Check if any topic lock is held for the given chat ID.
     pub fn any_locked_for_chat(&self, chat_id: i64) -> bool {
-        let locks = self.locks.lock().unwrap();
+        let locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
         locks
             .iter()
             .filter(|((cid, _), _)| *cid == chat_id)
@@ -110,8 +113,13 @@ impl LockPool {
 
     /// Return the number of locks currently tracked in the pool.
     pub fn len(&self) -> usize {
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.lock().unwrap_or_else(|e| e.into_inner());
         locks.retain(|_, weak| weak.strong_count() > 0);
         locks.len()
+    }
+
+    /// Return whether no locks are currently tracked in the pool.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

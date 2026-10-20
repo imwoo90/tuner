@@ -1,9 +1,9 @@
 //! # Observers Wire Module
 //!
+//! ## Overview
 //! Handles wiring up background observers (heartbeat, cron, background, webhooks) to
 //! submit their output results automatically to the `MessageBus`.
-
-//! 
+//!
 //! ## Search Tags
 //! #observers-wire
 
@@ -16,25 +16,40 @@ use super::adapters::{
 };
 
 #[async_trait]
+/// Defines the `HeartbeatObserverTrait` (heartbeat observer trait) interface.
 pub trait HeartbeatObserverTrait: Send + Sync {
+    /// Executes `set_result_handler` (set result handler).
     async fn set_result_handler(&self, handler: Arc<dyn for<'a> Fn(i64, &'a str, Option<i64>) + Send + Sync>);
 }
 
 #[async_trait]
+/// Defines the `CronObserverTrait` (cron observer trait) interface.
 pub trait CronObserverTrait: Send + Sync {
+    /// Executes `set_result_handler` (set result handler).
     async fn set_result_handler(&self, handler: Arc<dyn for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) + Send + Sync>);
 }
 
 #[async_trait]
+/// Defines the `WebhookObserverTrait` (webhook observer trait) interface.
 pub trait WebhookObserverTrait: Send + Sync {
+    /// Executes `set_result_handler` (set result handler).
     async fn set_result_handler(&self, handler: Arc<dyn Fn(WebhookResult) + Send + Sync>);
+    /// Executes `set_wake_handler` (set wake handler).
     async fn set_wake_handler(&self, handler: Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>);
 }
 
+/// Callback type invoked when a wake webhook is triggered.
+pub type WakeHandlerCallback = Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>;
+
+/// Represents `ObserverManager` (observer manager).
 pub struct ObserverManager {
+    /// Heartbeat.
     pub heartbeat: Option<Arc<dyn HeartbeatObserverTrait>>,
+    /// Cron.
     pub cron: Option<Arc<dyn CronObserverTrait>>,
+    /// Background.
     pub background: Option<crate::background::BackgroundObserver>,
+    /// Webhook.
     pub webhook: Option<Arc<dyn WebhookObserverTrait>>,
 }
 
@@ -43,7 +58,7 @@ impl ObserverManager {
     pub async fn wire_to_bus(
         &self,
         bus: Arc<MessageBus>,
-        wake_handler: Option<Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>>,
+        wake_handler: Option<WakeHandlerCallback>,
     ) {
         self.wire_heartbeat(bus.clone()).await;
         self.wire_cron(bus.clone()).await;
@@ -82,7 +97,7 @@ impl ObserverManager {
     async fn wire_webhook(
         &self,
         bus: Arc<MessageBus>,
-        wake_handler: Option<Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>>,
+        wake_handler: Option<WakeHandlerCallback>,
     ) {
         if let Some(ref wh) = self.webhook {
             let bus_clone = bus.clone();

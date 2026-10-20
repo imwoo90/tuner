@@ -1,9 +1,9 @@
 //! # Webhook Payload Encryption and Signing Keys
 //!
+//! ## Overview
 //! Manages ECDH/AES-GCM key exchanges and signature verification to guarantee message integrity
 //! across web APIs.
-
-//! 
+//!
 //! ## Search Tags
 //! #crypto
 
@@ -13,13 +13,22 @@ use crypto_box::{PublicKey, SalsaBox, SecretKey};
 use rand::rngs::OsRng;
 use serde_json::Value;
 
+/// Represents `E2ESession` (e2 esession).
 pub struct E2ESession {
     secret_key: SecretKey,
+    /// Local pk b64.
     pub local_pk_b64: String,
     box_session: Option<SalsaBox>,
 }
 
+impl Default for E2ESession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl E2ESession {
+    /// Creates a new instance.
     pub fn new() -> Self {
         let secret_key = SecretKey::generate(&mut OsRng);
         let local_pk_b64 =
@@ -31,6 +40,7 @@ impl E2ESession {
         }
     }
 
+    /// Executes `set_remote_key` (set remote key).
     pub fn set_remote_key(&mut self, remote_pk_b64: &str) -> Result<(), String> {
         let remote_bytes = base64::prelude::BASE64_STANDARD
             .decode(remote_pk_b64)
@@ -45,6 +55,7 @@ impl E2ESession {
         Ok(())
     }
 
+    /// Executes `encrypt` (encrypt).
     pub fn encrypt(&self, data: &Value) -> Result<String, String> {
         let session = self
             .box_session
@@ -63,6 +74,7 @@ impl E2ESession {
         Ok(base64::prelude::BASE64_STANDARD.encode(packet))
     }
 
+    /// Executes `decrypt` (decrypt).
     pub fn decrypt(&self, frame: &str) -> Result<Value, String> {
         let session = self
             .box_session

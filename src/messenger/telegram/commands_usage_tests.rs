@@ -2,6 +2,7 @@
 //!
 //! Tests quota parsing from ANSI terminal output, progress bar generation, HTML rendering,
 //! and slash command whitelist escaping to protect against Antigravity modal traps.
+#![allow(clippy::field_reassign_with_default)]
 
 #[cfg(test)]
 mod tests {
@@ -84,7 +85,7 @@ Press Esc or q to exit
 
     #[test]
     fn test_parse_quota_report_with_ansi_escapes() {
-        let raw_with_ansi = format!("\x1b[1mAccount:\x1b[0m user@google.com\n\x1b[32mGEMINI MODELS\x1b[0m\nWeekly Limit Remaining: 88.5%\n[█████████████████░░░]\nResets tomorrow\n");
+        let raw_with_ansi = "\x1b[1mAccount:\x1b[0m user@google.com\n\x1b[32mGEMINI MODELS\x1b[0m\nWeekly Limit Remaining: 88.5%\n[█████████████████░░░]\nResets tomorrow\n".to_string();
         let report = parse_quota_report(&raw_with_ansi);
         assert_eq!(report.account.as_deref(), Some("user@google.com"));
         let gemini = report.gemini.expect("Gemini expected");

@@ -1,10 +1,11 @@
-//! # Cross-Platform Messenger Adapter (index.md)
+//! # Cross-Platform Messenger Adapter
 //!
 //! ## Overview
-//! Bridges standard message bus envelopes to alternative messaging networks like Telegram.
+//! Bridges standard message bus envelopes and streaming agent outputs to external messaging
+//! networks such as Telegram.
 //!
-//! ## Module Components
-//! - [`telegram`]: Full Telegram client transport.
+//! ## Submodules
+//! - [`telegram`] (`telegram/mod.rs`): Full Telegram bot ingress, streaming, and interactive UI adapter.
 //!
 //! ## Search Tags
 //! #messenger-adapter, #telegram-adapter, #chat-bridge

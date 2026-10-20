@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)]
 #[cfg(test)]
 mod tests {
     use crate::telegram::{handle_message, TopicNameCache, BotInfo};
@@ -156,7 +157,7 @@ mod tests {
             &ctx.cfg,
         ).await.unwrap();
 
-        assert_eq!(handled, false);
+        assert!(!handled);
         assert!(start.elapsed().as_millis() >= 150);
     }
 }

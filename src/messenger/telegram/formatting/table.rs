@@ -1,9 +1,9 @@
 //! # Markdown Table Formatter and Parser
 //!
+//! ## Overview
 //! Extracts markdown pipe-tables, parses their columns and alignment rules, and formats them
 //! into fixed-width monospace layouts wrapped in pre/code blocks for clean grid presentation.
-
-//! 
+//!
 //! ## Search Tags
 //! #table
 
@@ -15,7 +15,9 @@ fn parse_table_row(line: &str) -> Vec<String> {
 }
 
 fn is_separator_row(line: &str) -> bool {
-    let re = Regex::new(r"^\s*\|?[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)*\|?\s*$").unwrap();
+    let Ok(re) = Regex::new(r"^\s*\|?[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)*\|?\s*$") else {
+        return false;
+    };
     re.is_match(line)
 }
 
@@ -67,6 +69,7 @@ fn format_table(lines: &[String]) -> String {
     out.join("\n")
 }
 
+/// Executes `extract_tables` (extract tables).
 pub fn extract_tables(src: &str, table_blocks: &mut Vec<String>) -> String {
     let mut out_lines = Vec::new();
     let mut table_buf = Vec::new();
@@ -82,7 +85,9 @@ pub fn extract_tables(src: &str, table_blocks: &mut Vec<String>) -> String {
         table_buf.clear();
     };
 
-    let check_table_line_re = Regex::new(r"\|.*\|").unwrap();
+    let Ok(check_table_line_re) = Regex::new(r"\|.*\|") else {
+        return src.to_string();
+    };
     for line in src.split('\n') {
         if line.contains('|') && check_table_line_re.is_match(line.trim()) {
             table_buf.push(line.to_string());

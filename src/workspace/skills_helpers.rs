@@ -1,21 +1,22 @@
 //! # Custom Skills Directory Link Resolver
 //!
+//! ## Overview
 //! Provides utilities to index, parse YAML metadata fronts, create symlinks, and synchronize
 //! skill directories in the workspace.
-
-//! 
+//!
 //! ## Search Tags
 //! #skills-helpers
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+/// Executes `load_skill_sync_config` (load skill sync config).
 pub fn load_skill_sync_config(config_path: &Path) -> (bool, HashSet<String>) {
     let mut providers: HashSet<String> = vec!["claude".to_string(), "codex".to_string(), "gemini".to_string()].into_iter().collect();
     let mut enabled = true;
-    if let Ok(content) = std::fs::read_to_string(config_path) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(skills) = val.get("skills").and_then(|v| v.as_object()) {
+    if let Ok(content) = std::fs::read_to_string(config_path)
+        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(skills) = val.get("skills").and_then(|v| v.as_object()) {
                 if let Some(sync_enabled) = skills.get("sync_enabled").and_then(|v| v.as_bool()) {
                     enabled = sync_enabled;
                 }
@@ -29,11 +30,10 @@ pub fn load_skill_sync_config(config_path: &Path) -> (bool, HashSet<String>) {
                     providers = new_providers;
                 }
             }
-        }
-    }
     (enabled, providers)
 }
 
+/// Executes `is_under` (is under).
 pub fn is_under(child: &Path, parent: &Path) -> bool {
     let child = match child.canonicalize() {
         Ok(p) => p,
@@ -46,6 +46,7 @@ pub fn is_under(child: &Path, parent: &Path) -> bool {
     child.starts_with(parent)
 }
 
+/// Executes `cli_skill_dirs` (cli skill dirs).
 pub fn cli_skill_dirs(enabled_providers: &HashSet<String>) -> HashMap<String, PathBuf> {
     let mut dirs = HashMap::new();
     let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -75,6 +76,7 @@ pub fn cli_skill_dirs(enabled_providers: &HashSet<String>) -> HashMap<String, Pa
 }
 
 #[cfg(unix)]
+/// Executes `create_dir_link` (create dir link).
 pub fn create_dir_link(link_path: &Path, target: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link_path)
 }
@@ -94,34 +96,32 @@ pub fn create_dir_link(link_path: &Path, target: &Path) -> std::io::Result<()> {
     }
 }
 
+/// Executes `ensure_link` (ensure link).
 pub fn ensure_link(link_path: &Path, target: &Path) -> std::io::Result<bool> {
     if link_path.exists() && !link_path.is_symlink() {
         return Ok(false);
     }
     if link_path.is_symlink() {
-        if let Ok(resolved) = std::fs::canonicalize(link_path) {
-            if let Ok(target_canon) = std::fs::canonicalize(target) {
-                if resolved == target_canon {
+        if let Ok(resolved) = std::fs::canonicalize(link_path)
+            && let Ok(target_canon) = std::fs::canonicalize(target)
+                && resolved == target_canon {
                     return Ok(false);
                 }
-            }
-        }
         let _ = std::fs::remove_file(link_path);
     }
     create_dir_link(link_path, target)?;
     Ok(true)
 }
 
+/// Executes `ensure_copy` (ensure copy).
 pub fn ensure_copy(dest: &Path, source: &Path) -> std::io::Result<bool> {
     let marker = dest.join(".tuner_managed");
     if is_managed_copy(dest) {
-        if let (Ok(src_time), Ok(dest_meta)) = (newest_mtime(source), std::fs::metadata(&marker)) {
-            if let Ok(dest_time) = dest_meta.modified() {
-                if src_time <= dest_time {
+        if let (Ok(src_time), Ok(dest_meta)) = (newest_mtime(source), std::fs::metadata(&marker))
+            && let Ok(dest_time) = dest_meta.modified()
+                && src_time <= dest_time {
                     return Ok(false);
                 }
-            }
-        }
         let _ = std::fs::remove_dir_all(dest);
     } else if dest.exists() && !dest.is_symlink() {
         return Ok(false);
@@ -134,31 +134,31 @@ pub fn ensure_copy(dest: &Path, source: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// Executes `is_managed_copy` (is managed copy).
 pub fn is_managed_copy(path: &Path) -> bool {
     path.is_dir() && !path.is_symlink() && path.join(".tuner_managed").is_file()
 }
 
+/// Executes `newest_mtime` (newest mtime).
 pub fn newest_mtime(dir: &Path) -> std::io::Result<std::time::SystemTime> {
     let mut newest = std::fs::metadata(dir)?.modified()?;
     if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    if let Ok(t) = newest_mtime(&path) {
-                        newest = newest.max(t);
-                    }
-                } else if let Ok(meta) = std::fs::metadata(&path) {
-                    if let Ok(t) = meta.modified() {
-                        newest = newest.max(t);
-                    }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Ok(t) = newest_mtime(&path) {
+                    newest = newest.max(t);
                 }
-            }
+            } else if let Ok(meta) = std::fs::metadata(&path)
+                && let Ok(t) = meta.modified() {
+                    newest = newest.max(t);
+                }
         }
     }
     Ok(newest)
 }
 
+/// Executes `copy_dir_all` (copy dir all).
 pub fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -168,68 +168,64 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
         if path.is_dir() {
             copy_dir_all(&path, &dst.join(name))?;
         } else {
-            std::fs::copy(&path, &dst.join(name))?;
+            std::fs::copy(&path, dst.join(name))?;
         }
     }
     Ok(())
 }
 
+/// Executes `clean_broken_links` (clean broken links).
 pub fn clean_broken_links(directory: &Path) -> usize {
     if !directory.is_dir() { return 0; }
     let mut removed = 0;
     if let Ok(entries) = std::fs::read_dir(directory) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_symlink() && !path.exists() {
-                    if std::fs::remove_file(&path).is_ok() {
-                        removed += 1;
-                      }
-                  }
-              }
-          }
+        for entry in entries.flatten() {
+          let path = entry.path();
+          if path.is_symlink() && !path.exists()
+              && std::fs::remove_file(&path).is_ok() {
+                  removed += 1;
+                }
+        }
       }
       removed
 }
 
+/// Executes `clean_invalid_workspace_skill_links` (clean invalid workspace skill links).
 pub fn clean_invalid_workspace_skill_links(base_dir: &Path) -> usize {
     if !base_dir.is_dir() { return 0; }
     let mut removed = 0;
     let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules", "builtin"];
     if let Ok(entries) = std::fs::read_dir(base_dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                let name = match path.file_name().and_then(|s| s.to_str()) {
-                    Some(n) => n,
-                    None => continue,
-                };
-                if name.starts_with('.') || skip_dirs.contains(&name) {
-                    continue;
-                }
-                if path.is_symlink() && path.exists() && !crate::workspace::skills::has_valid_skill_frontmatter(&path) {
-                    if std::fs::remove_file(&path).is_ok() {
-                        removed += 1;
-                    }
-                } else if is_managed_copy(&path) && !crate::workspace::skills::has_valid_skill_frontmatter(&path) {
-                    if std::fs::remove_dir_all(&path).is_ok() {
-                        removed += 1;
-                    }
-                }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = match path.file_name().and_then(|s| s.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if name.starts_with('.') || skip_dirs.contains(&name) {
+                continue;
             }
+            if path.is_symlink() && path.exists() && !crate::workspace::skills::has_valid_skill_frontmatter(&path) {
+                if std::fs::remove_file(&path).is_ok() {
+                    removed += 1;
+                }
+            } else if is_managed_copy(&path) && !crate::workspace::skills::has_valid_skill_frontmatter(&path)
+                && std::fs::remove_dir_all(&path).is_ok() {
+                    removed += 1;
+                }
         }
     }
     removed
 }
 
+/// Executes `link_skill_everywhere` (link skill everywhere).
 pub fn link_skill_everywhere(skill_name: &str, canonical: &Path, all_dirs: &HashMap<String, PathBuf>, docker_active: bool) -> std::io::Result<()> {
     let mut sync_roots = HashSet::new();
     for d in all_dirs.values() {
-        if d.is_dir() {
-            if let Ok(canon) = std::fs::canonicalize(d) {
+        if d.is_dir()
+            && let Ok(canon) = std::fs::canonicalize(d) {
                 sync_roots.insert(canon);
             }
-        }
     }
 
     let canon_resolved = std::fs::canonicalize(canonical)?;
@@ -245,11 +241,10 @@ pub fn link_skill_everywhere(skill_name: &str, canonical: &Path, all_dirs: &Hash
         }
 
         let dest = base_dir.join(skill_name);
-        if let Ok(dest_canon) = std::fs::canonicalize(&dest) {
-            if dest_canon == canon_resolved {
+        if let Ok(dest_canon) = std::fs::canonicalize(&dest)
+            && dest_canon == canon_resolved {
                 continue;
             }
-        }
 
         let skip = if docker_active {
             dest.exists() && !dest.is_symlink() && !is_managed_copy(&dest)

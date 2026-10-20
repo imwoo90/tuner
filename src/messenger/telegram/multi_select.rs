@@ -4,10 +4,6 @@
 //! Renders checklists and multi-select inline keyboard grids in Telegram. Tracks individual option
 //! toggle states in memory before submission.
 //!
-//! ## Collaboration Graph
-//! - Rendered via Teloxide keyboard markups.
-//! - Tracks option state changes before confirming.
-//!
 //! ## Search Tags
 //! #multi-select, #checklists, #ui-keyboard
 
@@ -122,8 +118,8 @@ pub(crate) async fn handle_ask_multi_callback(
     let bitmap_opt = data.split(':').nth(3);
     if let Some(mut state) = sessions.get_ask_state(sid).await {
         let q = &state.questions[state.current_index];
-        if let Some(opt) = q.options.get(idx) {
-            if opt.to_lowercase().contains("write-in") || opt.contains("직접 입력") {
+        if let Some(opt) = q.options.get(idx)
+            && (opt.to_lowercase().contains("write-in") || opt.contains("직접 입력")) {
                 state.waiting_for_write_in = true;
                 sessions.set_ask_state(sid, state).await;
                 let txt = format!("{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요.", msg.text().unwrap_or(""));
@@ -131,7 +127,6 @@ pub(crate) async fn handle_ask_multi_callback(
                 let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).await;
                 return;
             }
-        }
         let bm = bitmap_opt.unwrap_or(&state.current_bitmap);
         let nb: String = bm.chars().enumerate().map(|(i, c)| if i == idx { if c == '1' { '0' } else { '1' } } else { c }).collect();
         state.current_bitmap = nb.clone();
@@ -145,12 +140,11 @@ pub(crate) fn extract_options_from_markup(reply_markup: &teloxide::types::Inline
     let mut options = Vec::new();
     for row in &reply_markup.inline_keyboard {
         for button in row {
-            if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
-                if cbd.starts_with("ask_mul:") {
+            if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind
+                && cbd.starts_with("ask_mul:") {
                     let opt_name = button.text.trim_start_matches("✅ ").trim_start_matches("⬜ ").to_string();
                     options.push(opt_name);
                 }
-            }
         }
     }
     options
@@ -186,9 +180,9 @@ pub(crate) fn get_multiselect_keystrokes_and_options(
 
     for row in &reply_markup.inline_keyboard {
         for button in row {
-            if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind {
-                if cbd.starts_with("ask_mul:") {
-                    if let Some(opt_index) = cbd.split(':').nth(2).and_then(|s| s.parse::<usize>().ok()) {
+            if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &button.kind
+                && cbd.starts_with("ask_mul:")
+                    && let Some(opt_index) = cbd.split(':').nth(2).and_then(|s| s.parse::<usize>().ok()) {
                         let is_checked = bitmap.chars().nth(opt_index).unwrap_or('0') == '1';
                         let was_checked = prev_bitmap.chars().nth(opt_index).unwrap_or('0') == '1';
                         let opt_name = button.text.trim_start_matches("✅ ").trim_start_matches("⬜ ").to_string();
@@ -199,8 +193,6 @@ pub(crate) fn get_multiselect_keystrokes_and_options(
                             checked_indices.push(opt_index);
                         }
                     }
-                }
-            }
         }
     }
 

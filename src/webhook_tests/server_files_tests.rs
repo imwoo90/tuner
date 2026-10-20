@@ -1,6 +1,7 @@
 //! # Direct API Server Files Tests
 //!
 //! Verification of filename sanitization and tag parsing.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::webhook::api::files::{is_image_path, parse_file_refs, sanitize_filename};
 

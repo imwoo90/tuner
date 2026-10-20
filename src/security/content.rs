@@ -3,9 +3,6 @@
 //! ## Overview
 //! Evaluates text payloads against block patterns to prevent leakage of credentials or keys.
 //!
-//! ## Collaboration Graph
-//! - Inspects outgoing message envelopes before dispatching.
-//!
 //! ## Search Tags
 //! #credential-filter, #regex-leak, #data-safety
 
@@ -31,12 +28,12 @@ fn get_patterns() -> &'static [(Regex, &'static str)] {
             (r"<file:[^>]+>", "file_tag_injection"),
         ];
         raw.into_iter()
-            .map(|(p, cat)| {
+            .filter_map(|(p, cat)| {
                 let re = RegexBuilder::new(p)
                     .case_insensitive(true)
                     .build()
-                    .unwrap();
-                (re, cat)
+                    .ok()?;
+                Some((re, cat))
             })
             .collect()
     })

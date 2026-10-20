@@ -1,6 +1,7 @@
 //! # Extra Telegram Reply Tests
 //!
 //! Supplemental tests for resolve_session_model and parse_model_directive.
+#![allow(clippy::field_reassign_with_default)]
 
 #[cfg(test)]
 mod tests {
@@ -170,7 +171,7 @@ mod tests {
         let err_api = RequestError::Api(ApiError::MessageNotModified);
         assert!(crate::messenger::telegram::stream::is_message_not_modified(&err_api));
 
-        let err_str = RequestError::Io(std::io::Error::new(std::io::ErrorKind::Other, "Bad Request: message is not modified").into());
+        let err_str = RequestError::Io(std::io::Error::other("Bad Request: message is not modified").into());
         assert!(crate::messenger::telegram::stream::is_message_not_modified(&err_str));
 
         let err_other = RequestError::Api(ApiError::ChatNotFound);

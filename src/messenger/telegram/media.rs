@@ -1,6 +1,10 @@
 //! # Telegram Media Handling Helpers
 //!
+//! ## Overview
 //! Handles identification, download, and prompt injection for media files received via Telegram.
+//!
+//! ## Search Tags
+//! #telegram-media, #media-download, #prompt-injection
 
 use teloxide::types::Message;
 use teloxide::net::Download;
@@ -23,7 +27,7 @@ fn get_media_file_id_and_ext(message: &Message) -> Option<(teloxide::types::File
         }
     } else if let Some(doc) = message.document() {
         let ext = doc.file_name.as_ref()
-            .and_then(|name| name.split('.').last())
+            .and_then(|name| name.split('.').next_back())
             .unwrap_or("bin")
             .to_string();
         return Some((doc.file.id.clone(), ext));

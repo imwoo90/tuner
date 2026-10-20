@@ -3,9 +3,6 @@
 //! ## Overview
 //! Ticks periodically to log daemon health status and telemetry parameters.
 //!
-//! ## Collaboration Graph
-//! - Spawns tick routines during master/worker boot cycles.
-//!
 //! ## Search Tags
 //! #heartbeat-loop, #telemetry-logger, #daemon-health
 
@@ -20,14 +17,20 @@ use crate::session::data::SessionData;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::AgentProvider;
 
+/// Represents `HeartbeatScheduler` (heartbeat scheduler).
 pub struct HeartbeatScheduler {
+    /// Config.
     pub config: Arc<CliConfig>,
+    /// Sessions.
     pub sessions: Arc<SessionManager>,
+    /// Cli.
     pub cli: Arc<AntigravityCli>,
+    /// Bus.
     pub bus: Arc<crate::bus::bus::MessageBus>,
 }
 
 impl HeartbeatScheduler {
+    /// Creates a new instance.
     pub fn new(
         config: Arc<CliConfig>,
         sessions: Arc<SessionManager>,
@@ -42,10 +45,12 @@ impl HeartbeatScheduler {
         }
     }
 
+    /// Executes `heartbeat_enabled` (heartbeat enabled).
     pub fn heartbeat_enabled(&self) -> bool {
         self.config.heartbeat.enabled || self.config.telegram_heartbeat_enabled
     }
 
+    /// Executes `heartbeat_interval_minutes` (heartbeat interval minutes).
     pub fn heartbeat_interval_minutes(&self) -> i64 {
         if self.config.heartbeat.enabled {
             self.config.heartbeat.interval_minutes.unwrap_or(30)
@@ -54,6 +59,7 @@ impl HeartbeatScheduler {
         }
     }
 
+    /// Executes `heartbeat_quiet_start` (heartbeat quiet start).
     pub fn heartbeat_quiet_start(&self) -> Option<u32> {
         if self.config.heartbeat.enabled {
             self.config.heartbeat.quiet_start
@@ -62,6 +68,7 @@ impl HeartbeatScheduler {
         }
     }
 
+    /// Executes `heartbeat_quiet_end` (heartbeat quiet end).
     pub fn heartbeat_quiet_end(&self) -> Option<u32> {
         if self.config.heartbeat.enabled {
             self.config.heartbeat.quiet_end
@@ -70,6 +77,7 @@ impl HeartbeatScheduler {
         }
     }
 
+    /// Executes `heartbeat_ack_token` (heartbeat ack token).
     pub fn heartbeat_ack_token(&self) -> String {
         if self.config.heartbeat.enabled {
             self.config.heartbeat.ack_token.clone().unwrap_or_else(|| "HEARTBEAT_OK".to_string())
@@ -88,8 +96,8 @@ impl HeartbeatScheduler {
             self.heartbeat_quiet_start(),
             self.heartbeat_quiet_end(),
         ) {
-            let start = NaiveTime::from_hms_opt(start_h % 24, 0, 0).unwrap();
-            let end = NaiveTime::from_hms_opt(end_h % 24, 0, 0).unwrap();
+            let start = NaiveTime::from_hms_opt(start_h % 24, 0, 0).unwrap_or_default();
+            let end = NaiveTime::from_hms_opt(end_h % 24, 0, 0).unwrap_or_default();
             return super::quiet::is_within_quiet_hours(now, start, end);
         }
 
@@ -182,8 +190,8 @@ impl HeartbeatScheduler {
         let opt_sid = if sid.is_empty() { None } else { Some(&sid[..]) };
 
         let res = self.cli.send(prompt, opt_sid, false, self.config.working_dir.clone()).await;
-        if let Ok(resp) = res {
-            if !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
+        if let Ok(resp) = res
+            && !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
                 let mut env = crate::bus::adapters::from_heartbeat(
                     session.chat_id,
                     &resp.result,
@@ -192,7 +200,6 @@ impl HeartbeatScheduler {
                 );
                 self.bus.submit(&mut env).await;
             }
-        }
         Ok(())
     }
 }

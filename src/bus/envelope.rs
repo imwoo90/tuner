@@ -1,9 +1,9 @@
 //! # Envelope Module
 //!
+//! ## Overview
 //! Defines the `Envelope` structure and its associated enums (`Origin`, `DeliveryMode`, `LockMode`).
 //! Envelopes encapsulate message data, routing metadata, and execution status for delivery across the message bus.
-
-//! 
+//!
 //! ## Search Tags
 //! #envelope
 
@@ -12,16 +12,27 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Enumerates `Origin` (origin) variants.
 pub enum Origin {
+    /// `Background` (background) variant.
     Background,
+    /// `Cron` (cron) variant.
     Cron,
+    /// `WebhookWake` (webhook wake) variant.
     WebhookWake,
+    /// `WebhookCron` (webhook cron) variant.
     WebhookCron,
+    /// `Heartbeat` (heartbeat) variant.
     Heartbeat,
+    /// `Interagent` (interagent) variant.
     Interagent,
+    /// `TaskResult` (task result) variant.
     TaskResult,
+    /// `TaskQuestion` (task question) variant.
     TaskQuestion,
+    /// `User` (user) variant.
     User,
+    /// `Api` (api) variant.
     Api,
 }
 
@@ -45,12 +56,16 @@ impl Origin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Enumerates `DeliveryMode` (delivery mode) variants.
 pub enum DeliveryMode {
+    /// `Unicast` (unicast) variant.
     Unicast,
+    /// `Broadcast` (broadcast) variant.
     Broadcast,
 }
 
 impl DeliveryMode {
+    /// Executes `as_str` (as str).
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Unicast => "unicast",
@@ -61,12 +76,16 @@ impl DeliveryMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Enumerates `LockMode` (lock mode) variants.
 pub enum LockMode {
+    /// `Required` (required) variant.
     Required,
+    /// `None` (none) variant.
     None,
 }
 
 impl LockMode {
+    /// Executes `as_str` (as str).
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Required => "required",
@@ -76,28 +95,51 @@ impl LockMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Represents `Envelope` (envelope).
 pub struct Envelope {
+    /// Origin.
     pub origin: Origin,
+    /// Chat id.
     pub chat_id: i64,
+    /// Topic id.
     pub topic_id: Option<i64>,
+    /// Prompt.
     pub prompt: String,
+    /// Prompt preview.
     pub prompt_preview: String,
+    /// Result text.
     pub result_text: String,
+    /// Status.
     pub status: String,
+    /// Is error.
     pub is_error: bool,
+    /// Delivery.
     pub delivery: DeliveryMode,
+    /// Lock mode.
     pub lock_mode: LockMode,
+    /// Needs injection.
     pub needs_injection: bool,
+    /// Metadata.
     pub metadata: HashMap<String, String>,
+    /// Reply to message id.
     pub reply_to_message_id: Option<i64>,
+    /// Thread id.
     pub thread_id: Option<i64>,
+    /// Envelope id.
     pub envelope_id: String,
+    /// Elapsed seconds.
     pub elapsed_seconds: f64,
+    /// Provider.
     pub provider: String,
+    /// Model.
     pub model: String,
+    /// Session name.
     pub session_name: String,
+    /// Session id.
     pub session_id: String,
+    /// Created at.
     pub created_at: u64,
+    /// Transport.
     pub transport: String,
 }
 

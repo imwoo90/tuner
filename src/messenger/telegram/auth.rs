@@ -1,7 +1,11 @@
 //! # Telegram Ingress Authentication and Migration
 //!
+//! ## Overview
 //! Validates user authorization, handles first-time owner self-registration,
 //! group access control filtering, and Telegram forum topic creation/migration events.
+//!
+//! ## Search Tags
+//! #telegram-auth, #owner-registration, #topic-migration
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -17,19 +21,16 @@ pub(crate) fn auto_register_owner(from_id: i64) {
             std::path::PathBuf::from(home).join(".tuner")
         });
     let path = tuner_home.join("config/config.json");
-    if let Ok(c) = std::fs::read_to_string(&path) {
-        if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&c) {
-            if let Some(obj) = val.as_object_mut() {
+    if let Ok(c) = std::fs::read_to_string(&path)
+        && let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&c)
+            && let Some(obj) = val.as_object_mut() {
                 obj.insert("allowed_user_ids".to_string(), serde_json::json!([from_id]));
-                if let Ok(pretty) = serde_json::to_string_pretty(&val) {
-                    if std::fs::write(&path, pretty).is_ok() {
+                if let Ok(pretty) = serde_json::to_string_pretty(&val)
+                    && std::fs::write(&path, pretty).is_ok() {
                         let restart = tuner_home.join("restart-requested");
                         let _ = std::fs::write(restart, "");
                     }
-                }
             }
-        }
-    }
 }
 
 pub(crate) async fn validate_and_auth_message(

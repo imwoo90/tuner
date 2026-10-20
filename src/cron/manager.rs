@@ -4,14 +4,6 @@
 //! Handles loading, saving, registering, and tracking execution states of [`CronJob`] definitions.
 //! Employs asynchronous mutex locks to prevent race conditions during JSON file persistence.
 //!
-//! ## Collaboration Graph
-//! - Reads/writes local json files representing scheduled configurations.
-//! - Consulted by [`super::scheduler::CronScheduler`] to reload jobs when changes are detected on disk.
-//!
-//! ## Key Structures
-//! - [`CronJob`]: State representation containing schedule, provider, timezone, models, and execution logs.
-//! - [`CronManager`]: Service coordinator handling persistence and access locks.
-//!
 //! ## Search Tags
 //! #cron-registry, #job-persistence, #state-lock, #cron-jobs
 
@@ -21,36 +13,59 @@ use chrono::Utc;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Represents `CronJob` (cron job).
 pub struct CronJob {
+    /// Id.
     pub id: String,
+    /// Title.
     pub title: String,
     #[serde(default)]
+    /// Description.
     pub description: String,
+    /// Schedule.
     pub schedule: String,
+    /// Task folder.
     pub task_folder: String,
+    /// Agent instruction.
     pub agent_instruction: String,
     #[serde(default = "default_true")]
+    /// Enabled.
     pub enabled: bool,
     #[serde(default)]
+    /// Timezone.
     pub timezone: String,
     #[serde(default)]
+    /// Created at.
     pub created_at: String,
+    /// Last run at.
     pub last_run_at: Option<String>,
+    /// Last run status.
     pub last_run_status: Option<String>,
+    /// Provider.
     pub provider: Option<String>,
+    /// Model.
     pub model: Option<String>,
+    /// Reasoning effort.
     pub reasoning_effort: Option<String>,
     #[serde(default, deserialize_with = "deserialize_null_as_default")]
+    /// Cli parameters.
     pub cli_parameters: Vec<String>,
+    /// Quiet start.
     pub quiet_start: Option<u32>,
+    /// Quiet end.
     pub quiet_end: Option<u32>,
+    /// Dependency.
     pub dependency: Option<String>,
     #[serde(default, deserialize_with = "deserialize_null_as_default")]
+    /// Chat id.
     pub chat_id: i64,
+    /// Topic id.
     pub topic_id: Option<i64>,
     #[serde(default = "default_tg")]
+    /// Transport.
     pub transport: String,
     #[serde(default)]
+    /// Silent on success.
     pub silent_on_success: bool,
 }
 
@@ -72,6 +87,7 @@ fn default_tg() -> String {
 }
 
 impl CronJob {
+    /// Creates a new instance.
     pub fn new(
         id: String,
         title: String,
@@ -113,12 +129,14 @@ struct CronJobsFile {
     pub jobs: Vec<CronJob>,
 }
 
+/// Represents `CronManager` (cron manager).
 pub struct CronManager {
     jobs_path: PathBuf,
     lock: tokio::sync::Mutex<()>,
 }
 
 impl CronManager {
+    /// Creates a new instance.
     pub fn new(jobs_path: PathBuf) -> Self {
         Self {
             jobs_path,
@@ -126,10 +144,12 @@ impl CronManager {
         }
     }
 
+    /// Executes `jobs_path` (jobs path).
     pub fn jobs_path(&self) -> &PathBuf {
         &self.jobs_path
     }
 
+    /// Executes `load` (load).
     pub fn load(&self) -> Result<Vec<CronJob>, String> {
         if !self.jobs_path.exists() {
             return Ok(Vec::new());
@@ -142,6 +162,7 @@ impl CronManager {
         Ok(file_data.jobs)
     }
 
+    /// Executes `save` (save).
     pub fn save(&self, jobs: &[CronJob]) -> Result<(), String> {
         let temp_path = self.jobs_path.with_extension("tmp");
         let file_data = CronJobsFile { jobs: jobs.to_vec() };
@@ -154,6 +175,7 @@ impl CronManager {
         Ok(())
     }
 
+    /// Executes `add_job` (add job).
     pub async fn add_job(&self, job: CronJob) -> Result<(), String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;
@@ -165,6 +187,7 @@ impl CronManager {
         Ok(())
     }
 
+    /// Executes `remove_job` (remove job).
     pub async fn remove_job(&self, job_id: &str) -> Result<bool, String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;
@@ -177,33 +200,36 @@ impl CronManager {
         Ok(removed)
     }
 
+    /// Executes `list_jobs` (list jobs).
     pub async fn list_jobs(&self) -> Result<Vec<CronJob>, String> {
         let _guard = self.lock.lock().await;
         self.load()
     }
 
+    /// Executes `get_job` (get job).
     pub async fn get_job(&self, job_id: &str) -> Result<Option<CronJob>, String> {
         let _guard = self.lock.lock().await;
         let jobs = self.load()?;
         Ok(jobs.into_iter().find(|j| j.id == job_id))
     }
 
+    /// Executes `set_enabled` (set enabled).
     pub async fn set_enabled(&self, job_id: &str, enabled: bool) -> Result<bool, String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;
         let mut changed = false;
-        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
-            if job.enabled != enabled {
+        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id)
+            && job.enabled != enabled {
                 job.enabled = enabled;
                 changed = true;
             }
-        }
         if changed {
             self.save(&jobs)?;
         }
         Ok(changed)
     }
 
+    /// Executes `set_all_enabled` (set all enabled).
     pub async fn set_all_enabled(&self, enabled: bool) -> Result<usize, String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;
@@ -220,6 +246,7 @@ impl CronManager {
         Ok(changed_count)
     }
 
+    /// Executes `update_run_status` (update run status).
     pub async fn update_run_status(&self, job_id: &str, status: &str) -> Result<(), String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;
@@ -231,6 +258,7 @@ impl CronManager {
         Ok(())
     }
 
+    /// Executes `update_job_target` (update job target).
     pub async fn update_job_target(&self, job_id: &str, chat_id: i64, topic_id: Option<i64>) -> Result<bool, String> {
         let _guard = self.lock.lock().await;
         let mut jobs = self.load()?;

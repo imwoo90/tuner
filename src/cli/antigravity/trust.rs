@@ -1,14 +1,28 @@
 //! # Antigravity Workspace Auto-Trust Helper
 //!
+//! ## Overview
 //! This module handles updating the `settings.json` file for Google Antigravity CLI,
 //! automatically adding new workspaces to the list of `trustedWorkspaces`.
-
-//! 
+//!
 //! ## Search Tags
 //! #trust
 
 use std::fs;
 use std::path::{Path, PathBuf};
+
+fn load_settings_json(settings_file: &Path) -> serde_json::Value {
+    let mut data = if settings_file.is_file() {
+        let content = fs::read_to_string(settings_file).unwrap_or_default();
+        serde_json::from_str(&content)
+            .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()))
+    } else {
+        serde_json::Value::Object(serde_json::Map::new())
+    };
+    if !data.is_object() {
+        data = serde_json::Value::Object(serde_json::Map::new());
+    }
+    data
+}
 
 /// Ensure that `workspace` (fully resolved path) is present in `trustedWorkspaces`
 /// within settings.json (which resides under `.gemini/antigravity-cli/settings.json`).
@@ -16,13 +30,10 @@ use std::path::{Path, PathBuf};
 /// If `home_override` is specified, it uses that directory as HOME; otherwise,
 /// it resolves HOME from environment variables.
 pub fn trust_workspace_in_settings(workspace: &Path, home_override: Option<PathBuf>) {
-    let home = match home_override {
-        Some(path) => path,
-        None => {
-            let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home_str)
-        }
-    };
+    let home = home_override.unwrap_or_else(|| {
+        let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home_str)
+    });
 
     let parent_dir = home.join(".gemini").join("antigravity-cli");
     if !parent_dir.is_dir() {
@@ -30,18 +41,11 @@ pub fn trust_workspace_in_settings(workspace: &Path, home_override: Option<PathB
     }
 
     let settings_file = parent_dir.join("settings.json");
-    let mut data: serde_json::Value = if settings_file.is_file() {
-        let content = fs::read_to_string(&settings_file).unwrap_or_default();
-        serde_json::from_str(&content).unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
-    } else {
-        serde_json::Value::Object(serde_json::Map::new())
+    let mut data = load_settings_json(&settings_file);
+
+    let Some(obj) = data.as_object_mut() else {
+        return;
     };
-
-    if !data.is_object() {
-        data = serde_json::Value::Object(serde_json::Map::new());
-    }
-
-    let obj = data.as_object_mut().unwrap();
     let workspaces_val = obj
         .entry("trustedWorkspaces")
         .or_insert_with(|| serde_json::Value::Array(Vec::new()));
@@ -50,16 +54,18 @@ pub fn trust_workspace_in_settings(workspace: &Path, home_override: Option<PathB
         *workspaces_val = serde_json::Value::Array(Vec::new());
     }
 
-    let workspaces = workspaces_val.as_array_mut().unwrap();
-    
+    let Some(workspaces) = workspaces_val.as_array_mut() else {
+        return;
+    };
+
     let ws_resolved = match workspace.canonicalize() {
         Ok(canon) => canon.to_string_lossy().to_string(),
         Err(_) => workspace.to_string_lossy().to_string(),
     };
 
-    let exists = workspaces.iter().any(|v| {
-        v.as_str().map(|s| s == ws_resolved).unwrap_or(false)
-    });
+    let exists = workspaces
+        .iter()
+        .any(|v| v.as_str().map(|s| s == ws_resolved).unwrap_or(false));
 
     if !exists {
         workspaces.push(serde_json::Value::String(ws_resolved));

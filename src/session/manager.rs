@@ -4,11 +4,6 @@
 //! Manages active sessions list and coordinates JSON-based persistence to disk. Resolves session keys,
 //! handles timezone-based daily resets, and checks session freshness.
 //!
-//! ## Collaboration Graph
-//! - Works directly with [`super::key::SessionKey`] and [`super::data::SessionData`].
-//! - Called by Telegram [`runner`](crate::telegram::runner) and Webhook server controllers to resolve active streams.
-//! - Integrates with [`TopicNameResolver`] to name session workspaces.
-//!
 //! ## Search Tags
 //! #session-registry, #json-persistence, #session-resolving, #freshness-check
 
@@ -20,8 +15,10 @@ use tokio::sync::Mutex;
 use crate::session::key::SessionKey;
 use crate::session::data::SessionData;
 
+/// Type alias `TopicNameResolver` (topic name resolver).
 pub type TopicNameResolver = std::sync::Arc<dyn Fn(i64, i64) -> Option<String> + Send + Sync>;
 
+/// Represents `SessionManager` (session manager).
 pub struct SessionManager {
     path: PathBuf,
     idle_mins: i64,
@@ -31,10 +28,12 @@ pub struct SessionManager {
     max_msgs: Option<i64>,
     lock: Mutex<()>,
     resolver: Option<TopicNameResolver>,
+    /// Lock pool.
     pub lock_pool: std::sync::Arc<crate::bus::lock_pool::LockPool>,
 }
 
 impl SessionManager {
+    /// Creates a new instance.
     pub fn new(
         sessions_path: PathBuf,
         idle_timeout_minutes: i64,
@@ -56,6 +55,7 @@ impl SessionManager {
         }
     }
 
+    /// Executes `is_fresh` (is fresh).
     pub fn is_fresh(&self, session: &SessionData) -> bool {
         super::freshness::is_session_fresh(
             session,
@@ -67,6 +67,7 @@ impl SessionManager {
         )
     }
 
+    /// Executes `load` (load).
     pub fn load(&self) -> Result<HashMap<String, SessionData>, String> {
         if !self.path.exists() { return Ok(HashMap::new()); }
         let content = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
@@ -83,6 +84,7 @@ impl SessionManager {
         Ok(result)
     }
 
+    /// Executes `save` (save).
     pub fn save(&self, sessions: &HashMap<String, SessionData>) -> Result<(), String> {
         let temp_path = self.path.with_extension("tmp");
         let content = serde_json::to_string_pretty(sessions).map_err(|e| e.to_string())?;
@@ -92,26 +94,27 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Executes `get_active` (get active).
     pub async fn get_active(&self, key: &SessionKey) -> Result<Option<SessionData>, String> {
         let _guard = self.lock.lock().await;
         let sessions = self.load()?;
         Ok(sessions.get(&key.storage_key()).cloned())
     }
 
+    /// Executes `resolve_session` (resolve session).
     pub async fn resolve_session(&self, key: &SessionKey, provider: &str, model: &str) -> Result<(SessionData, bool), String> {
         let _guard = self.lock.lock().await;
         let mut sessions = self.load()?;
         let skey = key.storage_key();
         
         let mut resolved_topic_name = None;
-        if let Some(ref resolver) = self.resolver {
-            if let Some(tid) = key.topic_id {
+        if let Some(ref resolver) = self.resolver
+            && let Some(tid) = key.topic_id {
                 resolved_topic_name = resolver(key.chat_id, tid);
             }
-        }
 
-        if let Some(existing) = sessions.get_mut(&skey) {
-            if self.is_fresh(existing) {
+        if let Some(existing) = sessions.get_mut(&skey)
+            && self.is_fresh(existing) {
                 let mut to_save = false;
                 if resolved_topic_name.is_some() && existing.topic_name != resolved_topic_name {
                     existing.topic_name = resolved_topic_name;
@@ -124,7 +127,6 @@ impl SessionManager {
                 }
                 return Ok((cloned, session_id.is_empty()));
             }
-        }
 
         let mut new_session = SessionData::new(
             key.chat_id,
@@ -139,6 +141,7 @@ impl SessionManager {
         Ok((new_session, true))
     }
 
+    /// Executes `preserve_session_identity` (preserve session identity).
     pub async fn preserve_session_identity(&self, session: &SessionData) -> Result<SessionData, String> {
         let _guard = self.lock.lock().await;
         let mut sessions = self.load()?;
@@ -166,6 +169,7 @@ impl SessionManager {
         Ok(current)
     }
 
+    /// Executes `update_session` (update session).
     pub async fn update_session(&self, session: &SessionData, cost_usd: f64, tokens: i64) -> Result<SessionData, String> {
         let mut cur = self.preserve_session_identity(session).await?;
         let _guard = self.lock.lock().await;
@@ -180,6 +184,7 @@ impl SessionManager {
         Ok(cur)
     }
 
+    /// Executes `reset_session` (reset session).
     pub async fn reset_session(&self, k: &SessionKey, provider: &str, model: &str) -> Result<SessionData, String> {
         let _guard = self.lock.lock().await;
         let mut map = self.load()?;
@@ -190,6 +195,7 @@ impl SessionManager {
         Ok(new_s)
     }
 
+    /// Executes `reset_provider_session` (reset provider session).
     pub async fn reset_provider_session(&self, k: &SessionKey, provider: &str, model: &str) -> Result<SessionData, String> {
         let _guard = self.lock.lock().await;
         let mut map = self.load()?;
@@ -213,6 +219,7 @@ impl SessionManager {
         Ok(cur)
     }
 
+    /// Executes `sync_session_target` (sync session target).
     pub async fn sync_session_target(&self, s: &mut SessionData, provider: &str, model: &str) -> Result<(), String> {
         let _guard = self.lock.lock().await;
         let mut map = self.load()?;
@@ -230,6 +237,7 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Executes `migrate_chat_id` (migrate chat id).
     pub async fn migrate_chat_id(&self, old: i64, new: i64) -> Result<(), String> {
         let _guard = self.lock.lock().await;
         let mut map = HashMap::new();
@@ -247,16 +255,19 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Executes `with_topic_resolver` (with topic resolver).
     pub fn with_topic_resolver(mut self, resolver: TopicNameResolver) -> Self {
         self.resolver = Some(resolver);
         self
     }
 
+    /// Executes `list_active_for_chat` (list active for chat).
     pub async fn list_active_for_chat(&self, cid: i64) -> Result<Vec<SessionData>, String> {
         let _guard = self.lock.lock().await;
         Ok(self.load()?.into_values().filter(|s| s.chat_id == cid && self.is_fresh(s)).collect())
     }
 
+    /// Executes `list_all` (list all).
     pub async fn list_all(&self) -> Result<Vec<SessionData>, String> {
         let _guard = self.lock.lock().await;
         Ok(self.load()?.into_values().collect())

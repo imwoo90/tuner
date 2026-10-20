@@ -1,7 +1,11 @@
 //! # Model Quota and Usage Telegram Command
 //!
+//! ## Overview
 //! Handles the `/usage` slash command by querying the Antigravity CLI quota modal,
 //! parsing model quota percentages and limits, and formatting the output for Telegram.
+//!
+//! ## Search Tags
+//! #usage-command, #quota-modal, #token-usage
 
 use std::time::Duration;
 use teloxide::prelude::*;
@@ -12,31 +16,44 @@ use crate::messenger::telegram::topic_cache::TopicNameCache;
 use crate::cli::antigravity::pty_spawner::strip_ansi;
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Represents `QuotaLimit` (quota limit).
 pub struct QuotaLimit {
+    /// Pct.
     pub pct: f64,
+    /// Detail.
     pub detail: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Represents `ModelQuotaGroup` (model quota group).
 pub struct ModelQuotaGroup {
+    /// Weekly.
     pub weekly: Option<QuotaLimit>,
+    /// Five hour.
     pub five_hour: Option<QuotaLimit>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Represents `QuotaReport` (quota report).
 pub struct QuotaReport {
+    /// Account.
     pub account: Option<String>,
+    /// Gemini.
     pub gemini: Option<ModelQuotaGroup>,
+    /// Claude.
     pub claude: Option<ModelQuotaGroup>,
+    /// Raw fallback.
     pub raw_fallback: String,
 }
 
+/// Executes `format_progress_bar` (format progress bar).
 pub fn format_progress_bar(pct: f64) -> String {
     let total = 10;
     let filled = ((pct / 100.0) * (total as f64)).round().clamp(0.0, total as f64) as usize;
     format!("[{}{}]", "█".repeat(filled), "░".repeat(total - filled))
 }
 
+/// Executes `parse_limit` (parse limit).
 pub fn parse_limit(text: &str, header: &str) -> Option<QuotaLimit> {
     let pos = text.find(header)?;
     let slice = &text[pos..];
@@ -76,6 +93,7 @@ pub fn parse_limit(text: &str, header: &str) -> Option<QuotaLimit> {
     None
 }
 
+/// Executes `parse_group_block` (parse group block).
 pub fn parse_group_block(text: &str, group_marker: &str) -> Option<ModelQuotaGroup> {
     let pos = text.find(group_marker)?;
     let slice = &text[pos..];
@@ -101,6 +119,7 @@ pub fn parse_group_block(text: &str, group_marker: &str) -> Option<ModelQuotaGro
     }
 }
 
+/// Executes `parse_quota_report` (parse quota report).
 pub fn parse_quota_report(raw: &str) -> QuotaReport {
     let stripped = strip_ansi(raw);
     let account = stripped.lines()

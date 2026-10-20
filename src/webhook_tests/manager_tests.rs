@@ -1,6 +1,7 @@
 //! # Webhook Manager Tests
 //!
 //! Tests for WebhookManager CRUD operations and atomicity.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::webhook::manager::WebhookManager;
 use crate::webhook::models::WebhookEntry;

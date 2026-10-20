@@ -1,9 +1,9 @@
 //! # Log Event Parser for Antigravity Session Logs
 //!
+//! ## Overview
 //! Parses JSON lines and trace outputs written by agent CLI operations. Emits parsed structured
 //! event frames for streaming to messaging interfaces.
-
-//! 
+//!
 //! ## Search Tags
 //! #log-parser
 
@@ -31,11 +31,10 @@ fn process_planner_response(
             tool_completions.clear();
         }
     }
-    if let Some(thinking) = entry.get("thinking").and_then(|t| t.as_str()) {
-        if !thinking.trim().is_empty() {
+    if let Some(thinking) = entry.get("thinking").and_then(|t| t.as_str())
+        && !thinking.trim().is_empty() {
             thinking_blocks.push(thinking.trim().to_string());
         }
-    }
     if let Some(tcalls) = entry.get("tool_calls").and_then(|t| t.as_array()) {
         for tc in tcalls {
             if let Some(ask) = parse_ask_question_tool(tc) {
@@ -44,14 +43,13 @@ fn process_planner_response(
             tool_calls.push(clean_tool_call_args(tc));
         }
     }
-    if status == Some("DONE") && !has_tcalls {
-        if let Some(content) = entry.get("content").and_then(|c| c.as_str()) {
+    if status == Some("DONE") && !has_tcalls
+        && let Some(content) = entry.get("content").and_then(|c| c.as_str()) {
             let trimmed = content.trim();
             if !trimmed.is_empty() && !super::events::is_placeholder_content(trimmed) {
                 *final_content = Some(trimmed.to_string());
             }
         }
-    }
 }
 
 fn process_entry(
@@ -83,11 +81,10 @@ fn process_entry(
     if source == Some("MODEL") {
         if etype == Some("PLANNER_RESPONSE") {
             process_planner_response(entry, thinking_blocks, tool_calls, tool_completions, final_content, ask_question, status);
-        } else if status == Some("DONE") {
-            if let Some(t) = etype {
+        } else if status == Some("DONE")
+            && let Some(t) = etype {
                 tool_completions.push(format!("`{}` completed", get_friendly_name(t)));
             }
-        }
     }
 }
 
@@ -121,20 +118,28 @@ fn build_formatted_progress(
 
 
 #[derive(Debug, Clone, Default)]
+/// Represents `ParsedLogDelta` (parsed log delta).
 pub struct ParsedLogDelta {
+    /// New size.
     pub new_size: u64,
+    /// Formatted.
     pub formatted: Option<String>,
+    /// Final content.
     pub final_content: Option<String>,
+    /// Ask question.
     pub ask_question: Option<Vec<crate::cli::AskQuestionData>>,
+    /// Has activity.
     pub has_activity: bool,
 }
 
 #[derive(Default)]
+/// Represents `AntigravityLogParser` (antigravity log parser).
 pub struct AntigravityLogParser {
     seen_final: bool,
 }
 
 impl AntigravityLogParser {
+    /// Creates a new instance.
     pub fn new() -> Self {
         Self::default()
     }
@@ -187,6 +192,7 @@ impl AntigravityLogParser {
         ParsedLogDelta { new_size, formatted, final_content, ask_question, has_activity }
     }
 
+    /// Executes `parse_log_delta_structured` (parse log delta structured).
     pub fn parse_log_delta_structured(
         &mut self,
         transcript_path: &Path,
@@ -209,6 +215,7 @@ impl AntigravityLogParser {
         self.ingest_entries(&entries, new_size)
     }
 
+    /// Executes `parse_log_delta` (parse log delta).
     pub fn parse_log_delta(
         &mut self,
         transcript_path: &Path,

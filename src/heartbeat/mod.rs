@@ -3,9 +3,9 @@
 //! ## Overview
 //! Sends health telemetry logs and manages quiet hour status constraints.
 //!
-//! ## Module Components
-//! - [`scheduler`]: Ticks and sends health logs.
-//! - [`quiet`]: Checks time configurations to enforce quiet hours.
+//! ## Submodules
+//! - [`quiet`] (`quiet.rs`): Checks time configurations to enforce quiet hours.
+//! - [`scheduler`] (`scheduler.rs`): Ticks and dispatches periodic health heartbeat events.
 //!
 //! ## Search Tags
 //! #heartbeat, #quiet-hours, #health-telemetry

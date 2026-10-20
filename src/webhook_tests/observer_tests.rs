@@ -1,6 +1,8 @@
 //! # Webhook Observer Tests
 //!
 //! Tests the background hook execution wiring, dispatching, and lifecycle.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::field_reassign_with_default)]
 
 use crate::webhook::manager::WebhookManager;
 use crate::webhook::observer::{WebhookObserver, is_quiet_hours_at};

@@ -1,6 +1,7 @@
 //! # Webhook Authentication Tests
 //!
 //! Tests for Bearer token verification, sliding-window RateLimiter, and HMAC signature algorithms.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::webhook::auth::{RateLimiter, validate_bearer_token, validate_hmac_signature};
 use hmac::{Hmac, Mac};

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::bus::lock_pool::LockPool;
 use std::sync::Arc;
 
@@ -84,7 +85,7 @@ fn test_eviction_on_overflow() {
 async fn test_eviction_preserves_locked() {
     let pool = LockPool::new(3);
     let held = pool.get((1, None));
-    let _extra = vec![pool.get((2, None)), pool.get((3, None))];
+    let _extra = [pool.get((2, None)), pool.get((3, None))];
 
     let _guard = held.lock().await;
     let _extra_lock = pool.get((99, None));

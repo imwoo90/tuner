@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)]
 #[cfg(test)]
 mod tests {
     use super::super::review::*;
@@ -40,7 +41,7 @@ mod tests {
         std::fs::write(&video_file, &fake_video_data).unwrap();
 
         let mgr = ReviewManager::new();
-        let (token, count) = mgr.create_session(&[video_file.clone()]).await.unwrap();
+        let (token, count) = mgr.create_session(std::slice::from_ref(&video_file)).await.unwrap();
         assert_eq!(count, 1);
 
         let files = mgr.get_files(&token).await.unwrap();
@@ -53,11 +54,10 @@ mod tests {
 
 async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
     for _ in 0..20 {
-        if let Ok(res) = client.get(format!("http://127.0.0.1:{}/health", port)).send().await {
-            if res.status() == 200 {
+        if let Ok(res) = client.get(format!("http://127.0.0.1:{}/health", port)).send().await
+            && res.status() == 200 {
                 return;
             }
-        }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     panic!("Review server health endpoint failed to respond");

@@ -1,6 +1,7 @@
 //! # Direct API Server E2E Tests
 //!
 //! Verification of direct API E2E handshake.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::config::ApiConfig;
 use crate::session::key::SessionKey;

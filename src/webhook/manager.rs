@@ -1,8 +1,9 @@
 //! # Webhook Manager
 //!
+//! ## Overview
 //! Manages loading, saving, and updating registered webhooks dynamically with JSON persistence.
-
-//! 
+//! Provides thread-safe CRUD operations and atomic disk persistence for webhook endpoint configurations.
+//!
 //! ## Search Tags
 //! #manager
 
@@ -11,6 +12,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
 
+/// Represents `WebhookManager` (webhook manager).
 pub struct WebhookManager {
     hooks_path: PathBuf,
     hooks: RwLock<Vec<WebhookEntry>>,
@@ -18,6 +20,7 @@ pub struct WebhookManager {
 }
 
 impl WebhookManager {
+    /// Creates a new instance.
     pub fn new(hooks_path: PathBuf) -> Self {
         let initial_hooks = if hooks_path.exists() {
             if let Ok(data) = std::fs::read_to_string(&hooks_path) {
@@ -43,6 +46,7 @@ impl WebhookManager {
         }
     }
 
+    /// Executes `load` (load).
     pub async fn load(&self) -> Result<(), String> {
         if !self.hooks_path.exists() {
             *self.hooks.write().await = Vec::new();
@@ -60,6 +64,7 @@ impl WebhookManager {
         Ok(())
     }
 
+    /// Executes `save` (save).
     pub async fn save(&self) -> Result<(), String> {
         let _guard = self.save_lock.lock().await;
         if let Some(parent) = self.hooks_path.parent() {
@@ -93,6 +98,7 @@ impl WebhookManager {
         Ok(())
     }
 
+    /// Executes `add_hook` (add hook).
     pub async fn add_hook(&self, hook: WebhookEntry) -> Result<(), String> {
         let mut hooks = self.hooks.write().await;
         if hooks.iter().any(|h| h.id == hook.id) {
@@ -104,6 +110,7 @@ impl WebhookManager {
         Ok(())
     }
 
+    /// Executes `remove_hook` (remove hook).
     pub async fn remove_hook(&self, hook_id: &str) -> Result<bool, String> {
         let mut hooks = self.hooks.write().await;
         let before = hooks.len();
@@ -116,10 +123,12 @@ impl WebhookManager {
         Ok(found)
     }
 
+    /// Executes `list_hooks` (list hooks).
     pub async fn list_hooks(&self) -> Vec<WebhookEntry> {
         self.hooks.read().await.clone()
     }
 
+    /// Executes `get_hook` (get hook).
     pub async fn get_hook(&self, hook_id: &str) -> Option<WebhookEntry> {
         self.hooks
             .read()
@@ -129,6 +138,7 @@ impl WebhookManager {
             .cloned()
     }
 
+    /// Executes `update_hook` (update hook).
     pub async fn update_hook(&self, hook_id: &str, updates: &Value) -> Result<bool, String> {
         let mut hooks = self.hooks.write().await;
         let Some(hook) = hooks.iter_mut().find(|h| h.id == hook_id) else {
@@ -267,6 +277,7 @@ fn update_execution_fields(hook: &mut WebhookEntry, key: &str, val: &Value) {
 }
 
 impl WebhookManager {
+    /// Executes `record_trigger` (record trigger).
     pub async fn record_trigger(&self, hook_id: &str, error: Option<String>) {
         let mut hooks = self.hooks.write().await;
         if let Some(hook) = hooks.iter_mut().find(|h| h.id == hook_id) {
@@ -278,6 +289,7 @@ impl WebhookManager {
         }
     }
 
+    /// Executes `reload` (reload).
     pub async fn reload(&self) -> Result<(), String> {
         self.load().await
     }

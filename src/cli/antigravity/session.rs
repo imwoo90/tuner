@@ -1,10 +1,10 @@
 //! # Antigravity Session Holder and PTY Spawning
 //!
+//! ## Overview
 //! This module manages active interactive sessions with the Google Antigravity CLI.
 //! It handles non-echoing PTY spawning, non-blocking asynchronous output draining,
 //! and automatic resource cleanup to prevent zombie processes.
-
-//! 
+//!
 //! ## Search Tags
 //! #session
 
@@ -16,16 +16,24 @@ pub use super::pty_spawner::spawn_session;
 use super::pty_spawner::SessionHolder;
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+/// Represents `AskState` (ask state).
 pub struct AskState {
+    /// Msg id.
     pub msg_id: i32,
+    /// Questions.
     pub questions: Vec<crate::cli::AskQuestionData>,
+    /// Current index.
     pub current_index: usize,
+    /// Answers.
     pub answers: Vec<String>,
+    /// Current bitmap.
     pub current_bitmap: String,
+    /// Waiting for write in.
     pub waiting_for_write_in: bool,
 }
 
 #[derive(Default)]
+/// Represents `SessionManager` (session manager).
 pub struct SessionManager {
     pub(crate) holders: Mutex<HashMap<String, SessionHolder>>,
     pub(crate) running_runs: Mutex<HashSet<String>>,
@@ -34,6 +42,7 @@ pub struct SessionManager {
     pub(crate) interrupted_sessions: Mutex<HashSet<String>>,
     pub(crate) interrupted_at: Mutex<HashMap<String, Instant>>,
     pub(crate) interrupt_notify: tokio::sync::Notify,
+    #[allow(clippy::type_complexity)]
     pub(crate) boot_cancels: Mutex<HashMap<(i64, Option<i64>), tokio::sync::oneshot::Sender<()>>>,
 }
 
@@ -49,18 +58,22 @@ fn terminate_duplicates(
 }
 
 impl SessionManager {
+    /// Creates a new instance.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Executes `active_count` (active count).
     pub async fn active_count(&self) -> usize {
         self.holders.lock().await.len()
     }
 
+    /// Executes `is_running` (is running).
     pub async fn is_running(&self, session_id: &str) -> bool {
         self.running_runs.lock().await.contains(session_id)
     }
 
+    /// Executes `set_running` (set running).
     pub async fn set_running(&self, session_id: &str, running: bool) {
         let mut runs = self.running_runs.lock().await;
         if running {
@@ -71,15 +84,18 @@ impl SessionManager {
         }
     }
 
+    /// Executes `set_async_running` (set async running).
     pub async fn set_async_running(&self, sid: &str, running: bool) {
         let mut runs = self.async_runs.lock().await;
         if running { runs.insert(sid.to_string()); } else { runs.remove(sid); }
     }
 
+    /// Executes `is_ask_active` (is ask active).
     pub async fn is_ask_active(&self, session_id: &str) -> bool {
         self.active_asks.lock().await.contains_key(session_id)
     }
 
+    /// Executes `set_ask_active` (set ask active).
     pub async fn set_ask_active(&self, session_id: &str, active: bool) {
         let mut asks = self.active_asks.lock().await;
         if active {
@@ -89,14 +105,17 @@ impl SessionManager {
         }
     }
 
+    /// Executes `set_ask_state` (set ask state).
     pub async fn set_ask_state(&self, session_id: &str, state: AskState) {
         self.active_asks.lock().await.insert(session_id.to_string(), state);
     }
 
+    /// Executes `get_ask_state` (get ask state).
     pub async fn get_ask_state(&self, session_id: &str) -> Option<AskState> {
         self.active_asks.lock().await.get(session_id).cloned()
     }
 
+    /// Executes `cleanup_expired` (cleanup expired).
     pub async fn cleanup_expired(&self) {
         let now = Instant::now();
         self.holders.lock().await.retain(|_, h| {
@@ -105,6 +124,7 @@ impl SessionManager {
         });
     }
 
+    /// Executes `ensure_session` (ensure session).
     pub async fn ensure_session(
         &self,
         session_id: &str,
@@ -137,21 +157,25 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Executes `terminate` (terminate).
     pub async fn terminate(&self, session_id: &str) -> bool {
         self.interrupted_sessions.lock().await.remove(session_id);
         self.holders.lock().await.remove(session_id).is_some()
     }
 
+    /// Executes `register_boot` (register boot).
     pub async fn register_boot(&self, chat_id: i64, topic_id: Option<i64>) -> tokio::sync::oneshot::Receiver<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.boot_cancels.lock().await.insert((chat_id, topic_id), tx);
         rx
     }
 
+    /// Executes `unregister_boot` (unregister boot).
     pub async fn unregister_boot(&self, chat_id: i64, topic_id: Option<i64>) {
         self.boot_cancels.lock().await.remove(&(chat_id, topic_id));
     }
 
+    /// Executes `abort` (abort).
     pub async fn abort(&self, chat_id: i64, topic_id: Option<i64>) -> usize {
         if let Some(tx) = self.boot_cancels.lock().await.remove(&(chat_id, topic_id)) {
             let _ = tx.send(());
@@ -162,6 +186,7 @@ impl SessionManager {
         prev - h.len()
     }
 
+    /// Executes `terminate_all` (terminate all).
     pub async fn terminate_all(&self) {
         let mut cancels = self.boot_cancels.lock().await;
         for (_, tx) in cancels.drain() {
@@ -171,6 +196,7 @@ impl SessionManager {
         self.holders.lock().await.clear();
     }
 
+    /// Executes `interrupt` (interrupt).
     pub async fn interrupt(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
         let mut found = self.boot_cancels.lock().await.remove(&(chat_id, topic_id))
             .is_some_and(|tx| { let _ = tx.send(()); true });
@@ -207,20 +233,24 @@ impl SessionManager {
         found
     }
 
+    /// Executes `was_recently_interrupted` (was recently interrupted).
     pub async fn was_recently_interrupted(&self, sid: &str, within: std::time::Duration) -> bool {
         self.interrupted_at.lock().await.get(sid).is_some_and(|t| t.elapsed() < within)
     }
 
+    /// Executes `is_interrupted` (is interrupted).
     pub async fn is_interrupted(&self, session_id: &str) -> bool {
         let interrupted = self.interrupted_sessions.lock().await;
         interrupted.contains(session_id)
     }
 
+    /// Executes `clear_interrupted` (clear interrupted).
     pub async fn clear_interrupted(&self, session_id: &str) {
         let mut interrupted = self.interrupted_sessions.lock().await;
         interrupted.remove(session_id);
     }
 
+    /// Executes `write_to_session` (write to session).
     pub async fn write_to_session(&self, session_id: &str, input: &str) -> Result<bool, String> {
         let master_fd = {
             let holders = self.holders.lock().await;
@@ -248,6 +278,7 @@ impl SessionManager {
         }
     }
 
+    /// Executes `is_active` (is active).
     pub async fn is_active(&self, session_id: &str) -> bool {
         let mut h = self.holders.lock().await;
         if let Some(holder) = h.get_mut(session_id) {
@@ -256,6 +287,7 @@ impl SessionManager {
         false
     }
 
+    /// Executes `get_output_len` (get output len).
     pub async fn get_output_len(&self, session_id: &str) -> Option<usize> {
         let holders = self.holders.lock().await;
         let holder = holders.get(session_id)?;
@@ -263,6 +295,7 @@ impl SessionManager {
         Some(out.len())
     }
 
+    /// Executes `get_output_from` (get output from).
     pub async fn get_output_from(&self, session_id: &str, from: usize) -> Option<Vec<u8>> {
         let holders = self.holders.lock().await;
         let holder = holders.get(session_id)?;

@@ -1,7 +1,11 @@
 //! # Telegram Cron Formatting Helper
 //!
+//! ## Overview
 //! Provides human-friendly natural language formatting for cron expressions,
 //! next execution time calculations, and target chat/topic displays.
+//!
+//! ## Search Tags
+//! #cron-formatter, #schedule-display, #human-cron
 
 use crate::cron::manager::CronJob;
 use crate::t;
@@ -12,11 +16,10 @@ pub(crate) fn format_target_topic(job: &CronJob, topic_cache: Option<&TopicNameC
         return t!("bot.cron_target_unset");
     }
     if let Some(tid) = job.topic_id {
-        if let Some(cache) = topic_cache {
-            if let Some(name) = cache.find_by_id(job.chat_id, tid) {
+        if let Some(cache) = topic_cache
+            && let Some(name) = cache.find_by_id(job.chat_id, tid) {
                 return format!("<code>#{}</code>", html_escape::encode_safe(&name));
             }
-        }
         format!("<code>Topic #{}</code>", tid)
     } else {
         t!("bot.cron_target_main_chat")
@@ -48,12 +51,11 @@ pub(crate) fn parse_schedule_natural(schedule: &str) -> String {
                     let time = format!("{:02}:{:02}", h, m);
                     return t!("bot.cron_schedule_weekdays", time = time);
                 }
-            } else if dow == "0,6" || dow == "6,0" || dow.eq_ignore_ascii_case("sat,sun") {
-                if let (Ok(m), Ok(h)) = (min.parse::<u32>(), hour.parse::<u32>()) {
+            } else if (dow == "0,6" || dow == "6,0" || dow.eq_ignore_ascii_case("sat,sun"))
+                && let (Ok(m), Ok(h)) = (min.parse::<u32>(), hour.parse::<u32>()) {
                     let time = format!("{:02}:{:02}", h, m);
                     return t!("bot.cron_schedule_weekends", time = time);
                 }
-            }
         }
     }
     format!("<code>{}</code>", html_escape::encode_safe(schedule))
@@ -72,6 +74,7 @@ pub(crate) fn format_schedule_display(schedule: &str, timezone: &str) -> String 
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

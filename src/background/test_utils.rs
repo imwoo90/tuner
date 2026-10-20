@@ -1,7 +1,12 @@
 //! # Test Harness and Mocks for Background Module
 //!
+//! ## Overview
 //! Provides fake task providers, command runners, and callback catchers to simulate asynchronous
 //! agent runs during integration testing.
+//!
+//! ## Search Tags
+//! #background-tests, #mock-provider, #test-harness
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::background::observer::BackgroundSubmit;
 use crate::cli::{AgentProvider, CliResponse, StreamEvent};
@@ -12,8 +17,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
+/// Represents `MockProvider` (mock provider).
 pub struct MockProvider {
+    /// Notify.
     pub notify: Option<Arc<Notify>>,
+    /// Response.
     pub response: Result<CliResponse, String>,
 }
 
@@ -43,6 +51,7 @@ impl AgentProvider for MockProvider {
     }
 }
 
+/// Executes `make_paths` (make paths).
 pub fn make_paths() -> DuctorPaths {
     DuctorPaths::new(
         PathBuf::from("/tmp/ductor_home"),
@@ -52,6 +61,7 @@ pub fn make_paths() -> DuctorPaths {
     )
 }
 
+/// Executes `make_submit` (make submit).
 pub fn make_submit(chat_id: i64, prompt: &str, message_id: i64) -> BackgroundSubmit {
     BackgroundSubmit {
         chat_id,

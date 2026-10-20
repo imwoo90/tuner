@@ -3,9 +3,6 @@
 //! ## Overview
 //! Periodically purges stale files from media and session history folders.
 //!
-//! ## Collaboration Graph
-//! - Ticked by background scheduling timers in the main application loop.
-//!
 //! ## Search Tags
 //! #purger, #disk-maintenance, #retention-policy
 
@@ -14,10 +11,15 @@ use std::path::{Path, PathBuf};
 use chrono::Timelike;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// Represents `CleanupConfig` (cleanup config).
 pub struct CleanupConfig {
+    /// Enabled.
     pub enabled: bool,
+    /// Media files days.
     pub media_files_days: u64,
+    /// Output to user days.
     pub output_to_user_days: u64,
+    /// Check hour.
     pub check_hour: u32,
 }
 
@@ -32,9 +34,13 @@ impl Default for CleanupConfig {
     }
 }
 
+/// Represents `CleanupObserver` (cleanup observer).
 pub struct CleanupObserver {
+    /// Config.
     pub config: CleanupConfig,
+    /// Telegram files dir.
     pub telegram_files_dir: PathBuf,
+    /// Output to user dir.
     pub output_to_user_dir: PathBuf,
 }
 
@@ -65,29 +71,22 @@ pub fn delete_old_files(path: &Path, max_age_days: u64) -> u64 {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 walk(&entry_path, now, max_age, deleted_count, false);
-            } else if entry_path.is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(age) = now.duration_since(modified) {
-                            if age >= max_age {
-                                if fs::remove_file(&entry_path).is_ok() {
+            } else if entry_path.is_file()
+                && let Ok(metadata) = entry.metadata()
+                    && let Ok(modified) = metadata.modified()
+                        && let Ok(age) = now.duration_since(modified)
+                            && age >= max_age
+                                && fs::remove_file(&entry_path).is_ok() {
                                     *deleted_count += 1;
                                 }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // Subdirectory Pruning
-        if !is_root {
-            if let Ok(mut read_dir) = fs::read_dir(dir) {
-                if read_dir.next().is_none() {
+        if !is_root
+            && let Ok(mut read_dir) = fs::read_dir(dir)
+                && read_dir.next().is_none() {
                     let _ = fs::remove_dir(dir);
                 }
-            }
-        }
     }
 
     walk(path, now, max_age_duration, &mut deleted_count, true);
@@ -95,6 +94,7 @@ pub fn delete_old_files(path: &Path, max_age_days: u64) -> u64 {
 }
 
 impl CleanupObserver {
+    /// Creates a new instance.
     pub fn new(
         config: CleanupConfig,
         telegram_files_dir: PathBuf,

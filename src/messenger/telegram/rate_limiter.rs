@@ -1,7 +1,11 @@
 //! # Telegram Chat-Wide Rate Limiter and Throttle
 //!
+//! ## Overview
 //! Enforces global per-chat transmission rate limiting to prevent Telegram 429 RetryAfter
 //! errors when multiple forum topics or concurrent sessions send messages or edit streaming text.
+//!
+//! ## Search Tags
+//! #rate-limiter, #telegram-throttle, #retry-after
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
@@ -84,6 +88,7 @@ impl ChatRateLimiter {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

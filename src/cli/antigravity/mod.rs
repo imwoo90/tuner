@@ -1,13 +1,21 @@
 //! # Antigravity CLI Driver (index.md)
 //!
 //! ## Overview
-//! Controls the `agy` executable, parsing real-time logs, managing pseudo-terminals (PTY),
+//! Controls the `agy` executable, parsing real-time transcript logs, managing pseudo-terminals (PTY),
 //! and validating workspace security rules.
 //!
-//! ## Module Components
-//! - [`pty_spawner`]: Spawns subprocesses inside PTY descriptors.
-//! - [`log_parser`]: Extracts event frames from active log streams.
-//! - [`trust`]: Auto-merges trust directories.
+//! ## Submodules
+//! - [`events`] (`events.rs`): Brain directory resolution and JSONL transcript answer extraction.
+//! - [`session`] (`session.rs`): Active PTY session registry, soft Esc interruption, and ask state.
+//! - [`provider`] (`provider.rs`): High-level `AgentProvider` implementation for oneshot and PTY runs.
+//! - [`pty_spawner`] (`pty_spawner.rs`): Low-level non-echoing PTY allocation and child process spawning.
+//! - [`log_helpers`] (`log_helpers.rs`): Byte-offset file tailing and collapsible Markdown formatting helpers.
+//! - [`log_parser`] (`log_parser.rs`): Incremental structured log delta parser for CoT and tool calls.
+//! - [`polling`] (`polling.rs`): File-watcher-driven transcript polling and completion loops.
+//! - [`completion`] (`completion.rs`): Turn completion detection and PTY output stability checks.
+//! - [`discovery`] (`discovery.rs`): Dynamic model catalog and quota usage discovery via `agy`.
+//! - [`trust`] (`trust.rs`): Automatic workspace trust directory registration.
+//! - [`error_parser`] (`error_parser.rs`): User-friendly classification of CLI quota and runtime errors.
 //!
 //! ## Search Tags
 //! #antigravity-driver, #pty-spawner, #log-extractor, #workspace-trust
@@ -17,16 +25,25 @@ use std::path::PathBuf;
 
 pub mod events;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod events_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod async_tests;
 pub mod session;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod session_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod interrupt_tests;
 pub mod provider;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod provider_tests;
 pub mod pty_spawner;
 pub mod log_helpers;
@@ -35,23 +52,31 @@ pub mod polling;
 pub mod completion;
 pub mod discovery;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod discovery_tests;
 pub mod trust;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod trust_tests;
 pub mod error_parser;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod error_parser_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod provider_json_tests;
 
 #[derive(Clone)]
+/// Represents `AntigravityCli` (antigravity cli).
 pub struct AntigravityCli {
+    /// Config.
     pub config: CliConfig,
+    /// Sessions.
     pub sessions: std::sync::Arc<session::SessionManager>,
 }
 
 impl AntigravityCli {
+    /// Creates a new instance.
     pub fn new(config: CliConfig) -> Self {
         Self {
             config,
@@ -59,6 +84,7 @@ impl AntigravityCli {
         }
     }
 
+    /// Executes `is_session_alive` (is session alive).
     pub fn is_session_alive(&self, session_id: &str) -> bool {
         if session_id.is_empty() {
             return false;
@@ -70,6 +96,7 @@ impl AntigravityCli {
         conv_db.exists() || transcript.exists()
     }
 
+    /// Executes `discover_models` (discover models).
     pub async fn discover_models(&self) -> Vec<String> {
         discovery::discover_models("agy").await
     }
@@ -91,6 +118,7 @@ impl AntigravityCli {
         (Some(m.to_string()), eff)
     }
 
+    /// Executes `build_command` (build command).
     pub fn build_command(
         &self,
         prompt: &str,
@@ -129,12 +157,11 @@ impl AntigravityCli {
         }
 
         let has_print_timeout = cmd.iter().any(|arg| arg == "--print-timeout" || arg.starts_with("--print-timeout="));
-        if !has_print_timeout {
-            if let Ok(timeout_val) = std::env::var("TUNER_PRINT_TIMEOUT") {
+        if !has_print_timeout
+            && let Ok(timeout_val) = std::env::var("TUNER_PRINT_TIMEOUT") {
                 cmd.push("--print-timeout".to_string());
                 cmd.push(timeout_val);
             }
-        }
 
         if !cmd.contains(&"--output-format".to_string()) {
             cmd.push("--output-format".to_string());
@@ -148,6 +175,7 @@ impl AntigravityCli {
         cmd
     }
 
+    /// Executes `resolve_oneshot_timeout` (resolve oneshot timeout).
     pub fn resolve_oneshot_timeout(cmd_args: &[String]) -> (tokio::time::Duration, u64) {
         let explicit = cmd_args.iter().enumerate().find_map(|(i, arg)| {
             if arg == "--print-timeout" {
@@ -175,9 +203,9 @@ impl AntigravityCli {
     }
 
 fn strip_frontmatter(raw: &str) -> &str {
-    if raw.starts_with("---") {
-        if let Some(end_idx) = raw[3..].find("---") {
-            raw[3 + end_idx + 3..].trim_start()
+    if let Some(after_open) = raw.strip_prefix("---") {
+        if let Some(end_idx) = after_open.find("---") {
+            after_open[end_idx + 3..].trim_start()
         } else {
             raw
         }
@@ -228,6 +256,7 @@ fn append_section(target: &mut String, content: &str) {
         final_prompt
     }
 
+    /// Executes `agy_workspace` (agy workspace).
     pub fn agy_workspace(&self) -> PathBuf {
         let working_dir = &self.config.working_dir;
         let path_str = working_dir.to_string_lossy();
@@ -266,13 +295,11 @@ fn append_section(target: &mut String, content: &str) {
 
     fn ensure_agy_link(&self, link: &std::path::Path, target: &std::path::Path) -> bool {
         if link.is_symlink() {
-            if let Ok(resolved) = link.canonicalize() {
-                if let Ok(target_canon) = target.canonicalize() {
-                    if resolved == target_canon {
+            if let Ok(resolved) = link.canonicalize()
+                && let Ok(target_canon) = target.canonicalize()
+                    && resolved == target_canon {
                         return true;
                     }
-                }
-            }
             let _ = std::fs::remove_file(link);
         } else if link.exists() {
             return false;
@@ -293,4 +320,6 @@ fn append_section(target: &mut String, content: &str) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod mod_tests;

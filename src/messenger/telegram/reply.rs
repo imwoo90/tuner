@@ -4,10 +4,6 @@
 //! Constructs context-rich prompts by parsing reply histories, removing bot mentions,
 //! downloading media attachments, and injecting system hints.
 //!
-//! ## Collaboration Graph
-//! - Builds payloads before calling [`runner`](crate::telegram::runner) streams.
-//! - Resolves parent messages to inject prompt-context buffers.
-//!
 //! ## Search Tags
 //! #prompt-builder, #reply-history, #media-downloader, #mention-filter
 
@@ -15,6 +11,7 @@ use teloxide::types::Message;
 use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
 
+/// Executes `get_topic_id` (get topic id).
 pub fn get_topic_id(msg: &Message) -> Option<i64> {
     if msg.is_topic_message {
         msg.thread_id.map(|t| t.0.0 as i64)
@@ -76,15 +73,14 @@ fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
     let mut remaining_text = "";
     let mut count = 0;
     for (i, ch) in rest.char_indices() {
-        if ch.is_whitespace() {
-            if i > 0 && !rest.as_bytes()[i-1].is_ascii_whitespace() {
+        if ch.is_whitespace()
+            && i > 0 && !rest.as_bytes()[i-1].is_ascii_whitespace() {
                 count += 1;
                 if count == consumed_tokens {
                     remaining_text = rest[i..].trim();
                     break;
                 }
             }
-        }
     }
     if count < consumed_tokens {
         ""
@@ -116,8 +112,8 @@ fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> 
 
 fn split_legacy_model_effort(m: &str) -> (String, Option<String>) {
     for (suffix, eff) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
-        if m.ends_with(suffix) {
-            return (m[..m.len() - suffix.len()].to_string(), Some(eff.to_string()));
+        if let Some(prefix) = m.strip_suffix(suffix) {
+            return (prefix.to_string(), Some(eff.to_string()));
         }
     }
     (m.to_string(), None)
@@ -176,11 +172,10 @@ pub(crate) async fn resolve_session_model(
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
         let eff = sess.effort.as_ref().or(config.effort.as_ref());
-        if let Some(eff_str) = eff {
-            if !eff_str.is_empty() {
+        if let Some(eff_str) = eff
+            && !eff_str.is_empty() {
                 return format!("{} (effort: {})", sess.model, eff_str);
             }
-        }
         sess.model
     } else {
         default_model.to_string()

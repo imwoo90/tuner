@@ -2,6 +2,7 @@
 //!
 //! This module contains unit and integration tests for the Telegram bot interface,
 //! validating message reply prompt building and SessionManager integration.
+#![allow(clippy::await_holding_lock)]
 
 #[cfg(test)]
 mod tests {

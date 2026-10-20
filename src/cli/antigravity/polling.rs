@@ -1,9 +1,9 @@
 //! # Antigravity CLI Log Polling
 //!
+//! ## Overview
 //! This module spawns background tasks to poll the transcript log
 //! of active Antigravity CLI sessions and feed streaming progress.
-
-//! 
+//!
 //! ## Search Tags
 //! #polling
 
@@ -79,9 +79,8 @@ fn parse_and_stream(
         *act_path = Some(tp.clone());
         let res = parser.parse_log_delta_structured(&tp, *p_size);
         *p_size = Some(res.new_size);
-        if res.final_content.is_none() {
-            if let Some(t) = res.formatted { let _ = tx.send(StreamEvent::TextDelta(t)); }
-        }
+        if res.final_content.is_none()
+            && let Some(t) = res.formatted { let _ = tx.send(StreamEvent::TextDelta(t)); }
         if let Some(a) = res.ask_question { let _ = tx.send(StreamEvent::AskQuestion(a)); }
     }
 }
@@ -103,16 +102,14 @@ async fn poll_loop_async(
     let brain_root = super::events::agy_state_root(Some(&env)).join("brain");
 
     if let Ok(mut w) = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res {
-            if matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+        if let Ok(e) = res
+            && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                 let _ = fs_tx.send(());
             }
-        }
-    }) {
-        if w.watch(&brain_root, RecursiveMode::Recursive).is_ok() {
+    })
+        && w.watch(&brain_root, RecursiveMode::Recursive).is_ok() {
             watcher = Some(w);
         }
-    }
 
     let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(5));
     parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
@@ -156,11 +153,10 @@ fn setup_path_watcher(
 ) -> Option<RecommendedWatcher> {
     let p = path?.parent()?;
     let mut w = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res {
-            if matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+        if let Ok(e) = res
+            && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                 let _ = tx.send(());
             }
-        }
     }).ok()?;
     w.watch(p, RecursiveMode::NonRecursive).ok()?;
     Some(w)

@@ -4,10 +4,6 @@
 //! Connects to the Telegram Bot API and starts long-polling listener using Teloxide. Coordinates
 //! session caches, message queues, and worker status.
 //!
-//! ## Collaboration Graph
-//! - Entry point loaded by the main application launcher [`main.rs`](crate::main.rs).
-//! - Spawns typing status guards during processing.
-//!
 //! ## Search Tags
 //! #polling-loop, #bot-initializer, #teloxide-runner
 
@@ -118,6 +114,7 @@ fn spawn_restart_watcher(tuner_home: std::path::PathBuf) {
     });
 }
 
+/// Executes `run_bot` (run bot).
 pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
     let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;

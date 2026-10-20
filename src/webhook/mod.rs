@@ -1,13 +1,16 @@
-//! # Webhook Ingress and Axum API Module (index.md)
+//! # Webhook Ingress and Axum API Module
 //!
 //! ## Overview
-//! Manages registration, signature verification, route handling, and WebSocket sessions for external runners.
+//! Manages webhook registration, HMAC/Bearer authentication, HTTP route handling, and encrypted
+//! WebSocket sessions for external clients and triggers.
 //!
-//! ## Module Components
-//! - [`server`]: Binds TCP ports, sets up grace shutdown, and starts HTTP pipelines.
-//! - [`api`]: Implements websocket session loops, handshake validations, and API routes.
-//! - [`auth`]: Validates bearer tokens and HMAC sha256 checksums.
-//! - [`manager`]: Persists and resolves registered webhook destinations.
+//! ## Submodules
+//! - [`api`] (`api/mod.rs`): Implements WebSocket session loops, E2E handshake validation, and API routes.
+//! - [`auth`] (`auth.rs`): Validates Bearer tokens and HMAC-SHA256 payload signatures.
+//! - [`manager`] (`manager.rs`): Persists and resolves registered webhook hook definitions.
+//! - [`models`] (`models.rs`): Data structures for webhook hooks, payloads, and dispatch results.
+//! - [`observer`] (`observer.rs`): Watches `webhooks.json` and manages the lifecycle of the webhook server.
+//! - [`server`] (`server.rs`): Binds TCP ports, configures rate limiting, and runs the Axum HTTP server.
 //!
 //! ## Search Tags
 //! #webhook-ingress, #axum-server, #websocket-sessions, #hmac-validation

@@ -4,9 +4,23 @@
 //! The primary boot orchestrator for the `tuner` service. Operates as a supervisor master
 //! spawning individual profile workers or as a worker managing bots.
 //!
-//! ## Application Architecture
-//! - **Master Mode**: Supervises child profile workers, restarting them on failure, and checks restart markers.
-//! - **Worker Mode**: Runs the bot event loop, schedules cron tasks, and starts webhook ports.
+//! ## Submodules
+//! - [`cli`] (`cli/mod.rs`): Agent CLI provider abstractions and PTY execution drivers.
+//! - [`config`] (`config.rs`): JSON configuration parsing, defaults, and profile overrides.
+//! - [`messenger`] (`messenger/mod.rs`): Messaging frontend adapters anchored by Telegram.
+//! - [`session`] (`session/mod.rs`): Persistent chat/topic session lifecycle and freshness tracking.
+//! - [`cleanup`] (`cleanup/mod.rs`): Retention-based temporary file and process cleanup observer.
+//! - [`heartbeat`] (`heartbeat/mod.rs`): Quiet-hour-aware periodic health telemetry scheduler.
+//! - [`cron`] (`cron/mod.rs`): Timezone-aware periodic AI agent job scheduler and store.
+//! - [`workspace`] (`workspace/mod.rs`): Profile directory layout, rule templates, and skill mounting.
+//! - [`background`] (`background/mod.rs`): Asynchronous fire-and-forget CLI task execution.
+//! - [`security`] (`security/mod.rs`): Path sandboxing and output credential filtering.
+//! - [`bus`] (`bus/mod.rs`): Internal message bus, routing envelopes, and topic lock pool.
+//! - [`webhook`] (`webhook/mod.rs`): Axum HTTP/WebSocket ingress server and encrypted remote API.
+//! - [`i18n`] (`i18n/mod.rs`): TOML localization catalog loader and lookup macros.
+//! - [`supervisor`] (`supervisor.rs`): Child process restart supervisor with backoff.
+//! - [`setup`] (`setup.rs`): Interactive setup wizard, `.env` loader, and systemd installer.
+//! - [`upgrade`] (`upgrade.rs`): GitHub release self-upgrade downloader and atomic binary swapper.
 //!
 //! ## Search Tags
 //! #main-entry, #master-mode, #worker-mode, #process-supervisor
@@ -30,57 +44,82 @@ pub mod setup;
 pub mod upgrade;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod telegram_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod config_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod upgrade_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod supervisor_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod webhook_tests;
 
 
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod i18n_tests;
 
 #[cfg(test)]
-pub mod i18n_tests_extra;
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
+pub mod i18n_extra_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod i18n_check_tests;
 
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod cleanup_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod heartbeat_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod cron_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod workspace_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod background_tests;
 
 #[cfg(test)]
-pub mod background_tests_extra;
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
+pub mod background_extra_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod security_tests;
 
 #[cfg(test)]
-pub mod security_tests_extra;
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+pub mod security_extra_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod bus_tests;
 
 
@@ -110,7 +149,7 @@ fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String>
         println!("❌ Token cannot be empty. Please try again.");
     };
 
-    let content = std::fs::read_to_string(&paths.config_path()).map_err(|e| e.to_string())?;
+    let content = std::fs::read_to_string(paths.config_path()).map_err(|e| e.to_string())?;
     let mut config_val: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     
     if let Some(obj) = config_val.as_object_mut() {
@@ -119,7 +158,7 @@ fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String>
     }
 
     let config_content = serde_json::to_string_pretty(&config_val).map_err(|e| e.to_string())?;
-    std::fs::write(&paths.config_path(), config_content).map_err(|e| e.to_string())?;
+    std::fs::write(paths.config_path(), config_content).map_err(|e| e.to_string())?;
     println!("✅ Configuration saved successfully to {:?}", paths.config_path());
 
     let config = config::CliConfig::load_from_file(&paths.config_path())?;
@@ -164,12 +203,11 @@ async fn monitor_workers(workers: &mut [(String, tokio::process::Child)], curren
         match child.try_wait() {
             Ok(Some(status)) => {
                 println!("🤖 [tuner] Worker '{}' exited with status: {}", name, status);
-                if let Some(code) = status.code() {
-                    if code == 42 {
+                if let Some(code) = status.code()
+                    && code == 42 {
                         exit_requested = Some(name.clone());
                         break;
                     }
-                }
                 println!("🤖 [tuner] Restarting worker: {}", name);
                 *child = spawn_worker(current_exe, name).await?;
             }
@@ -240,7 +278,7 @@ async fn handle_daemon_mode(args: &[String], config: &config::CliConfig) -> Resu
     if args.contains(&"--supervisor".to_string()) {
         let current_exe = std::env::current_exe()
             .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
-        let filtered_args: Vec<String> = args.iter().cloned().skip(1).filter(|arg| arg != "--supervisor").collect();
+        let filtered_args: Vec<String> = args.iter().skip(1).filter(|&arg| arg != "--supervisor").cloned().collect();
         let supervisor = supervisor::Supervisor::with_args(current_exe, filtered_args);
         supervisor.run().await?;
         return Ok(Some(()));

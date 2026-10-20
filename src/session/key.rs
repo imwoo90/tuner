@@ -4,10 +4,6 @@
 //! Defines the [`SessionKey`] representation. Matches Telegram chat/topic ID mappings or webhook channels
 //! to guarantee strict separation of concurrent workspaces.
 //!
-//! ## Collaboration Graph
-//! - Constructed inside message routers (e.g. [`process_text_with_files`](crate::telegram::process_text_with_files)).
-//! - Used by [`SessionManager`](super::manager::SessionManager) as hash keys.
-//!
 //! ## Search Tags
 //! #session-keys, #telegram-keys, #webhook-keys, #key-serialization
 
@@ -16,8 +12,11 @@ use std::str::FromStr;
 /// Composite session identifier: transport + chat + optional topic/channel.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SessionKey {
+    /// Transport.
     pub transport: String,
+    /// Chat id.
     pub chat_id: i64,
+    /// Topic id.
     pub topic_id: Option<i64>,
 }
 
@@ -49,10 +48,12 @@ impl SessionKey {
         }
     }
 
+    /// Executes `lock_key` (lock key).
     pub fn lock_key(&self) -> (i64, Option<i64>) {
         (self.chat_id, self.topic_id)
     }
 
+    /// Executes `matrix` (matrix).
     pub fn matrix(chat_id: i64) -> Self {
         Self {
             transport: "mx".to_string(),
@@ -61,6 +62,7 @@ impl SessionKey {
         }
     }
 
+    /// Executes `for_transport` (for transport).
     pub fn for_transport(transport: &str, chat_id: i64, topic_id: Option<i64>) -> Self {
         Self {
             transport: transport.to_string(),
@@ -111,6 +113,7 @@ impl FromStr for SessionKey {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

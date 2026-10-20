@@ -1,8 +1,12 @@
 //! # In-App File Review Manager
 //!
+//! ## Overview
 //! Provides ephemeral, secure file snapshot sessions for Telegram WebApp and mobile file review.
 //! Captures referenced code, text, images, video, and audio files, preparing sessions for the
 //! mobile-responsive dark-mode viewer and direct download.
+//!
+//! ## Search Tags
+//! #file-review, #webapp-viewer, #snapshot-session
 
 use super::review_store::{
     check_record_files, default_storage_path, load_records, save_records, ReviewSessionRecord,
@@ -14,13 +18,20 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+/// Represents `ReviewFile` (review file).
 pub struct ReviewFile {
+    /// Filename.
     pub filename: String,
+    /// Path.
     pub path: String,
+    /// Content.
     pub content: String,
+    /// Size bytes.
     pub size_bytes: usize,
+    /// Language.
     pub language: String,
     #[serde(default)]
+    /// Is binary.
     pub is_binary: bool,
 }
 
@@ -31,6 +42,7 @@ struct SessionEntry {
     files: Vec<ReviewFile>,
 }
 
+/// Represents `ReviewManager` (review manager).
 pub struct ReviewManager {
     sessions: Arc<Mutex<HashMap<String, SessionEntry>>>,
     records: Arc<Mutex<HashMap<String, ReviewSessionRecord>>>,
@@ -41,11 +53,19 @@ pub struct ReviewManager {
 
 static INSTANCE: OnceLock<Arc<ReviewManager>> = OnceLock::new();
 
+/// Executes `global_review_manager` (global review manager).
 pub fn global_review_manager() -> Arc<ReviewManager> {
     INSTANCE.get_or_init(|| Arc::new(ReviewManager::new())).clone()
 }
 
+impl Default for ReviewManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReviewManager {
+    /// Creates a new instance.
     pub fn new() -> Self {
         let path = default_storage_path();
         let loaded = load_records(&path);
@@ -58,6 +78,7 @@ impl ReviewManager {
         }
     }
 
+    /// Executes `init_storage` (init storage).
     pub async fn init_storage(&self, path: PathBuf) {
         let loaded = load_records(&path);
         let mut recs = self.records.lock().await;
@@ -68,6 +89,7 @@ impl ReviewManager {
         *p = path;
     }
 
+    /// Executes `register_session` (register session).
     pub async fn register_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
         let valid_paths: Vec<String> = paths
             .iter()
@@ -96,11 +118,13 @@ impl ReviewManager {
         Some((session_id, count))
     }
 
+    /// Executes `get_session_record` (get session record).
     pub async fn get_session_record(&self, session_id: &str) -> Option<ReviewSessionRecord> {
         let recs = self.records.lock().await;
         recs.get(session_id).cloned()
     }
 
+    /// Executes `activate_session` (activate session).
     pub async fn activate_session(&self, paths: &[PathBuf]) -> Option<String> {
         let mut files = Vec::new();
         let mut used_names = HashSet::new();
@@ -124,12 +148,14 @@ impl ReviewManager {
         Some(token)
     }
 
+    /// Executes `create_session` (create session).
     pub async fn create_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
         let (_session_id, count) = self.register_session(paths).await?;
         let token = self.activate_session(paths).await?;
         Some((token, count))
     }
 
+    /// Executes `get_files` (get files).
     pub async fn get_files(&self, token_or_id: &str) -> Option<Vec<ReviewFile>> {
         let mut map = self.sessions.lock().await;
         let now = Instant::now();
@@ -152,6 +178,7 @@ impl ReviewManager {
         map.get(&token).map(|e| e.files.clone())
     }
 
+    /// Executes `get_file_path` (get file path).
     pub async fn get_file_path(&self, token: &str, filename: &str) -> Option<PathBuf> {
         let files = self.get_files(token).await?;
         for f in files {
@@ -165,6 +192,7 @@ impl ReviewManager {
         None
     }
 
+    /// Executes `get_html` (get html).
     pub async fn get_html(&self, token: &str) -> Option<String> {
         let files = self.get_files(token).await?;
         let json_data = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
@@ -178,14 +206,17 @@ impl ReviewManager {
         Some(rendered)
     }
 
+    /// Executes `ensure_server_running` (ensure server running).
     pub async fn ensure_server_running(&self) -> u16 {
         super::review_server::ensure_server_running(&self.server_port).await
     }
 
+    /// Executes `warmup` (warmup).
     pub async fn warmup(&self) {
         super::review_server::warmup(&self.server_port, &self.tunnel_url).await
     }
 
+    /// Executes `get_review_url` (get review url).
     pub async fn get_review_url(&self, token: &str) -> String {
         super::review_server::get_review_url(&self.server_port, &self.tunnel_url, token).await
     }
@@ -253,6 +284,7 @@ fn process_path_for_review(path: &StdPath, used_names: &mut HashSet<String>) -> 
     })
 }
 
+/// Executes `detect_language` (detect language).
 pub fn detect_language(path: &StdPath) -> String {
     let ext = path
         .extension()

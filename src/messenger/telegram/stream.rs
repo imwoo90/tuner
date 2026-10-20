@@ -4,11 +4,6 @@
 //! Consumes character/event streams from active agent CLI PTY processes. Debounces text chunks
 //! to minimize Telegram message update rate-limiting and renders real-time outputs.
 //!
-//! ## Collaboration Graph
-//! - Receives stdout streams from [`AntigravityCli`](crate::cli::antigravity::AntigravityCli).
-//! - Edits active Telegram messages dynamically using Teloxide.
-//! - Feeds final execution status updates back to the session manager.
-//!
 //! ## Search Tags
 //! #streaming-consumer, #debouncer, #rate-limiting, #message-updates
 
@@ -89,6 +84,7 @@ pub(crate) async fn send_chunks_to_telegram(
     (ok, err, sent_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_stream_result(
     bot: &Bot,
     chat_id: ChatId,
@@ -172,6 +168,7 @@ pub(crate) async fn handle_text_delta(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
@@ -215,6 +212,7 @@ async fn process_stream_events(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn consume_stream(
     bot: &Bot,
     chat_id: ChatId,
@@ -237,13 +235,12 @@ pub(crate) async fn consume_stream(
 
     process_stream_events(bot, chat_id, thread_id, stream, &session_data, config, &mut last_text, &mut pub_msg_id, &mut last_sid, cli).await?;
 
-    if let Some(mid) = pub_msg_id {
-        if last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for") {
+    if let Some(mid) = pub_msg_id
+        && (last_text.contains("🛠️ **Tool Calls:") || last_text.contains("<!-- Waiting for")) {
             let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
             super::typing::set_progress_reaction(mid.0, chat_id, tok);
             updated.last_progress_msg_id = Some(mid.0);
         }
-    }
 
     if last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
         if let Some(sid) = last_sid { updated.set_session_id(&config.provider, &sid); }

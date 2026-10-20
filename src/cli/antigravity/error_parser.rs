@@ -1,5 +1,6 @@
 //! # Smart CLI Error Parser
 //!
+//! ## Overview
 //! This module analyzes agy CLI process exit status and stderr streams
 //! to offer clear, actionable restoration guidelines to the user.
 //! In agy 1.2.6+, headless runs exit with code 3 on agent/model API failures
@@ -11,33 +12,45 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone, Default, PartialEq)]
+/// Represents `AgyErrorPayload` (agy error payload).
 pub struct AgyErrorPayload {
+    /// Status.
     pub status: Option<String>,
+    /// Code.
     pub code: Option<serde_json::Value>,
+    /// Message.
     pub message: Option<String>,
+    /// Retryable.
     pub retryable: Option<bool>,
+    /// Error id.
     pub error_id: Option<String>,
+    /// Error.
     pub error: Option<serde_json::Value>,
 }
 
 impl AgyErrorPayload {
+    /// Executes `code_as_i64` (code as i64).
     pub fn code_as_i64(&self) -> Option<i64> {
         let v = self.code.as_ref().or_else(|| self.error.as_ref()?.get("code"))?;
         v.as_i64().or_else(|| v.as_str()?.parse().ok())
     }
 
+    /// Executes `code_str` (code str).
     pub fn code_str(&self) -> Option<&str> {
         self.code.as_ref().or_else(|| self.error.as_ref()?.get("code"))?.as_str()
     }
 
+    /// Executes `effective_status` (effective status).
     pub fn effective_status(&self) -> Option<&str> {
         self.status.as_deref().or_else(|| self.error.as_ref()?.get("status")?.as_str())
     }
 
+    /// Executes `effective_message` (effective message).
     pub fn effective_message(&self) -> Option<&str> {
         self.message.as_deref().or_else(|| self.error.as_ref()?.get("message")?.as_str())
     }
 
+    /// Executes `is_empty` (is empty).
     pub fn is_empty(&self) -> bool {
         self.status.is_none() && self.code.is_none() && self.message.is_none()
             && self.error_id.is_none() && self.error.is_none()
@@ -68,26 +81,23 @@ fn has_any(text: &str, patterns: &[&str]) -> bool {
 }
 
 fn try_parse_payload(s: &str) -> Option<AgyErrorPayload> {
-    if let Ok(p) = serde_json::from_str::<AgyErrorPayload>(s) {
-        if !p.is_empty() { return Some(p); }
-    }
+    if let Ok(p) = serde_json::from_str::<AgyErrorPayload>(s)
+        && !p.is_empty() { return Some(p); }
     let mut de = serde_json::Deserializer::from_str(s).into_iter::<AgyErrorPayload>();
-    if let Some(Ok(p)) = de.next() {
-        if !p.is_empty() { return Some(p); }
-    }
+    if let Some(Ok(p)) = de.next()
+        && !p.is_empty() { return Some(p); }
     None
 }
 
+/// Executes `extract_agy_error` (extract agy error).
 pub fn extract_agy_error(stderr: &str) -> Option<AgyErrorPayload> {
     const TAG: &str = "AGY_ERROR:";
     for line in stderr.lines() {
-        if let Some(idx) = line.find(TAG) {
-            if let Some(p) = try_parse_payload(line[idx + TAG.len()..].trim()) { return Some(p); }
-        }
+        if let Some(idx) = line.find(TAG)
+            && let Some(p) = try_parse_payload(line[idx + TAG.len()..].trim()) { return Some(p); }
         let t = line.trim();
-        if t.starts_with('{') && (t.contains("\"status\"") || t.contains("\"message\"") || t.contains("\"code\"")) {
-            if let Some(p) = try_parse_payload(t) { return Some(p); }
-        }
+        if t.starts_with('{') && (t.contains("\"status\"") || t.contains("\"message\"") || t.contains("\"code\""))
+            && let Some(p) = try_parse_payload(t) { return Some(p); }
     }
     let idx = stderr.find(TAG)?;
     try_parse_payload(stderr[idx + TAG.len()..].trim_start())
@@ -160,6 +170,7 @@ fn get_error_guidance(kind: AgyErrorKind, payload: &AgyErrorPayload) -> (&'stati
     }
 }
 
+/// Executes `format_agy_error` (format agy error).
 pub fn format_agy_error(payload: &AgyErrorPayload) -> String {
     let kind = classify_agy_error(payload);
     let (header, suggestion) = get_error_guidance(kind, payload);
@@ -188,6 +199,7 @@ pub fn format_agy_error(payload: &AgyErrorPayload) -> String {
     out
 }
 
+/// Executes `parse_cli_error` (parse cli error).
 pub fn parse_cli_error(stderr: &str, returncode: i32) -> String {
     if let Some(payload) = extract_agy_error(stderr) {
         return format_agy_error(&payload);

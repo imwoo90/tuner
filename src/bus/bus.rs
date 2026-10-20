@@ -1,10 +1,10 @@
 //! # Message Bus Module
 //!
+//! ## Overview
 //! Provides the `MessageBus` implementation for submitting envelopes, acquiring chat locks,
 //! executing prompt injection, and delivering messages to registered transports (e.g. Telegram, Matrix).
 //! Handles cascading transport fallback and error resilience.
-
-//! 
+//!
 //! ## Search Tags
 //! #bus
 
@@ -14,6 +14,7 @@ use super::envelope::{Envelope, LockMode, DeliveryMode};
 use super::lock_pool::LockPool;
 
 #[async_trait]
+/// Defines the `Transport` (transport) interface.
 pub trait Transport: Send + Sync {
     /// Return the identifier of this transport (e.g. "tg", "mx").
     fn transport_name(&self) -> &str;
@@ -26,6 +27,7 @@ pub trait Transport: Send + Sync {
 }
 
 #[async_trait]
+/// Defines the `PromptInjector` (prompt injector) interface.
 pub trait PromptInjector: Send + Sync {
     /// Inject the given prompt into the active CLI session.
     async fn inject_prompt(
@@ -38,14 +40,22 @@ pub trait PromptInjector: Send + Sync {
     ) -> Result<String, String>;
 }
 
+/// Type alias `BusHook` (bus hook).
 pub type BusHook = Arc<dyn Fn(&Envelope) + Send + Sync>;
 
+/// Represents `MessageBus` (message bus).
 pub struct MessageBus {
     transports: Mutex<Vec<Arc<dyn Transport>>>,
     lock_pool: Arc<LockPool>,
     injector: Mutex<Option<Arc<dyn PromptInjector>>>,
     pre_deliver_hook: Mutex<Option<BusHook>>,
     audit_hook: Mutex<Option<BusHook>>,
+}
+
+impl Default for MessageBus {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MessageBus {
@@ -72,22 +82,22 @@ impl MessageBus {
 
     /// Register a transport with the bus.
     pub fn register_transport(&self, transport: Arc<dyn Transport>) {
-        self.transports.lock().unwrap().push(transport);
+        self.transports.lock().unwrap_or_else(|e| e.into_inner()).push(transport);
     }
 
     /// Set the active prompt injector.
     pub fn set_injector(&self, injector: Arc<dyn PromptInjector>) {
-        *self.injector.lock().unwrap() = Some(injector);
+        *self.injector.lock().unwrap_or_else(|e| e.into_inner()) = Some(injector);
     }
 
     /// Set a pre-deliver hook function.
     pub fn set_pre_deliver_hook(&self, hook: BusHook) {
-        *self.pre_deliver_hook.lock().unwrap() = Some(hook);
+        *self.pre_deliver_hook.lock().unwrap_or_else(|e| e.into_inner()) = Some(hook);
     }
 
     /// Set an audit hook function.
     pub fn set_audit_hook(&self, hook: BusHook) {
-        *self.audit_hook.lock().unwrap() = Some(hook);
+        *self.audit_hook.lock().unwrap_or_else(|e| e.into_inner()) = Some(hook);
     }
 
     /// Submit an envelope to the bus for processing and delivery.
@@ -96,7 +106,7 @@ impl MessageBus {
             envelope.envelope_id = generate_envelope_id();
         }
 
-        let audit = self.audit_hook.lock().unwrap().clone();
+        let audit = self.audit_hook.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(ref hook) = audit {
             hook(envelope);
         }
@@ -112,9 +122,9 @@ impl MessageBus {
     }
 
     async fn process(&self, envelope: &mut Envelope) {
-        let injector = self.injector.lock().unwrap().clone();
-        if envelope.needs_injection && !envelope.prompt.is_empty() {
-            if let Some(ref inj) = injector {
+        let injector = self.injector.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if envelope.needs_injection && !envelope.prompt.is_empty()
+            && let Some(ref inj) = injector {
                 let label = format!("{}:{}", envelope.origin.as_str(), &envelope.envelope_id);
                 match inj.inject_prompt(
                     &envelope.prompt,
@@ -138,9 +148,8 @@ impl MessageBus {
                     }
                 }
             }
-        }
 
-        let pre_deliver = self.pre_deliver_hook.lock().unwrap().clone();
+        let pre_deliver = self.pre_deliver_hook.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Some(ref hook) = pre_deliver {
             hook(envelope);
         }
@@ -149,7 +158,7 @@ impl MessageBus {
     }
 
     async fn deliver(&self, envelope: &Envelope) {
-        let transports = self.transports.lock().unwrap().clone();
+        let transports = self.transports.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if transports.is_empty() {
             return;
         }

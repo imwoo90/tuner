@@ -1,14 +1,16 @@
 //! # Filesystem Sync Helpers
 //!
+//! ## Overview
 //! Internal implementation helpers for walk_and_copy, sync_group, and smart_merge.
-
-//! 
+//! Provides recursive directory copying, rule group synchronization, and non-destructive markdown merging.
+//!
 //! ## Search Tags
 //! #sync-helpers
 
 use crate::workspace::paths::DuctorPaths;
 use std::path::Path;
 
+/// Executes `is_zone2_py_file` (is zone2 py file).
 pub fn is_zone2_py_file(entry: &Path, src: &Path, root_src: &Path) -> bool {
     if entry.extension().and_then(|s| s.to_str()) != Some("py") {
         return false;
@@ -27,6 +29,7 @@ pub fn is_zone2_py_file(entry: &Path, src: &Path, root_src: &Path) -> bool {
     false
 }
 
+/// Executes `walk_and_copy` (walk and copy).
 pub fn walk_and_copy(src: &Path, dst: &Path, root_src: &Path) -> Result<(), String> {
     if let Err(e) = std::fs::create_dir_all(dst) {
         return Err(format!("Failed to create dir: {}", e));
@@ -45,19 +48,17 @@ pub fn walk_and_copy(src: &Path, dst: &Path, root_src: &Path) -> Result<(), Stri
         Err(e) => return Err(format!("Failed to read dir: {}", e)),
     };
 
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            let name = match path.file_name().and_then(|s| s.to_str()) {
-                Some(n) => n,
-                None => continue,
-            };
-            if name.starts_with('.') || skip_dirs.contains(&name) || skip_files.contains(&name) {
-                continue;
-            }
-            let target = dst.join(name);
-            handle_entry(&path, &target, name, src, root_src, dst)?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|s| s.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if name.starts_with('.') || skip_dirs.contains(&name) || skip_files.contains(&name) {
+            continue;
         }
+        let target = dst.join(name);
+        handle_entry(&path, &target, name, src, root_src, dst)?;
     }
     Ok(())
 }
@@ -73,7 +74,8 @@ fn handle_entry(path: &Path, target: &Path, name: &str, src: &Path, root_src: &P
         }
         let _ = std::fs::copy(path, target);
         if name == "CLAUDE.md" {
-            for mirror in &["AGENTS.md"] {
+            {
+                let mirror = &"AGENTS.md";
                 let mirror_target = dst.join(mirror);
                 if mirror_target.is_symlink() || mirror_target.is_file() {
                     let _ = std::fs::remove_file(&mirror_target);
@@ -152,13 +154,11 @@ pub fn sync_managed_rule_dirs(workspace_root: &Path) -> Result<(), String> {
             };
             for entry in entries.flatten() {
                 let child = entry.path();
-                if child.is_dir() && !child.is_symlink() {
-                    if let Some(name) = child.file_name().and_then(|s| s.to_str()) {
-                        if !name.starts_with('.') {
+                if child.is_dir() && !child.is_symlink()
+                    && let Some(name) = child.file_name().and_then(|s| s.to_str())
+                        && !name.starts_with('.') {
                             sync_group(&child)?;
                         }
-                    }
-                }
             }
         }
     }
@@ -166,28 +166,29 @@ pub fn sync_managed_rule_dirs(workspace_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Executes `sync_group` (sync group).
 pub fn sync_group(directory: &Path) -> Result<(), String> {
     let filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
     let mut existing = Vec::new();
 
     for name in &filenames {
         let path = directory.join(name);
-        if path.is_file() {
-            if let Ok(meta) = std::fs::metadata(&path) {
-                if let Ok(mtime) = meta.modified() {
+        if path.is_file()
+            && let Ok(meta) = std::fs::metadata(&path)
+                && let Ok(mtime) = meta.modified() {
                     existing.push((*name, path, mtime));
                 }
-            }
-        }
     }
     if existing.is_empty() {
         return Ok(());
     }
 
-    let (newest_name, newest_path, newest_mtime) = existing
+    let Some((newest_name, newest_path, newest_mtime)) = existing
         .iter()
         .max_by_key(|(_, _, mtime)| mtime)
-        .unwrap();
+    else {
+        return Ok(());
+    };
 
     for name in &filenames {
         if *name == *newest_name { continue; }
@@ -203,14 +204,17 @@ pub fn sync_group(directory: &Path) -> Result<(), String> {
                 if let Err(e) = std::fs::copy(newest_path, &target_path) {
                     return Err(format!("Failed to copy rule file: {}", e));
                 }
-                let ft_newest = filetime::FileTime::from_last_modification_time(&std::fs::metadata(newest_path).unwrap());
-                let _ = filetime::set_file_mtime(&target_path, ft_newest);
+                if let Ok(meta) = std::fs::metadata(newest_path) {
+                    let ft_newest = filetime::FileTime::from_last_modification_time(&meta);
+                    let _ = filetime::set_file_mtime(&target_path, ft_newest);
+                }
             }
         }
     }
     Ok(())
 }
 
+/// Executes `smart_merge_config` (smart merge config).
 pub fn smart_merge_config(paths: &DuctorPaths) -> Result<(), String> {
     let example_path = paths.config_example_path();
     if !example_path.is_file() {
@@ -237,6 +241,7 @@ pub fn smart_merge_config(paths: &DuctorPaths) -> Result<(), String> {
     Ok(())
 }
 
+/// Executes `smart_merge_profile_config` (smart merge profile config).
 pub fn smart_merge_profile_config(paths: &DuctorPaths) -> Result<(), String> {
     let example_path = paths.home_defaults.join("config").join("config.json");
     if !example_path.is_file() {

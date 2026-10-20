@@ -1,5 +1,11 @@
 //! # Antigravity CLI Provider
+//!
+//! ## Overview
 //! Implements the AgentProvider trait for AntigravityCli, managing execution environments, PTY lifecycles, and logs.
+//! Coordinates session resumption, one-shot execution, and live streaming channels across active workspaces.
+//!
+//! ## Search Tags
+//! #antigravity-provider, #agent-provider, #pty-lifecycle
 
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::{AgentProvider, CliResponse, StreamEvent};
@@ -56,6 +62,7 @@ impl AntigravityCli {
         Ok(())
     }
 
+    /// Executes `ensure_interactive_ready` (ensure interactive ready).
     pub async fn ensure_interactive_ready(&self, session_id: &str) -> Result<(), String> {
         if session_id.starts_with("mock-") {
             return Ok(());
@@ -97,11 +104,10 @@ impl AntigravityCli {
         }.await;
 
         sessions.set_running(&sid_str, false).await;
-        if let Err(ref e) = res {
-            if e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:") {
+        if let Err(ref e) = res
+            && e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:") {
                 sessions.terminate(&sid_str).await;
             }
-        }
         if !sessions.is_active(&sid_str).await {
             sessions.set_ask_active(&sid_str, false).await;
         }
@@ -178,11 +184,10 @@ impl AgentProvider for AntigravityCli {
             .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
         let result = self.resolve_result_text(&agy_ws, &env, &stdout_str, brain.as_deref());
 
-        if resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1 {
-            if let Some(ref fid) = final_sid {
+        if resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
+            && let Some(ref fid) = final_sid {
                 self.ensure_interactive_session(fid, &agy_ws, &env).await?;
             }
-        }
 
         Ok(CliResponse {
             session_id: final_sid,

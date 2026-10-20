@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock, clippy::type_complexity)]
 #[cfg(test)]
 mod tests {
     use crate::telegram::{handle_message, TEST_ENV_MUTEX};

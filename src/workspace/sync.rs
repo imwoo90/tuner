@@ -3,9 +3,6 @@
 //! ## Overview
 //! Initializes workspace layout folders (cron_tasks, telegram_files, skills) and mounts rules profiles.
 //!
-//! ## Collaboration Graph
-//! - Invoked during application initialization in [`main.rs`](crate::main.rs).
-//!
 //! ## Search Tags
 //! #workspace-init, #profile-copy, #environment-setup
 
@@ -54,18 +51,15 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
         let _ = smart_merge_config(paths);
     }
 
-    if paths.workspace().is_dir() {
-        if let Ok(entries) = std::fs::read_dir(paths.workspace()) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_symlink() && !path.exists() {
-                        let _ = std::fs::remove_file(&path);
-                    }
+    if paths.workspace().is_dir()
+        && let Ok(entries) = std::fs::read_dir(paths.workspace()) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_symlink() && !path.exists() {
+                    let _ = std::fs::remove_file(&path);
                 }
             }
         }
-    }
 
     let _ = crate::workspace::skills::sync_skills(paths, false);
     Ok(())
@@ -99,6 +93,7 @@ pub async fn watch_rule_files(root: &Path, interval_ms: u64) -> Result<(), Strin
     }
 }
 
+/// Executes `ensure_task_rule_files` (ensure task rule files).
 pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
     if !cron_tasks_dir.is_dir() {
         return Ok(0);
@@ -112,33 +107,31 @@ pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
         Err(e) => return Err(format!("Failed to read dir: {}", e)),
     };
 
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let task_dir = entry.path();
-            if task_dir.is_dir() {
-                let mut existing = Vec::new();
-                for name in &rule_filenames {
-                    if task_dir.join(name).is_file() {
-                        existing.push(*name);
-                    }
+    for entry in entries.flatten() {
+        let task_dir = entry.path();
+        if task_dir.is_dir() {
+            let mut existing = Vec::new();
+            for name in &rule_filenames {
+                if task_dir.join(name).is_file() {
+                    existing.push(*name);
                 }
-                if existing.is_empty() {
-                    continue;
+            }
+            if existing.is_empty() {
+                continue;
+            }
+            let mut missing = Vec::new();
+            for name in &expected {
+                if !task_dir.join(name).is_file() {
+                    missing.push(name.clone());
                 }
-                let mut missing = Vec::new();
-                for name in &expected {
-                    if !task_dir.join(name).is_file() {
-                        missing.push(name.clone());
-                    }
-                }
-                if missing.is_empty() {
-                    continue;
-                }
-                if let Ok(source_content) = std::fs::read_to_string(task_dir.join(existing[0])) {
-                    for name in missing {
-                        let _ = std::fs::write(task_dir.join(name), &source_content);
-                        created += 1;
-                    }
+            }
+            if missing.is_empty() {
+                continue;
+            }
+            if let Ok(source_content) = std::fs::read_to_string(task_dir.join(existing[0])) {
+                for name in missing {
+                    let _ = std::fs::write(task_dir.join(name), &source_content);
+                    created += 1;
                 }
             }
         }

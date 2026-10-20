@@ -1,9 +1,9 @@
 //! # i18n Loader Module
 //!
+//! ## Overview
 //! Handles locating locale files, parsing TOML translations, flattening structures,
 //! and doing placeholder substitution.
-
-//! 
+//!
 //! ## Search Tags
 //! #loader
 
@@ -102,12 +102,19 @@ pub fn load_language(root: &Path, lang: &str) -> (HashMap<String, String>, HashM
 /// Represents a collection of localized strings and their English fallbacks.
 #[derive(Clone, Debug)]
 pub struct TranslationStore {
+    /// Language.
     pub language: String,
+    /// En chat.
     pub en_chat: HashMap<String, String>,
+    /// En cli.
     pub en_cli: HashMap<String, String>,
+    /// En cmd.
     pub en_cmd: HashMap<String, String>,
+    /// Primary chat.
     pub primary_chat: Option<HashMap<String, String>>,
+    /// Primary cli.
     pub primary_cli: Option<HashMap<String, String>>,
+    /// Primary cmd.
     pub primary_cmd: Option<HashMap<String, String>>,
 }
 
@@ -177,18 +184,22 @@ impl TranslationStore {
         }
     }
 
+    /// Executes `all_chat_keys` (all chat keys).
     pub fn all_chat_keys(&self) -> HashSet<String> {
         self.en_chat.keys().cloned().collect()
     }
 
+    /// Executes `all_cli_keys` (all cli keys).
     pub fn all_cli_keys(&self) -> HashSet<String> {
         self.en_cli.keys().cloned().collect()
     }
 
+    /// Executes `all_cmd_keys` (all cmd keys).
     pub fn all_cmd_keys(&self) -> HashSet<String> {
         self.en_cmd.keys().cloned().collect()
     }
 
+    /// Executes `lang_chat_keys` (lang chat keys).
     pub fn lang_chat_keys(&self) -> HashSet<String> {
         match &self.primary_chat {
             Some(m) => m.keys().cloned().collect(),
@@ -196,6 +207,7 @@ impl TranslationStore {
         }
     }
 
+    /// Executes `lang_cli_keys` (lang cli keys).
     pub fn lang_cli_keys(&self) -> HashSet<String> {
         match &self.primary_cli {
             Some(m) => m.keys().cloned().collect(),
@@ -203,6 +215,7 @@ impl TranslationStore {
         }
     }
 
+    /// Executes `lang_cmd_keys` (lang cmd keys).
     pub fn lang_cmd_keys(&self) -> HashSet<String> {
         match &self.primary_cmd {
             Some(m) => m.keys().cloned().collect(),
@@ -216,12 +229,13 @@ impl TranslationStore {
 pub fn format_string(_key: &str, raw: &str, args: &[(&str, &str)]) -> String {
     use regex::Regex;
     use std::sync::OnceLock;
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").unwrap());
-
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
     if args.is_empty() {
         return raw.to_string();
     }
+    let Some(re) = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").ok()) else {
+        return raw.to_string();
+    };
 
     let result = re.replace_all(raw, |caps: &regex::Captures| {
         let ph_name = &caps[1];

@@ -1,11 +1,49 @@
 //! # Telegram Attachment Direct Downloader
+//!
+//! ## Overview
 //! Handles direct downloading of referenced files via Telegram inline callback buttons.
+//! Validates workspace path boundaries and streams requested attachments directly to the user chat or forum topic.
+//!
+//! ## Search Tags
+//! #attachment-download, #callback-download, #telegram-files
 
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use teloxide::prelude::*;
 use super::review::{global_review_manager, ReviewFile};
+
+fn resolve_unique_entry_name(f: &ReviewFile, p: &Path, used_names: &mut HashSet<String>) -> String {
+    let mut entry_name = f.filename.clone();
+    if entry_name.is_empty() {
+        entry_name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "file".to_string());
+    }
+
+    if used_names.contains(&entry_name) {
+        let stem = Path::new(&entry_name)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "file".to_string());
+        let ext = Path::new(&entry_name)
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+        let mut counter = 2;
+        loop {
+            let candidate = format!("{}_{}{}", stem, counter, ext);
+            if !used_names.contains(&candidate) {
+                entry_name = candidate;
+                break;
+            }
+            counter += 1;
+        }
+    }
+    used_names.insert(entry_name.clone());
+    entry_name
+}
 
 /// Compresses a slice of `ReviewFile` items into an in-memory ZIP archive.
 /// Deduplicates entry names if multiple files share identical basenames.
@@ -19,35 +57,7 @@ pub(crate) fn create_zip_archive(files: &[ReviewFile]) -> Result<Vec<u8>, String
     for f in files {
         let p = Path::new(&f.path);
         let content = std::fs::read(p).unwrap_or_else(|_| f.content.as_bytes().to_vec());
-
-        let mut entry_name = f.filename.clone();
-        if entry_name.is_empty() {
-            entry_name = p
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "file".to_string());
-        }
-
-        if used_names.contains(&entry_name) {
-            let stem = Path::new(&entry_name)
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "file".to_string());
-            let ext = Path::new(&entry_name)
-                .extension()
-                .map(|e| format!(".{}", e.to_string_lossy()))
-                .unwrap_or_default();
-            let mut counter = 2;
-            loop {
-                let candidate = format!("{}_{}{}", stem, counter, ext);
-                if !used_names.contains(&candidate) {
-                    entry_name = candidate;
-                    break;
-                }
-                counter += 1;
-            }
-        }
-        used_names.insert(entry_name.clone());
+        let entry_name = resolve_unique_entry_name(f, p, &mut used_names);
 
         zip.start_file(&entry_name, options)
             .map_err(|e| format!("Failed to create zip entry {}: {}", entry_name, e))?;
@@ -62,8 +72,8 @@ pub(crate) fn create_zip_archive(files: &[ReviewFile]) -> Result<Vec<u8>, String
 /// Handles the `dl_files:<token>` inline button callback.
 /// Delivers files directly to the calling forum topic (`msg.thread_id`).
 async fn send_single_attachment(bot: &teloxide::Bot, msg: &teloxide::types::Message, path: PathBuf) {
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if meta.len() > 50 * 1024 * 1024 {
+    if let Ok(meta) = std::fs::metadata(&path)
+        && meta.len() > 50 * 1024 * 1024 {
             let text = "⚠️ 파일 크기가 50MB를 초과하여 텔레그램으로 직접 전송할 수 없습니다. 웹 뷰어에서 스트리밍 및 개별 다운로드하세요.";
             let mut req = bot.send_message(msg.chat.id, text);
             if let Some(tid) = msg.thread_id {
@@ -72,7 +82,6 @@ async fn send_single_attachment(bot: &teloxide::Bot, msg: &teloxide::types::Mess
             let _ = req.await;
             return;
         }
-    }
     let mut req = bot.send_document(msg.chat.id, teloxide::types::InputFile::file(&path));
     if let Some(tid) = msg.thread_id {
         req = req.message_thread_id(tid);
@@ -154,6 +163,7 @@ pub(crate) async fn handle_dl_files_callback(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use tempfile::tempdir;

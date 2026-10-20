@@ -1,9 +1,9 @@
 //! # Timezone-safe Quiet Windows and ACK Suppression
 //!
+//! ## Overview
 //! This module implements local timezone calculations for quiet hours and
 //! parsing logic for suppressing empty heartbeat alert tokens.
-
-//! 
+//!
 //! ## Search Tags
 //! #quiet
 
@@ -24,7 +24,7 @@ pub fn is_within_quiet_hours(
         now.hour(),
         now.minute(),
         now.second(),
-    ).unwrap();
+    ).unwrap_or_default();
 
     if quiet_start < quiet_end {
         current_local_time >= quiet_start && current_local_time < quiet_end

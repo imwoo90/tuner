@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::bus::lock_pool::LockPool;
 use crate::webhook::api::files::verify_bearer;
 use crate::webhook::auth::{validate_bearer_token, validate_hmac_signature};

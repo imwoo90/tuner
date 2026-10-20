@@ -1,5 +1,6 @@
 //! # Session Control Slash Commands
 //!
+//! ## Overview
 //! Handles session lifecycle slash commands: `/new`, `/reset`, `/stop`, `/stop_all`, and `/abort`.
 //!
 //! ## Search Tags
@@ -47,11 +48,10 @@ async fn collect_handover_context(
     if let Ok(Some(existing_sess)) = sessions.get_active(&key).await {
         old_sid = existing_sess.get_session_id(&config.provider);
         past_ids = existing_sess.get_past_session_ids(&config.provider);
-        if old_sid.is_empty() {
-            if let Some(last_id) = past_ids.last() {
+        if old_sid.is_empty()
+            && let Some(last_id) = past_ids.last() {
                 old_sid = last_id.clone();
             }
-        }
         topic_name = existing_sess.topic_name.clone();
         prior_summary = existing_sess.last_handover_summary.clone();
         if !old_sid.is_empty() {
@@ -59,15 +59,12 @@ async fn collect_handover_context(
         }
     }
 
-    if topic_id.is_none() {
-        return None;
-    }
+    topic_id?;
 
-    if topic_name.is_none() {
-        if let Some(tid) = topic_id {
+    if topic_name.is_none()
+        && let Some(tid) = topic_id {
             topic_name = topic_cache.find_by_id(chat_id, tid);
         }
-    }
 
     super::handover::build_topic_handover(
         &config.working_dir,
@@ -79,6 +76,7 @@ async fn collect_handover_context(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_new_command(
     bot: &Bot,
     msg: &Message,
@@ -103,7 +101,9 @@ pub(crate) async fn handle_new_command(
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, target_topic);
     let model = config.model.as_deref().unwrap_or("antigravity-default");
-    let mut sess = sessions.reset_provider_session(&key, &config.provider, model).await.unwrap();
+    let Ok(mut sess) = sessions.reset_provider_session(&key, &config.provider, model).await else {
+        return Ok(());
+    };
 
     let startup_prompt = if let Some(ref handover) = handover_context {
         sess.last_handover_summary = Some(format!(

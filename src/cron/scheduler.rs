@@ -4,15 +4,6 @@
 //! Continuously polls active cron jobs, evaluates timezone-adjusted upcoming runs, checks quiet hours,
 //! and triggers background agent runs via [`AntigravityCli`].
 //!
-//! ## Collaboration Graph
-//! - Ticked by [`CronScheduler::start`] event loop spawning background monitoring threads.
-//! - Queries [`super::manager::CronManager`] to retrieve active [`CronJob`] structures.
-//! - Utilizes [`AntigravityCli`] to run prompt instructions.
-//! - Dispatches results as envelopes to the central [`MessageBus`](crate::bus::bus::MessageBus).
-//!
-//! ## Key Types
-//! - [`CronScheduler`]: Controller holding configuration, client bindings, message bus adapters, and quiet-hour status.
-//!
 //! ## Search Tags
 //! #cron-engine, #tick-loop, #quiet-hours, #task-spawner, #time-evaluator
 
@@ -29,14 +20,20 @@ use crate::cli::antigravity::AntigravityCli;
 use crate::cli::AgentProvider;
 use crate::cron::manager::{CronJob, CronManager};
 
+/// Represents `CronScheduler` (cron scheduler).
 pub struct CronScheduler {
+    /// Config.
     pub config: Arc<CliConfig>,
+    /// Manager.
     pub manager: Arc<CronManager>,
+    /// Cli.
     pub cli: Arc<AntigravityCli>,
+    /// Bus.
     pub bus: Arc<crate::bus::bus::MessageBus>,
 }
 
 impl CronScheduler {
+    /// Creates a new instance.
     pub fn new(
         config: Arc<CliConfig>,
         manager: Arc<CronManager>,
@@ -51,6 +48,7 @@ impl CronScheduler {
         Ok(next.with_timezone(&Utc))
     }
 
+    /// Executes `start` (start).
     pub fn start(self: Arc<Self>) {
         let scheduler = self.clone();
         tokio::spawn(async move {
@@ -141,13 +139,14 @@ impl CronScheduler {
         self.check_quiet_hours_at(job, Utc::now())
     }
 
+    /// Executes `check_quiet_hours_at` (check quiet hours at).
     pub fn check_quiet_hours_at(&self, job: &CronJob, now: DateTime<Utc>) -> bool {
         if let (Some(qs), Some(qe)) = (job.quiet_start, job.quiet_end) {
             let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
             if let Ok(tz) = tz_str.parse::<Tz>() {
                 let now_local = now.with_timezone(&tz);
-                let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap();
-                let end = NaiveTime::from_hms_opt(qe % 24, 0, 0).unwrap();
+                let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap_or_default();
+                let end = NaiveTime::from_hms_opt(qe % 24, 0, 0).unwrap_or_default();
                 return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
             }
         }
@@ -239,6 +238,7 @@ impl CronScheduler {
     }
 }
 
+/// Executes `calculate_job_next_run` (calculate job next run).
 pub fn calculate_job_next_run(schedule: &str, timezone: &str) -> Result<DateTime<Tz>, String> {
     let norm = if schedule.split_whitespace().count() == 5 {
         format!("0 {}", schedule)

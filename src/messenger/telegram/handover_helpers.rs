@@ -12,6 +12,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use crate::messenger::telegram::history::TelegramHistoryEntry;
 
+/// Executes `extract_topic_history` (extract topic history).
 pub fn extract_topic_history(working_dir: &Path, session_id: &str) -> Vec<TelegramHistoryEntry> {
     if session_id.trim().is_empty() { return Vec::new(); }
     let path = working_dir.join("brain").join(session_id).join("telegram_history.jsonl");
@@ -28,19 +29,19 @@ pub fn extract_topic_history(working_dir: &Path, session_id: &str) -> Vec<Telegr
         if n == 0 { break; }
         let line = String::from_utf8_lossy(&raw_line);
         let trimmed = line.trim();
-        if !trimmed.is_empty() {
-            if let Ok(entry) = serde_json::from_str::<TelegramHistoryEntry>(trimmed) {
+        if !trimmed.is_empty()
+            && let Ok(entry) = serde_json::from_str::<TelegramHistoryEntry>(trimmed) {
                 let text = entry.text.trim();
                 if entry.is_success && entry.error.is_none() && !text.is_empty() && !is_meta_cmd(text) {
                     entries.push(entry);
                 }
             }
-        }
         raw_line.clear();
     }
     entries
 }
 
+/// Executes `is_meta_cmd` (is meta cmd).
 pub fn is_meta_cmd(text: &str) -> bool {
     let lower = text.trim().to_lowercase();
     if lower.starts_with("[topic context handover]") || lower.contains("instructions for continuing this session") {
@@ -51,6 +52,7 @@ pub fn is_meta_cmd(text: &str) -> bool {
     matches!(cmd, "/new" | "/reset" | "/stop" | "/abort" | "/stop_all" | "/model" | "/status" | "/usage" | "/memory" | "/help" | "/diagnose" | "/restart" | "/upgrade" | "/compact")
 }
 
+/// Executes `truncate_chars` (truncate chars).
 pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
         let truncated: String = s.chars().take(max_chars).collect();
@@ -60,11 +62,13 @@ pub fn truncate_chars(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// Executes `is_greeting` (is greeting).
 pub fn is_greeting(line: &str) -> bool {
     let l = line.trim().to_lowercase();
     matches!(l.as_str(), "hi" | "hello" | "hey" | "안녕" | "안녕하세요" | "시작" | "start" | "hi!" | "hello!" | "안녕하세요!" | "hi tuner" | "hello tuner")
 }
 
+/// Executes `extract_topic_objective` (extract topic objective).
 pub fn extract_topic_objective(entries: &[TelegramHistoryEntry], topic_name: Option<&str>, prior_obj: Option<&str>) -> String {
     if let Some(po) = prior_obj {
         let clean_po = po.trim();
@@ -96,6 +100,7 @@ pub fn extract_topic_objective(entries: &[TelegramHistoryEntry], topic_name: Opt
     }
 }
 
+/// Executes `is_boilerplate_or_header` (is boilerplate or header).
 pub fn is_boilerplate_or_header(line: &str) -> bool {
     let l = line.trim();
     l.starts_with('#')
@@ -108,6 +113,7 @@ pub fn is_boilerplate_or_header(line: &str) -> bool {
         || l.contains("INSTRUCTIONS FOR")
 }
 
+/// Executes `is_decision_line` (is decision line).
 pub fn is_decision_line(line: &str) -> bool {
     if is_boilerplate_or_header(line) { return false; }
     let l = line.to_lowercase();
@@ -144,7 +150,7 @@ fn extract_fallback_steps(entries: &[TelegramHistoryEntry]) -> Vec<String> {
     let mut steps = Vec::new();
     for entry in entries.iter().rev().filter(|e| !e.sender.eq_ignore_ascii_case("user")) {
         for line in entry.text.lines().rev() {
-            let clean = line.trim().trim_start_matches(|c| c == '-' || c == '*' || c == '•').trim();
+            let clean = line.trim().trim_start_matches(['-', '*', '•']).trim();
             if !is_boilerplate_or_header(clean)
                 && (clean.starts_with("1.") || clean.starts_with("2.") || clean.contains("Step") || clean.contains("단계"))
                 && clean.len() > 10
@@ -160,11 +166,12 @@ fn extract_fallback_steps(entries: &[TelegramHistoryEntry]) -> Vec<String> {
     steps
 }
 
+/// Executes `extract_agreed_decisions` (extract agreed decisions).
 pub fn extract_agreed_decisions(entries: &[TelegramHistoryEntry], prior_decisions: &[String]) -> Vec<String> {
     let mut decisions = Vec::new();
     for entry in entries.iter().rev() {
         for line in entry.text.lines().rev() {
-            let clean = line.trim().trim_start_matches(|c| c == '-' || c == '*' || c == '•').trim();
+            let clean = line.trim().trim_start_matches(['-', '*', '•']).trim();
             if clean.len() >= 6 && is_decision_line(clean) {
                 let item = truncate_chars(clean, 150);
                 if !decisions.contains(&item) { decisions.push(item); }
@@ -185,6 +192,7 @@ pub fn extract_agreed_decisions(entries: &[TelegramHistoryEntry], prior_decision
     decisions
 }
 
+/// Executes `extract_current_progress` (extract current progress).
 pub fn extract_current_progress(entries: &[TelegramHistoryEntry], prior_prog: Option<&str>) -> String {
     let last_bot = entries.iter().rev().find(|e| !e.sender.eq_ignore_ascii_case("user") && !is_boilerplate_or_header(&e.text));
     let last_user = entries.iter().rev().find(|e| e.sender.eq_ignore_ascii_case("user") && !is_meta_cmd(&e.text));

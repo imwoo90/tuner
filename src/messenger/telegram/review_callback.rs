@@ -1,7 +1,11 @@
 //! # Review Callback Interaction Handler
 //!
+//! ## Overview
 //! Handles Telegram inline button callbacks for on-demand review session activation,
 //! validating 30-day session retention, checking disk file existence, and updating message buttons.
+//!
+//! ## Search Tags
+//! #review-callback, #inline-button, #session-retention
 
 use super::review::global_review_manager;
 use super::review_store::check_record_files;
@@ -24,6 +28,7 @@ fn build_viewer_buttons(review_url: &str, is_private: bool, session_id: &str) ->
     InlineKeyboardMarkup::new(vec![vec![open_btn], vec![refresh_btn, dl_btn]])
 }
 
+/// Executes `handle_review_callback` (handle review callback).
 pub async fn handle_review_callback(
     bot: &teloxide::Bot,
     q: &teloxide::types::CallbackQuery,

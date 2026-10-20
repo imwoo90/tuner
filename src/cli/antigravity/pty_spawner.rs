@@ -3,9 +3,6 @@
 //! ## Overview
 //! Spawns process targets wrapped in standard Unix pseudo-terminals (PTY). Manages raw I/O descriptors.
 //!
-//! ## Collaboration Graph
-//! - Invoked by [`AntigravityCli`](super::AntigravityCli) to boot interactive agent loops.
-//!
 //! ## Search Tags
 //! #pty-descriptor, #process-fork, #unix-io
 
@@ -22,16 +19,27 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+/// Represents `SessionHolder` (session holder).
 pub struct SessionHolder {
+    /// Child.
     pub child: Child,
+    /// Drain task.
     pub drain_task: JoinHandle<()>,
+    /// Last active.
     pub last_active: Instant,
+    /// Chat id.
     pub chat_id: Option<i64>,
+    /// Topic id.
     pub topic_id: Option<i64>,
+    /// Master fd.
     pub master_fd: std::os::unix::io::RawFd,
+    /// Output.
     pub output: std::sync::Arc<Mutex<Vec<u8>>>,
+    /// Initialized.
     pub initialized: bool,
+    /// Cmd args.
     pub cmd_args: Vec<String>,
+    /// Turn start offset.
     pub turn_start_offset: usize,
 }
 
@@ -47,6 +55,7 @@ impl Drop for SessionHolder {
     }
 }
 
+/// Executes `write_fd` (write fd).
 pub fn write_fd(fd: std::os::unix::io::RawFd, input: &str) -> Result<(), String> {
     let mut bytes_written = 0;
     let data = input.as_bytes();
@@ -66,6 +75,7 @@ pub fn write_fd(fd: std::os::unix::io::RawFd, input: &str) -> Result<(), String>
 }
 
 impl SessionHolder {
+    /// Executes `write_input` (write input).
     pub fn write_input(&self, input: &str) -> Result<(), String> {
         write_fd(self.master_fd, input)
     }
@@ -88,6 +98,37 @@ fn set_non_blocking<Fd: AsFd>(fd: Fd) -> Result<(), String> {
     Ok(())
 }
 
+fn build_pty_command(
+    workspace: &Path,
+    cmd_name: &str,
+    args: &[String],
+    env: &HashMap<String, String>,
+    slave: std::os::fd::OwnedFd,
+) -> Result<Command, String> {
+    let stdin_redirect = Stdio::from(slave.try_clone().map_err(|e| e.to_string())?);
+    let stdout_redirect = Stdio::from(slave.try_clone().map_err(|e| e.to_string())?);
+    let stderr_redirect = Stdio::from(slave);
+
+    let mut cmd = Command::new(cmd_name);
+    cmd.args(args)
+        .current_dir(workspace)
+        .envs(env)
+        .stdin(stdin_redirect)
+        .stdout(stdout_redirect)
+        .stderr(stderr_redirect)
+        .kill_on_drop(true);
+
+    unsafe {
+        cmd.pre_exec(move || {
+            let _ = nix::unistd::setsid();
+            let _ = nix::libc::ioctl(0, nix::libc::TIOCSCTTY as _, 0);
+            Ok(())
+        });
+    }
+    Ok(cmd)
+}
+
+/// Executes `spawn_session` (spawn session).
 pub fn spawn_session(
     workspace: &Path,
     cmd_name: &str,
@@ -106,31 +147,9 @@ pub fn spawn_session(
     set_non_blocking(&pty.master)?;
 
     let master_raw = pty.master.as_raw_fd();
-    let slave_raw = pty.slave.as_raw_fd();
     let master_dup = nix::unistd::dup(master_raw).map_err(|e| e.to_string())?;
 
-    let stdin_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
-    let stdout_redirect = Stdio::from(pty.slave.try_clone().map_err(|e| e.to_string())?);
-    let stderr_redirect = Stdio::from(pty.slave);
-
-    let mut cmd = Command::new(cmd_name);
-    cmd.args(args)
-        .current_dir(workspace)
-        .envs(env)
-        .stdin(stdin_redirect)
-        .stdout(stdout_redirect)
-        .stderr(stderr_redirect)
-        .kill_on_drop(true);
-
-    let _ = slave_raw;
-    unsafe {
-        cmd.pre_exec(move || {
-            let _ = nix::unistd::setsid();
-            let _ = nix::libc::ioctl(0, nix::libc::TIOCSCTTY as _, 0);
-            Ok(())
-        });
-    }
-
+    let mut cmd = build_pty_command(workspace, cmd_name, args, env, pty.slave)?;
     let child = cmd.spawn().map_err(|e| e.to_string())?;
     let output = std::sync::Arc::new(Mutex::new(Vec::new()));
     let async_master = AsyncFd::new(pty.master).map_err(|e| e.to_string())?;
@@ -159,35 +178,32 @@ fn spawn_drain_task(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = [0u8; 4096];
-        loop {
-            match async_master.readable().await {
-                Ok(mut guard) => {
-                    loop {
-                        match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
-                            Ok(0) => return,
-                            Ok(n) => {
-                                let mut out = output.lock().await;
-                                out.extend_from_slice(&buf[..n]);
-                            }
-                            Err(nix::Error::EAGAIN) => {
-                                guard.clear_ready();
-                                break;
-                            }
-                            Err(_) => return,
-                        }
+        while let Ok(mut guard) = async_master.readable().await {
+            loop {
+                match nix::unistd::read(async_master.get_ref().as_raw_fd(), &mut buf) {
+                    Ok(0) => return,
+                    Ok(n) => {
+                        let mut out = output.lock().await;
+                        out.extend_from_slice(&buf[..n]);
                     }
+                    Err(nix::Error::EAGAIN) => {
+                        guard.clear_ready();
+                        break;
+                    }
+                    Err(_) => return,
                 }
-                Err(_) => break,
             }
         }
     })
 }
 
 pub(crate) fn strip_ansi(s: &str) -> String {
-    static ANSI_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = ANSI_RE.get_or_init(|| {
-        regex::Regex::new(r"\x1B(?:\[[0-9:;<=>?]*[ -/]*[@-~]|[\(\)][a-zA-Z0-9]|\][^\x07\x1B]*(?:\x07|\x1B\\))").unwrap()
-    });
+    static ANSI_RE: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
+    let Some(re) = ANSI_RE.get_or_init(|| {
+        regex::Regex::new(r"\x1B(?:\[[0-9:;<=>?]*[ -/]*[@-~]|[\(\)][a-zA-Z0-9]|\][^\x07\x1B]*(?:\x07|\x1B\\))").ok()
+    }) else {
+        return s.to_string();
+    };
     re.replace_all(s, "").to_string()
 }
 

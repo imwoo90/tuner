@@ -3,9 +3,10 @@
 //! ## Overview
 //! Handles fire-and-forget background execution of AI agent provider commands.
 //!
-//! ## Module Components
-//! - [`models`]: Data structures representing task targets and execution parameters.
-//! - [`observer`]: Task registry, chat limits, timeout tracking, and process drop guards.
+//! ## Submodules
+//! - [`models`] (`models.rs`): Data structures representing task targets and execution parameters.
+//! - [`observer`] (`observer.rs`): Task registry, chat limits, timeout tracking, and process drop guards.
+//! - [`test_utils`] (`test_utils.rs`): Mock providers and helper builders for background task testing.
 //!
 //! ## Search Tags
 //! #background-runner, #observer, #async-execution, #task-limits

@@ -4,9 +4,6 @@
 //! Implements logical rules to verify if an active session is still fresh, checking inactivity timeouts,
 //! max message limits, and daily user-timezone resets.
 //!
-//! ## Collaboration Graph
-//! - Called by [`SessionManager::is_fresh`](super::manager::SessionManager::is_fresh) on new message ingress.
-//!
 //! ## Search Tags
 //! #session-freshness, #timeout-inactivity, #daily-resets, #timezone-calculator
 
@@ -26,7 +23,7 @@ pub fn has_crossed_daily_reset(
     let last_local = last_active.with_timezone(&tz);
 
     let today_reset = match tz.from_local_datetime(
-        &now_local.date_naive().and_hms_opt(daily_reset_hour % 24, 0, 0).unwrap()
+        &now_local.date_naive().and_hms_opt(daily_reset_hour % 24, 0, 0).unwrap_or_default()
     ) {
         LocalResult::Single(dt) => dt,
         LocalResult::Ambiguous(dt1, _) => dt1,

@@ -1,8 +1,9 @@
 //! # Workspace Paths Resolution
 //!
+//! ## Overview
 //! SINGLE SOURCE OF TRUTH for all workspace and configuration paths in tuner.
-
-//! 
+//! Resolves canonical directories for profiles, sessions, cron tasks, webhooks, logs, and rule templates.
+//!
 //! ## Search Tags
 //! #paths
 
@@ -11,9 +12,13 @@ use std::path::PathBuf;
 /// Immutable paths resolved for the workspace layout.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct DuctorPaths {
+    /// Tuner home.
     pub tuner_home: PathBuf,
+    /// Home defaults.
     pub home_defaults: PathBuf,
+    /// Framework root.
     pub framework_root: PathBuf,
+    /// Profile.
     pub profile: Option<String>,
 }
 

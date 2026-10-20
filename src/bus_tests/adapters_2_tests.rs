@@ -1,4 +1,5 @@
-use crate::bus::envelope::{Envelope, Origin, LockMode, DeliveryMode};
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+use crate::bus::envelope::{Origin, LockMode, DeliveryMode};
 use crate::bus::adapters::{
     from_interagent_result, from_task_result, from_task_question, from_user_message,
     InterAgentResult, TaskResult,

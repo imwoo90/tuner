@@ -1,6 +1,7 @@
 //! # Webhook Models Tests
 //!
 //! Tests for schema deserialization, template rendering, and validation.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::webhook::models::{WebhookEntry, render_template};
 use serde_json::json;

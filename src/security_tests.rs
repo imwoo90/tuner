@@ -77,19 +77,19 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let f = tmp.path().join("safe.txt");
         std::fs::write(&f, "ok").unwrap();
-        assert!(is_path_safe(&f, &vec![tmp.path().to_path_buf()]));
+        assert!(is_path_safe(&f, &[tmp.path().to_path_buf()]));
     }
 
     #[test]
     fn test_is_path_safe_returns_false() {
         let tmp = tempfile::tempdir().unwrap();
-        assert!(!is_path_safe("/etc/shadow", &vec![tmp.path().to_path_buf()]));
+        assert!(!is_path_safe("/etc/shadow", &[tmp.path().to_path_buf()]));
     }
 
     #[test]
     fn test_is_path_safe_no_exception_on_bad_path() {
         let tmp = tempfile::tempdir().unwrap();
-        assert!(!is_path_safe("/nonexistent/\x00evil", &vec![tmp.path().to_path_buf()]));
+        assert!(!is_path_safe("/nonexistent/\x00evil", &[tmp.path().to_path_buf()]));
     }
 
     #[test]
@@ -105,7 +105,7 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(&secret, &link).unwrap();
 
-        let res = validate_file_path(&link, &vec![allowed]);
+        let res = validate_file_path(&link, &[allowed]);
         assert!(matches!(res, Err(PathValidationError::OutsideAllowedRoots(_, _))));
     }
 
@@ -120,7 +120,7 @@ mod tests {
         std::fs::write(&secret, "secret").unwrap();
 
         let sneaky = allowed.join("..").join("outside").join("secret.txt");
-        assert!(validate_file_path(&sneaky, &vec![allowed]).is_err());
+        assert!(validate_file_path(&sneaky, &[allowed]).is_err());
     }
 
     #[test]
@@ -128,7 +128,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let allowed = tmp.path().join("allowed");
         std::fs::create_dir(&allowed).unwrap();
-        assert!(validate_file_path("./sneaky.txt", &vec![allowed]).is_err());
+        assert!(validate_file_path("./sneaky.txt", &[allowed]).is_err());
     }
 
     // =========================================================================

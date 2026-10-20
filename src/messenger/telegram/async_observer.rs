@@ -1,8 +1,12 @@
 //! # Session Async Event Observer
 //!
+//! ## Overview
 //! Monitors active Antigravity CLI session transcript logs for asynchronous
 //! turn events (such as subagent completion or timer notifications) while the
 //! agent is idle, and dispatches new messages to Telegram.
+//!
+//! ## Search Tags
+//! #async-observer, #transcript-watcher, #background-turn
 
 use teloxide::prelude::*;
 use std::collections::HashSet;
@@ -26,12 +30,12 @@ pub(crate) fn spawn_session_async_observer(
     let (chat_id, thread_id) = (msg.chat.id, msg.thread_id.map(|t| t.0.0));
     let key = format!("{}:{}:{:?}", session_id, chat_id.0, thread_id);
     {
-        let mut lock = WATCHED_SESSIONS.lock().unwrap();
+        let mut lock = WATCHED_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
         if !lock.insert(key.clone()) { return; }
     }
     tokio::spawn(async move {
         run_observer_loop(bot, chat_id, thread_id, session_id, cli, sessions, config).await;
-        WATCHED_SESSIONS.lock().unwrap().remove(&key);
+        WATCHED_SESSIONS.lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
     });
 }
 
@@ -55,16 +59,14 @@ fn create_brain_dir_watcher(
     fs_tx: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> Option<notify::RecommendedWatcher> {
     if let Ok(mut w) = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res {
-            if matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+        if let Ok(e) = res
+            && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                 let _ = fs_tx.send(());
             }
-        }
-    }) {
-        if w.watch(brain_dir, RecursiveMode::Recursive).is_ok() {
+    })
+        && w.watch(brain_dir, RecursiveMode::Recursive).is_ok() {
             return Some(w);
         }
-    }
     None
 }
 
@@ -77,6 +79,7 @@ struct ActiveAsyncTurn {
     last_text: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch_terminal_event(
     bot: &Bot,
     chat_id: ChatId,
@@ -160,6 +163,7 @@ async fn update_active_turn_progress(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn check_and_dispatch_delta(
     bot: &Bot,
     chat_id: ChatId,

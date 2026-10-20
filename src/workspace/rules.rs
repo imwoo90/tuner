@@ -3,9 +3,6 @@
 //! ## Overview
 //! Parses custom user profiles and determines corresponding CLAUDE.md/GEMINI.md/AGENTS.md configurations.
 //!
-//! ## Collaboration Graph
-//! - Called by [`init_workspace`](super::sync::init_workspace) to sync rule configurations.
-//!
 //! ## Search Tags
 //! #rule-profiles, #markdown-rules, #profile-mapping
 
@@ -16,26 +13,38 @@ use std::path::{Path, PathBuf};
 /// Authentication status for CLI providers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AuthStatus {
+    /// `Authenticated` (authenticated) variant.
     Authenticated,
+    /// `Installed` (installed) variant.
     Installed,
+    /// `NotFound` (not found) variant.
     NotFound,
 }
 
 /// Verification result for a provider.
 #[derive(Clone, Debug)]
 pub struct AuthResult {
+    /// Provider.
     pub provider: String,
+    /// Status.
     pub status: AuthStatus,
+    /// Auth file.
     pub auth_file: Option<PathBuf>,
+    /// Auth age.
     pub auth_age: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Selector and deployer for variant-specific rule files.
 pub struct RulesSelector {
+    /// Paths.
     pub paths: DuctorPaths,
+    /// Claude authenticated.
     pub claude_authenticated: bool,
+    /// Codex authenticated.
     pub codex_authenticated: bool,
+    /// Gemini authenticated.
     pub gemini_authenticated: bool,
+    /// Antigravity authenticated.
     pub antigravity_authenticated: bool,
 }
 
@@ -170,17 +179,14 @@ fn find_rules_templates(dir: &Path, candidates: &mut Vec<PathBuf>) {
     if !dir.is_dir() { return; }
     let mut has_rules = false;
     if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    find_rules_templates(&path, candidates);
-                } else if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if name.starts_with("RULES") && name.ends_with(".md") {
-                        has_rules = true;
-                    }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                find_rules_templates(&path, candidates);
+            } else if let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && name.starts_with("RULES") && name.ends_with(".md") {
+                    has_rules = true;
                 }
-            }
         }
     }
     if has_rules {
@@ -216,6 +222,7 @@ fn managed_profile_rule_dirs(paths: &DuctorPaths) -> Vec<PathBuf> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use tempfile::tempdir;

@@ -1,12 +1,13 @@
 //! # Antigravity CLI Events & Log Parsing
 //!
+//! ## Overview
 //! This module contains utilities for processing the JSON responses and real-time transcript logs of the Google Antigravity CLI.
 //! It supports one-shot response extraction ([`parse_antigravity_json`]) and transcript extraction ([`read_transcript_answer`]).
-
-//! 
+//!
 //! ## Search Tags
 //! #events
 
+/// Executes `parse_antigravity_json` (parse antigravity json).
 pub fn parse_antigravity_json(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -17,11 +18,10 @@ pub fn parse_antigravity_json(raw: &str) -> String {
         Ok(parsed) => match parsed {
             serde_json::Value::Object(obj) => {
                 for key in &["content", "result", "text", "message", "response"] {
-                    if let Some(val) = obj.get(*key).and_then(|v| v.as_str()) {
-                        if !val.is_empty() {
+                    if let Some(val) = obj.get(*key).and_then(|v| v.as_str())
+                        && !val.is_empty() {
                             return val.to_string();
                         }
-                    }
                 }
                 serde_json::Value::Object(obj).to_string()
             }
@@ -42,12 +42,12 @@ pub fn parse_antigravity_json(raw: &str) -> String {
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Executes `agy_state_root` (agy state root).
 pub fn agy_state_root(env: Option<&HashMap<String, String>>) -> PathBuf {
-    if let Some(e) = env {
-        if let Some(root) = e.get("AGY_STATE_ROOT") {
+    if let Some(e) = env
+        && let Some(root) = e.get("AGY_STATE_ROOT") {
             return PathBuf::from(root);
         }
-    }
     if let Ok(root) = std::env::var("AGY_STATE_ROOT") {
         return PathBuf::from(root);
     }
@@ -87,11 +87,10 @@ fn conv_id_for_cwd(root: &Path, working_dir: &Path) -> Option<String> {
             .to_string(),
     ];
     for key in keys {
-        if let Some(conv) = obj.get(&key).and_then(|v| v.as_str()) {
-            if !conv.is_empty() {
+        if let Some(conv) = obj.get(&key).and_then(|v| v.as_str())
+            && !conv.is_empty() {
                 return Some(conv.to_string());
             }
-        }
     }
     None
 }
@@ -102,27 +101,25 @@ fn newest_brain_dir(brain_root: &Path) -> Option<PathBuf> {
     let mut best_time = std::time::SystemTime::UNIX_EPOCH;
 
     for entry in entries.flatten() {
-        if let Ok(file_type) = entry.file_type() {
-            if file_type.is_dir() {
+        if let Ok(file_type) = entry.file_type()
+            && file_type.is_dir() {
                 let path = entry.path();
                 let transcript = path
                     .join(".system_generated")
                     .join("logs")
                     .join("transcript_full.jsonl");
-                if let Ok(metadata) = transcript.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        if modified > best_time {
+                if let Ok(metadata) = transcript.metadata()
+                    && let Ok(modified) = metadata.modified()
+                        && modified > best_time {
                             best_time = modified;
                             best_dir = Some(path);
                         }
-                    }
-                }
             }
-        }
     }
     best_dir
 }
 
+/// Executes `resolve_brain_dir` (resolve brain dir).
 pub fn resolve_brain_dir(
     working_dir: &Path,
     env: Option<&HashMap<String, String>>,
@@ -139,6 +136,7 @@ pub fn resolve_brain_dir(
     newest_brain_dir(&brain_root)
 }
 
+/// Executes `read_transcript_answer` (read transcript answer).
 pub fn read_transcript_answer(
     working_dir: &Path,
     env: Option<&HashMap<String, String>>,
@@ -160,27 +158,25 @@ pub fn read_transcript_answer(
         if stripped.is_empty() {
             continue;
         }
-        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped) {
-            if let Some(obj) = entry.as_object() {
+        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped)
+            && let Some(obj) = entry.as_object() {
                 if obj.get("type").and_then(|v| v.as_str()) == Some("USER_INPUT") {
                     answer = None;
                 } else if obj.get("source").and_then(|v| v.as_str()) == Some("MODEL")
                     && obj.get("type").and_then(|v| v.as_str()) == Some("PLANNER_RESPONSE")
                     && obj.get("status").and_then(|v| v.as_str()) == Some("DONE")
-                {
-                    if let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
+                    && let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
                         let content_trimmed = content.trim();
                         if !content_trimmed.is_empty() && !is_placeholder_content(content_trimmed) {
                             answer = Some(content_trimmed.to_string());
                         }
                     }
-                }
             }
-        }
     }
     answer
 }
 
+/// Executes `is_placeholder_content` (is placeholder content).
 pub fn is_placeholder_content(content: &str) -> bool {
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -212,18 +208,16 @@ fn remove_html_comments_and_nbsp(s: &str) -> String {
     result.replace("&nbsp;", "").replace("&#160;", "")
 }
 
+/// Executes `extract_conversation_id` (extract conversation id).
 pub fn extract_conversation_id(stdout: &str) -> Option<String> {
     for line in stdout.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with('{') {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(cid) = val.get("conversation_id").and_then(|s| s.as_str()) {
-                    if !cid.is_empty() {
+        if trimmed.starts_with('{')
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed)
+                && let Some(cid) = val.get("conversation_id").and_then(|s| s.as_str())
+                    && !cid.is_empty() {
                         return Some(cid.to_string());
                     }
-                }
-            }
-        }
     }
     None
 }

@@ -4,11 +4,6 @@
 //! Extracts, distills, and formats topic-specific context across `/new` and `/reset` commands.
 //! Preserves topic objective, agreed decisions, and current progress without context leakage.
 //!
-//! ## Collaboration Graph
-//! - Invoked by [`super::commands_session::handle_new_command`] when resetting a topic session.
-//! - Injected into [`super::session_init::initialize_session_with_prompt`] as the initial boot prompt.
-//! - Delegates history distillation algorithms to [`super::handover_helpers`].
-//!
 //! ## Search Tags
 //! #topic-handover, #session-reset, #context-compression, #forum-topics
 
@@ -19,15 +14,23 @@ pub use super::handover_helpers::*;
 /// Structured representation of compressed topic context for handover.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TopicHandoverContext {
+    /// Topic id.
     pub topic_id: Option<i64>,
+    /// Topic name.
     pub topic_name: Option<String>,
+    /// Previous session id.
     pub previous_session_id: String,
+    /// Topic objective.
     pub topic_objective: String,
+    /// Agreed decisions.
     pub agreed_decisions: Vec<String>,
+    /// Current progress.
     pub current_progress: String,
+    /// Handover prompt.
     pub handover_prompt: String,
 }
 
+/// Executes `parse_prior_summary` (parse prior summary).
 pub fn parse_prior_summary(summary: &str) -> (Option<String>, Vec<String>, Option<String>) {
     let mut obj = None;
     let mut decs = Vec::new();
@@ -60,7 +63,7 @@ pub fn parse_prior_summary(summary: &str) -> (Option<String>, Vec<String>, Optio
         } else if current_section == 1 && !trimmed.is_empty() {
             obj_lines.push(trimmed.to_string());
         } else if current_section == 2 && !trimmed.is_empty() {
-            let c = trimmed.trim_start_matches(|ch| ch == '-' || ch == '*' || ch == '•').trim();
+            let c = trimmed.trim_start_matches(['-', '*', '•']).trim();
             if !c.is_empty() && !c.starts_with("No explicit technical decisions") {
                 decs.push(c.to_string());
             }
@@ -74,6 +77,7 @@ pub fn parse_prior_summary(summary: &str) -> (Option<String>, Vec<String>, Optio
     (obj, decs, prog)
 }
 
+/// Executes `format_recent_excerpts` (format recent excerpts).
 pub fn format_recent_excerpts(entries: &[TelegramHistoryEntry], max_count: usize) -> Vec<String> {
     let clean_entries: Vec<&TelegramHistoryEntry> = entries.iter()
         .filter(|e| !is_meta_cmd(&e.text) && !is_boilerplate_or_header(&e.text))
@@ -135,9 +139,8 @@ fn resolve_topic_entries(working_dir: &Path, session_id: &str, past_session_ids:
 fn resolve_topic_name(working_dir: &Path, session_id: &str, mut topic_name: Option<String>, entries: &[TelegramHistoryEntry]) -> Option<String> {
     if topic_name.is_none() && !session_id.is_empty() {
         let meta_file = working_dir.join("brain").join(session_id).join("topic.json");
-        if let Ok(c) = std::fs::read_to_string(&meta_file) {
-            if let Ok(m) = serde_json::from_str::<TopicMetadata>(&c) { topic_name = m.topic_name; }
-        }
+        if let Ok(c) = std::fs::read_to_string(&meta_file)
+            && let Ok(m) = serde_json::from_str::<TopicMetadata>(&c) { topic_name = m.topic_name; }
     }
     if topic_name.is_none() {
         topic_name = entries.iter().find_map(|e| e.topic_name.clone().filter(|s| !s.trim().is_empty()));
@@ -145,6 +148,7 @@ fn resolve_topic_name(working_dir: &Path, session_id: &str, mut topic_name: Opti
     topic_name
 }
 
+/// Executes `build_topic_handover` (build topic handover).
 pub fn build_topic_handover(
     working_dir: &Path,
     session_id: &str,

@@ -1,11 +1,12 @@
-//! # Security and Path Safety Module (index.md)
+//! # Security and Path Safety Module
 //!
 //! ## Overview
-//! Validates path bounds to prevent directory traversal and checks output strings against safety rules.
+//! Validates filesystem path bounds to prevent directory traversal and filters output strings
+//! against credential leakage rules.
 //!
-//! ## Module Components
-//! - [`paths`]: Verifies path targets are restricted to authorized directories.
-//! - [`content`]: Filters output text to block credential leakage.
+//! ## Submodules
+//! - [`paths`] (`paths.rs`): Verifies path targets are restricted to authorized workspace directories.
+//! - [`content`] (`content.rs`): Filters output text to redact credentials and sensitive tokens.
 //!
 //! ## Search Tags
 //! #safety-module, #path-sandbox, #content-filter

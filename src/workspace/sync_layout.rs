@@ -1,5 +1,6 @@
 //! # Workspace Layout and Rule Initialization
 //!
+//! ## Overview
 //! Provides layout creation, legacy data migration, and persistent rule initialization
 //! including mainmemory and operational constraints for the Tuner workspace environment.
 //!
@@ -9,6 +10,7 @@
 use crate::workspace::paths::DuctorPaths;
 use std::path::Path;
 
+/// Executes `create_workspace_directories` (create workspace directories).
 pub fn create_workspace_directories(paths: &DuctorPaths) {
     let required_workspace_dirs = [
         "",
@@ -38,9 +40,10 @@ pub fn create_workspace_directories(paths: &DuctorPaths) {
     let _ = std::fs::create_dir_all(paths.config_dir());
 }
 
+/// Executes `migrate_legacy_data` (migrate legacy data).
 pub fn migrate_legacy_data(paths: &DuctorPaths) {
-    if let Some(ref p) = paths.profile {
-        if p == "default" {
+    if let Some(ref p) = paths.profile
+        && p == "default" {
             let legacy_sessions = paths.tuner_home.join("sessions.json");
             let legacy_workspace = paths.tuner_home.join("workspace");
             let target_sessions = paths.sessions_path();
@@ -59,9 +62,9 @@ pub fn migrate_legacy_data(paths: &DuctorPaths) {
                 let _ = std::fs::rename(&legacy_workspace, &target_workspace);
             }
         }
-    }
 }
 
+/// Executes `sync_mainmemory_rule` (sync mainmemory rule).
 pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
     let rules_dir = root.join(".agents").join("rules");
     let target = rules_dir.join("mainmemory.md");
@@ -69,8 +72,8 @@ pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
     let legacy_mem = legacy_dir.join("MAINMEMORY.md");
 
     // 1. Migration: if legacy regular file exists and target doesn't exist, migrate it
-    if legacy_mem.is_file() && !legacy_mem.is_symlink() && !target.is_file() {
-        if let Ok(content) = std::fs::read_to_string(&legacy_mem) {
+    if legacy_mem.is_file() && !legacy_mem.is_symlink() && !target.is_file()
+        && let Ok(content) = std::fs::read_to_string(&legacy_mem) {
             let header = "---\ntrigger: always_on\ndescription: \"Core factual memory about user, family, assets, vehicle, and preferences\"\n---\n";
             let clean = if content.starts_with("---") {
                 content
@@ -80,7 +83,6 @@ pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
             let _ = std::fs::create_dir_all(&rules_dir);
             let _ = std::fs::write(&target, clean);
         }
-    }
 
     // 2. Ensure legacy path is a relative symlink to target if legacy_dir exists or target exists
     if target.is_file() && legacy_dir.is_dir() {
@@ -100,6 +102,7 @@ pub fn sync_mainmemory_rule(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Executes `sync_constraints_rule` (sync constraints rule).
 pub fn sync_constraints_rule(root: &Path, default_template: Option<&Path>) -> Result<(), String> {
     let rules_dir = root.join(".agents").join("rules");
     let target = rules_dir.join("constraints.md");

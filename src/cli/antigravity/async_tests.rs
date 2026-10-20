@@ -48,8 +48,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let transcript = dir.path().join("transcript_full.jsonl");
 
-        let entries = vec![
-            serde_json::json!({
+        let entries = [serde_json::json!({
                 "source": "SYSTEM",
                 "type": "SYSTEM_MESSAGE",
                 "content": "background task completed"
@@ -58,8 +57,7 @@ mod tests {
                 "source": "MODEL",
                 "type": "PLANNER_RESPONSE",
                 "tool_calls": [{"name": "run_command", "args": {"CommandLine": "cargo test"}}]
-            })
-        ];
+            })];
         let content = entries.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n") + "\n";
         std::fs::write(&transcript, content).unwrap();
 

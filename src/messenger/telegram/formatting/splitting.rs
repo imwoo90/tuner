@@ -1,9 +1,9 @@
 //! # Telegram Message Chunking and Splitter
 //!
+//! ## Overview
 //! Splits long reply payloads exceeding Telegram's 4096-character API limit. Automatically
 //! balances opened and closed HTML markup tags across split message parts.
-
-//! 
+//!
 //! ## Search Tags
 //! #splitting
 
@@ -13,13 +13,11 @@ fn split_at_char_limit(s: &str, char_limit: usize) -> (&str, &str) {
     if s.is_empty() || char_limit == 0 {
         return ("", s);
     }
-    let mut char_count = 0;
     let mut byte_idx = 0;
-    for c in s.chars() {
+    for (char_count, c) in s.chars().enumerate() {
         if char_count >= char_limit {
             break;
         }
-        char_count += 1;
         byte_idx += c.len_utf8();
     }
     s.split_at(byte_idx)
@@ -38,7 +36,9 @@ fn get_closing_tags(open_tags: &[String]) -> String {
 }
 
 fn tokenize_html(text: &str) -> Vec<&str> {
-    let tok_re = Regex::new(r"(</?[a-zA-Z][^>]*>|&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);|\n\n|\n)").unwrap();
+    let Ok(tok_re) = Regex::new(r"(</?[a-zA-Z][^>]*>|&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);|\n\n|\n)") else {
+        return vec![text];
+    };
     let mut tokens = Vec::new();
     let mut last_idx = 0;
 
@@ -164,11 +164,14 @@ fn process_token(
 }
 
 fn has_text_content(s: &str) -> bool {
-    let re = Regex::new(r"<[^>]*>").unwrap();
+    let Ok(re) = Regex::new(r"<[^>]*>") else {
+        return !s.trim().is_empty();
+    };
     let text = re.replace_all(s, "");
     !text.trim().is_empty()
 }
 
+/// Executes `split_html_message` (split html message).
 pub fn split_html_message(text: &str, max_len: usize) -> Vec<String> {
     let char_len = |s: &str| s.chars().count();
     if char_len(text) <= max_len {

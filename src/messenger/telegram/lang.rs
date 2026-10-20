@@ -1,9 +1,9 @@
 //! # Chat Thread Locale Detector and Switcher
 //!
+//! ## Overview
 //! Automatically determines and updates the internationalization language locale context for
 //! specific Telegram chat threads based on configuration and commands.
-
-//! 
+//!
 //! ## Search Tags
 //! #lang
 
@@ -43,7 +43,9 @@ pub(crate) async fn handle_lang_command(
         }
     } else {
         let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-        let (mut sess, _) = sessions.resolve_session(&key, &config.provider, default_model).await.unwrap();
+        let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await else {
+            return Ok(());
+        };
         
         let target_lang = if crate::i18n::LANGUAGES.iter().any(|(code, _)| *code == args) {
             args
@@ -68,6 +70,7 @@ pub(crate) async fn handle_lang_command(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     #[tokio::test]
     async fn test_telegram_language_switching_across_yields() {

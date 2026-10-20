@@ -1,9 +1,9 @@
 //! # i18n Completeness Checker
 //!
+//! ## Overview
 //! Compares translated locale files against the English source of truth to identify
 //! missing keys, extra keys, and mismatched formatting placeholders.
-
-//! 
+//!
 //! ## Search Tags
 //! #check
 
@@ -16,17 +16,24 @@ pub const DOMAINS: &[&str] = &["chat", "cli", "commands", "wizard"];
 /// Represents a mismatch in formatting placeholders for a specific key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceholderMismatch {
+    /// Key.
     pub key: String,
+    /// En only.
     pub en_only: BTreeSet<String>,
+    /// Locale only.
     pub locale_only: BTreeSet<String>,
 }
 
 /// Completeness report for a single domain.
 #[derive(Debug, Clone, Default)]
 pub struct DomainReport {
+    /// Missing.
     pub missing: Vec<String>,
+    /// Extra.
     pub extra: Vec<String>,
+    /// Placeholder mismatches.
     pub placeholder_mismatches: Vec<PlaceholderMismatch>,
+    /// Empty.
     pub empty: Vec<String>,
 }
 
@@ -45,7 +52,9 @@ impl DomainReport {
 /// Completeness report for a single locale containing multiple domains.
 #[derive(Debug, Clone)]
 pub struct LocaleReport {
+    /// Locale.
     pub locale: String,
+    /// Domains.
     pub domains: HashMap<String, DomainReport>,
 }
 
@@ -64,7 +73,9 @@ impl LocaleReport {
 /// Top-level report containing completeness results for all tested locales.
 #[derive(Debug, Clone)]
 pub struct Report {
+    /// Root.
     pub root: PathBuf,
+    /// Locales.
     pub locales: Vec<LocaleReport>,
 }
 
@@ -79,8 +90,10 @@ impl Report {
 pub fn placeholders(text: &str) -> BTreeSet<String> {
     use regex::Regex;
     use std::sync::OnceLock;
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").unwrap());
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    let Some(re) = RE.get_or_init(|| Regex::new(r"\{([\w.-]+)\}").ok()) else {
+        return BTreeSet::new();
+    };
     re.captures_iter(text)
         .map(|cap| cap[1].to_string())
         .collect()
@@ -108,8 +121,9 @@ pub fn compare_domain(en: &HashMap<String, String>, tr: &HashMap<String, String>
     let mut placeholder_mismatches = Vec::new();
     let common: BTreeSet<&String> = en_keys.intersection(&tr_keys).cloned().collect();
     for key in common {
-        let en_val = en.get(key).unwrap();
-        let tr_val = tr.get(key).unwrap();
+        let (Some(en_val), Some(tr_val)) = (en.get(key), tr.get(key)) else {
+            continue;
+        };
 
         if tr_val.is_empty() {
             empty.push(key.clone());
@@ -172,8 +186,9 @@ pub fn build_report(root: &Path, locales: Option<Vec<String>>) -> anyhow::Result
         let mut domains_reports = HashMap::new();
         for domain in DOMAINS {
             let tr = load_domain(root, &locale, domain);
-            let en = en_data.get(*domain).unwrap();
-            domains_reports.insert(domain.to_string(), compare_domain(en, &tr));
+            if let Some(en) = en_data.get(*domain) {
+                domains_reports.insert(domain.to_string(), compare_domain(en, &tr));
+            }
         }
         locales_reports.push(LocaleReport {
             locale,

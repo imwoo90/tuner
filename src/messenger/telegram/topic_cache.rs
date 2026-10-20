@@ -4,10 +4,6 @@
 //! Manages a local cache mapping Telegram forum topic names to IDs. Accelerates message routing
 //! in multi-topic workspace environments.
 //!
-//! ## Collaboration Graph
-//! - Queried by [`super::handler::handle_message`] to associate topics with paths.
-//! - Pre-populated from active thread metadata during startup.
-//!
 //! ## Search Tags
 //! #topic-cache, #forum-topics, #metadata-cache
 
@@ -15,34 +11,47 @@ use std::sync::Mutex;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
+/// Represents `BotInfo` (bot info).
 pub struct BotInfo {
+    /// Username.
     pub username: Option<String>,
 }
 
+/// Represents `TopicNameCache` (topic name cache).
 pub struct TopicNameCache {
     names: Mutex<HashMap<(i64, i64), String>>,
 }
 
+impl Default for TopicNameCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TopicNameCache {
+    /// Creates a new instance.
     pub fn new() -> Self {
         Self {
             names: Mutex::new(HashMap::new()),
         }
     }
 
+    /// Executes `insert` (insert).
     pub fn insert(&self, chat_id: i64, topic_id: i64, name: String) {
-        let mut map = self.names.lock().unwrap();
+        let mut map = self.names.lock().unwrap_or_else(|e| e.into_inner());
         map.insert((chat_id, topic_id), name);
     }
 
+    /// Executes `find_by_id` (find by id).
     pub fn find_by_id(&self, chat_id: i64, topic_id: i64) -> Option<String> {
-        let map = self.names.lock().unwrap();
+        let map = self.names.lock().unwrap_or_else(|e| e.into_inner());
         map.get(&(chat_id, topic_id)).cloned()
     }
 
+    /// Executes `find_by_name` (find by name).
     pub fn find_by_name(&self, chat_id: i64, name: &str) -> Option<i64> {
         let target_name = name.strip_prefix('@').unwrap_or(name);
-        let map = self.names.lock().unwrap();
+        let map = self.names.lock().unwrap_or_else(|e| e.into_inner());
         for (&(cid, tid), tname) in map.iter() {
             if cid == chat_id && tname.eq_ignore_ascii_case(target_name) {
                 return Some(tid);

@@ -4,12 +4,6 @@
 //! The central routing entry point for incoming Telegram updates. Parses messages, extracts media group
 //! attachments, routes callback queries, and executes command or chat stream pipelines.
 //!
-//! ## Collaboration Graph
-//! - Binds directly to the Teloxide listener event loop.
-//! - Dispatches commands to [`super::commands::handle_commands`].
-//! - Routes callbacks to [`super::callbacks::handle_callback_query`].
-//! - Downloads photos/files via [`super::reply::download_telegram_media`].
-//!
 //! ## Search Tags
 //! #ingress-handler, #telegram-dispatcher, #event-router, #media-downloads
 
@@ -24,6 +18,7 @@ use super::{reply, get_topic_id, process_text_with_files};
 
 
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_media_group_message(
     bot: Bot,
     msg: Message,
@@ -50,6 +45,7 @@ async fn handle_media_group_message(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_single_media_message(
     bot: Bot,
     msg: Message,
@@ -62,16 +58,13 @@ async fn handle_single_media_message(
 ) -> Result<(), teloxide::RequestError> {
     if text.is_empty() {
         let dest_dir = config.working_dir.join("telegram_files");
-        match reply::download_telegram_media(&bot, &msg, &dest_dir).await {
-            Ok(Some(relative_path)) => {
-                let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
-                let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-                if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-                    sess.pending_attachments.push(relative_path);
-                    let _ = sessions.preserve_session_identity(&sess).await;
-                }
+        if let Ok(Some(relative_path)) = reply::download_telegram_media(&bot, &msg, &dest_dir).await {
+            let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
+            let default_model = config.model.as_deref().unwrap_or("antigravity-default");
+            if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
+                sess.pending_attachments.push(relative_path);
+                let _ = sessions.preserve_session_identity(&sess).await;
             }
-            _ => {}
         }
     } else {
         let dest_dir = config.working_dir.join("telegram_files");
@@ -94,6 +87,7 @@ async fn handle_single_media_message(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_pure_text_message(
     bot: Bot,
     msg: Message,
@@ -107,13 +101,12 @@ async fn handle_pure_text_message(
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
     let mut files = Vec::new();
-    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-        if !sess.pending_attachments.is_empty() {
+    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await
+        && !sess.pending_attachments.is_empty() {
             files = sess.pending_attachments.clone();
             sess.pending_attachments.clear();
             let _ = sessions.preserve_session_identity(&sess).await;
         }
-    }
     process_text_with_files(
         &bot,
         &msg,
@@ -128,6 +121,7 @@ async fn handle_pure_text_message(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn route_media_message(
     bot: Bot,
     msg: Message,
@@ -177,6 +171,7 @@ fn normalize_command_text(raw_text: &str, bot_username: Option<&str>) -> String 
         .replace("/grill_me", "/grill-me")
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch_lock_free(
     bot: Bot,
     msg: Message,
@@ -194,6 +189,7 @@ async fn dispatch_lock_free(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_message(
     bot: Bot,
     msg: Message,

@@ -4,10 +4,6 @@
 //! Resolves human-readable session aliases to raw UUID session strings. Enables resumes
 //! and diagnostics via user-friendly mnemonic names.
 //!
-//! ## Collaboration Graph
-//! - Saves aliases mappings under configuration paths.
-//! - Consulted by Telegram command routing controllers during session switching.
-//!
 //! ## Search Tags
 //! #session-aliases, #name-resolver, #alias-mapping
 
@@ -18,13 +14,19 @@ use serde::{Deserialize, Serialize};
 use chrono::Utc;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// Represents `NamedSession` (named session).
 pub struct NamedSession {
+    /// Name.
     pub name: String,
+    /// Chat id.
     pub chat_id: i64,
+    /// Status.
     pub status: String,
+    /// Last prompt.
     pub last_prompt: String,
 }
 
+/// Represents `NamedSessionRegistry` (named session registry).
 pub struct NamedSessionRegistry {
     path: PathBuf,
     lock: std::sync::Mutex<()>,
@@ -42,10 +44,12 @@ fn get_random_seed() -> u64 {
 }
 
 impl NamedSessionRegistry {
+    /// Creates a new instance.
     pub fn new(path: PathBuf) -> Self {
         Self { path, lock: std::sync::Mutex::new(()) }
     }
 
+    /// Executes `load` (load).
     pub fn load(&self) -> Result<HashMap<String, NamedSession>, String> {
         if !self.path.exists() { return Ok(HashMap::new()); }
         let content = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
@@ -53,6 +57,7 @@ impl NamedSessionRegistry {
         serde_json::from_str(&content).map_err(|e| e.to_string())
     }
 
+    /// Executes `save` (save).
     pub fn save(&self, map: &HashMap<String, NamedSession>) -> Result<(), String> {
         let temp = self.path.with_extension("tmp");
         let content = serde_json::to_string_pretty(map).map_err(|e| e.to_string())?;
@@ -83,6 +88,7 @@ impl NamedSessionRegistry {
         Err("Failed to generate unique name".to_string())
     }
 
+    /// Executes `recover_crash` (recover crash).
     pub fn recover_crash(&self) -> Result<(), String> {
         let _guard = self.lock.lock().map_err(|e| e.to_string())?;
         let mut map = self.load()?;
@@ -97,6 +103,7 @@ impl NamedSessionRegistry {
         Ok(())
     }
 
+    /// Executes `create_session` (create session).
     pub fn create_session(&self, chat_id: i64, status: &str, last_prompt: &str) -> Result<NamedSession, String> {
         let _guard = self.lock.lock().map_err(|e| e.to_string())?;
         let mut map = self.load()?;
@@ -120,6 +127,7 @@ impl NamedSessionRegistry {
         Ok(ns)
     }
 
+    /// Executes `update_session_status` (update session status).
     pub fn update_session_status(&self, name: &str, status: &str, last_prompt: Option<&str>) -> Result<NamedSession, String> {
         let _guard = self.lock.lock().map_err(|e| e.to_string())?;
         let mut map = self.load()?;
@@ -139,6 +147,7 @@ impl NamedSessionRegistry {
         }
     }
 
+    /// Executes `get_session` (get session).
     pub fn get_session(&self, name: &str) -> Result<Option<NamedSession>, String> {
         let _guard = self.lock.lock().map_err(|e| e.to_string())?;
         let map = self.load()?;

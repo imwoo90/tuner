@@ -2,6 +2,7 @@
 //!
 //! Tests direct API server endpoints, token authentication, directory traversal,
 //! E2E encryption handshake, and concurrent request handling.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::config::ApiConfig;
 use crate::session::key::SessionKey;
@@ -149,7 +150,7 @@ async fn test_api_server_token_auth_bypass_vulnerability() {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     ws_handshake(&mut stream, port).await;
 
-    let client_pk = base64::Engine::encode(&base64::prelude::BASE64_STANDARD, &[0u8; 32]);
+    let client_pk = base64::Engine::encode(&base64::prelude::BASE64_STANDARD, [0u8; 32]);
     let auth_msg = serde_json::json!({
         "type": "auth",
         "token": "",

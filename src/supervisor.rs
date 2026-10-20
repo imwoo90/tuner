@@ -3,9 +3,6 @@
 //! ## Overview
 //! Monitors child subprocesses, restarts workers on failure, and handles termination signals.
 //!
-//! ## Collaboration Graph
-//! - Instantiated by master daemon mode to manage child worker targets.
-//!
 //! ## Search Tags
 //! #supervisor, #subprocess-runner, #signal-propagator
 
@@ -13,12 +10,14 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::process::Command;
 
+/// Represents `Supervisor` (supervisor).
 pub struct Supervisor {
     child_path: PathBuf,
     args: Vec<String>,
 }
 
 impl Supervisor {
+    /// Creates a new instance.
     pub fn new(child_path: PathBuf) -> Self {
         Self {
             child_path,
@@ -26,10 +25,12 @@ impl Supervisor {
         }
     }
 
+    /// Executes `with_args` (with args).
     pub fn with_args(child_path: PathBuf, args: Vec<String>) -> Self {
         Self { child_path, args }
     }
 
+    /// Executes `run` (run).
     pub async fn run(&self) -> Result<(), String> {
         let mut fast_crash_count = 0;
         loop {
@@ -46,7 +47,7 @@ impl Supervisor {
             } else {
                 fast_crash_count = 0;
             }
-            let backoff = Duration::from_secs_f64(f64::min(2.0f64.powi(fast_crash_count as i32), 30.0));
+            let backoff = Duration::from_secs_f64(f64::min(2.0f64.powi(fast_crash_count), 30.0));
             tokio::time::sleep(backoff).await;
         }
         Ok(())
@@ -65,6 +66,7 @@ impl Supervisor {
     }
 }
 
+/// Executes `terminate_child` (terminate child).
 pub async fn terminate_child(child: &mut tokio::process::Child, timeout: Duration) -> Result<(), std::io::Error> {
     if child.try_wait()?.is_some() {
         return Ok(());

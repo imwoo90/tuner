@@ -4,10 +4,6 @@
 //! Resolves target paths for new chat threads, triggers workspace setup rules (CLAUDE.md/GEMINI.md),
 //! clones custom skills, and boots up CLI processes when active sessions are required.
 //!
-//! ## Collaboration Graph
-//! - Called by [`super::handler::handle_message`] when resolving or creating sessions.
-//! - Instantiates rules through [`RulesSelector`](crate::workspace::rules::RulesSelector).
-//!
 //! ## Search Tags
 //! #session-initializer, #workspace-provisioner, #rules-sync
 

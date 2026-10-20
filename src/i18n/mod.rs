@@ -1,11 +1,12 @@
-//! # Internationalization (i18n) Module (index.md)
+//! # Internationalization (i18n) Module
 //!
 //! ## Overview
-//! Loads TOML catalogs into static catalogs for thread-safe translation lookup.
+//! Loads TOML translation catalogs into static registries for thread-safe and task-local
+//! translation lookup across chat messages, CLI prompts, and bot command descriptions.
 //!
-//! ## Module Components
-//! - [`loader`]: Loads and flattens translations from TOML folders.
-//! - [`check`]: Audits translation catalog completeness.
+//! ## Submodules
+//! - [`loader`] (`loader.rs`): Loads and flattens translation strings from locale TOML directories.
+//! - [`check`] (`check.rs`): Audits translation catalog completeness and placeholder consistency.
 //!
 //! ## Search Tags
 //! #i18n-module, #translation-store, #locale-selector, #macro-lookup
@@ -36,11 +37,12 @@ static REGISTRY: OnceLock<HashMap<String, TranslationStore>> = OnceLock::new();
 static GLOBAL_ACTIVE_LANG: RwLock<String> = RwLock::new(String::new());
 
 tokio::task_local! {
+    /// Task-local active locale code override.
     pub static TASK_ACTIVE_LANG: String;
 }
 
 thread_local! {
-    static ACTIVE_LANG: RefCell<Option<String>> = RefCell::new(None);
+    static ACTIVE_LANG: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// Retrieve the static global registry, initializing it if necessary.
@@ -109,6 +111,7 @@ pub fn init(language: &str) {
     }
 }
 
+/// Executes `set_language` (set language).
 pub fn set_language(language: &str) {
     let lang = if LANGUAGES.iter().any(|(code, _)| *code == language) {
         language
@@ -131,7 +134,9 @@ pub fn set_language(language: &str) {
 pub fn t(key: &str, args: &[(&str, &str)]) -> String {
     let lang = get_active_language();
     let registry = get_registry();
-    let store = registry.get(&lang).or_else(|| registry.get("en")).unwrap();
+    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
+        return key.to_string();
+    };
     store.chat(key, args)
 }
 
@@ -146,7 +151,9 @@ pub fn t(key: &str, args: &[(&str, &str)]) -> String {
 pub fn t_rich(key: &str, args: &[(&str, &str)]) -> String {
     let lang = get_active_language();
     let registry = get_registry();
-    let store = registry.get(&lang).or_else(|| registry.get("en")).unwrap();
+    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
+        return key.to_string();
+    };
     store.cli(key, args)
 }
 
@@ -161,7 +168,9 @@ pub fn t_rich(key: &str, args: &[(&str, &str)]) -> String {
 pub fn t_cmd(key: &str) -> String {
     let lang = get_active_language();
     let registry = get_registry();
-    let store = registry.get(&lang).or_else(|| registry.get("en")).unwrap();
+    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
+        return key.to_string();
+    };
     store.cmd(key)
 }
 
@@ -195,10 +204,15 @@ pub fn get_language() -> String {
 pub fn get_store() -> TranslationStore {
     let lang = get_active_language();
     let registry = get_registry();
-    registry.get(&lang).or_else(|| registry.get("en")).unwrap().clone()
+    registry
+        .get(&lang)
+        .or_else(|| registry.get("en"))
+        .cloned()
+        .unwrap_or_else(|| TranslationStore::new("en"))
 }
 
 #[macro_export]
+/// Helper macro `t!` (t).
 macro_rules! t {
     ($key:expr) => {
         $crate::i18n::t($key, &[])
@@ -211,6 +225,7 @@ macro_rules! t {
 }
 
 #[macro_export]
+/// Helper macro `t_rich!` (t rich).
 macro_rules! t_rich {
     ($key:expr) => {
         $crate::i18n::t_rich($key, &[])
@@ -223,6 +238,7 @@ macro_rules! t_rich {
 }
 
 #[macro_export]
+/// Helper macro `t_plural!` (t plural).
 macro_rules! t_plural {
     ($key:expr, $count:expr) => {
         $crate::i18n::t_plural($key, $count, &[])

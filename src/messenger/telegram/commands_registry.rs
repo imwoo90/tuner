@@ -1,7 +1,11 @@
 //! # Telegram Bot Commands Registry and Metadata
 //!
+//! ## Overview
 //! Registers available slash commands with Telegram Bot API across private and group chat scopes,
 //! and provides classification for lock-free command dispatch.
+//!
+//! ## Search Tags
+//! #commands-registry, #slash-commands, #command-scope
 
 use teloxide::prelude::*;
 
@@ -55,7 +59,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
 }
 
 pub(crate) fn is_workflow_slash_command(text: &str) -> bool {
-    let cmd = text.trim_start().split_whitespace().next().unwrap_or("");
+    let cmd = text.split_whitespace().next().unwrap_or("");
     matches!(
         cmd,
         "/goal"

@@ -1,9 +1,9 @@
 //! # Ask-Question Execution Helper Utilities
 //!
+//! ## Overview
 //! Provides utilities to query active sessions, feed user input to PTY stdin channels,
 //! and clean up prompt-waiting locks upon resolution.
-
-//! 
+//!
 //! ## Search Tags
 //! #ask-helpers
 
@@ -132,6 +132,7 @@ async fn update_question_ui(
         .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn advance_ask_state(
     bot: &teloxide::Bot,
     msg: &Message,
@@ -169,6 +170,7 @@ async fn advance_ask_state(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_ask_input(
     bot: &teloxide::Bot,
     msg: &Message,
@@ -191,20 +193,20 @@ async fn handle_ask_input(
         }
     }
 
-    if let Some(mid) = msg_id {
-        if let Some(q) = state.questions.get(state.current_index) {
+    if let Some(mid) = msg_id
+        && let Some(q) = state.questions.get(state.current_index) {
             let txt = format!("{}\n\n(Selected: **{}**)", q.question, current_text);
             let html = super::formatting::markdown_to_telegram_html(&txt);
             let _ = bot.edit_message_text(msg.chat.id, teloxide::types::MessageId(mid), html)
                 .parse_mode(teloxide::types::ParseMode::Html)
                 .await;
         }
-    }
 
     advance_ask_state(bot, msg, session_id, msg_id, state, cli, is_write_in, sessions, sess, config).await?;
     Ok(ip)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn feed_active_session_if_running(
     bot: &teloxide::Bot,
     msg: &Message,
@@ -219,12 +221,11 @@ pub(crate) async fn feed_active_session_if_running(
     let is_running = cli.sessions.is_running(session_id).await;
     let is_ask = cli.sessions.is_ask_active(session_id).await;
 
-    if is_active && is_ask {
-        if let Some(state) = cli.sessions.get_ask_state(session_id).await {
+    if is_active && is_ask
+        && let Some(state) = cli.sessions.get_ask_state(session_id).await {
             let _ = handle_ask_input(bot, msg, session_id, current_text, cli, state, sessions, sess, config).await?;
             return Ok(true);
         }
-    }
 
     if is_active && is_running {
         let start = std::time::Instant::now();
@@ -254,9 +255,8 @@ pub(crate) async fn update_telegram_ask_ui(bot: &teloxide::Bot, msg: &Message, i
     if let Some(rm) = msg.reply_markup() {
         for r in &rm.inline_keyboard {
             for b in r {
-                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &b.kind {
-                    if cbd == data { chosen = b.text.clone(); }
-                }
+                if let teloxide::types::InlineKeyboardButtonKind::CallbackData(cbd) = &b.kind
+                    && cbd == data { chosen = b.text.clone(); }
             }
         }
     }

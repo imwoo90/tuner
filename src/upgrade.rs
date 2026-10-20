@@ -4,9 +4,6 @@
 //! Manages checking for GitHub release versions, downloading binaries, verifying checksums,
 //! and replacing the running executable dynamically with zero-downtime restarts.
 //!
-//! ## Collaboration Graph
-//! - Invoked via `--upgrade` CLI flag or Telegram update commands.
-//!
 //! ## Search Tags
 //! #binary-upgrade, #github-releases, #checksum-verifier
 
@@ -14,18 +11,26 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Deserialize, Clone, Debug)]
+/// Represents `GithubAsset` (github asset).
 pub struct GithubAsset {
+    /// Name.
     pub name: String,
+    /// Browser download url.
     pub browser_download_url: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
+/// Represents `GithubRelease` (github release).
 pub struct GithubRelease {
+    /// Tag name.
     pub tag_name: String,
+    /// Body.
     pub body: Option<String>,
+    /// Assets.
     pub assets: Vec<GithubAsset>,
 }
 
+/// Executes `get_latest_release` (get latest release).
 pub async fn get_latest_release() -> Result<GithubRelease, String> {
     let client = reqwest::Client::builder()
         .user_agent("tuner-updater")
@@ -49,6 +54,7 @@ pub async fn get_latest_release() -> Result<GithubRelease, String> {
     Ok(release)
 }
 
+/// Executes `is_newer_version` (is newer version).
 pub fn is_newer_version(current: &str, latest: &str) -> bool {
     let parse_parts = |s: &str| -> Vec<u32> {
         s.trim_start_matches('v')
@@ -102,6 +108,7 @@ async fn unpack_archive(archive_path: &Path, dest_path: &Path) -> Result<(), Str
     .map_err(|e| format!("Join error: {}", e))?
 }
 
+/// Executes `perform_upgrade` (perform upgrade).
 pub async fn perform_upgrade(url: &str) -> Result<(), String> {
     let exe_path = std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
     let parent_dir = exe_path.parent().ok_or("No exe parent dir")?;
@@ -150,6 +157,7 @@ pub async fn perform_upgrade(url: &str) -> Result<(), String> {
     bin_ok.map_err(|e| format!("Replace binary failed: {}", e))
 }
 
+/// Executes `run_cli_upgrade` (run cli upgrade).
 pub async fn run_cli_upgrade() -> Result<(), String> {
     println!("Checking for updates...");
     let release = get_latest_release().await?;

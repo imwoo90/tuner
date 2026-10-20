@@ -1,7 +1,11 @@
 //! # In-App File Review Web Server
 //!
+//! ## Overview
 //! Provides the Axum HTTP web server and Cloudflare Quick Tunnel orchestration
 //! for file review, code inspection, media streaming (HTTP Range/206), and downloads.
+//!
+//! ## Search Tags
+//! #review-server, #cloudflare-tunnel, #media-streaming
 
 use axum::{
     extract::Path,
@@ -16,6 +20,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
+/// Executes `ensure_server_running` (ensure server running).
 pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16 {
     let mut port_guard = server_port.lock().await;
     if let Some(port) = *port_guard {
@@ -33,9 +38,10 @@ pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16
 
     let listener = match tokio::net::TcpListener::bind(bind_addr).await {
         Ok(l) => l,
-        Err(_) => tokio::net::TcpListener::bind("0.0.0.0:0")
-            .await
-            .expect("Failed to bind ephemeral port"),
+        Err(_) => match tokio::net::TcpListener::bind("0.0.0.0:0").await {
+            Ok(l) => l,
+            Err(_) => return 8743,
+        },
     };
 
     let port = listener.local_addr().map(|a| a.port()).unwrap_or(8743);
@@ -55,16 +61,17 @@ pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16
     port
 }
 
+/// Executes `warmup` (warmup).
 pub async fn warmup(server_port: &Arc<Mutex<Option<u16>>>, tunnel_url: &Arc<Mutex<Option<String>>>) {
     let port = ensure_server_running(server_port).await;
     let mut tunnel_guard = tunnel_url.lock().await;
-    if tunnel_guard.is_none() {
-        if let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
+    if tunnel_guard.is_none()
+        && let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
             *tunnel_guard = Some(url);
         }
-    }
 }
 
+/// Executes `get_review_url` (get review url).
 pub async fn get_review_url(
     server_port: &Arc<Mutex<Option<u16>>>,
     tunnel_url: &Arc<Mutex<Option<String>>>,
@@ -110,6 +117,7 @@ fn parse_tunnel_url(line: &str) -> Option<String> {
     }
 }
 
+/// Executes `spawn_quick_tunnel` (spawn quick tunnel).
 pub async fn spawn_quick_tunnel(port: u16) -> Option<String> {
     spawn_quick_tunnel_tracked(port, None).await
 }

@@ -1,9 +1,9 @@
 //! # Webhook Connection Handshake Protocol
 //!
+//! ## Overview
 //! Handles registration sequence, key exchange negotiation, and authorization checks for external
 //! worker registration.
-
-//! 
+//!
 //! ## Search Tags
 //! #handshake
 
@@ -13,14 +13,10 @@ use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use serde_json::Value;
 
-pub async fn perform_handshake(
+async fn receive_auth_json(
     sender: &mut futures::stream::SplitSink<axum::extract::ws::WebSocket, axum::extract::ws::Message>,
     receiver: &mut futures::stream::SplitStream<axum::extract::ws::WebSocket>,
-    tok: &str,
-    def_chat: i64,
-    prov_info: &Value,
-    getter: Option<&crate::webhook::api::websocket::ActiveStateGetter>,
-) -> Result<(crate::session::key::SessionKey, E2ESession), String> {
+) -> Result<Value, String> {
     let auth_msg = match tokio::time::timeout(tokio::time::Duration::from_secs(10), receiver.next()).await {
         Ok(Some(Ok(msg))) => msg,
         _ => {
@@ -35,13 +31,25 @@ pub async fn perform_handshake(
             return Err("First message not text".to_string());
         }
     };
-    let data: Value = match serde_json::from_str(&text) {
-        Ok(v) => v,
+    match serde_json::from_str(&text) {
+        Ok(v) => Ok(v),
         Err(_) => {
             send_reject(sender, "auth_required", "First message must be auth JSON").await;
-            return Err("Invalid JSON".to_string());
+            Err("Invalid JSON".to_string())
         }
-    };
+    }
+}
+
+/// Executes `perform_handshake` (perform handshake).
+pub async fn perform_handshake(
+    sender: &mut futures::stream::SplitSink<axum::extract::ws::WebSocket, axum::extract::ws::Message>,
+    receiver: &mut futures::stream::SplitStream<axum::extract::ws::WebSocket>,
+    tok: &str,
+    def_chat: i64,
+    prov_info: &Value,
+    getter: Option<&crate::webhook::api::websocket::ActiveStateGetter>,
+) -> Result<(crate::session::key::SessionKey, E2ESession), String> {
+    let data = receive_auth_json(sender, receiver).await?;
     let (raw_chat, chan_id, pk) = match validate_auth_msg(&data, tok) {
         Ok(res) => res,
         Err(e) => {
@@ -97,22 +105,15 @@ fn build_auth_ok(
         "e2e_pk": local_pk,
         "providers": provider_info,
     });
-    if let Some(cid) = channel_id {
-        payload
-            .as_object_mut()
-            .unwrap()
-            .insert("channel_id".to_string(), serde_json::json!(cid));
-    }
-    if let Some(getter) = active_state_getter {
-        let (active_provider, active_model) = getter();
-        payload
-            .as_object_mut()
-            .unwrap()
-            .insert("active_provider".to_string(), serde_json::json!(active_provider));
-        payload
-            .as_object_mut()
-            .unwrap()
-            .insert("active_model".to_string(), serde_json::json!(active_model));
+    if let Some(obj) = payload.as_object_mut() {
+        if let Some(cid) = channel_id {
+            obj.insert("channel_id".to_string(), serde_json::json!(cid));
+        }
+        if let Some(getter) = active_state_getter {
+            let (active_provider, active_model) = getter();
+            obj.insert("active_provider".to_string(), serde_json::json!(active_provider));
+            obj.insert("active_model".to_string(), serde_json::json!(active_model));
+        }
     }
     payload
 }

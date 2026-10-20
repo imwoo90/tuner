@@ -1,14 +1,15 @@
-//! # Session Lifecycle Management (index.md)
+//! # Session Lifecycle Management
 //!
 //! ## Overview
-//! Manages message histories, workspace initializations, and key resolution for active user/group chat threads.
+//! Manages conversation histories, workspace session initializations, and session key resolution
+//! for active user and group chat threads.
 //!
-//! ## Module Components
-//! - [`key`]: Represents unique session identifiers matching chat/topic mappings.
-//! - [`data`]: In-memory and serialized structure of active session data.
-//! - [`manager`]: Resolves, loads, updates, and resets sessions.
-//! - [`freshness`]: Inspects session age, inactivity timeouts, and triggers daily resets.
-//! - [`named`]: Maintains session-to-alias maps.
+//! ## Submodules
+//! - [`key`] (`key.rs`): Unique session identifiers matching transport, chat, and forum topic mappings.
+//! - [`data`] (`data.rs`): In-memory and JSON-serialized structure of active session state.
+//! - [`manager`] (`manager.rs`): Resolves, loads, updates, and resets persisted sessions.
+//! - [`freshness`] (`freshness.rs`): Inspects session age, inactivity timeouts, and daily reset policies.
+//! - [`named`] (`named.rs`): Maintains human-readable session alias mappings for background follow-ups.
 //!
 //! ## Search Tags
 //! #session-lifecycle, #session-manager, #timezone-reset, #alias-resolver
@@ -20,8 +21,12 @@ pub mod freshness;
 pub mod named;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod manager_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+/// Test module/item.
 pub mod named_tests;
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod topic_history_tests;

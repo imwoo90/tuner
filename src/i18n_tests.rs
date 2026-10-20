@@ -275,7 +275,7 @@ fn test_chat_placeholders_are_valid() {
         let val = store.chat(&key, &[]);
         let phs = extract_placeholders(&val);
         for ph in phs {
-            let is_ident = !ph.is_empty() && ph.chars().next().map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
+            let is_ident = !ph.is_empty() && ph.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 && ph.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-');
             assert!(is_ident, "Bad placeholder {{{}}} in {}", ph, key);
         }

@@ -3,10 +3,6 @@
 //! ## Overview
 //! Configures and boots the Axum web service. Handles graceful termination and manages active connection pools.
 //!
-//! ## Collaboration Graph
-//! - Main startup controller booted by daemon profiles.
-//! - Binds routes declared in [`super::api::server::ApiServer::start`].
-//!
 //! ## Search Tags
 //! #axum-listener, #graceful-shutdown, #web-server
 
@@ -21,22 +17,31 @@ use axum::{
 };
 use std::sync::Arc;
 
+/// Type alias `DispatchHandler` (dispatch handler).
 pub type DispatchHandler = Arc<dyn Fn(String, serde_json::Value) + Send + Sync + 'static>;
 
+/// Represents `ServerState` (server state).
 pub struct ServerState {
+    /// Manager.
     pub manager: Arc<WebhookManager>,
+    /// Rate limiter.
     pub rate_limiter: RateLimiter,
+    /// Global token.
     pub global_token: String,
+    /// Dispatch.
     pub dispatch: Option<DispatchHandler>,
+    /// Max body bytes.
     pub max_body_bytes: usize,
 }
 
+/// Represents `WebhookServer` (webhook server).
 pub struct WebhookServer {
     state: Arc<ServerState>,
     shutdown_tx: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl WebhookServer {
+    /// Creates a new instance.
     pub fn new(
         manager: Arc<WebhookManager>,
         rate_limit_per_minute: usize,
@@ -56,9 +61,10 @@ impl WebhookServer {
         }
     }
 
+    /// Executes `start` (start).
     pub async fn start(&self, host: &str, port: u16) -> Result<(), String> {
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        *self.shutdown_tx.lock().unwrap() = Some(tx);
+        *self.shutdown_tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
 
         let app = Router::new()
             .route("/health", get(handle_health))
@@ -84,8 +90,9 @@ impl WebhookServer {
         Ok(())
     }
 
+    /// Executes `stop` (stop).
     pub fn stop(&self) {
-        if let Some(tx) = self.shutdown_tx.lock().unwrap().take() {
+        if let Some(tx) = self.shutdown_tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = tx.send(());
         }
     }

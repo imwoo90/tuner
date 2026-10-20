@@ -261,8 +261,7 @@ fn test_log_parser_extracts_tool_completions_and_final_response() {
 
     let mut parser = AntigravityLogParser::new();
     
-    let entries = vec![
-        serde_json::json!({
+    let entries = [serde_json::json!({
             "source": "MODEL",
             "type": "RUN_COMMAND",
             "status": "DONE"
@@ -272,8 +271,7 @@ fn test_log_parser_extracts_tool_completions_and_final_response() {
             "type": "PLANNER_RESPONSE",
             "status": "DONE",
             "content": "All done!"
-        })
-    ];
+        })];
     let content = entries.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n") + "\n";
     std::fs::write(&transcript, content).unwrap();
     
