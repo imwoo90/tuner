@@ -129,10 +129,20 @@ fn truncate_streaming_preview(delta: &str) -> String {
             units <= 3400
         }).collect();
         let tail_str: String = tail.into_iter().rev().collect();
-        format!("...[중간 생략]...\n{}", tail_str)
+        let aligned = tail_str.find('\n').map(|i| &tail_str[i + 1..]).unwrap_or(&tail_str);
+        format!("...[중간 생략]...\n{}", aligned)
     } else {
         delta.to_string()
     }
+}
+
+pub(crate) fn render_streaming_preview_html(delta: &str) -> String {
+    let preview = truncate_streaming_preview(delta);
+    let full_html = formatting::markdown_to_telegram_html(&preview);
+    formatting::split_html_message(&full_html, 3800)
+        .into_iter()
+        .last()
+        .unwrap_or(full_html)
 }
 
 pub(crate) async fn handle_text_delta(
@@ -145,38 +155,19 @@ pub(crate) async fn handle_text_delta(
     last_edit: &mut Instant,
 ) -> Result<(), teloxide::RequestError> {
     *last_text = delta.to_string();
-    let preview = truncate_streaming_preview(delta);
-    let limiter = super::rate_limiter::global_chat_rate_limiter();
-
-    if let Some(mid) = *pub_msg_id {
-        if last_edit.elapsed() >= Duration::from_secs(2) {
-            let res = limiter.execute_rate_limited(chat_id, || {
-                let d = preview.clone();
-                async move { bot.edit_message_text(chat_id, mid, d).await }
-            }).await;
-            if let Err(e) = res {
-                if !is_message_not_modified(&e) {
-                    eprintln!("❌ [tuner] Edit stream msg failed ({}, {}): {:?}", chat_id, mid, e);
-                }
-            }
+    if pub_msg_id.is_some() && last_edit.elapsed() < Duration::from_secs(2) {
+        return Ok(());
+    }
+    let html = render_streaming_preview_html(delta);
+    match send_single_chunk(bot, chat_id, *pub_msg_id, thread_id, &html, true).await {
+        Ok(mid) => {
+            *pub_msg_id = Some(mid);
             *last_edit = Instant::now();
         }
-    } else {
-        let res = limiter.execute_rate_limited(chat_id, || {
-            let d = preview.clone();
-            async move {
-                let mut req = bot.send_message(chat_id, d);
-                if let Some(tid) = thread_id { req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid))); }
-                req.await
-            }
-        }).await;
-        match res {
-            Ok(sent) => {
-                *pub_msg_id = Some(sent.id);
-                *last_edit = Instant::now();
-            }
-            Err(e) => eprintln!("❌ [tuner] Initial stream msg failed ({}, {:?}): {:?}", chat_id, thread_id, e),
+        Err(e) if !is_message_not_modified(&e) => {
+            eprintln!("❌ [tuner] Stream msg failed ({}, {:?}): {:?}", chat_id, *pub_msg_id, e);
         }
+        _ => {}
     }
     Ok(())
 }
@@ -184,26 +175,40 @@ pub(crate) async fn handle_text_delta(
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
-    thread_id: Option<i32>,
+    tid: Option<i32>,
     mut stream: futures::stream::BoxStream<'_, StreamEvent>,
     sdata: &crate::session::data::SessionData,
-    config: &CliConfig,
+    cfg: &CliConfig,
     last_text: &mut String,
-    pub_msg_id: &mut Option<teloxide::types::MessageId>,
+    pub_id: &mut Option<teloxide::types::MessageId>,
     last_sid: &mut Option<String>,
     cli: &crate::cli::antigravity::AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let mut last_edit = Instant::now();
+    let (mut last_edit, mut pending) = (Instant::now(), false);
+    let mut tick = tokio::time::interval(Duration::from_millis(700));
     use futures::StreamExt;
-    while let Some(event) = stream.next().await {
-        match event {
-            StreamEvent::TextDelta(delta) => handle_text_delta(bot, chat_id, thread_id, &delta, last_text, pub_msg_id, &mut last_edit).await?,
-            StreamEvent::AskQuestion(ask) => super::ask_process::handle_ask_question_event(bot, chat_id, thread_id, ask, sdata, config, cli).await?,
-            StreamEvent::Result(resp) => {
-                *last_text = resp.result.clone();
-                if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_msg_id, thread_id, sdata.topic_id, sdata.topic_name.as_deref(), resp, config).await {
-                    *last_sid = Some(sid);
+    loop {
+        tokio::select! {
+            ev = stream.next() => match ev {
+                Some(StreamEvent::TextDelta(d)) => {
+                    let prev = last_edit;
+                    handle_text_delta(bot, chat_id, tid, &d, last_text, pub_id, &mut last_edit).await?;
+                    pending = pub_id.is_some() && last_edit == prev;
                 }
+                Some(StreamEvent::AskQuestion(ask)) => super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, cfg, cli).await?,
+                Some(StreamEvent::Result(resp)) => {
+                    pending = false;
+                    if !resp.result.is_empty() { *last_text = resp.result.clone(); }
+                    if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, *pub_id, tid, sdata.topic_id, sdata.topic_name.as_deref(), resp, cfg).await {
+                        *last_sid = Some(sid);
+                    }
+                }
+                None => break,
+            },
+            _ = tick.tick(), if pending => if last_edit.elapsed() >= Duration::from_secs(2) {
+                let cur = last_text.clone();
+                handle_text_delta(bot, chat_id, tid, &cur, last_text, pub_id, &mut last_edit).await?;
+                pending = false;
             }
         }
     }

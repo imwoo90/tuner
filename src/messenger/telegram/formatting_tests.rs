@@ -242,5 +242,22 @@ mod tests {
         let html4 = markdown_to_telegram_html("**bold _unmatched** and _other_");
         assert_eq!(html4, "<b>bold _unmatched</b> and <i>other</i>");
     }
+
+    #[test]
+    fn test_streaming_preview_renders_collapsible_blockquotes() {
+        let long_thought = (0..60).map(|i| format!(">! thought line {}", i)).collect::<Vec<_>>().join("\n");
+        let delta = format!(
+            "💭 **Thinking Process:**\n{}\n\n🛠️ **Tool Calls:**\n>! • `run_command({{\"CommandLine\":\"ls\"}})`\n\n📥 **Tool Completions:**\n>! • `run_command (execute)` completed",
+            long_thought
+        );
+        let html = crate::telegram::stream::render_streaming_preview_html(&delta);
+        assert!(html.contains("💭 <b>Thinking Process:</b>"));
+        assert!(html.contains("🛠️ <b>Tool Calls:</b>"));
+        assert!(html.contains("📥 <b>Tool Completions:</b>"));
+        assert_eq!(html.matches("<blockquote expandable>").count(), 3);
+        assert_eq!(html.matches("</blockquote>").count(), 3);
+        assert!(!html.contains(">! "));
+        assert!(!html.contains("**Thinking Process:**"));
+    }
 }
 

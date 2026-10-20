@@ -72,7 +72,18 @@ pub fn format_thinking(thinking_blocks: &[String]) -> Option<String> {
         return None;
     }
     let combined = thinking_blocks.join("\n\n");
-    let blockquote = combined
+    let clipped = if combined.encode_utf16().count() > 1800 {
+        let mut units = 0;
+        let tail: String = combined.chars().rev().take_while(|c| {
+            units += c.len_utf16();
+            units <= 1700
+        }).collect::<Vec<_>>().into_iter().rev().collect();
+        let aligned = tail.find('\n').map(|i| &tail[i + 1..]).unwrap_or(&tail);
+        format!("...[중간 생략]...\n{}", aligned)
+    } else {
+        combined
+    };
+    let blockquote = clipped
         .lines()
         .map(|l| format!(">! {}", l))
         .collect::<Vec<_>>()
@@ -84,12 +95,15 @@ pub fn format_bullets(title: &str, items: &[String]) -> Option<String> {
     if items.is_empty() {
         return None;
     }
-    let list = items
-        .iter()
-        .map(|item| format!(">! • {}", item))
-        .collect::<Vec<_>>()
-        .join("\n");
-    Some(format!("{}**\n{}", title, list))
+    let start = items.len().saturating_sub(10);
+    let mut lines = Vec::new();
+    if start > 0 {
+        lines.push(format!(">! • ... ({} earlier)", start));
+    }
+    for item in &items[start..] {
+        lines.push(format!(">! • {}", item));
+    }
+    Some(format!("{}**\n{}", title, lines.join("\n")))
 }
 
 pub fn clean_tool_call_args(tc: &serde_json::Value) -> String {

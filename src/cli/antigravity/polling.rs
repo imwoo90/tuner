@@ -45,7 +45,9 @@ fn handle_oneshot_finish(
 ) {
     match res {
         Ok(Ok(resp)) => {
-            let _ = tx.send(StreamEvent::TextDelta(resp.result.clone()));
+            if session_id.is_none() && !resp.is_error && !resp.result.is_empty() {
+                let _ = tx.send(StreamEvent::TextDelta(resp.result.clone()));
+            }
             let _ = tx.send(StreamEvent::Result(resp));
         }
         Ok(Err(e)) => { let _ = tx.send(StreamEvent::Result(err_resp(e, session_id))); }
@@ -75,10 +77,12 @@ fn parse_and_stream(
             *parser = super::log_parser::AntigravityLogParser::new();
         }
         *act_path = Some(tp.clone());
-        let (ns, txt, ask) = parser.parse_log_delta(&tp, *p_size);
-        *p_size = Some(ns);
-        if let Some(t) = txt { let _ = tx.send(StreamEvent::TextDelta(t)); }
-        if let Some(a) = ask { let _ = tx.send(StreamEvent::AskQuestion(a)); }
+        let res = parser.parse_log_delta_structured(&tp, *p_size);
+        *p_size = Some(res.new_size);
+        if res.final_content.is_none() {
+            if let Some(t) = res.formatted { let _ = tx.send(StreamEvent::TextDelta(t)); }
+        }
+        if let Some(a) = res.ask_question { let _ = tx.send(StreamEvent::AskQuestion(a)); }
     }
 }
 

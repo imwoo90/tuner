@@ -56,21 +56,21 @@ mod tests {
 
     #[test]
     fn test_parse_model_directive_scenarios() {
-        // Scenario 1: Standard format with @model prefix and effort flag
+        // Scenario 1: Standard format with @model prefix and effort flag (normalizes legacy 3.6 -> 3.8)
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash --effort high write code");
-        assert_eq!(model, Some("gemini-3.6-flash".to_string()));
+        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
         assert_eq!(effort, Some("high".to_string()));
         assert_eq!(prompt, "write code");
 
         // Scenario 2: Standard format with @model prefix and positional effort
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash medium refactor this");
-        assert_eq!(model, Some("gemini-3.6-flash".to_string()));
+        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
         assert_eq!(effort, Some("medium".to_string()));
         assert_eq!(prompt, "refactor this");
 
         // Scenario 3: Legacy format with suffix
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash-high write a test");
-        assert_eq!(model, Some("gemini-3.6-flash".to_string()));
+        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
         assert_eq!(effort, Some("high".to_string()));
         assert_eq!(prompt, "write a test");
 
