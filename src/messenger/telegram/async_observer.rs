@@ -179,13 +179,13 @@ async fn check_and_dispatch_delta(
 
     let delta = parser.parse_log_delta_structured(transcript_path, Some(*last_size));
     *last_size = delta.new_size;
+    *parser = AntigravityLogParser::new();
 
     if !delta.has_activity { return; }
 
     ensure_active_turn(bot, chat_id, thread_id, session_id, cli, sessions, active_turn).await;
 
     if delta.final_content.is_some() || delta.ask_question.is_some() {
-        *parser = AntigravityLogParser::new();
         cli.sessions.set_async_running(session_id, false).await;
         dispatch_terminal_event(bot, chat_id, thread_id, session_id, cli, sessions, config, delta, active_turn).await;
     } else if let Some(ref progress_text) = delta.formatted {

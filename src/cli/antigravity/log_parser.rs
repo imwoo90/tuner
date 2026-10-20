@@ -17,10 +17,20 @@ fn process_planner_response(
     entry: &serde_json::Value,
     thinking_blocks: &mut Vec<String>,
     tool_calls: &mut Vec<String>,
+    tool_completions: &mut Vec<String>,
     final_content: &mut Option<String>,
     ask_question: &mut Option<Vec<crate::cli::AskQuestionData>>,
     status: Option<&str>,
 ) {
+    let has_thinking = entry.get("thinking").and_then(|t| t.as_str()).is_some_and(|s| !s.trim().is_empty());
+    let has_tcalls = entry.get("tool_calls").and_then(|t| t.as_array()).is_some_and(|a| !a.is_empty());
+    if has_thinking || has_tcalls {
+        thinking_blocks.clear();
+        tool_calls.clear();
+        if has_tcalls {
+            tool_completions.clear();
+        }
+    }
     if let Some(thinking) = entry.get("thinking").and_then(|t| t.as_str()) {
         if !thinking.trim().is_empty() {
             thinking_blocks.push(thinking.trim().to_string());
@@ -34,12 +44,7 @@ fn process_planner_response(
             tool_calls.push(clean_tool_call_args(tc));
         }
     }
-    let tool_calls_empty_or_missing = match entry.get("tool_calls") {
-        None => true,
-        Some(serde_json::Value::Array(arr)) => arr.is_empty(),
-        _ => false,
-    };
-    if status == Some("DONE") && tool_calls_empty_or_missing {
+    if status == Some("DONE") && !has_tcalls {
         if let Some(content) = entry.get("content").and_then(|c| c.as_str()) {
             let trimmed = content.trim();
             if !trimmed.is_empty() && !super::events::is_placeholder_content(trimmed) {
@@ -77,7 +82,7 @@ fn process_entry(
 
     if source == Some("MODEL") {
         if etype == Some("PLANNER_RESPONSE") {
-            process_planner_response(entry, thinking_blocks, tool_calls, final_content, ask_question, status);
+            process_planner_response(entry, thinking_blocks, tool_calls, tool_completions, final_content, ask_question, status);
         } else if status == Some("DONE") {
             if let Some(t) = etype {
                 tool_completions.push(format!("`{}` completed", get_friendly_name(t)));
@@ -127,9 +132,6 @@ pub struct ParsedLogDelta {
 #[derive(Default)]
 pub struct AntigravityLogParser {
     seen_final: bool,
-    thinking_blocks: Vec<String>,
-    tool_calls: Vec<String>,
-    tool_completions: Vec<String>,
 }
 
 impl AntigravityLogParser {
@@ -137,15 +139,10 @@ impl AntigravityLogParser {
         Self::default()
     }
 
-    fn reset(&mut self) {
-        self.seen_final = false;
-        self.thinking_blocks.clear();
-        self.tool_calls.clear();
-        self.tool_completions.clear();
-    }
-
     fn ingest_entries(&mut self, entries: &[serde_json::Value], new_size: u64) -> ParsedLogDelta {
-        let prev_counts = (self.thinking_blocks.len(), self.tool_calls.len(), self.tool_completions.len());
+        let mut thinking_blocks = Vec::new();
+        let mut tool_calls = Vec::new();
+        let mut tool_completions = Vec::new();
         let mut final_content = None;
         let mut ask_question = None;
         let mut system_event = false;
@@ -156,17 +153,21 @@ impl AntigravityLogParser {
             }
             process_entry(
                 entry,
-                &mut self.thinking_blocks,
-                &mut self.tool_calls,
-                &mut self.tool_completions,
+                &mut thinking_blocks,
+                &mut tool_calls,
+                &mut tool_completions,
                 &mut final_content,
                 &mut ask_question,
                 &mut system_event,
             );
         }
 
-        let counts_now = (self.thinking_blocks.len(), self.tool_calls.len(), self.tool_completions.len());
-        let has_activity = system_event || counts_now != prev_counts || final_content.is_some() || ask_question.is_some();
+        let has_activity = system_event
+            || !thinking_blocks.is_empty()
+            || !tool_calls.is_empty()
+            || !tool_completions.is_empty()
+            || final_content.is_some()
+            || ask_question.is_some();
 
         if self.seen_final {
             final_content = None;
@@ -176,11 +177,12 @@ impl AntigravityLogParser {
             ask_question = None;
         }
 
-        let formatted = if has_activity {
-            build_formatted_progress(&self.thinking_blocks, &self.tool_calls, &self.tool_completions, final_content.as_deref())
-        } else {
-            None
-        };
+        let formatted = build_formatted_progress(
+            &thinking_blocks,
+            &tool_calls,
+            &tool_completions,
+            final_content.as_deref(),
+        );
 
         ParsedLogDelta { new_size, formatted, final_content, ask_question, has_activity }
     }
@@ -195,7 +197,7 @@ impl AntigravityLogParser {
             Err(_) => return ParsedLogDelta { new_size: prev_size.unwrap_or(0), ..Default::default() },
         };
         if prev_size.map(|s| new_size < s).unwrap_or(false) {
-            self.reset();
+            self.seen_final = false;
         }
         if new_content.is_empty() {
             return ParsedLogDelta { new_size, ..Default::default() };

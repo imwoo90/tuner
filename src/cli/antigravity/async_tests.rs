@@ -88,5 +88,40 @@ mod tests {
         assert!(delta.has_activity);
         assert_eq!(delta.final_content.as_deref(), Some("Task finished successfully!"));
     }
+
+    #[test]
+    fn test_log_parser_does_not_accumulate_previous_deltas() {
+        let dir = tempdir().unwrap();
+        let transcript = dir.path().join("transcript_full.jsonl");
+        let step1 = serde_json::json!({
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "thinking": "Step 1 thought",
+            "tool_calls": [{"name": "run_command", "args": {"CommandLine": "echo step1"}}]
+        });
+        std::fs::write(&transcript, step1.to_string() + "\n").unwrap();
+
+        let mut parser = AntigravityLogParser::new();
+        let d1 = parser.parse_log_delta_structured(&transcript, Some(0));
+        let t1 = d1.formatted.unwrap();
+        assert!(t1.contains("Step 1 thought"));
+        assert!(t1.contains("echo step1"));
+
+        let step2 = serde_json::json!({
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "thinking": "Step 2 thought",
+            "tool_calls": [{"name": "run_command", "args": {"CommandLine": "echo step2"}}]
+        });
+        let mut f = std::fs::OpenOptions::new().append(true).open(&transcript).unwrap();
+        f.write_all((step2.to_string() + "\n").as_bytes()).unwrap();
+
+        let d2 = parser.parse_log_delta_structured(&transcript, Some(d1.new_size));
+        let t2 = d2.formatted.unwrap();
+        assert!(t2.contains("Step 2 thought"));
+        assert!(t2.contains("echo step2"));
+        assert!(!t2.contains("Step 1 thought"), "Previous delta thinking must not accumulate");
+        assert!(!t2.contains("echo step1"), "Previous delta tool calls must not accumulate");
+    }
 }
 

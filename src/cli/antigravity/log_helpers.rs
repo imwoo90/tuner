@@ -138,6 +138,7 @@ pub fn get_friendly_name(t: &str) -> &str {
         "LIST_DIRECTORY" => "list_dir (list)",
         "GREP_SEARCH" => "grep_search (search)",
         "CODE_ACTION" => "replace_file_content (edit)",
+        "GENERIC" => "tool_call (execute)",
         _ => t,
     }
 }
