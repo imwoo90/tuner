@@ -118,3 +118,13 @@ fn test_resolve_profile_info() {
     assert_eq!(screen_name_s, "tuner-agy-remote-seojin");
     assert_eq!(instance_name_s, "seojin-remote");
 }
+
+#[test]
+fn test_parse_antigravity_url_from_osc8_and_v1() {
+    use super::commands_remote_hub::parse_antigravity_url_from_text;
+    let osc8_output = "\x1b[4D\x1b[34;4m\x1b]8;id=jk7ecf9d45d234dd9f;https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v1\x07https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v1\x1b[m\x1b]8;;\x07\n";
+    assert_eq!(
+        parse_antigravity_url_from_text(osc8_output).as_deref(),
+        Some("https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v2")
+    );
+}
