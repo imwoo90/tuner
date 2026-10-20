@@ -179,13 +179,13 @@
 <a href=#179 id=179 data-nosnippet>179</a>
 <a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>delta = parser.parse_log_delta_structured(transcript_path, <span class="prelude-val">Some</span>(<span class="kw-2">*</span>last_size));
 <a href=#181 id=181 data-nosnippet>181</a>    <span class="kw-2">*</span>last_size = delta.new_size;
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">if </span>!delta.has_activity { <span class="kw">return</span>; }
-<a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a>    ensure_active_turn(bot, chat_id, thread_id, session_id, cli, sessions, active_turn).<span class="kw">await</span>;
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">if </span>delta.final_content.is_some() || delta.ask_question.is_some() {
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw-2">*</span>parser = AntigravityLogParser::new();
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw-2">*</span>parser = AntigravityLogParser::new();
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">if </span>!delta.has_activity { <span class="kw">return</span>; }
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a>    ensure_active_turn(bot, chat_id, thread_id, session_id, cli, sessions, active_turn).<span class="kw">await</span>;
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">if </span>delta.final_content.is_some() || delta.ask_question.is_some() {
 <a href=#189 id=189 data-nosnippet>189</a>        cli.sessions.set_async_running(session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
 <a href=#190 id=190 data-nosnippet>190</a>        dispatch_terminal_event(bot, chat_id, thread_id, session_id, cli, sessions, config, delta, active_turn).<span class="kw">await</span>;
 <a href=#191 id=191 data-nosnippet>191</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>progress_text) = delta.formatted {
