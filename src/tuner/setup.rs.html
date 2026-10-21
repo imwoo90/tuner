@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span>unit_content = <span class="macro">format!</span>(
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="string">"[Unit]\nDescription=Tuner Bot\nAfter=network.target\n\n[Service]\nType=simple\n\
 <a href=#62 id=62 data-nosnippet>62</a>         WorkingDirectory={}\nExecStart={}\n{}Environment=\"HOME={}\"\nEnvironment=\"PATH={}\"\n\
-<a href=#63 id=63 data-nosnippet>63</a>         Restart=always\nRestartSec=10\n\n\
+<a href=#63 id=63 data-nosnippet>63</a>         Restart=always\nRestartSec=10\nOOMPolicy=continue\n\n\
 <a href=#64 id=64 data-nosnippet>64</a>         [Install]\nWantedBy=default.target\n"</span>,
 <a href=#65 id=65 data-nosnippet>65</a>        project_root.to_string_lossy(), current_exe.to_string_lossy(), token_line, home, path_env
 <a href=#66 id=66 data-nosnippet>66</a>    );

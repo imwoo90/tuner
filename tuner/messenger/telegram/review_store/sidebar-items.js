@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["RETENTION_SECS"],"fn":["check_record_files","current_unix_secs","default_storage_path","load_records","save_records"],"struct":["ReviewSessionRecord"]};
+window.SIDEBAR_ITEMS = {"constant":["RETENTION_SECS"],"fn":["check_record_files","current_unix_secs","default_storage_path","inspect_zip_entries","load_records","save_records"],"struct":["ReviewSessionRecord","ZipEntryInfo"]};
