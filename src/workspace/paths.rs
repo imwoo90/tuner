@@ -77,6 +77,11 @@ impl DuctorPaths {
         self.profile_join("review_sessions.json")
     }
 
+    /// Encrypted credential vault directory: `~/.tuner/profiles/<profile_name>/vault`
+    pub fn vault_dir(&self) -> PathBuf {
+        self.profile_join("vault")
+    }
+
     /// Cron jobs path
     pub fn cron_jobs_path(&self) -> PathBuf {
         self.profile_join("cron_jobs.json")
@@ -227,4 +232,17 @@ pub fn resolve_paths(
     let defaults = std::fs::canonicalize(&defaults).unwrap_or(defaults);
 
     DuctorPaths::new(home, defaults, root, profile)
+}
+
+/// Extracts `(profile_name, vault_dir)` when `working_dir` points to `<tuner_home>/profiles/<profile>/workspace`.
+pub fn extract_profile_from_working_dir(working_dir: &std::path::Path) -> Option<(String, PathBuf)> {
+    let profile_home = working_dir.parent()?;
+    let profiles_dir = profile_home.parent()?;
+    if profiles_dir.file_name().and_then(|s| s.to_str()) == Some("profiles") {
+        let profile = profile_home.file_name()?.to_str()?.to_string();
+        if !profile.is_empty() {
+            return Some((profile, profile_home.join("vault")));
+        }
+    }
+    None
 }

@@ -6,14 +6,18 @@
 //!
 //! ## Submodules
 //! - [`paths`] (`paths.rs`): Verifies path targets are restricted to authorized workspace directories.
+//! - [`vault`] (`vault.rs`): Encrypted per-profile credential store and RFC 6238 TOTP generator.
+//! - [`vault_cli`] (`vault_cli.rs`): Zero-knowledge `--vault` CLI runner with output secret redaction.
 //!
 //! ## Search Tags
-//! #safety-module, #path-sandbox, #content-filter
+//! #safety-module, #path-sandbox, #content-filter, #credential-vault
 
 use regex::{Regex, RegexBuilder};
 use std::sync::OnceLock;
 
 pub mod paths;
+pub mod vault;
+pub mod vault_cli;
 
 fn get_patterns() -> &'static [(Regex, &'static str)] {
     static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();

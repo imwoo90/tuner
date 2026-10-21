@@ -222,6 +222,11 @@ impl ReviewManager {
     pub async fn get_review_url(&self, token: &str) -> String {
         super::review_server::get_review_url(&self.server_port, &self.tunnel_url, token).await
     }
+
+    /// Resolves the external or local URL for a `/vault/:token` session.
+    pub async fn get_vault_url(&self, token: &str) -> String {
+        super::review_server::get_vault_url(&self.server_port, &self.tunnel_url, token).await
+    }
 }
 
 fn resolve_unique_filename(path: &StdPath, used_names: &mut HashSet<String>) -> String {

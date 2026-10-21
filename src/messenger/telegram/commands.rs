@@ -59,6 +59,7 @@ async fn handle_help_command(
 • /cron - Manage scheduled cron tasks
 • /usage - View model quota and remaining limits
 • /remote - Manage remote development services
+• /vault - Manage per-profile site login credentials
 • /upgrade - Check for updates and self-upgrade
 • /restart - Request clean service restart";
     let mut req = bot.send_message(msg.chat.id, help_text).parse_mode(teloxide::types::ParseMode::Html);
@@ -156,6 +157,10 @@ pub(crate) async fn handle_commands(
     }
     if trimmed == "/remote" || trimmed.starts_with("/remote ") {
         super::commands_remote::handle_remote_command(bot, msg, config).await?;
+        return Ok(true);
+    }
+    if trimmed == "/vault" || trimmed.starts_with("/vault ") || trimmed.starts_with("/vault@") {
+        super::vault::handle_vault_command(bot, msg, config).await?;
         return Ok(true);
     }
     if text.starts_with("/new") || text.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {

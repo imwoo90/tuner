@@ -47,18 +47,36 @@ pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16
     let port = listener.local_addr().map(|a| a.port()).unwrap_or(8743);
     *port_guard = Some(port);
 
-    let app = Router::new()
-        .route("/review/:token", get(handle_review_page))
-        .route("/review/:token/json", get(handle_review_json))
-        .route("/review/:token/media/:filename", get(handle_media))
-        .route("/review/:token/download/:filename", get(handle_download))
-        .route("/health", get(handle_health));
+    let app = build_review_router();
 
     tokio::spawn(async move {
         axum::serve(listener, app).await.ok();
     });
 
     port
+}
+
+/// Builds the combined Axum router for `/review` and `/vault` endpoints.
+pub fn build_review_router() -> Router {
+    Router::new()
+        .route("/review/:token", get(handle_review_page))
+        .route("/review/:token/json", get(handle_review_json))
+        .route("/review/:token/media/:filename", get(handle_media))
+        .route("/review/:token/download/:filename", get(handle_download))
+        .route("/vault/:token", get(super::vault::handle_vault_page))
+        .route(
+            "/vault/:token/api/entries",
+            get(super::vault::handle_vault_list).post(super::vault::handle_vault_upsert),
+        )
+        .route(
+            "/vault/:token/api/entries/:site_key",
+            axum::routing::delete(super::vault::handle_vault_delete),
+        )
+        .route(
+            "/vault/:token/api/lock",
+            axum::routing::post(super::vault::handle_vault_lock),
+        )
+        .route("/health", get(handle_health))
 }
 
 /// Executes `warmup` (warmup).
@@ -88,6 +106,26 @@ pub async fn get_review_url(
         format!("{}/review/{}", url, token)
     } else {
         format!("http://127.0.0.1:{}/review/{}", port, token)
+    }
+}
+
+/// Resolves the public or loopback URL for `/vault/:token`.
+pub async fn get_vault_url(
+    server_port: &Arc<Mutex<Option<u16>>>,
+    tunnel_url: &Arc<Mutex<Option<String>>>,
+    token: &str,
+) -> String {
+    let port = ensure_server_running(server_port).await;
+    let mut tunnel_guard = tunnel_url.lock().await;
+    if let Some(ref base) = *tunnel_guard {
+        return format!("{}/vault/{}", base, token);
+    }
+
+    if let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
+        *tunnel_guard = Some(url.clone());
+        format!("{}/vault/{}", url, token)
+    } else {
+        format!("http://127.0.0.1:{}/vault/{}", port, token)
     }
 }
 

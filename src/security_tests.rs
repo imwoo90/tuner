@@ -189,5 +189,115 @@ mod tests {
         assert_eq!(fold_fullwidth("\u{FF1C}\u{FF46}\u{FF49}\u{FF4C}\u{FF45}\u{FF1E}"), "<file>");
     }
 
+    #[test]
+    fn test_vault_store_roundtrip_and_masking() {
+        use crate::security::vault::{mask_username, normalize_site_key, VaultEntry, VaultStore};
+        use crate::security::vault_cli::redact_secrets;
 
+        assert_eq!(normalize_site_key("  JLCPCB Order / Main "), "jlcpcb-order-main");
+        assert_eq!(mask_username("imwoo90@gmail.com"), "im***@gmail.com");
+        assert_eq!(mask_username("admin"), "adm***");
+
+        let tmp = tempfile::tempdir().unwrap();
+        let store = VaultStore::new(tmp.path().join("vault"));
+        assert!(store.load_entries().unwrap().is_empty());
+
+        let entry = VaultEntry {
+            site_key: "JLCPCB".to_string(),
+            title: "JLCPCB PCB/PCBA".to_string(),
+            url: "https://jlcpcb.com".to_string(),
+            username: "imwoo90@example.com".to_string(),
+            password: "SuperSecretPassword!2026".to_string(),
+            updated_at_secs: 0,
+        };
+        let saved = store.upsert_entry(entry).unwrap();
+        assert_eq!(saved.site_key, "jlcpcb");
+
+        // Verify disk payload is encrypted (no plaintext password in vault.enc)
+        let raw_enc = std::fs::read_to_string(tmp.path().join("vault").join("vault.enc")).unwrap();
+        assert!(!raw_enc.contains("SuperSecretPassword!2026"));
+
+        let loaded = store.get_entry("jlcpcb").unwrap().unwrap();
+        assert_eq!(loaded.password, "SuperSecretPassword!2026");
+
+        let masked = store.list_masked().unwrap();
+        assert_eq!(masked.len(), 1);
+        assert_eq!(masked[0].masked_username, "im***@example.com");
+        assert!(masked[0].has_password);
+
+        let scrubbed = redact_secrets(
+            "Login failed with pass=SuperSecretPassword!2026",
+            &[&loaded.password],
+        );
+        assert!(!scrubbed.contains("SuperSecretPassword!2026"));
+        assert!(scrubbed.contains("***REDACTED***"));
+
+        assert!(store.delete_entry("jlcpcb").unwrap());
+        assert!(store.load_entries().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_vault_web_endpoints_and_lock() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_dir = tmp.path().join("vault");
+        let mgr = crate::telegram::vault::global_vault_manager();
+        let token = mgr.create_session_for("default".to_string(), vault_dir).await;
+
+        let app = crate::telegram::review_server::build_review_router();
+
+        // 1. GET /vault/:token renders HTML
+        let res = app
+            .clone()
+            .oneshot(Request::builder().uri(format!("/vault/{}", token)).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 2. POST /vault/:token/api/entries creates a site entry
+        let body_json = serde_json::json!({
+            "site_key": "jlcpcb",
+            "title": "JLCPCB",
+            "url": "https://jlcpcb.com",
+            "username": "imwoo90@example.com",
+            "password": "MyVaultPass#99"
+        });
+        let res_post = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/vault/{}/api/entries", token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(body_json.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res_post.status(), StatusCode::OK);
+
+        // 3. POST /vault/:token/api/lock invalidates the session
+        let res_lock = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/vault/{}/api/lock", token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res_lock.status(), StatusCode::OK);
+
+        // 4. Subsequent GET /vault/:token returns 404
+        let res_after = app
+            .oneshot(Request::builder().uri(format!("/vault/{}", token)).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res_after.status(), StatusCode::NOT_FOUND);
+    }
 }

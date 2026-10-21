@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🔐 Tuner 자격증명 금고</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --surface: #131a26;
+    --surface-hover: #1a2333;
+    --card: #151d2b;
+    --border: #263248;
+    --text: #e2e8f0;
+    --muted: #8b9bb4;
+    --accent: #38bdf8;
+    --accent-bg: rgba(56, 189, 248, 0.14);
+    --success: #34d399;
+    --danger: #f87171;
+    --danger-bg: rgba(248, 113, 113, 0.14);
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+  .brand-text {
+    min-width: 0;
+    flex: 1;
+  }
+  .brand-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--accent-bg);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .brand-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand-sub {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .profile-pill {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    padding: 1px 7px;
+    border-radius: 99px;
+    font-weight: 600;
+    font-family: monospace;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .ttl-badge {
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--warn);
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    padding: 1px 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--surface-hover);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn:hover { border-color: var(--accent); color: #fff; }
+  .btn-primary {
+    background: var(--accent);
+    color: #090d16;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: #7dd3fc; color: #090d16; }
+  .btn-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-color: rgba(248, 113, 113, 0.35);
+  }
+  .btn-danger:hover { background: rgba(248, 113, 113, 0.25); color: #fff; }
+
+  .container {
+    max-width: 1020px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 16px;
+    flex: 1;
+  }
+
+  .security-banner {
+    background: rgba(56, 189, 248, 0.07);
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: #bae6fd;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .search-wrap {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+  .search-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px 10px 34px;
+    border-radius: 10px;
+    font-size: 13px;
+    outline: none;
+    text-overflow: ellipsis;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+    .brand-title { font-size: 14px; }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #364866; }
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card-title-group { min-width: 0; }
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .site-key-badge {
+    font-size: 11px;
+    font-family: monospace;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .card-url {
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 3px;
+    word-break: break-all;
+  }
+  .card-url:hover { color: var(--accent); text-decoration: underline; }
+
+  .field-row {
+    background: #0e141f;
+    border: 1px solid #1e293b;
+    border-radius: 9px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .field-info {
+    min-width: 0;
+    flex: 1;
+  }
+  .field-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .field-val {
+    font-size: 13px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    color: #f8fafc;
+    word-break: break-all;
+  }
+  .field-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .icon-btn {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: #fff; }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .card-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 20px;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    color: var(--muted);
+  }
+  .empty-state h3 { color: #fff; margin-bottom: 8px; font-size: 16px; }
+  .empty-state p { font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+
+  /* Modal / Bottom Sheet */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-sheet {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 460px;
+    max-height: 90dvh;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  }
+  @media (max-width: 600px) {
+    .modal-backdrop { align-items: flex-end; padding: 0; }
+    .modal-sheet {
+      max-width: 100%;
+      border-radius: 18px 18px 0 0;
+      border-bottom: none;
+      padding: 18px 16px 26px;
+    }
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-title { font-size: 16px; font-weight: 700; color: #fff; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label { font-size: 12px; font-weight: 600; color: #cbd5e1; }
+  .form-hint { font-size: 11px; color: var(--muted); }
+  .form-input {
+    background: #0b0f17;
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .pw-input-group {
+    display: flex;
+    gap: 6px;
+  }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1e293b;
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 9px 16px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s;
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Locked overlay */
+  .locked-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 300;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    gap: 12px;
+  }
+  .locked-screen.active { display: flex; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand-wrap">
+    <div class="brand-icon">🔐</div>
+    <div class="brand-text">
+      <div class="brand-title">Tuner 자격증명 금고</div>
+      <div class="brand-sub">
+        <span class="profile-pill" id="profile-badge">-</span>
+        <span id="site-count-label">0개 사이트</span>
+        <span class="ttl-badge" id="ttl-badge" title="세션 남은 시간">⏱️ --:--</span>
+      </div>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-danger" id="btn-lock" onclick="lockVaultSession()" style="white-space:nowrap;">🔒 즉시 잠금</button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="security-banner">
+    <span>🛡️</span>
+    <div>
+      <strong>Zero-Knowledge 암호화 보호 중:</strong> 입력하신 비밀번호는 프로필 전용 키(<code>XSalsa20-Poly1305 AEAD</code>)로 암호화 저장되며, 채팅창이나 AI 프롬프트 로그(<code>transcript.jsonl</code>)에 평문이 절대 노출되지 않습니다. 비서는 <code>tuner --vault exec &lt;사이트키&gt;</code>를 통해 안전하게 로그인을 수행합니다.
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="search-input" placeholder="사이트명, 식별키, 아이디 검색..." oninput="renderEntries()">
+    </div>
+    <button class="btn btn-primary" id="btn-add-site" onclick="openModal(null)" style="white-space:nowrap;flex-shrink:0;">+ 사이트 추가</button>
+  </div>
+
+  <div class="grid" id="entries-grid"></div>
+</main>
+
+<!-- Add / Edit Modal -->
+<div class="modal-backdrop" id="entry-modal" onclick="onModalBackdropClick(event)">
+  <form class="modal-sheet" onsubmit="saveEntry(event)">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">새 사이트 자격증명 추가</div>
+      <button type="button" class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">사이트 이름 (Title) *</label>
+      <input type="text" class="form-input" id="f-title" placeholder="예: 네이버, GitHub, 사내 포털" required oninput="onTitleInput()">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">사이트 식별 키 (Site Key) *</label>
+      <input type="text" class="form-input" id="f-site-key" placeholder="예: naver, github (영문 소문자·숫자·하이픈)" required>
+      <span class="form-hint">AI 비서가 호출할 때 사용하는 고유 키입니다 (예: <code>github</code>).</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">로그인 / 서비스 URL</label>
+      <input type="text" class="form-input" id="f-url" placeholder="https://example.com">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">아이디 / 이메일 (Username) *</label>
+      <input type="text" class="form-input" id="f-username" placeholder="user@example.com" required autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">비밀번호 (Password) *</label>
+      <div class="pw-input-group">
+        <input type="password" class="form-input" id="f-password" placeholder="비밀번호 입력" required autocomplete="new-password">
+        <button type="button" class="icon-btn" onclick="toggleModalPw()" id="btn-modal-pw">👁️</button>
+        <button type="button" class="icon-btn" onclick="generateRandomPw()" title="강력한 비밀번호 생성">🎲 생성</button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeModal()">취소</button>
+      <button type="submit" class="btn btn-primary" id="btn-save">💾 암호화 저장</button>
+    </div>
+  </form>
+</div>
+
+<div class="locked-screen" id="locked-screen">
+  <div style="font-size: 46px;">🔒</div>
+  <h2>자격증명 금고 세션이 잠겼습니다</h2>
+  <p style="color: var(--muted); font-size: 13px; max-width: 360px; line-height: 1.5;">
+    보안을 위해 일회용 접속 링크가 만료되었거나 잠금 처리되었습니다.<br>다시 관리하려면 텔레그램 채팅방에서 <code>/vault</code> 명령어를 실행해 주세요.
+  </p>
+</div>
+
+<div class="toast" id="toast">복사되었습니다</div>
+
+<script>
+const BOOTSTRAP = __VAULT_BOOTSTRAP__;
+let entries = BOOTSTRAP.entries || [];
+let remainingSecs = BOOTSTRAP.ttl_secs || 900;
+let revealedMap = {};
+let editingKey = null;
+let autoSlugEnabled = true;
+
+document.getElementById('profile-badge').textContent = BOOTSTRAP.profile || 'default';
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function copyText(val, label) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(val).then(() => showToast(label + ' 복사 완료!'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = val;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(label + ' 복사 완료!');
+  }
+}
+
+function toggleReveal(siteKey) {
+  revealedMap[siteKey] = !revealedMap[siteKey];
+  renderEntries();
+}
+
+function formatUpdatedTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderEntries() {
+  const q = (document.getElementById('search-input').value || '').trim().toLowerCase();
+  const grid = document.getElementById('entries-grid');
+  document.getElementById('site-count-label').textContent = entries.length + '개 사이트';
+
+  const filtered = entries.filter(e => {
+    if (!q) return true;
+    return (e.site_key || '').toLowerCase().includes(q)
+      || (e.title || '').toLowerCase().includes(q)
+      || (e.url || '').toLowerCase().includes(q)
+      || (e.username || '').toLowerCase().includes(q);
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <h3>${entries.length === 0 ? '아직 등록된 사이트 계정이 없습니다' : '검색 결과가 없습니다'}</h3>
+        <p>${entries.length === 0
+          ? '웹 서비스나 포털 등 비서가 자동 로그인할 사이트의 아이디와 비밀번호를 안전하게 등록해 보세요.'
+          : '다른 검색어를 입력하거나 새 사이트를 추가해 보세요.'}</p>
+        <button class="btn btn-primary" onclick="openModal(null)">+ 첫 사이트 자격증명 추가</button>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(e => {
+    const isRevealed = !!revealedMap[e.site_key];
+    const pwDisplay = isRevealed ? escapeHtml(e.password) : '••••••••••••';
+    const urlHtml = e.url
+      ? `<a class="card-url" href="${escapeHtml(e.url.startsWith('http') ? e.url : 'https://' + e.url)}" target="_blank" rel="noopener">🔗 ${escapeHtml(e.url)}</a>`
+      : '';
+
+    return `
+      <div class="card" data-site-key="${escapeHtml(e.site_key)}">
+        <div class="card-head">
+          <div class="card-title-group">
+            <div class="card-title">
+              <span>${escapeHtml(e.title)}</span>
+              <span class="site-key-badge" onclick="copyText('${escapeHtml(e.site_key)}', '사이트 키')" title="클릭하여 키 복사">${escapeHtml(e.site_key)}</span>
+            </div>
+            ${urlHtml}
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-info">
+            <div class="field-label">아이디 / 계정 (Username)</div>
+            <div class="field-val">${escapeHtml(e.username)}</div>
+          </div>
+          <div class="field-actions">
+            <button class="icon-btn" onclick="copyField('${escapeHtml(e.site_key)}', 'username', '아이디')">📋 복사</button>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-info">
+            <div class="field-label">비밀번호 (Password)</div>
+            <div class="field-val">${pwDisplay}</div>
+          </div>
+          <div class="field-actions">
+            <button class="icon-btn" onclick="toggleReveal('${escapeHtml(e.site_key)}')">${isRevealed ? '🙈 숨김' : '👁️ 보기'}</button>
+            <button class="icon-btn" onclick="copyField('${escapeHtml(e.site_key)}', 'password', '비밀번호')">📋 복사</button>
+          </div>
+        </div>
+
+        <div class="card-footer">
+          <span>수정: ${formatUpdatedTime(e.updated_at_secs)}</span>
+          <div class="card-actions">
+            <button class="icon-btn" onclick="openModal('${escapeHtml(e.site_key)}')">✏️ 수정</button>
+            <button class="icon-btn" style="color:var(--danger);" onclick="deleteEntry('${escapeHtml(e.site_key)}')">🗑️ 삭제</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function copyField(siteKey, field, label) {
+  const item = entries.find(x => x.site_key === siteKey);
+  if (!item) return;
+  copyText(item[field] || '', label);
+}
+
+function slugify(str) {
+  return String(str || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function onTitleInput() {
+  if (!editingKey && autoSlugEnabled) {
+    const t = document.getElementById('f-title').value;
+    document.getElementById('f-site-key').value = slugify(t);
+  }
+}
+
+document.getElementById('f-site-key').addEventListener('input', () => {
+  autoSlugEnabled = false;
+});
+
+function openModal(siteKey) {
+  const modal = document.getElementById('entry-modal');
+  const existing = siteKey ? entries.find(x => x.site_key === siteKey) : null;
+  editingKey = existing ? existing.site_key : null;
+  autoSlugEnabled = !existing;
+
+  document.getElementById('modal-title').textContent = existing
+    ? `사이트 수정 (${existing.site_key})`
+    : '새 사이트 자격증명 추가';
+  document.getElementById('f-title').value = existing ? existing.title : '';
+  const keyInput = document.getElementById('f-site-key');
+  keyInput.value = existing ? existing.site_key : '';
+  keyInput.readOnly = !!existing;
+  document.getElementById('f-url').value = existing ? existing.url : '';
+  document.getElementById('f-username').value = existing ? existing.username : '';
+  const pwInput = document.getElementById('f-password');
+  pwInput.type = 'password';
+  pwInput.value = existing ? existing.password : '';
+
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById(existing ? 'f-username' : 'f-title').focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById('entry-modal').classList.remove('open');
+}
+
+function onModalBackdropClick(e) {
+  if (e.target.id === 'entry-modal') closeModal();
+}
+
+function toggleModalPw() {
+  const pw = document.getElementById('f-password');
+  pw.type = pw.type === 'password' ? 'text' : 'password';
+}
+
+function generateRandomPw() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*_-+=';
+  const arr = new Uint32Array(20);
+  crypto.getRandomValues(arr);
+  let out = '';
+  for (let i = 0; i < arr.length; i++) out += chars[arr[i] % chars.length];
+  const pw = document.getElementById('f-password');
+  pw.value = out;
+  pw.type = 'text';
+  showToast('20자리 보안 비밀번호 생성됨');
+}
+
+async function saveEntry(ev) {
+  ev.preventDefault();
+  const payload = {
+    site_key: document.getElementById('f-site-key').value.trim(),
+    title: document.getElementById('f-title').value.trim(),
+    url: document.getElementById('f-url').value.trim(),
+    username: document.getElementById('f-username').value.trim(),
+    password: document.getElementById('f-password').value,
+    updated_at_secs: 0
+  };
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/vault/${BOOTSTRAP.token}/api/entries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 404) {
+      showLockedScreen();
+      return;
+    }
+    if (!res.ok) {
+      const msg = await res.text();
+      alert('저장 실패: ' + msg);
+      return;
+    }
+    const data = await res.json();
+    entries = data.entries || [];
+    closeModal();
+    renderEntries();
+    showToast('✅ 암호화 저장되었습니다');
+  } catch (e) {
+    alert('네트워크 오류: ' + e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteEntry(siteKey) {
+  if (!confirm(`정말 '${siteKey}' 자격증명을 금고에서 삭제하시겠습니까?`)) return;
+  try {
+    const res = await fetch(`/vault/${BOOTSTRAP.token}/api/entries/${encodeURIComponent(siteKey)}`, {
+      method: 'DELETE'
+    });
+    if (res.status === 401 || res.status === 404) {
+      showLockedScreen();
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      entries = data.entries || [];
+      renderEntries();
+      showToast('🗑️ 삭제되었습니다');
+    }
+  } catch (e) {
+    alert('오류: ' + e);
+  }
+}
+
+async function lockVaultSession() {
+  try {
+    await fetch(`/vault/${BOOTSTRAP.token}/api/lock`, { method: 'POST' });
+  } catch (_) {}
+  showLockedScreen();
+}
+
+function showLockedScreen() {
+  document.getElementById('locked-screen').classList.add('active');
+}
+
+function updateTtlBadge() {
+  const m = String(Math.floor(remainingSecs / 60)).padStart(2, '0');
+  const s = String(remainingSecs % 60).padStart(2, '0');
+  document.getElementById('ttl-badge').textContent = `⏱️ ${m}:${s}`;
+}
+
+setInterval(() => {
+  if (remainingSecs > 0) {
+    remainingSecs--;
+    updateTtlBadge();
+    if (remainingSecs === 0) showLockedScreen();
+  }
+}, 1000);
+
+updateTtlBadge();
+renderEntries();
+</script>
+</body>
+</html>

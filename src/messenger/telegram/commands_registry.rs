@@ -25,6 +25,7 @@ pub(crate) fn is_lock_free_command(text: &str) -> bool {
             | "/stop_all"
             | "/abort"
             | "/remote"
+            | "/vault"
     )
 }
 
@@ -50,6 +51,7 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
         ("compact", "Condense conversation history to free context"),
         ("usage", "Show model quota and remaining limits"),
         ("remote", "Manage remote dev services"),
+        ("vault", "Manage per-profile site login credentials"),
         ("upgrade", "Check for updates and perform self-upgrade"),
     ];
     list.into_iter().map(|(c, d)| teloxide::types::BotCommand {

@@ -43,6 +43,7 @@
 //! - [`commands_registry`] (`commands_registry.rs`): Bot command registration and classification.
 //! - [`auth`] (`auth.rs`): User/group authorization and topic migration checks.
 //! - [`handler`] (`handler.rs`): Top-level update handler and concurrency gate.
+//! - [`vault`] (`vault.rs`): Ephemeral Web Vault session manager and credential CRUD endpoints.
 //!
 //! ## Search Tags
 //! #telegram-bot, #message-routing, #pty-streaming, #inline-keyboards, #chat-commands
@@ -53,6 +54,7 @@ use crate::cli::{antigravity::AntigravityCli, AgentProvider};
 use crate::session::{manager::SessionManager, data::SessionData};
 
 pub mod formatting;
+pub mod vault;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod formatting_tests;

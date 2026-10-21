@@ -114,6 +114,20 @@ fn spawn_restart_watcher(tuner_home: std::path::PathBuf) {
     });
 }
 
+fn spawn_web_warmup(paths: &DuctorPaths) {
+    let review_path = paths.review_sessions_path();
+    let vault_prof = paths.profile.clone().unwrap_or_else(|| "default".to_string());
+    let vault_dir = paths.vault_dir();
+    tokio::spawn(async move {
+        super::vault::global_vault_manager()
+            .init_storage(vault_prof, vault_dir)
+            .await;
+        let mgr = super::review::global_review_manager();
+        mgr.init_storage(review_path).await;
+        mgr.warmup().await;
+    });
+}
+
 /// Executes `run_bot` (run bot).
 pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
@@ -133,12 +147,7 @@ pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
-    let review_path = paths.review_sessions_path();
-    tokio::spawn(async move {
-        let mgr = super::review::global_review_manager();
-        mgr.init_storage(review_path).await;
-        mgr.warmup().await;
-    });
+    spawn_web_warmup(&paths);
 
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
