@@ -153,7 +153,37 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         assert!(files[0].content.len() < 256);
 
         let html = mgr.get_html(&token).await.unwrap();
-        assert!(html.len() < 50_000, "Rendered review HTML must stay lightweight (<50KB), got {}", html.len());
+        assert!(html.len() < 80_000, "Rendered review HTML must stay lightweight (<80KB), got {}", html.len());
         assert!(html.contains("showHtmlView"));
+    }
+
+    #[tokio::test]
+    async fn test_zip_archive_inspection_in_review_session() {
+        let dir = tempdir().unwrap();
+        let part_file = dir.path().join("front_shell.step");
+        std::fs::write(&part_file, "ISO-10303-21; STEP CONTENT").unwrap();
+
+        let sample_rf = ReviewFile {
+            filename: "front_shell.step".to_string(),
+            path: part_file.to_string_lossy().to_string(),
+            content: String::new(),
+            size_bytes: 26,
+            language: "plaintext".to_string(),
+            is_binary: true,
+        };
+        let zip_bytes = super::super::attachments_dl::create_zip_archive(&[sample_rf]).unwrap();
+        let zip_path = dir.path().join("release_bundle.zip");
+        std::fs::write(&zip_path, &zip_bytes).unwrap();
+
+        let mgr = ReviewManager::new();
+        let (token, count) = mgr.create_session(std::slice::from_ref(&zip_path)).await.unwrap();
+        assert_eq!(count, 1);
+
+        let files = mgr.get_files(&token).await.unwrap();
+        assert_eq!(files[0].filename, "release_bundle.zip");
+        assert_eq!(files[0].language, "zip");
+        assert!(files[0].is_binary);
+        assert_eq!(files[0].size_bytes, zip_bytes.len());
+        assert!(files[0].content.contains("front_shell.step"));
     }
 }

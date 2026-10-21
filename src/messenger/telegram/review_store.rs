@@ -86,3 +86,34 @@ pub fn check_record_files(record: &ReviewSessionRecord) -> (Vec<PathBuf>, usize)
     let total = record.file_paths.len();
     (valid, total)
 }
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+/// Metadata for a single entry inside a `.zip` archive inspected by the review viewer.
+pub struct ZipEntryInfo {
+    /// Entry relative path inside the archive.
+    pub name: String,
+    /// Uncompressed size in bytes.
+    pub size: u64,
+    /// Compressed size in bytes.
+    pub compressed: u64,
+    /// Whether the entry is a directory.
+    pub is_dir: bool,
+}
+
+/// Reads the central directory of a `.zip` file and returns a JSON array of `ZipEntryInfo`.
+pub fn inspect_zip_entries(path: &Path) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entries = Vec::with_capacity(archive.len().min(500));
+    for i in 0..archive.len().min(500) {
+        if let Ok(entry) = archive.by_index_raw(i) {
+            entries.push(ZipEntryInfo {
+                name: entry.name().to_string(),
+                size: entry.size(),
+                compressed: entry.compressed_size(),
+                is_dir: entry.is_dir(),
+            });
+        }
+    }
+    serde_json::to_string(&entries).ok()
+}

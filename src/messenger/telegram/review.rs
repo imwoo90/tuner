@@ -9,7 +9,8 @@
 //! #file-review, #webapp-viewer, #snapshot-session
 
 use super::review_store::{
-    check_record_files, default_storage_path, load_records, save_records, ReviewSessionRecord,
+    check_record_files, default_storage_path, inspect_zip_entries, load_records, save_records,
+    ReviewSessionRecord,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path as StdPath, PathBuf};
@@ -262,7 +263,9 @@ fn process_path_for_review(path: &StdPath, used_names: &mut HashSet<String>) -> 
 
     const MAX_INLINE_TEXT_BYTES: usize = 256 * 1024;
     let is_media = matches!(language.as_str(), "video" | "audio" | "image" | "pdf");
-    let (content, is_binary) = if is_media {
+    let (content, is_binary) = if language == "zip" {
+        (inspect_zip_entries(path).unwrap_or_default(), true)
+    } else if is_media {
         (String::new(), true)
     } else if size_bytes > MAX_INLINE_TEXT_BYTES {
         (
@@ -316,6 +319,7 @@ pub fn detect_language(path: &StdPath) -> String {
         "png" | "jpg" | "jpeg" | "gif" | "webp" => "image",
         "svg" => "svg",
         "pdf" => "pdf",
+        "zip" => "zip",
         _ => "plaintext",
     }
     .to_string()

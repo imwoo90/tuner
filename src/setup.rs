@@ -60,7 +60,7 @@ pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
     let unit_content = format!(
         "[Unit]\nDescription=Tuner Bot\nAfter=network.target\n\n[Service]\nType=simple\n\
          WorkingDirectory={}\nExecStart={}\n{}Environment=\"HOME={}\"\nEnvironment=\"PATH={}\"\n\
-         Restart=always\nRestartSec=10\n\n\
+         Restart=always\nRestartSec=10\nOOMPolicy=continue\n\n\
          [Install]\nWantedBy=default.target\n",
         project_root.to_string_lossy(), current_exe.to_string_lossy(), token_line, home, path_env
     );
