@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["ensure_server_running","find_cloudflared_bin","get_review_url","handle_download","handle_health","handle_media","handle_review_json","handle_review_page","parse_tunnel_url","spawn_quick_tunnel","spawn_quick_tunnel_tracked","warmup"]};
+window.SIDEBAR_ITEMS = {"fn":["build_review_router","ensure_server_running","find_cloudflared_bin","get_review_url","get_vault_url","handle_download","handle_health","handle_media","handle_review_json","handle_review_page","parse_tunnel_url","spawn_quick_tunnel","spawn_quick_tunnel_tracked","warmup"]};

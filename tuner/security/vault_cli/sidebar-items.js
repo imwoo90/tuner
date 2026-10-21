@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_profile_from_path","handle_vault_exec","handle_vault_list","handle_vault_session","load_persisted_sessions","open_profile_store","print_vault_help","redact_secrets","resolve_cli_profile","run_vault_cli","save_persisted_sessions"],"struct":["VaultWebSession"]};

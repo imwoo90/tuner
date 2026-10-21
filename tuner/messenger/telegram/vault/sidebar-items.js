@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VAULT_SESSION_TTL_SECS"],"fn":["entries_response","format_vault_message","global_vault_manager","handle_vault_command","handle_vault_delete","handle_vault_list","handle_vault_lock","handle_vault_page","handle_vault_upsert"],"static":["VAULT_INSTANCE"],"struct":["VaultWebManager"]};

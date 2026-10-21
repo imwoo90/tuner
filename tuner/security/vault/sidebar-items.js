@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["current_unix_secs","mask_username","normalize_site_key"],"struct":["VaultEntry","VaultEntryMasked","VaultStore"]};
