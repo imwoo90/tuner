@@ -391,6 +391,7 @@
       if (f.language === 'video') return '🎬';
       if (f.language === 'audio') return '🎵';
       if (f.language === 'image' || f.language === 'svg') return '🖼️';
+      if (f.language === 'html') return '🌐';
       if (f.language === 'markdown') return '📝';
       if (f.is_binary) return '📦';
       return '📄';
@@ -403,6 +404,8 @@
       if (video) { video.pause(); video.src = ''; }
       const audio = mc.querySelector('audio');
       if (audio) { audio.pause(); audio.src = ''; }
+      const iframe = mc.querySelector('iframe');
+      if (iframe) { iframe.src = 'about:blank'; }
     }
 
     function init() {
@@ -538,6 +541,11 @@
         const normalizedContent = (file.content || '').replace(/\r\n/g, '\n');
         const lines = normalizedContent.split('\n');
         const lineCount = lines.length;
+        const maxLineLen = lines.reduce((m, l) => Math.max(m, l.length), 0);
+        const safeContent = maxLineLen > 4000
+          ? lines.map(l => l.length > 4000 ? l.slice(0, 4000) + ' ... [line truncated]' : l).join('\n')
+          : normalizedContent;
+        const canHighlight = safeContent.length <= 100000 && maxLineLen <= 4000;
         document.getElementById('file-stats').innerText = `${lineCount} lines · ${formatBytes(file.size_bytes)}`;
 
         const codeLinesEl = document.getElementById('code-lines');
@@ -547,15 +555,15 @@
         }
         let highlighted = '';
         try {
-          if (file.language && window.hljs && hljs.getLanguage(file.language)) {
-            highlighted = hljs.highlight(normalizedContent, { language: file.language }).value;
-          } else if (window.hljs) {
-            highlighted = hljs.highlightAuto(normalizedContent).value;
+          if (canHighlight && file.language && window.hljs && hljs.getLanguage(file.language)) {
+            highlighted = hljs.highlight(safeContent, { language: file.language }).value;
+          } else if (canHighlight && window.hljs) {
+            highlighted = hljs.highlightAuto(safeContent).value;
           } else {
-            highlighted = escapeHtml(normalizedContent);
+            highlighted = escapeHtml(safeContent);
           }
         } catch (e) {
-          highlighted = escapeHtml(normalizedContent);
+          highlighted = escapeHtml(safeContent);
         }
 
         const highlightedLines = splitHighlightedLines(highlighted);
@@ -568,11 +576,17 @@
         codeContainer.scrollLeft = 0;
         mdContainer.scrollTop = 0;
 
-        const isMd = file.language === 'markdown';
-        if (isMd) {
+        if (file.language === 'markdown') {
           toggleBtn.style.display = 'inline-flex';
           if (isMarkdownRendered) {
             showMarkdownView(normalizedContent);
+          } else {
+            showCodeView();
+          }
+        } else if (file.language === 'html') {
+          toggleBtn.style.display = 'inline-flex';
+          if (isMarkdownRendered) {
+            showHtmlView(mediaUrl, file.filename);
           } else {
             showCodeView();
           }
@@ -607,8 +621,23 @@
     function showCodeView() {
       document.getElementById('code-container').style.display = 'block';
       document.getElementById('markdown-container').style.display = 'none';
+      const mc = document.getElementById('media-container');
+      mc.style.display = 'none';
+      mc.innerHTML = '';
       const toggleBtn = document.getElementById('btn-toggle-view');
       toggleBtn.innerText = '👁️ 렌더';
+    }
+
+    function showHtmlView(mediaUrl, filename) {
+      document.getElementById('code-container').style.display = 'none';
+      document.getElementById('markdown-container').style.display = 'none';
+      const mc = document.getElementById('media-container');
+      mc.style.display = 'flex';
+      mc.innerHTML = `
+        <iframe src="${mediaUrl}" style="width:100%;height:calc(100vh - 140px);border:none;border-radius:8px;background:#fff;" title="${escapeHtml(filename)}"></iframe>
+      `;
+      const toggleBtn = document.getElementById('btn-toggle-view');
+      toggleBtn.innerText = '📝 코드';
     }
 
     function showMarkdownView(content) {
@@ -654,10 +683,15 @@
 
     function toggleMarkdownView() {
       const file = FILES[activeIndex];
-      if (!file || file.language !== 'markdown') return;
+      if (!file || (file.language !== 'markdown' && file.language !== 'html')) return;
       isMarkdownRendered = !isMarkdownRendered;
       if (isMarkdownRendered) {
-        showMarkdownView((file.content || '').replace(/\r\n/g, '\n'));
+        if (file.language === 'html') {
+          const mediaUrl = `/review/${TOKEN}/media/${encodeURIComponent(file.filename)}`;
+          showHtmlView(mediaUrl, file.filename);
+        } else {
+          showMarkdownView((file.content || '').replace(/\r\n/g, '\n'));
+        }
       } else {
         showCodeView();
       }

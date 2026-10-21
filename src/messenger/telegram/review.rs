@@ -198,7 +198,8 @@ impl ReviewManager {
         let json_data = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
         let safe_json = json_data
             .replace("</script", "<\\/script")
-            .replace("</SCRIPT", "<\\/SCRIPT");
+            .replace("</SCRIPT", "<\\/SCRIPT")
+            .replace("<!--", "<\\!--");
         let template = include_str!("review_viewer.html");
         let rendered = template
             .replace("__FILES_JSON__", &safe_json)
@@ -259,12 +260,16 @@ fn process_path_for_review(path: &StdPath, used_names: &mut HashSet<String>) -> 
     let metadata = std::fs::metadata(path).ok();
     let size_bytes = metadata.as_ref().map(|m| m.len() as usize).unwrap_or(0);
 
+    const MAX_INLINE_TEXT_BYTES: usize = 256 * 1024;
     let is_media = matches!(language.as_str(), "video" | "audio" | "image" | "pdf");
     let (content, is_binary) = if is_media {
         (String::new(), true)
-    } else if size_bytes > 10_000_000 {
+    } else if size_bytes > MAX_INLINE_TEXT_BYTES {
         (
-            format!("// File exceeds 10MB ({} bytes). Download directly to inspect.", size_bytes),
+            format!(
+                "// File exceeds 256KB ({} bytes). Use rendered preview or download directly to inspect full source.",
+                size_bytes
+            ),
             false,
         )
     } else {
@@ -277,7 +282,7 @@ fn process_path_for_review(path: &StdPath, used_names: &mut HashSet<String>) -> 
     Some(ReviewFile {
         filename,
         path: path.to_string_lossy().to_string(),
-        size_bytes: if is_binary { size_bytes } else { content.len() },
+        size_bytes: if size_bytes > 0 { size_bytes } else { content.len() },
         content,
         language,
         is_binary,

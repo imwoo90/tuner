@@ -132,4 +132,28 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         let (valid_paths_empty, _) = super::super::review_store::check_record_files(&record);
         assert!(valid_paths_empty.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_oversized_html_caps_inline_content_and_preserves_size() {
+        let dir = tempdir().unwrap();
+        let big_html = dir.path().join("viewer_3d.html");
+        let payload = format!("<!DOCTYPE html><html><script>const DATA = \"{}\";</script></html>", "A".repeat(400_000));
+        let expected_size = payload.len();
+        std::fs::write(&big_html, &payload).unwrap();
+
+        let mgr = ReviewManager::new();
+        let (token, count) = mgr.create_session(std::slice::from_ref(&big_html)).await.unwrap();
+        assert_eq!(count, 1);
+
+        let files = mgr.get_files(&token).await.unwrap();
+        assert_eq!(files[0].filename, "viewer_3d.html");
+        assert_eq!(files[0].language, "html");
+        assert_eq!(files[0].size_bytes, expected_size);
+        assert!(files[0].content.contains("File exceeds 256KB"));
+        assert!(files[0].content.len() < 256);
+
+        let html = mgr.get_html(&token).await.unwrap();
+        assert!(html.len() < 50_000, "Rendered review HTML must stay lightweight (<50KB), got {}", html.len());
+        assert!(html.contains("showHtmlView"));
+    }
 }
