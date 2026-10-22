@@ -61,12 +61,12 @@
 <a href=#61 id=61 data-nosnippet>61</a>        .as_secs()
 <a href=#62 id=62 data-nosnippet>62</a>}
 <a href=#63 id=63 data-nosnippet>63</a>
-<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// Normalizes a raw site key into a clean lowercase slug (`a-z`, `0-9`, `-`, `_`, `.`).
+<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// Normalizes a raw site key into a clean lowercase slug (alphanumeric/Hangul, `-`, `_`, `.`).
 <a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub fn </span>normalize_site_key(raw: <span class="kw-2">&amp;</span>str) -&gt; String {
 <a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = String::with_capacity(raw.len());
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">for </span>ch <span class="kw">in </span>raw.trim().chars() {
 <a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">let </span>lower = ch.to_ascii_lowercase();
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">if </span>lower.is_ascii_alphanumeric() || lower == <span class="string">'-' </span>|| lower == <span class="string">'_' </span>|| lower == <span class="string">'.' </span>{
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">if </span>lower.is_alphanumeric() || lower == <span class="string">'-' </span>|| lower == <span class="string">'_' </span>|| lower == <span class="string">'.' </span>{
 <a href=#70 id=70 data-nosnippet>70</a>            out.push(lower);
 <a href=#71 id=71 data-nosnippet>71</a>        } <span class="kw">else if </span>(lower.is_whitespace() || lower == <span class="string">'/'</span>) &amp;&amp; !out.ends_with(<span class="string">'-'</span>) &amp;&amp; !out.is_empty()
 <a href=#72 id=72 data-nosnippet>72</a>        {
