@@ -61,12 +61,12 @@ pub fn current_unix_secs() -> u64 {
         .as_secs()
 }
 
-/// Normalizes a raw site key into a clean lowercase slug (`a-z`, `0-9`, `-`, `_`, `.`).
+/// Normalizes a raw site key into a clean lowercase slug (alphanumeric/Hangul, `-`, `_`, `.`).
 pub fn normalize_site_key(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for ch in raw.trim().chars() {
         let lower = ch.to_ascii_lowercase();
-        if lower.is_ascii_alphanumeric() || lower == '-' || lower == '_' || lower == '.' {
+        if lower.is_alphanumeric() || lower == '-' || lower == '_' || lower == '.' {
             out.push(lower);
         } else if (lower.is_whitespace() || lower == '/') && !out.ends_with('-') && !out.is_empty()
         {

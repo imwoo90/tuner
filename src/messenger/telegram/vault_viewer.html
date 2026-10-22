@@ -207,9 +207,16 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   .card:hover { border-color: #364866; }
+  @keyframes cardFlash {
+    0% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.38); background: rgba(56, 189, 248, 0.1); }
+    100% { border-color: var(--border); box-shadow: none; background: var(--card); }
+  }
+  .card.flash-highlight {
+    animation: cardFlash 1.8s ease-out;
+  }
   .card-head {
     display: flex;
     align-items: flex-start;
@@ -474,7 +481,7 @@
 
     <div class="form-group">
       <label class="form-label">사이트 식별 키 (Site Key) *</label>
-      <input type="text" class="form-input" id="f-site-key" placeholder="예: naver, github (영문 소문자·숫자·하이픈)" required>
+      <input type="text" class="form-input" id="f-site-key" placeholder="예: naver, github, 사내포털 (영문·한글·숫자·하이픈)" required>
       <span class="form-hint">AI 비서가 호출할 때 사용하는 고유 키입니다 (예: <code>github</code>).</span>
     </div>
 
@@ -651,7 +658,7 @@ function slugify(str) {
   return String(str || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[^a-z0-9가-힣._-]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
 
@@ -724,6 +731,13 @@ async function saveEntry(ev) {
     password: document.getElementById('f-password').value,
     updated_at_secs: 0
   };
+  const targetKey = slugify(payload.site_key || payload.title);
+  const existingEntry = entries.find(x => x.site_key === targetKey);
+  if (!editingKey && existingEntry) {
+    if (!confirm(`⚠️ 이미 등록된 사이트('${existingEntry.title}' / 키: ${targetKey})입니다.\n기존 아이디·비밀번호를 새로 입력한 정보로 덮어쓰시겠습니까?`)) {
+      return;
+    }
+  }
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   try {
@@ -743,9 +757,19 @@ async function saveEntry(ev) {
     }
     const data = await res.json();
     entries = data.entries || [];
+    const wasUpdate = !!(editingKey || existingEntry);
     closeModal();
     renderEntries();
-    showToast('✅ 암호화 저장되었습니다');
+    const savedCard = Array.from(document.querySelectorAll('.card')).find(
+      el => el.getAttribute('data-site-key') === targetKey
+    );
+    if (savedCard) {
+      savedCard.classList.remove('flash-highlight');
+      void savedCard.offsetWidth;
+      savedCard.classList.add('flash-highlight');
+      savedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    showToast(wasUpdate ? '🔄 기존 사이트 정보가 갱신되었습니다' : '✅ 새 사이트가 암호화 저장되었습니다');
   } catch (e) {
     alert('네트워크 오류: ' + e);
   } finally {

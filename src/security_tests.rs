@@ -195,6 +195,7 @@ mod tests {
         use crate::security::vault_cli::redact_secrets;
 
         assert_eq!(normalize_site_key("  JLCPCB Order / Main "), "jlcpcb-order-main");
+        assert_eq!(normalize_site_key("네이버 사내 포털"), "네이버-사내-포털");
         assert_eq!(mask_username("imwoo90@gmail.com"), "im***@gmail.com");
         assert_eq!(mask_username("admin"), "adm***");
 
