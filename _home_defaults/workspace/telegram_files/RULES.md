@@ -1,13 +1,12 @@
 # Telegram Files
 
-Incoming Telegram files are stored here, grouped by date.
+Incoming Telegram media and documents are stored in this directory.
 
 ## Structure
 
 ```text
 telegram_files/
-  YYYY-MM-DD/
-    ...files...
+  media_<chat_id>_<message_id>.<ext>
 ```
 
 ## Processing

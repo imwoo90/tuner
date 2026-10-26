@@ -71,14 +71,19 @@ pub fn delete_old_files(path: &Path, max_age_days: u64) -> u64 {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 walk(&entry_path, now, max_age, deleted_count, false);
-            } else if entry_path.is_file()
-                && let Ok(metadata) = entry.metadata()
+            } else if entry_path.is_file() {
+                let fname = entry_path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if matches!(fname, "RULES.md" | "AGENTS.md" | "CLAUDE.md" | "GEMINI.md" | ".gitkeep") {
+                    continue;
+                }
+                if let Ok(metadata) = entry.metadata()
                     && let Ok(modified) = metadata.modified()
                         && let Ok(age) = now.duration_since(modified)
                             && age >= max_age
                                 && fs::remove_file(&entry_path).is_ok() {
                                     *deleted_count += 1;
                                 }
+            }
         }
 
         // Subdirectory Pruning

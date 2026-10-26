@@ -2,17 +2,15 @@
 //!
 //! ## Overview
 //! Loads TOML translation catalogs into static registries for thread-safe and task-local
-//! translation lookup across chat messages, CLI prompts, and bot command descriptions.
+//! translation lookup across chat messages.
 //!
 //! ## Submodules
 //! - [`loader`] (`loader.rs`): Loads and flattens translation strings from locale TOML directories.
-//! - [`check`] (`check.rs`): Audits translation catalog completeness and placeholder consistency.
 //!
 //! ## Search Tags
 //! #i18n-module, #translation-store, #locale-selector, #macro-lookup
 
 pub mod loader;
-pub mod check;
 
 pub use loader::{TranslationStore, find_locales_dir, flatten, load_toml, load_language, format_string};
 
@@ -140,40 +138,6 @@ pub fn t(key: &str, args: &[(&str, &str)]) -> String {
     store.chat(key, args)
 }
 
-/// Translate a rich formatting CLI string.
-///
-/// # Examples
-/// ```no_run
-/// tuner::i18n::init("en");
-/// let val = tuner::i18n::t_rich("wizard.common.cancelled", &[]);
-/// assert!(val.contains("cancelled"));
-/// ```
-pub fn t_rich(key: &str, args: &[(&str, &str)]) -> String {
-    let lang = get_active_language();
-    let registry = get_registry();
-    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
-        return key.to_string();
-    };
-    store.cli(key, args)
-}
-
-/// Translate a bot command name or description.
-///
-/// # Examples
-/// ```no_run
-/// tuner::i18n::init("en");
-/// let val = tuner::i18n::t_cmd("bot.new");
-/// assert!(!val.is_empty());
-/// ```
-pub fn t_cmd(key: &str) -> String {
-    let lang = get_active_language();
-    let registry = get_registry();
-    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
-        return key.to_string();
-    };
-    store.cmd(key)
-}
-
 /// Translate with plural form selection.
 ///
 /// # Examples
@@ -219,19 +183,6 @@ macro_rules! t {
     };
     ($key:expr, $($name:ident = $val:expr),* $(,)?) => {
         $crate::i18n::t($key, &[
-            $((stringify!($name), &format!("{}", $val) as &str)),*
-        ])
-    };
-}
-
-#[macro_export]
-/// Helper macro `t_rich!` (t rich).
-macro_rules! t_rich {
-    ($key:expr) => {
-        $crate::i18n::t_rich($key, &[])
-    };
-    ($key:expr, $($name:ident = $val:expr),* $(,)?) => {
-        $crate::i18n::t_rich($key, &[
             $((stringify!($name), &format!("{}", $val) as &str)),*
         ])
     };

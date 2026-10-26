@@ -20,9 +20,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-_TELEGRAM_FILES = Path(
+_WORKSPACE_TG = Path(__file__).resolve().parent.parent.parent / "telegram_files"
+_LEGACY_TG = Path(
     os.environ.get("TUNER_HOME", str(Path.home() / ".tuner"))
 ).expanduser() / "workspace" / "telegram_files"
+_TELEGRAM_FILES = _WORKSPACE_TG if _WORKSPACE_TG.is_dir() else _LEGACY_TG
 
 
 def _transcribe_external(path: Path) -> dict:

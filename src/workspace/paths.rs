@@ -117,21 +117,6 @@ impl DuctorPaths {
         self.workspace().join("telegram_files")
     }
 
-    /// Matrix files directory: `~/.tuner/workspace/matrix_files`
-    pub fn matrix_files_dir(&self) -> PathBuf {
-        self.workspace().join("matrix_files")
-    }
-
-    /// API files directory: `~/.tuner/workspace/api_files`
-    pub fn api_files_dir(&self) -> PathBuf {
-        self.workspace().join("api_files")
-    }
-
-    /// Memory system directory: `~/.tuner/workspace/memory_system`
-    pub fn memory_system_dir(&self) -> PathBuf {
-        self.workspace().join("memory_system")
-    }
-
     /// User skills directory: `~/.tuner/workspace/skills`
     pub fn skills_dir(&self) -> PathBuf {
         self.workspace().join("skills")
@@ -147,36 +132,6 @@ impl DuctorPaths {
         self.home_defaults.join("workspace").join("skills")
     }
 
-    /// Tasks directory: `~/.tuner/workspace/tasks`
-    pub fn tasks_dir(&self) -> PathBuf {
-        self.workspace().join("tasks")
-    }
-
-    /// Tasks registry path
-    pub fn tasks_registry_path(&self) -> PathBuf {
-        self.profile_join("tasks.json")
-    }
-
-    /// Chat activity path
-    pub fn chat_activity_path(&self) -> PathBuf {
-        self.profile_join("chat_activity.json")
-    }
-
-    /// Named sessions path
-    pub fn named_sessions_path(&self) -> PathBuf {
-        self.profile_join("named_sessions.json")
-    }
-
-    /// Startup state path
-    pub fn startup_state_path(&self) -> PathBuf {
-        self.profile_join("startup_state.json")
-    }
-
-    /// Inflight turns path
-    pub fn inflight_turns_path(&self) -> PathBuf {
-        self.profile_join("inflight_turns.json")
-    }
-
     /// User-managed environment file: `~/.tuner/.env`
     pub fn env_file(&self) -> PathBuf {
         self.tuner_home.join(".env")
@@ -187,11 +142,6 @@ impl DuctorPaths {
         self.workspace().join(".agents").join("rules").join("mainmemory.md")
     }
 
-    /// Join notification path: `~/.tuner/workspace/JOIN_NOTIFICATION.md`
-    pub fn join_notification_path(&self) -> PathBuf {
-        self.workspace().join("JOIN_NOTIFICATION.md")
-    }
-
     /// Config example path: `{framework_root}/config.example.json` or fallback.
     pub fn config_example_path(&self) -> PathBuf {
         let repo_path = self.framework_root.join("config.example.json");
@@ -199,16 +149,6 @@ impl DuctorPaths {
             repo_path
         } else {
             self.home_defaults.join("_config_example.json")
-        }
-    }
-
-    /// Dockerfile sandbox path: `{framework_root}/Dockerfile.sandbox` or fallback.
-    pub fn dockerfile_sandbox_path(&self) -> PathBuf {
-        let repo_path = self.framework_root.join("Dockerfile.sandbox");
-        if repo_path.is_file() {
-            repo_path
-        } else {
-            self.home_defaults.join("_Dockerfile.sandbox")
         }
     }
 }

@@ -78,21 +78,6 @@ pub fn sync_rule_files(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Asynchronously monitors changes to rule files and syncs them periodically.
-pub async fn watch_rule_files(root: &Path, interval_ms: u64) -> Result<(), String> {
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
-    let cron_tasks_dir = root.join("cron_tasks");
-    loop {
-        interval.tick().await;
-        let root_clone = root.to_path_buf();
-        let cron_tasks_clone = cron_tasks_dir.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            let _ = ensure_task_rule_files(&cron_tasks_clone);
-            let _ = sync_rule_files(&root_clone);
-        }).await;
-    }
-}
-
 /// Executes `ensure_task_rule_files` (ensure task rule files).
 pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
     if !cron_tasks_dir.is_dir() {

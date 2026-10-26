@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,13 +28,22 @@ sanitize_name = sanitize_name
 _WORKSPACE_DIR = _TOOLS_DIR.parent
 _PROFILE_DIR = _WORKSPACE_DIR.parent
 
-if (_PROFILE_DIR / "webhooks.json").exists() or (_PROFILE_DIR / "config").exists():
+if (
+    _PROFILE_DIR.parent.name == "profiles"
+    or (_PROFILE_DIR / "webhooks.json").exists()
+    or (_PROFILE_DIR / "config").exists()
+):
     TUNER_HOME = _PROFILE_DIR
 else:
     TUNER_HOME = Path(os.environ.get("TUNER_HOME", "~/.tuner")).expanduser()
 
 HOOKS_PATH = TUNER_HOME / "webhooks.json"
 CONFIG_PATH = TUNER_HOME / "config" / "config.json"
+GLOBAL_CONFIG_PATH = (
+    _PROFILE_DIR.parent.parent / "config" / "config.json"
+    if _PROFILE_DIR.parent.name == "profiles"
+    else CONFIG_PATH
+)
 CRON_TASKS_DIR = _WORKSPACE_DIR / "cron_tasks"
 
 
@@ -63,11 +73,15 @@ def find_hook(hooks: list[dict[str, Any]], hook_id: str) -> dict[str, Any] | Non
 
 
 def load_webhook_config() -> dict[str, Any]:
-    """Load the webhooks section from config.json."""
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return data.get("webhooks", {})
-    except (json.JSONDecodeError, TypeError):
-        return {}
+    """Load the webhooks section from profile or global config.json."""
+    for path in (CONFIG_PATH, GLOBAL_CONFIG_PATH):
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            wh = data.get("webhooks", {})
+            if isinstance(wh, dict) and wh:
+                return wh
+        except (json.JSONDecodeError, TypeError, OSError):
+            continue
+    return {}

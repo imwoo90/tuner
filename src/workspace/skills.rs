@@ -13,17 +13,8 @@ use crate::workspace::skills_helpers::{
     cli_skill_dirs, create_dir_link, ensure_copy, load_skill_sync_config,
     sync_profile_agent_skills,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-
-/// Configuration options for skill synchronization.
-#[derive(Clone, Debug)]
-pub struct SkillConfig {
-    /// Sync enabled.
-    pub sync_enabled: bool,
-    /// Sync providers.
-    pub sync_providers: HashSet<String>,
-}
 
 /// Synchronizes custom and bundled skills strictly within the profile workspace (`<workspace>/.agents/skills`).
 pub fn sync_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(), String> {
@@ -234,29 +225,4 @@ pub fn has_valid_skill_frontmatter(skill_dir: &Path) -> bool {
         (Some(n), Some(d)) => !n.trim().is_empty() && !d.trim().is_empty(),
         _ => false,
     }
-}
-
-/// Resolves the canonical path for duplicate skills using provider precedence.
-pub fn resolve_canonical(
-    name: &str,
-    ductor: &HashMap<String, PathBuf>,
-    claude: &HashMap<String, PathBuf>,
-    codex: &HashMap<String, PathBuf>,
-    gemini: &HashMap<String, PathBuf>,
-) -> Option<PathBuf> {
-    let registries = [ductor, claude, codex, gemini];
-    for reg in &registries {
-        if let Some(entry) = reg.get(name)
-            && !entry.is_symlink() {
-                return Some(entry.clone());
-            }
-    }
-    for reg in &registries {
-        if let Some(entry) = reg.get(name)
-            && entry.is_symlink() && entry.exists()
-                && let Ok(resolved) = std::fs::canonicalize(entry) {
-                    return Some(resolved);
-                }
-    }
-    None
 }

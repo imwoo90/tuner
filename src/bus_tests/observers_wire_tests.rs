@@ -2,39 +2,11 @@
 #![allow(clippy::type_complexity)]
 use crate::bus::envelope::{Envelope, Origin};
 use crate::bus::bus::{MessageBus, Transport};
-use crate::bus::observers_wire::{
-    ObserverManager, HeartbeatObserverTrait, CronObserverTrait, WebhookObserverTrait,
-};
+use crate::bus::observers_wire::{ObserverManager, WebhookObserverTrait};
 use crate::bus::adapters::WebhookResult;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use async_trait::async_trait;
-
-// --- Mock Implementations for Tests ---
-
-struct MockHeartbeatObserver {
-    handler_set: Arc<AtomicBool>,
-    handler: Mutex<Option<Arc<dyn for<'a> Fn(i64, &'a str, Option<i64>) + Send + Sync>>>,
-}
-#[async_trait]
-impl HeartbeatObserverTrait for MockHeartbeatObserver {
-    async fn set_result_handler(&self, handler: Arc<dyn for<'a> Fn(i64, &'a str, Option<i64>) + Send + Sync>) {
-        self.handler_set.store(true, Ordering::SeqCst);
-        *self.handler.lock().unwrap() = Some(handler);
-    }
-}
-
-struct MockCronObserver {
-    handler_set: Arc<AtomicBool>,
-    handler: Mutex<Option<Arc<dyn for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) + Send + Sync>>>,
-}
-#[async_trait]
-impl CronObserverTrait for MockCronObserver {
-    async fn set_result_handler(&self, handler: Arc<dyn for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) + Send + Sync>) {
-        self.handler_set.store(true, Ordering::SeqCst);
-        *self.handler.lock().unwrap() = Some(handler);
-    }
-}
 
 struct MockWebhookObserver {
     handler_set: Arc<AtomicBool>,
@@ -74,58 +46,6 @@ impl Transport for MockTransport {
     }
 }
 
-// --- Unit Tests for Wiring ---
-
-#[tokio::test]
-async fn test_heartbeat_handler_wired() {
-    let heartbeat = Arc::new(MockHeartbeatObserver {
-        handler_set: Arc::new(AtomicBool::new(false)),
-        handler: Mutex::new(None),
-    });
-    let mgr = ObserverManager {
-        heartbeat: Some(heartbeat.clone()),
-        cron: None,
-        background: None,
-        webhook: None,
-    };
-
-    let bus = Arc::new(MessageBus::new());
-    mgr.wire_to_bus(bus, None).await;
-
-    assert!(heartbeat.handler_set.load(Ordering::SeqCst));
-}
-
-#[tokio::test]
-async fn test_cron_handler_wired_when_present() {
-    let cron = Arc::new(MockCronObserver {
-        handler_set: Arc::new(AtomicBool::new(false)),
-        handler: Mutex::new(None),
-    });
-    let mgr = ObserverManager {
-        heartbeat: None,
-        cron: Some(cron.clone()),
-        background: None,
-        webhook: None,
-    };
-
-    let bus = Arc::new(MessageBus::new());
-    mgr.wire_to_bus(bus, None).await;
-
-    assert!(cron.handler_set.load(Ordering::SeqCst));
-}
-
-#[tokio::test]
-async fn test_cron_handler_skipped_when_none() {
-    let mgr = ObserverManager {
-        heartbeat: None,
-        cron: None,
-        background: None,
-        webhook: None,
-    };
-    let bus = Arc::new(MessageBus::new());
-    mgr.wire_to_bus(bus, None).await; // No panic/error
-}
-
 #[tokio::test]
 async fn test_webhook_handler_wired_when_present() {
     let webhook = Arc::new(MockWebhookObserver {
@@ -135,9 +55,6 @@ async fn test_webhook_handler_wired_when_present() {
         wake_handler: Mutex::new(None),
     });
     let mgr = ObserverManager {
-        heartbeat: None,
-        cron: None,
-        background: None,
         webhook: Some(webhook.clone()),
     };
 
@@ -145,6 +62,7 @@ async fn test_webhook_handler_wired_when_present() {
     mgr.wire_to_bus(bus, None).await;
 
     assert!(webhook.handler_set.load(Ordering::SeqCst));
+    assert!(webhook.wake_handler_set.load(Ordering::SeqCst));
 }
 
 #[tokio::test]
@@ -156,9 +74,6 @@ async fn test_wake_handler_passed_to_webhook() {
         wake_handler: Mutex::new(None),
     });
     let mgr = ObserverManager {
-        heartbeat: None,
-        cron: None,
-        background: None,
         webhook: Some(webhook.clone()),
     };
 
@@ -169,8 +84,6 @@ async fn test_wake_handler_passed_to_webhook() {
     assert!(webhook.wake_handler_set.load(Ordering::SeqCst));
 }
 
-// --- Webhook Callback Mode Filtering Tests ---
-
 #[tokio::test]
 async fn test_webhook_callback_skips_wake_mode() {
     let webhook = Arc::new(MockWebhookObserver {
@@ -180,9 +93,6 @@ async fn test_webhook_callback_skips_wake_mode() {
         wake_handler: Mutex::new(None),
     });
     let mgr = ObserverManager {
-        heartbeat: None,
-        cron: None,
-        background: None,
         webhook: Some(webhook.clone()),
     };
 
@@ -207,19 +117,16 @@ async fn test_webhook_callback_skips_wake_mode() {
     assert!(!transport.deliver_broadcast_called.load(Ordering::SeqCst));
 }
 
-// --- Integration tests showing wiring callback reaches bus ---
-
 #[tokio::test]
-async fn test_heartbeat_callback_submits_to_bus() {
-    let heartbeat = Arc::new(MockHeartbeatObserver {
+async fn test_default_wake_handler_submits_to_bus() {
+    let webhook = Arc::new(MockWebhookObserver {
         handler_set: Arc::new(AtomicBool::new(false)),
+        wake_handler_set: Arc::new(AtomicBool::new(false)),
         handler: Mutex::new(None),
+        wake_handler: Mutex::new(None),
     });
     let mgr = ObserverManager {
-        heartbeat: Some(heartbeat.clone()),
-        cron: None,
-        background: None,
-        webhook: None,
+        webhook: Some(webhook.clone()),
     };
 
     let bus = Arc::new(MessageBus::new());
@@ -231,15 +138,15 @@ async fn test_heartbeat_callback_submits_to_bus() {
     bus.register_transport(transport.clone());
     mgr.wire_to_bus(bus, None).await;
 
-    let handler = heartbeat.handler.lock().unwrap().clone().unwrap();
-    handler(99, "Alert text", None);
+    let wake = webhook.wake_handler.lock().unwrap().clone().unwrap();
+    wake(777, "external wake prompt");
 
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     assert!(transport.deliver_called.load(Ordering::SeqCst));
     let env = transport.last_envelope.lock().unwrap().clone().unwrap();
-    assert_eq!(env.origin, Origin::Heartbeat);
-    assert_eq!(env.chat_id, 99);
-    assert!(env.topic_id.is_none());
-    assert_eq!(env.result_text, "Alert text");
+    assert_eq!(env.origin, Origin::WebhookWake);
+    assert_eq!(env.chat_id, 777);
+    assert_eq!(env.prompt, "external wake prompt");
+    assert!(env.needs_injection);
 }

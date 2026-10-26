@@ -1,11 +1,10 @@
-//! # Webhook Ingress and Axum API Module
+//! # Webhook Ingress Module
 //!
 //! ## Overview
-//! Manages webhook registration, HMAC/Bearer authentication, HTTP route handling, and encrypted
-//! WebSocket sessions for external clients and triggers.
+//! Manages webhook registration, HMAC/Bearer authentication, and HTTP route handling
+//! for external webhook triggers.
 //!
 //! ## Submodules
-//! - [`api`] (`api/mod.rs`): Implements WebSocket session loops, E2E handshake validation, and API routes.
 //! - [`auth`] (`auth.rs`): Validates Bearer tokens and HMAC-SHA256 payload signatures.
 //! - [`manager`] (`manager.rs`): Persists and resolves registered webhook hook definitions.
 //! - [`models`] (`models.rs`): Data structures for webhook hooks, payloads, and dispatch results.
@@ -13,9 +12,8 @@
 //! - [`server`] (`server.rs`): Binds TCP ports, configures rate limiting, and runs the Axum HTTP server.
 //!
 //! ## Search Tags
-//! #webhook-ingress, #axum-server, #websocket-sessions, #hmac-validation
+//! #webhook-ingress, #axum-server, #hmac-validation
 
-pub mod api;
 pub mod auth;
 pub mod manager;
 pub mod models;

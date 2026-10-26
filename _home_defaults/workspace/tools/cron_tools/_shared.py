@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,12 +28,21 @@ sanitize_name = sanitize_name
 _WORKSPACE_DIR = _TOOLS_DIR.parent
 _PROFILE_DIR = _WORKSPACE_DIR.parent
 
-if (_PROFILE_DIR / "cron_jobs.json").exists() or (_PROFILE_DIR / "config").exists():
+if (
+    _PROFILE_DIR.parent.name == "profiles"
+    or (_PROFILE_DIR / "cron_jobs.json").exists()
+    or (_PROFILE_DIR / "config").exists()
+):
     TUNER_HOME = _PROFILE_DIR
 else:
     TUNER_HOME = Path(os.environ.get("TUNER_HOME", "~/.tuner")).expanduser()
 
 CONFIG_PATH = TUNER_HOME / "config" / "config.json"
+GLOBAL_CONFIG_PATH = (
+    _PROFILE_DIR.parent.parent / "config" / "config.json"
+    if _PROFILE_DIR.parent.name == "profiles"
+    else CONFIG_PATH
+)
 JOBS_PATH = TUNER_HOME / "cron_jobs.json"
 CRON_TASKS_DIR = _WORKSPACE_DIR / "cron_tasks"
 
@@ -41,14 +51,18 @@ _RULE_FILENAMES = ("AGENTS.md",)
 
 
 def read_user_timezone() -> str:
-    """Read user_timezone from config.json. Returns empty string if not set."""
-    if not CONFIG_PATH.exists():
-        return ""
-    try:
-        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return str(data.get("user_timezone", "")).strip()
-    except (json.JSONDecodeError, OSError):
-        return ""
+    """Read user_timezone from profile or global config.json. Returns empty string if not set."""
+    for path in (CONFIG_PATH, GLOBAL_CONFIG_PATH):
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            tz = str(data.get("user_timezone", "")).strip()
+            if tz:
+                return tz
+        except (json.JSONDecodeError, OSError):
+            continue
+    return ""
 
 
 def detect_rule_filenames() -> list[str]:
@@ -88,7 +102,7 @@ Complete your task autonomously and update memory when done.
 - Stay focused on this task only. Do not deviate.
 - Do not modify unrelated project files outside the scope of `TASK_DESCRIPTION.md`.
 - Check whether all scripts are already present in the script folder! (IF they are needed!)
-- Use `.venv` for Python dependencies: `source .venv/bin/activate`
+- Use `.venv` for Python dependencies if needed.
 
 ## Important
 

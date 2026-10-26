@@ -1,8 +1,8 @@
 //! # Observers Wire Module
 //!
 //! ## Overview
-//! Handles wiring up background observers (heartbeat, cron, background, webhooks) to
-//! submit their output results automatically to the `MessageBus`.
+//! Handles wiring up webhook observers to submit their output results and wake
+//! prompts automatically to the `MessageBus`.
 //!
 //! ## Search Tags
 //! #observers-wire
@@ -10,24 +10,7 @@
 use std::sync::Arc;
 use async_trait::async_trait;
 use super::bus::MessageBus;
-use super::adapters::{
-    from_heartbeat, from_cron_result, from_background_result, from_webhook_cron_result,
-    WebhookResult,
-};
-
-#[async_trait]
-/// Defines the `HeartbeatObserverTrait` (heartbeat observer trait) interface.
-pub trait HeartbeatObserverTrait: Send + Sync {
-    /// Executes `set_result_handler` (set result handler).
-    async fn set_result_handler(&self, handler: Arc<dyn for<'a> Fn(i64, &'a str, Option<i64>) + Send + Sync>);
-}
-
-#[async_trait]
-/// Defines the `CronObserverTrait` (cron observer trait) interface.
-pub trait CronObserverTrait: Send + Sync {
-    /// Executes `set_result_handler` (set result handler).
-    async fn set_result_handler(&self, handler: Arc<dyn for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) + Send + Sync>);
-}
+use super::adapters::{from_webhook_cron_result, from_webhook_wake, WebhookResult};
 
 #[async_trait]
 /// Defines the `WebhookObserverTrait` (webhook observer trait) interface.
@@ -43,55 +26,18 @@ pub type WakeHandlerCallback = Arc<dyn for<'a> Fn(i64, &'a str) + Send + Sync>;
 
 /// Represents `ObserverManager` (observer manager).
 pub struct ObserverManager {
-    /// Heartbeat.
-    pub heartbeat: Option<Arc<dyn HeartbeatObserverTrait>>,
-    /// Cron.
-    pub cron: Option<Arc<dyn CronObserverTrait>>,
-    /// Background.
-    pub background: Option<crate::background::BackgroundObserver>,
     /// Webhook.
     pub webhook: Option<Arc<dyn WebhookObserverTrait>>,
 }
 
 impl ObserverManager {
-    /// Wire all present observers to submit their output envelopes to the provided bus.
+    /// Wire present observers to submit their output envelopes to the provided bus.
     pub async fn wire_to_bus(
         &self,
         bus: Arc<MessageBus>,
         wake_handler: Option<WakeHandlerCallback>,
     ) {
-        self.wire_heartbeat(bus.clone()).await;
-        self.wire_cron(bus.clone()).await;
-        self.wire_webhook(bus.clone(), wake_handler).await;
-        self.wire_background(bus).await;
-    }
-
-    async fn wire_heartbeat(&self, bus: Arc<MessageBus>) {
-        if let Some(ref hb) = self.heartbeat {
-            hb.set_result_handler(Arc::new(move |chat_id, alert_text, topic_id| {
-                let bus = bus.clone();
-                let alert_text = alert_text.to_string();
-                tokio::spawn(async move {
-                    let mut env = from_heartbeat(chat_id, &alert_text, topic_id, None);
-                    bus.submit(&mut env).await;
-                });
-            })).await;
-        }
-    }
-
-    async fn wire_cron(&self, bus: Arc<MessageBus>) {
-        if let Some(ref cr) = self.cron {
-            cr.set_result_handler(Arc::new(move |title, result_text, status| {
-                let bus = bus.clone();
-                let title = title.to_string();
-                let result_text = result_text.to_string();
-                let status = status.to_string();
-                tokio::spawn(async move {
-                    let mut env = from_cron_result(&title, &result_text, &status, None, None, None);
-                    bus.submit(&mut env).await;
-                });
-            })).await;
-        }
+        self.wire_webhook(bus, wake_handler).await;
     }
 
     async fn wire_webhook(
@@ -112,21 +58,19 @@ impl ObserverManager {
                 });
             })).await;
 
-            if let Some(ref wake) = wake_handler {
-                wh.set_wake_handler(wake.clone()).await;
+            if let Some(wake) = wake_handler {
+                wh.set_wake_handler(wake).await;
+            } else {
+                let bus_wake = bus.clone();
+                wh.set_wake_handler(Arc::new(move |chat_id, prompt| {
+                    let bus = bus_wake.clone();
+                    let prompt_owned = prompt.to_string();
+                    tokio::spawn(async move {
+                        let mut env = from_webhook_wake(chat_id, &prompt_owned);
+                        bus.submit(&mut env).await;
+                    });
+                })).await;
             }
-        }
-    }
-
-    async fn wire_background(&self, bus: Arc<MessageBus>) {
-        if let Some(ref bg) = self.background {
-            bg.set_result_handler(move |res| {
-                let bus = bus.clone();
-                tokio::spawn(async move {
-                    let mut env = from_background_result(&res);
-                    bus.submit(&mut env).await;
-                });
-            }).await;
         }
     }
 }

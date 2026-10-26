@@ -8,10 +8,9 @@
 //! - [`key`] (`key.rs`): Unique session identifiers matching transport, chat, and forum topic mappings.
 //! - [`data`] (`data.rs`): In-memory and JSON-serialized structure of active session state.
 //! - [`manager`] (`manager.rs`): Resolves, loads, updates, and resets persisted sessions.
-//! - [`named`] (`named.rs`): Maintains human-readable session alias mappings for background follow-ups.
 //!
 //! ## Search Tags
-//! #session-lifecycle, #session-manager, #timezone-reset, #alias-resolver
+//! #session-lifecycle, #session-manager, #timezone-reset
 
 use chrono::{DateTime, Duration, LocalResult, TimeZone, Utc};
 use chrono_tz::Tz;
@@ -19,15 +18,10 @@ use chrono_tz::Tz;
 pub mod key;
 pub mod data;
 pub mod manager;
-pub mod named;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod manager_tests;
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-/// Test module/item.
-pub mod named_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod topic_history_tests;

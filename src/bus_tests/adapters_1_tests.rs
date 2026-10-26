@@ -1,23 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::bus::envelope::{Origin, LockMode, DeliveryMode};
 use crate::bus::adapters::{
-    from_background_result, from_cron_result, from_heartbeat,
+    from_cron_result, from_heartbeat,
     from_webhook_cron_result, from_webhook_wake, WebhookResult,
 };
-use crate::background::models::{BackgroundResult, BackgroundResultStatus};
-
-fn fake_background_result(status: BackgroundResultStatus) -> BackgroundResult {
-    BackgroundResult {
-        task_id: "bg1".to_string(),
-        chat_id: 100,
-        message_id: 42,
-        thread_id: None,
-        prompt_preview: "do something".to_string(),
-        result_text: "done".to_string(),
-        status,
-        elapsed_seconds: 1.5,
-    }
-}
 
 fn fake_webhook_result() -> WebhookResult {
     WebhookResult {
@@ -26,24 +12,6 @@ fn fake_webhook_result() -> WebhookResult {
         result_text: "deployed".to_string(),
         status: "success".to_string(),
     }
-}
-
-#[test]
-fn test_from_background_result() {
-    let env = from_background_result(&fake_background_result(BackgroundResultStatus::Success));
-    assert_eq!(env.origin, Origin::Background);
-    assert_eq!(env.chat_id, 100);
-    assert_eq!(env.delivery, DeliveryMode::Unicast);
-    assert_eq!(env.lock_mode, LockMode::None);
-    assert!(!env.needs_injection);
-    assert_eq!(env.reply_to_message_id, Some(42));
-    assert!(!env.is_error);
-}
-
-#[test]
-fn test_from_background_result_error() {
-    let env = from_background_result(&fake_background_result(BackgroundResultStatus::ErrorTimeout));
-    assert!(env.is_error);
 }
 
 #[test]
@@ -110,4 +78,5 @@ fn test_from_webhook_wake() {
     assert_eq!(env.prompt, "wake up");
     assert_eq!(env.delivery, DeliveryMode::Unicast);
     assert_eq!(env.lock_mode, LockMode::Required);
+    assert!(env.needs_injection);
 }

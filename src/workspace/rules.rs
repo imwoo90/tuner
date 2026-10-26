@@ -1,37 +1,26 @@
 //! # Workspace Rule Profile Selector
 //!
 //! ## Overview
-//! Parses custom user profiles and determines corresponding CLAUDE.md/GEMINI.md/AGENTS.md configurations.
+//! Deploys `AGENTS.md` configurations to the profile workspace and cleans up legacy rule files.
 //!
 //! ## Search Tags
 //! #rule-profiles, #markdown-rules, #profile-mapping
 
 use crate::workspace::paths::DuctorPaths;
-use crate::workspace::rules_check::check_antigravity;
 use std::path::{Path, PathBuf};
 
-/// Authentication status for CLI providers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AuthStatus {
-    /// `Authenticated` (authenticated) variant.
-    Authenticated,
-    /// `Installed` (installed) variant.
-    Installed,
-    /// `NotFound` (not found) variant.
-    NotFound,
-}
-
-/// Verification result for a provider.
-#[derive(Clone, Debug)]
-pub struct AuthResult {
-    /// Provider.
-    pub provider: String,
-    /// Status.
-    pub status: AuthStatus,
-    /// Auth file.
-    pub auth_file: Option<PathBuf>,
-    /// Auth age.
-    pub auth_age: Option<chrono::DateTime<chrono::Utc>>,
+fn check_antigravity_installed(paths: &DuctorPaths) -> bool {
+    if std::env::var("TUNER_TEST_MODE").is_ok() {
+        return false;
+    }
+    let home = if paths.tuner_home.ends_with(".tuner") {
+        paths.tuner_home.parent().unwrap_or(&paths.tuner_home).to_path_buf()
+    } else {
+        paths.tuner_home.clone()
+    };
+    home.join(".gemini").join("antigravity-cli").is_dir()
+        || home.join(".local").join("bin").join("agy").exists()
+        || home.join(".ccs").join("agy.settings.json").is_file()
 }
 
 /// Selector and deployer for variant-specific rule files.
@@ -51,17 +40,17 @@ pub struct RulesSelector {
 impl RulesSelector {
     /// Returns a RulesSelector configured for the Antigravity-native Tuner environment.
     pub fn new(paths: DuctorPaths) -> Self {
-        let agy = check_antigravity(&paths);
+        let antigravity_authenticated = check_antigravity_installed(&paths);
         Self {
             paths,
             claude_authenticated: false,
             codex_authenticated: false,
             gemini_authenticated: false,
-            antigravity_authenticated: agy.status != AuthStatus::NotFound,
+            antigravity_authenticated,
         }
     }
 
-    /// Determines variant suffix (e.g. "claude-only", "all-clis", "gemini-only").
+    /// Determines variant suffix (e.g. "antigravity", "claude-only").
     pub fn get_variant_suffix(&self) -> String {
         let auth_count = self.claude_authenticated as usize
             + self.codex_authenticated as usize
@@ -79,14 +68,6 @@ impl RulesSelector {
         } else {
             "claude-only".to_string()
         }
-    }
-
-    /// Discovers directories in `home_defaults` containing templates.
-    pub fn discover_template_directories(&self) -> Vec<PathBuf> {
-        let mut candidates = Vec::new();
-        find_rules_templates(&self.paths.home_defaults, &mut candidates);
-        candidates.sort();
-        candidates
     }
 
     /// Selects the best template (variant or static) for a directory.
@@ -189,25 +170,6 @@ impl RulesSelector {
             }
         }
         Ok(count)
-    }
-}
-
-fn find_rules_templates(dir: &Path, candidates: &mut Vec<PathBuf>) {
-    if !dir.is_dir() { return; }
-    let mut has_rules = false;
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                find_rules_templates(&path, candidates);
-            } else if let Some(name) = path.file_name().and_then(|s| s.to_str())
-                && name.starts_with("RULES") && name.ends_with(".md") {
-                    has_rules = true;
-                }
-        }
-    }
-    if has_rules {
-        candidates.push(dir.to_path_buf());
     }
 }
 

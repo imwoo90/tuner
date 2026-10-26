@@ -14,14 +14,17 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let old_file = temp.path().join("old.txt");
         let recent_file = temp.path().join("recent.txt");
+        let rules_file = temp.path().join("RULES.md");
 
         // Write files
         fs::write(&old_file, "old contents").unwrap();
         fs::write(&recent_file, "recent contents").unwrap();
+        fs::write(&rules_file, "system rules").unwrap();
 
-        // Backdate mtime of old_file by 40 days (40 * 86400 secs)
+        // Backdate mtime of old_file and rules_file by 40 days (40 * 86400 secs)
         let forty_days_ago = SystemTime::now() - Duration::from_secs(40 * 86400);
         filetime::set_file_mtime(&old_file, filetime::FileTime::from_system_time(forty_days_ago)).unwrap();
+        filetime::set_file_mtime(&rules_file, filetime::FileTime::from_system_time(forty_days_ago)).unwrap();
 
         // Keep recent_file current
         let now = SystemTime::now();
@@ -33,6 +36,7 @@ mod tests {
         assert_eq!(deleted, 1);
         assert!(!old_file.exists());
         assert!(recent_file.exists());
+        assert!(rules_file.exists());
     }
 
     #[test]

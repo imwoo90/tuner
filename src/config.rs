@@ -72,51 +72,10 @@ pub struct CliConfig {
     pub cleanup: crate::cleanup::observer::CleanupConfig,
     /// Webhooks.
     pub webhooks: WebhookConfig,
-    /// Api.
-    pub api: ApiConfig,
-    /// Matrix.
-    pub matrix: MatrixConfig,
     /// Language.
     pub language: Option<String>,
     /// Profiles.
     pub profiles: Vec<ProfileConfig>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
-/// Represents `MatrixConfig` (matrix config).
-pub struct MatrixConfig {
-    /// Homeserver.
-    pub homeserver: String,
-    /// User id.
-    pub user_id: String,
-    /// Password.
-    pub password: Option<String>,
-    /// Access token.
-    pub access_token: Option<String>,
-    /// Device id.
-    pub device_id: Option<String>,
-    /// Allowed rooms.
-    pub allowed_rooms: Vec<String>,
-    /// Allowed users.
-    pub allowed_users: Vec<String>,
-    /// Store path.
-    pub store_path: String,
-}
-
-impl Default for MatrixConfig {
-    fn default() -> Self {
-        Self {
-            homeserver: "https://matrix.org".to_string(),
-            user_id: String::new(),
-            password: None,
-            access_token: None,
-            device_id: None,
-            allowed_rooms: Vec::new(),
-            allowed_users: Vec::new(),
-            store_path: ".matrix".to_string(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -146,37 +105,6 @@ impl Default for WebhookConfig {
             token: String::new(),
             max_body_bytes: 262144,
             rate_limit_per_minute: 30,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
-/// Represents `ApiConfig` (api config).
-pub struct ApiConfig {
-    /// Enabled.
-    pub enabled: bool,
-    /// Host.
-    pub host: String,
-    /// Port.
-    pub port: u16,
-    /// Token.
-    pub token: String,
-    /// Chat id.
-    pub chat_id: i64,
-    /// Allow public.
-    pub allow_public: bool,
-}
-
-impl Default for ApiConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            host: "0.0.0.0".to_string(),
-            port: 8741,
-            token: String::new(),
-            chat_id: 0,
-            allow_public: false,
         }
     }
 }
@@ -241,8 +169,6 @@ impl Default for CliConfig {
             heartbeat: HeartbeatConfig::default(),
             cleanup: crate::cleanup::observer::CleanupConfig::default(),
             webhooks: WebhookConfig::default(),
-            api: ApiConfig::default(),
-            matrix: MatrixConfig::default(),
             language: None,
             profiles: Vec::new(),
         }

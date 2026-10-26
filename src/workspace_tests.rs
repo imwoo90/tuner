@@ -10,7 +10,7 @@ mod tests {
     use crate::workspace::rules_selector::RulesSelector;
     use crate::workspace::rule_sync::sync_rule_files;
     use crate::workspace::skill_sync::{
-        cleanup_ductor_links, discover_skills, resolve_canonical, sync_skills,
+        cleanup_ductor_links, discover_skills, sync_skills,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -158,16 +158,6 @@ mod tests {
 
         let skills = discover_skills(tmp.path());
         assert!(skills.contains_key("skill_a"));
-    }
-
-    #[test]
-    fn test_resolve_canonical_precedence() {
-        let ductor = std::collections::HashMap::new();
-        let claude = std::collections::HashMap::new();
-        let codex = std::collections::HashMap::new();
-        let gemini = std::collections::HashMap::new();
-
-        let _res = resolve_canonical("my_skill", &ductor, &claude, &codex, &gemini);
     }
 
     #[test]

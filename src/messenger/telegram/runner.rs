@@ -32,6 +32,36 @@ pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache
     .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
 }
 
+fn spawn_webhook_if_enabled(
+    cfg: Arc<CliConfig>,
+    cli: Arc<AntigravityCli>,
+    bus: Arc<crate::bus::bus::MessageBus>,
+    paths: &DuctorPaths,
+) {
+    if !cfg.webhooks.enabled {
+        return;
+    }
+    let wh_mgr = Arc::new(crate::webhook::manager::WebhookManager::new(paths.webhooks_path()));
+    let wh_obs = Arc::new(crate::webhook::observer::WebhookObserver::new(
+        wh_mgr,
+        paths.webhooks_path(),
+        cfg,
+        cli,
+    ));
+    let obs_wire = crate::bus::observers_wire::ObserverManager {
+        webhook: Some(wh_obs.clone()),
+    };
+    tokio::spawn(async move {
+        obs_wire.wire_to_bus(bus, None).await;
+        if let Err(e) = wh_obs.start().await {
+            eprintln!("❌ [tuner] Failed to start Webhook server: {}", e);
+        } else {
+            println!("🤖 [tuner] Webhook server listening on {}:{}", wh_obs.config.webhooks.host, wh_obs.config.webhooks.port);
+            std::future::pending::<()>().await;
+        }
+    });
+}
+
 fn start_schedulers(
     bot: Bot,
     cfg: Arc<CliConfig>,
@@ -40,7 +70,12 @@ fn start_schedulers(
     paths: DuctorPaths,
 ) -> Arc<crate::cron::manager::CronManager> {
     let bus = Arc::new(crate::bus::bus::MessageBus::new());
-    bus.register_transport(Arc::new(super::transport::TelegramTransport::new(bot.clone())));
+    let targets = if !cfg.allowed_group_ids.is_empty() {
+        cfg.allowed_group_ids.clone()
+    } else {
+        cfg.allowed_user_ids.clone()
+    };
+    bus.register_transport(Arc::new(super::transport::TelegramTransport::with_targets(bot, targets)));
     bus.set_injector(Arc::new(super::transport::TelegramPromptInjector::new(
         cli.clone(),
         sess.clone(),
@@ -55,29 +90,7 @@ fn start_schedulers(
     tokio::spawn(async move {
         let _ = crate::workspace::skills::watch_skill_sync(&skill_paths, 30_000).await;
     });
-
-    if cfg.webhooks.enabled {
-        let wh_mgr = Arc::new(crate::webhook::manager::WebhookManager::new(paths.webhooks_path()));
-        let wh_obs = Arc::new(crate::webhook::observer::WebhookObserver::new(
-            wh_mgr,
-            paths.webhooks_path(),
-            cfg.clone(),
-            cli,
-        ));
-        let obs_wire = crate::bus::observers_wire::ObserverManager {
-            heartbeat: None,
-            cron: None,
-            background: None,
-            webhook: Some(wh_obs.clone()),
-        };
-        tokio::spawn(async move {
-            obs_wire.wire_to_bus(bus, None).await;
-            if let Err(e) = wh_obs.start().await {
-                eprintln!("❌ [tuner] Failed to start Webhook server: {}", e);
-            }
-        });
-    }
-
+    spawn_webhook_if_enabled(cfg, cli, bus, &paths);
     cron
 }
 

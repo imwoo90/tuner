@@ -1,7 +1,7 @@
 use crate::i18n::{
-    flatten, load_toml, TranslationStore, LANGUAGES, init, get_language, get_store, t_cmd, find_locales_dir
+    flatten, load_toml, TranslationStore, LANGUAGES, init, get_language, get_store, find_locales_dir
 };
-use crate::{t, t_rich, t_plural};
+use crate::{t, t_plural};
 use std::collections::{HashMap, HashSet};
 use toml::Value;
 
@@ -73,7 +73,6 @@ fn test_load_toml_valid() {
 fn test_store_english() {
     let store = TranslationStore::new("en");
     assert!(!store.all_chat_keys().is_empty());
-    assert!(!store.all_cmd_keys().is_empty());
 }
 
 #[test]
@@ -161,22 +160,8 @@ fn test_t_returns_string() {
 #[test]
 fn test_t_with_kwargs() {
     init("en");
-    let result = crate::i18n::t("stop.killed", &[("provider", "Claude")]);
-    assert!(result.contains("Claude"));
-}
-
-#[test]
-fn test_t_rich_returns_string() {
-    init("en");
-    let result = crate::i18n::t_rich("wizard.common.cancelled", &[]);
-    assert!(result.to_lowercase().contains("cancelled"));
-}
-
-#[test]
-fn test_t_cmd_returns_string() {
-    init("en");
-    let result = t_cmd("bot.new");
-    assert!(!result.is_empty());
+    let result = crate::i18n::t("stop.killed", &[("provider", "Antigravity")]);
+    assert!(result.contains("Antigravity"));
 }
 
 #[test]
@@ -202,11 +187,8 @@ fn test_macros() {
     let r1 = t!("session.error_header");
     assert!(r1.contains("Session Error"));
 
-    let r2 = t!("stop.killed", provider = "Claude");
-    assert!(r2.contains("Claude"));
-
-    let r3 = t_rich!("wizard.common.cancelled");
-    assert!(r3.to_lowercase().contains("cancelled"));
+    let r2 = t!("stop.killed", provider = "Antigravity");
+    assert!(r2.contains("Antigravity"));
 
     let r4 = t_plural!("tasks.cancelled", 1);
     assert!(r4.contains("1 task."));
@@ -228,32 +210,12 @@ fn test_all_chat_keys_resolvable() {
 }
 
 #[test]
-fn test_all_cmd_keys_resolvable() {
-    init("en");
-    let store = get_store();
-    for key in store.all_cmd_keys() {
-        let result = store.cmd(&key);
-        assert!(!result.contains("[MISSING:"), "Key {:?} is missing", key);
-    }
-}
-
-#[test]
 fn test_no_empty_values() {
     init("en");
     let store = get_store();
     for key in store.all_chat_keys() {
         let result = store.chat(&key, &[]);
         assert!(!result.trim().is_empty(), "Key {:?} has empty value", key);
-    }
-}
-
-#[test]
-fn test_command_descriptions_short() {
-    init("en");
-    let store = get_store();
-    for key in store.all_cmd_keys() {
-        let val = store.cmd(&key);
-        assert!(val.len() <= 256, "Command {:?} too long: {} chars", key, val.len());
     }
 }
 
@@ -306,8 +268,6 @@ fn test_key_completeness() {
         if lang == "en" { continue; }
         let store = TranslationStore::new(lang);
         assert!(store.all_chat_keys().difference(&store.lang_chat_keys()).next().is_none(), "[{}] missing chat keys", lang);
-        assert!(store.all_cli_keys().difference(&store.lang_cli_keys()).next().is_none(), "[{}] missing cli keys", lang);
-        assert!(store.all_cmd_keys().difference(&store.lang_cmd_keys()).next().is_none(), "[{}] missing cmd keys", lang);
     }
 }
 
@@ -323,13 +283,6 @@ fn test_placeholder_match() {
                 assert_eq!(extract_placeholders(&en_val), extract_placeholders(&lang_val), "chat: {}", key);
             }
         }
-        for key in &store.all_cli_keys() {
-            let en_val = store.en_cli.get(key).cloned().unwrap_or_default();
-            let lang_val = store.primary_cli.as_ref().and_then(|m| m.get(key)).cloned().unwrap_or_default();
-            if !lang_val.is_empty() {
-                assert_eq!(extract_placeholders(&en_val), extract_placeholders(&lang_val), "cli: {}", key);
-            }
-        }
     }
 }
 
@@ -339,6 +292,4 @@ fn test_german_loads_without_error() {
     let store = get_store();
     assert_eq!(store.language, "de");
     assert!(!store.lang_chat_keys().is_empty());
-    assert!(!store.lang_cli_keys().is_empty());
-    assert!(!store.lang_cmd_keys().is_empty());
 }

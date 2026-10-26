@@ -15,9 +15,11 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+from datetime import datetime, timezone
 from pathlib import Path
 
-_MEDIA_DIRS = ("telegram_files", "matrix_files")
+_MEDIA_DIRS = ("telegram_files",)
+_IGNORED_FILES = frozenset({"RULES.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md"})
 
 
 def _get_base_dirs() -> list[Path]:
@@ -26,37 +28,46 @@ def _get_base_dirs() -> list[Path]:
     return [workspace / d for d in _MEDIA_DIRS if (workspace / d).is_dir()]
 
 
+def _append_file_entry(f: Path, date_str: str, source: str, args: argparse.Namespace, results: list[dict]) -> None:
+    if not f.is_file() or f.name.startswith(".") or f.name in _IGNORED_FILES:
+        return
+    if args.date and date_str != args.date:
+        return
+    mime, _ = mimetypes.guess_type(f.name)
+    mime_str = mime or "application/octet-stream"
+    if args.file_type and not mime_str.startswith(args.file_type):
+        return
+    try:
+        size = f.stat().st_size
+    except OSError:
+        size = 0
+    results.append({
+        "date": date_str,
+        "name": f.name,
+        "type": mime_str,
+        "size": size,
+        "path": str(f),
+        "source": source,
+    })
+
+
 def _scan_dir(base_dir: Path, args: argparse.Namespace) -> list[dict]:
-    """Scan date subdirectories in a media directory and return matching files."""
+    """Scan flat media files and legacy date subdirectories in a media directory."""
     results: list[dict] = []
-    date_dirs = sorted(
-        (d for d in base_dir.iterdir() if d.is_dir() and not d.name.startswith(".")),
-        key=lambda d: d.name,
-        reverse=True,
-    )
-    for date_dir in date_dirs:
-        date_str = date_dir.name
-        if args.date and date_str != args.date:
+    for entry in sorted(base_dir.iterdir(), key=lambda p: p.name, reverse=True):
+        if entry.name.startswith("."):
             continue
-        for f in sorted(date_dir.iterdir(), key=lambda p: p.name):
-            if not f.is_file() or f.name.startswith("."):
-                continue
-            mime, _ = mimetypes.guess_type(f.name)
-            mime_str = mime or "application/octet-stream"
-            if args.file_type and not mime_str.startswith(args.file_type):
-                continue
+        if entry.is_file():
             try:
-                size = f.stat().st_size
+                mtime = entry.stat().st_mtime
+                date_str = datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%d")
             except OSError:
-                size = 0
-            results.append({
-                "date": date_str,
-                "name": f.name,
-                "type": mime_str,
-                "size": size,
-                "path": str(f),
-                "source": base_dir.name,
-            })
+                date_str = "unknown"
+            _append_file_entry(entry, date_str, base_dir.name, args, results)
+        elif entry.is_dir():
+            date_str = entry.name
+            for f in sorted(entry.iterdir(), key=lambda p: p.name):
+                _append_file_entry(f, date_str, base_dir.name, args, results)
     return results
 
 

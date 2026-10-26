@@ -23,26 +23,6 @@ fn test_load_from_file_parses_json_with_defaults() {
 }
 
 #[test]
-fn test_load_from_file_parses_matrix_config() {
-    let dir = tempdir().unwrap();
-    let config_path = dir.path().join("config.json");
-    let json = r#"{
-        "matrix": {
-            "homeserver": "https://custom.homeserver",
-            "user_id": "@bot:custom.homeserver",
-            "allowed_rooms": ["!room:custom.homeserver"]
-        }
-    }"#;
-    std::fs::write(&config_path, json).unwrap();
-
-    let config = CliConfig::load_from_file(&config_path).unwrap();
-    assert_eq!(config.matrix.homeserver, "https://custom.homeserver");
-    assert_eq!(config.matrix.user_id, "@bot:custom.homeserver");
-    assert_eq!(config.matrix.allowed_rooms, vec!["!room:custom.homeserver"]);
-    assert_eq!(config.matrix.store_path, ".matrix"); // defaulted
-}
-
-#[test]
 fn test_load_from_file_parses_profiles_array() {
     let dir = tempdir().unwrap();
     let config_path = dir.path().join("config.json");

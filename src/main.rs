@@ -13,10 +13,9 @@
 //! - [`heartbeat`] (`heartbeat/mod.rs`): Quiet-hour-aware periodic health telemetry scheduler.
 //! - [`cron`] (`cron/mod.rs`): Timezone-aware periodic AI agent job scheduler and store.
 //! - [`workspace`] (`workspace/mod.rs`): Profile directory layout, rule templates, and skill mounting.
-//! - [`background`] (`background/mod.rs`): Asynchronous fire-and-forget CLI task execution.
 //! - [`security`] (`security/mod.rs`): Path sandboxing and output credential filtering.
 //! - [`bus`] (`bus/mod.rs`): Internal message bus, routing envelopes, and topic lock pool.
-//! - [`webhook`] (`webhook/mod.rs`): Axum HTTP/WebSocket ingress server and encrypted remote API.
+//! - [`webhook`] (`webhook/mod.rs`): Axum HTTP webhook ingress server and observer.
 //! - [`i18n`] (`i18n/mod.rs`): TOML localization catalog loader and lookup macros.
 //! - [`supervisor`] (`supervisor.rs`): Child process restart supervisor with backoff.
 //! - [`setup`] (`setup.rs`): Interactive setup wizard, `.env` loader, and systemd installer.
@@ -34,7 +33,6 @@ pub mod cleanup;
 pub mod heartbeat;
 pub mod cron;
 pub mod workspace;
-pub mod background;
 pub mod security;
 pub mod bus;
 pub mod webhook;
@@ -65,23 +63,10 @@ pub mod supervisor_tests;
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod webhook_tests;
 
-
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 /// Test module/item.
 pub mod i18n_tests;
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-/// Test module/item.
-pub mod i18n_extra_tests;
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-/// Test module/item.
-pub mod i18n_check_tests;
-
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -102,21 +87,7 @@ pub mod workspace_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
-/// Test module/item.
-pub mod background_tests;
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-/// Test module/item.
-pub mod background_extra_tests;
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod security_tests;
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-pub mod security_extra_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]

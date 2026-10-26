@@ -14,9 +14,8 @@ Complete your task autonomously and update memory when done.
 ## Rules
 
 - Stay focused on this task only. Do not deviate.
-- Do not modify files outside this task folder.
+- Do not modify unrelated files; only update files required by `TASK_DESCRIPTION.md` and `memory-consolidator_MEMORY.md`.
 - Check whether all scripts are already present in the script folder! (IF they are needed!)
-- Use `.venv` for Python dependencies: `source .venv/bin/activate`
 
 ## Important
 

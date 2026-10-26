@@ -83,39 +83,49 @@ fn is_safe_lang(lang: &str) -> bool {
     lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Load the entire translation suite (chat, cli/wizard, commands) for a language.
-pub fn load_language(root: &Path, lang: &str) -> (HashMap<String, String>, HashMap<String, String>, HashMap<String, String>) {
-    if !is_safe_lang(lang) {
-        return (HashMap::new(), HashMap::new(), HashMap::new());
+fn embedded_chat_toml(lang: &str) -> Option<&'static str> {
+    match lang {
+        "en" => Some(include_str!("locales/en/chat.toml")),
+        "de" => Some(include_str!("locales/de/chat.toml")),
+        "nl" => Some(include_str!("locales/nl/chat.toml")),
+        "es" => Some(include_str!("locales/es/chat.toml")),
+        "fr" => Some(include_str!("locales/fr/chat.toml")),
+        "id" => Some(include_str!("locales/id/chat.toml")),
+        "pt" => Some(include_str!("locales/pt/chat.toml")),
+        "ru" => Some(include_str!("locales/ru/chat.toml")),
+        "ko" => Some(include_str!("locales/ko/chat.toml")),
+        _ => None,
     }
-    let lang_dir = root.join(lang);
-    let chat = load_toml(&lang_dir.join("chat.toml")).unwrap_or_default();
-    let mut cli = load_toml(&lang_dir.join("cli.toml")).unwrap_or_default();
-    let wizard = load_toml(&lang_dir.join("wizard.toml")).unwrap_or_default();
-    for (k, v) in wizard {
-        cli.insert(format!("wizard.{}", k), v);
-    }
-    let cmd = load_toml(&lang_dir.join("commands.toml")).unwrap_or_default();
-    (chat, cli, cmd)
 }
 
-/// Represents a collection of localized strings and their English fallbacks.
+/// Load the chat translation catalog for a language, falling back to embedded assets when running standalone.
+pub fn load_language(root: &Path, lang: &str) -> HashMap<String, String> {
+    if !is_safe_lang(lang) {
+        return HashMap::new();
+    }
+    let chat_path = root.join(lang).join("chat.toml");
+    if chat_path.is_file() {
+        return load_toml(&chat_path).unwrap_or_default();
+    }
+    if !root.is_dir()
+        && let Some(raw) = embedded_chat_toml(lang)
+            && let Ok(val) = raw.parse::<toml::Value>() {
+                let mut map = HashMap::new();
+                flatten(&val, "", &mut map);
+                return map;
+            }
+    HashMap::new()
+}
+
+/// Represents a collection of localized chat strings and their English fallbacks.
 #[derive(Clone, Debug)]
 pub struct TranslationStore {
     /// Language.
     pub language: String,
     /// En chat.
     pub en_chat: HashMap<String, String>,
-    /// En cli.
-    pub en_cli: HashMap<String, String>,
-    /// En cmd.
-    pub en_cmd: HashMap<String, String>,
     /// Primary chat.
     pub primary_chat: Option<HashMap<String, String>>,
-    /// Primary cli.
-    pub primary_cli: Option<HashMap<String, String>>,
-    /// Primary cmd.
-    pub primary_cmd: Option<HashMap<String, String>>,
 }
 
 impl TranslationStore {
@@ -127,44 +137,23 @@ impl TranslationStore {
 
     /// Create a new TranslationStore with a specific locales path.
     pub fn new_with_root(language: &str, root: &Path) -> Self {
-        let (en_chat, en_cli, en_cmd) = load_language(root, "en");
+        let en_chat = load_language(root, "en");
         let language = if is_safe_lang(language) { language } else { "en" };
-        let (primary_chat, primary_cli, primary_cmd) = if language == "en" {
-            (None, None, None)
+        let primary_chat = if language == "en" {
+            None
         } else {
-            let (chat, cli, cmd) = load_language(root, language);
-            (Some(chat), Some(cli), Some(cmd))
+            Some(load_language(root, language))
         };
         Self {
             language: language.to_string(),
             en_chat,
-            en_cli,
-            en_cmd,
             primary_chat,
-            primary_cli,
-            primary_cmd,
         }
     }
 
     /// Retrieve a chat translation.
     pub fn chat(&self, key: &str, args: &[(&str, &str)]) -> String {
         self.resolve(self.primary_chat.as_ref(), &self.en_chat, key, args)
-    }
-
-    /// Retrieve a CLI translation.
-    pub fn cli(&self, key: &str, args: &[(&str, &str)]) -> String {
-        self.resolve(self.primary_cli.as_ref(), &self.en_cli, key, args)
-    }
-
-    /// Retrieve a command translation.
-    pub fn cmd(&self, key: &str) -> String {
-        let raw = self.primary_cmd.as_ref()
-            .and_then(|m| m.get(key))
-            .or_else(|| self.en_cmd.get(key));
-        match raw {
-            Some(val) => val.clone(),
-            None => format!("[MISSING: {}]", key),
-        }
     }
 
     fn resolve(
@@ -189,37 +178,11 @@ impl TranslationStore {
         self.en_chat.keys().cloned().collect()
     }
 
-    /// Executes `all_cli_keys` (all cli keys).
-    pub fn all_cli_keys(&self) -> HashSet<String> {
-        self.en_cli.keys().cloned().collect()
-    }
-
-    /// Executes `all_cmd_keys` (all cmd keys).
-    pub fn all_cmd_keys(&self) -> HashSet<String> {
-        self.en_cmd.keys().cloned().collect()
-    }
-
     /// Executes `lang_chat_keys` (lang chat keys).
     pub fn lang_chat_keys(&self) -> HashSet<String> {
         match &self.primary_chat {
             Some(m) => m.keys().cloned().collect(),
             None => self.en_chat.keys().cloned().collect(),
-        }
-    }
-
-    /// Executes `lang_cli_keys` (lang cli keys).
-    pub fn lang_cli_keys(&self) -> HashSet<String> {
-        match &self.primary_cli {
-            Some(m) => m.keys().cloned().collect(),
-            None => self.en_cli.keys().cloned().collect(),
-        }
-    }
-
-    /// Executes `lang_cmd_keys` (lang cmd keys).
-    pub fn lang_cmd_keys(&self) -> HashSet<String> {
-        match &self.primary_cmd {
-            Some(m) => m.keys().cloned().collect(),
-            None => self.en_cmd.keys().cloned().collect(),
         }
     }
 }
