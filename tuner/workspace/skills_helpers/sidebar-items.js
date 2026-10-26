@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["clean_broken_links","clean_invalid_workspace_skill_links","cli_skill_dirs","copy_dir_all","create_dir_link","ensure_copy","ensure_link","is_managed_copy","is_under","link_skill_everywhere","load_skill_sync_config","newest_mtime"]};
+window.SIDEBAR_ITEMS = {"fn":["clean_broken_links","clean_cross_profile_skill_links","clean_invalid_workspace_skill_links","cli_skill_dirs","copy_dir_all","create_dir_link","ensure_copy","ensure_link","is_managed_copy","load_skill_sync_config","newest_mtime","sync_profile_agent_skills"]};
