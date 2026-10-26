@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_antigravity_installed","managed_profile_rule_dirs"],"struct":["RulesSelector"]};
+window.SIDEBAR_ITEMS = {"fn":["managed_profile_rule_dirs"],"struct":["RulesSelector"]};

@@ -152,7 +152,7 @@
 <a href=#152 id=152 data-nosnippet>152</a>    }
 <a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">let </span>trimmed = text.trim();
 <a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if </span>trimmed == <span class="string">"/usage" </span>{
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">super</span>::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">super</span>::commands_usage::handle_usage_command(bot, msg, config, sessions, cli).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
 <a href=#157 id=157 data-nosnippet>157</a>    }
 <a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">if </span>trimmed == <span class="string">"/remote" </span>|| trimmed.starts_with(<span class="string">"/remote "</span>) {

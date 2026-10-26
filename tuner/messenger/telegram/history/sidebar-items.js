@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["find_sessions_for_topic","log_telegram_message"],"struct":["TelegramHistoryEntry","TopicMetadata"]};
+window.SIDEBAR_ITEMS = {"fn":["log_telegram_message"],"struct":["TelegramHistoryEntry","TopicMetadata"]};

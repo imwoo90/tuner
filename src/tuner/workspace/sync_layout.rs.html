@@ -7,11 +7,11 @@
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Search Tags
 <a href=#8 id=8 data-nosnippet>8</a>//! #workspace-layout, #rules-init, #constraints-sync
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span><span class="kw">crate</span>::workspace::paths::DuctorPaths;
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span><span class="kw">crate</span>::workspace::paths::TunerPaths;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::path::Path;
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// Executes `create_workspace_directories` (create workspace directories).
-<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub fn </span>create_workspace_directories(paths: <span class="kw-2">&amp;</span>DuctorPaths) {
+<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub fn </span>create_workspace_directories(paths: <span class="kw-2">&amp;</span>TunerPaths) {
 <a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">let </span>required_workspace_dirs = [
 <a href=#16 id=16 data-nosnippet>16</a>        <span class="string">""</span>,
 <a href=#17 id=17 data-nosnippet>17</a>        <span class="string">"memory_system"</span>,
@@ -42,7 +42,7 @@
 <a href=#42 id=42 data-nosnippet>42</a>}
 <a href=#43 id=43 data-nosnippet>43</a>
 <a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// Executes `migrate_legacy_data` (migrate legacy data).
-<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub fn </span>migrate_legacy_data(paths: <span class="kw-2">&amp;</span>DuctorPaths) {
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub fn </span>migrate_legacy_data(paths: <span class="kw-2">&amp;</span>TunerPaths) {
 <a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = paths.profile
 <a href=#47 id=47 data-nosnippet>47</a>        &amp;&amp; p == <span class="string">"default" </span>{
 <a href=#48 id=48 data-nosnippet>48</a>            <span class="kw">let </span>legacy_sessions = paths.tuner_home.join(<span class="string">"sessions.json"</span>);

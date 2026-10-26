@@ -253,7 +253,7 @@
 <a href=#253 id=253 data-nosnippet>253</a>
 <a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">if </span>state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
 <a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = state.last_sid { updated.set_session_id(<span class="kw-2">&amp;</span>config.provider, <span class="kw-2">&amp;</span>sid); }
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>updated, <span class="number">0.0</span>, <span class="number">0</span>).<span class="kw">await</span>;
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>updated).<span class="kw">await</span>;
 <a href=#257 id=257 data-nosnippet>257</a>    }
 <a href=#258 id=258 data-nosnippet>258</a>    <span class="prelude-val">Ok</span>(())
 <a href=#259 id=259 data-nosnippet>259</a>}

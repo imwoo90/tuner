@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["LockPool"],"trait":["IntoLockKey"],"type":["LockKey"]};
+window.SIDEBAR_ITEMS = {"struct":["LockPool"],"type":["LockKey"]};

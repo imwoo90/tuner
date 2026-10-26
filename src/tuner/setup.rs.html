@@ -177,7 +177,7 @@
 <a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">pub fn </span>override_profile_config(
 <a href=#178 id=178 data-nosnippet>178</a>    config: <span class="kw-2">&amp;mut </span>CliConfig,
 <a href=#179 id=179 data-nosnippet>179</a>    profile_name: <span class="kw-2">&amp;</span>str,
-<a href=#180 id=180 data-nosnippet>180</a>    paths: <span class="kw-2">&amp;</span><span class="kw">crate</span>::workspace::paths::DuctorPaths,
+<a href=#180 id=180 data-nosnippet>180</a>    paths: <span class="kw-2">&amp;</span><span class="kw">crate</span>::workspace::paths::TunerPaths,
 <a href=#181 id=181 data-nosnippet>181</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
 <a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
 <a href=#183 id=183 data-nosnippet>183</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"Profile '{}' not found in config.json"</span>, profile_name))<span class="question-mark">?</span>;
@@ -196,15 +196,18 @@
 <a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>m) = profile_cfg.model {
 <a href=#197 id=197 data-nosnippet>197</a>        config.model = <span class="prelude-val">Some</span>(m.clone());
 <a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.system_prompt {
-<a href=#200 id=200 data-nosnippet>200</a>        config.system_prompt = <span class="prelude-val">Some</span>(p.clone());
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>e) = profile_cfg.effort {
+<a href=#200 id=200 data-nosnippet>200</a>        config.effort = <span class="prelude-val">Some</span>(e.clone());
 <a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.append_system_prompt {
-<a href=#203 id=203 data-nosnippet>203</a>        config.append_system_prompt = <span class="prelude-val">Some</span>(p.clone());
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.system_prompt {
+<a href=#203 id=203 data-nosnippet>203</a>        config.system_prompt = <span class="prelude-val">Some</span>(p.clone());
 <a href=#204 id=204 data-nosnippet>204</a>    }
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>l) = profile_cfg.language {
-<a href=#206 id=206 data-nosnippet>206</a>        config.language = <span class="prelude-val">Some</span>(l.clone());
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.append_system_prompt {
+<a href=#206 id=206 data-nosnippet>206</a>        config.append_system_prompt = <span class="prelude-val">Some</span>(p.clone());
 <a href=#207 id=207 data-nosnippet>207</a>    }
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="prelude-val">Ok</span>(())
-<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>l) = profile_cfg.language {
+<a href=#209 id=209 data-nosnippet>209</a>        config.language = <span class="prelude-val">Some</span>(l.clone());
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="prelude-val">Ok</span>(())
+<a href=#212 id=212 data-nosnippet>212</a>}
 </code></pre></div></section></main></body></html>

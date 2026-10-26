@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MANAGED_CONTAINER_DIRS","MANAGED_SINGLE_DIRS"],"fn":["handle_entry","is_bundled_system_doc","is_zone2_py_file","smart_merge_config","smart_merge_profile_config","sync_group","sync_managed_rule_dirs","walk_and_copy"]};
+window.SIDEBAR_ITEMS = {"constant":["MANAGED_SINGLE_DIRS"],"fn":["handle_entry","is_bundled_system_doc","is_zone2_py_file","smart_merge_config","smart_merge_profile_config","walk_and_copy"]};

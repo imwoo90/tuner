@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["terminate_child"],"struct":["Supervisor"]};
+window.SIDEBAR_ITEMS = {"struct":["Supervisor"]};

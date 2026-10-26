@@ -196,7 +196,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>(mo, eff) = model_and_effort;
 <a href=#197 id=197 data-nosnippet>197</a>    sess.model = mo.to_string();
 <a href=#198 id=198 data-nosnippet>198</a>    sess.effort = eff.map(|s| s.to_string());
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">let _ </span>= sessions.update_session(sess, <span class="number">0.0</span>, <span class="number">0</span>).<span class="kw">await</span>;
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">let _ </span>= sessions.preserve_session_identity(sess).<span class="kw">await</span>;
 <a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span>sid = sess.get_session_id(<span class="kw-2">&amp;</span>sess.provider);
 <a href=#201 id=201 data-nosnippet>201</a>    commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>sess.model, sess.effort.as_deref()).<span class="kw">await</span>;
 <a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">if </span>empty {

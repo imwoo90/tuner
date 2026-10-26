@@ -204,15 +204,5 @@
 <a href=#204 id=204 data-nosnippet>204</a>        }
 <a href=#205 id=205 data-nosnippet>205</a>        <span class="self">self</span>.ingest_entries(<span class="kw-2">&amp;</span>entries, new_size)
 <a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="doccomment">/// Executes `parse_log_delta` (parse log delta).
-<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">pub fn </span>parse_log_delta(
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#211 id=211 data-nosnippet>211</a>        transcript_path: <span class="kw-2">&amp;</span>Path,
-<a href=#212 id=212 data-nosnippet>212</a>        prev_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#213 id=213 data-nosnippet>213</a>    ) -&gt; (u64, <span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="kw">crate</span>::cli::AskQuestionData&gt;&gt;) {
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>res = <span class="self">self</span>.parse_log_delta_structured(transcript_path, prev_size);
-<a href=#215 id=215 data-nosnippet>215</a>        (res.new_size, res.formatted, res.ask_question)
-<a href=#216 id=216 data-nosnippet>216</a>    }
-<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#207 id=207 data-nosnippet>207</a>}
 </code></pre></div></section></main></body></html>

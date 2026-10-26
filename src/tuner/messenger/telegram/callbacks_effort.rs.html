@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! and reasoning effort levels.
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Search Tags
-<a href=#8 id=8 data-nosnippet>8</a>//! #effort-callback, #model-selector, #reasoning-effort
+<a href=#8 id=8 data-nosnippet>8</a>//! #effort-callback, #model-selector, #effort-level
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>teloxide::prelude::<span class="kw-2">*</span>;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
@@ -69,7 +69,7 @@
 <a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>s, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, dm).<span class="kw">await </span>{
 <a href=#70 id=70 data-nosnippet>70</a>            s.model = base.to_string();
 <a href=#71 id=71 data-nosnippet>71</a>            s.effort = <span class="prelude-val">None</span>;
-<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>s, <span class="number">0.0</span>, <span class="number">0</span>).<span class="kw">await</span>;
+<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">let _ </span>= sessions.preserve_session_identity(<span class="kw-2">&amp;</span>s).<span class="kw">await</span>;
 <a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">let </span>sid = s.get_session_id(<span class="kw-2">&amp;</span>s.provider);
 <a href=#74 id=74 data-nosnippet>74</a>            <span class="kw">crate</span>::messenger::telegram::commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>s.model, s.effort.as_deref()).<span class="kw">await</span>;
 <a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, <span class="macro">crate::t!</span>(<span class="string">"bot.model_switch_success"</span>, model = base)).<span class="kw">await</span>;
@@ -94,7 +94,7 @@
 <a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>s, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, dm).<span class="kw">await </span>{
 <a href=#95 id=95 data-nosnippet>95</a>        s.model = base.to_string();
 <a href=#96 id=96 data-nosnippet>96</a>        s.effort = <span class="prelude-val">Some</span>(effort.to_string());
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>s, <span class="number">0.0</span>, <span class="number">0</span>).<span class="kw">await</span>;
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let _ </span>= sessions.preserve_session_identity(<span class="kw-2">&amp;</span>s).<span class="kw">await</span>;
 <a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>sid = s.get_session_id(<span class="kw-2">&amp;</span>s.provider);
 <a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">crate</span>::messenger::telegram::commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>s.model, s.effort.as_deref()).<span class="kw">await</span>;
 <a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>display = <span class="macro">format!</span>(<span class="string">"{} (effort: {})"</span>, base, effort);
@@ -115,7 +115,7 @@
 <a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>dm = config.model.as_deref().unwrap_or(<span class="string">"antigravity-default"</span>);
 <a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>s, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, dm).<span class="kw">await </span>{
 <a href=#117 id=117 data-nosnippet>117</a>        s.effort = <span class="prelude-val">Some</span>(effort.to_string());
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>s, <span class="number">0.0</span>, <span class="number">0</span>).<span class="kw">await</span>;
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let _ </span>= sessions.preserve_session_identity(<span class="kw-2">&amp;</span>s).<span class="kw">await</span>;
 <a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span>sid = s.get_session_id(<span class="kw-2">&amp;</span>s.provider);
 <a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">crate</span>::messenger::telegram::commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>s.model, s.effort.as_deref()).<span class="kw">await</span>;
 <a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span>display_msg = <span class="macro">format!</span>(<span class="string">"🤖 [tuner] Session reasoning effort switched to `{}`."</span>, effort);

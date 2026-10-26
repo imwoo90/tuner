@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_profile_from_working_dir","resolve_paths"],"struct":["DuctorPaths"]};
+window.SIDEBAR_ITEMS = {"fn":["extract_profile_from_working_dir","resolve_paths"],"struct":["TunerPaths"]};
