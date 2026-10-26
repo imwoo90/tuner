@@ -7,7 +7,7 @@
 //! #rule-profiles, #markdown-rules, #profile-mapping
 
 use crate::workspace::paths::DuctorPaths;
-use crate::workspace::rules_check::{check_antigravity, check_claude, check_codex, check_gemini};
+use crate::workspace::rules_check::check_antigravity;
 use std::path::{Path, PathBuf};
 
 /// Authentication status for CLI providers.
@@ -49,18 +49,15 @@ pub struct RulesSelector {
 }
 
 impl RulesSelector {
-    /// Discovers auth status and returns a RulesSelector instance.
+    /// Returns a RulesSelector configured for the Antigravity-native Tuner environment.
     pub fn new(paths: DuctorPaths) -> Self {
-        let claude = check_claude(&paths);
-        let codex = check_codex(&paths);
-        let gemini = check_gemini(&paths);
         let agy = check_antigravity(&paths);
         Self {
             paths,
-            claude_authenticated: claude.status == AuthStatus::Authenticated,
-            codex_authenticated: codex.status == AuthStatus::Authenticated,
-            gemini_authenticated: gemini.status == AuthStatus::Authenticated,
-            antigravity_authenticated: agy.status == AuthStatus::Authenticated,
+            claude_authenticated: false,
+            codex_authenticated: false,
+            gemini_authenticated: false,
+            antigravity_authenticated: agy.status != AuthStatus::NotFound,
         }
     }
 
@@ -127,7 +124,10 @@ impl RulesSelector {
             if self.claude_authenticated {
                 let _ = std::fs::copy(&template, dst_dir.join("CLAUDE.md"));
             }
-            if self.codex_authenticated || self.antigravity_authenticated {
+            if self.codex_authenticated
+                || self.antigravity_authenticated
+                || (!self.claude_authenticated && !self.gemini_authenticated)
+            {
                 let _ = std::fs::copy(&template, dst_dir.join("AGENTS.md"));
             }
             if self.gemini_authenticated {
@@ -143,9 +143,6 @@ impl RulesSelector {
         let mut stale = Vec::new();
         if !self.claude_authenticated {
             stale.push("CLAUDE.md");
-        }
-        if !self.codex_authenticated && !self.antigravity_authenticated {
-            stale.push("AGENTS.md");
         }
         if !self.gemini_authenticated {
             stale.push("GEMINI.md");

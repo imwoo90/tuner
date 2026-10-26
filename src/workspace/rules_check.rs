@@ -110,18 +110,20 @@ pub fn check_gemini(paths: &DuctorPaths) -> AuthResult {
     AuthResult { provider: "gemini".to_string(), status: AuthStatus::Installed, auth_file: None, auth_age: None }
 }
 
-/// Executes `check_antigravity` (check antigravity).
+/// Executes `check_antigravity` (check antigravity) using fast local filesystem checks without blocking network calls.
 pub fn check_antigravity(paths: &DuctorPaths) -> AuthResult {
     if std::env::var("TUNER_TEST_MODE").is_ok() {
         return AuthResult { provider: "antigravity".to_string(), status: AuthStatus::NotFound, auth_file: None, auth_age: None };
     }
-    let binary_found = std::process::Command::new("agy").arg("models").output().is_ok();
-    if binary_found && check_antigravity_cli_logged_in() {
-        return AuthResult { provider: "antigravity".to_string(), status: AuthStatus::Authenticated, auth_file: None, auth_age: None };
-    }
     let home = get_home_dir(paths);
+    let agy_dir = home.join(".gemini").join("antigravity-cli");
+    let local_bin = home.join(".local").join("bin").join("agy");
     let ccs_settings = home.join(".ccs").join("agy.settings.json");
-    let status = if binary_found || ccs_settings.is_file() { AuthStatus::Installed } else { AuthStatus::NotFound };
+    let status = if agy_dir.is_dir() || local_bin.exists() || ccs_settings.is_file() {
+        AuthStatus::Authenticated
+    } else {
+        AuthStatus::Installed
+    };
     AuthResult { provider: "antigravity".to_string(), status, auth_file: None, auth_age: None }
 }
 
@@ -224,20 +226,4 @@ fn gemini_settings_auth(gemini_home: &Path) -> Option<AuthStatus> {
             }
         }
     None
-}
-
-fn check_antigravity_cli_logged_in() -> bool {
-    match std::process::Command::new("agy").arg("models").output() {
-        Ok(output) => {
-            let merged = format!("{}\n{}", 
-                std::str::from_utf8(&output.stdout).unwrap_or_default(),
-                std::str::from_utf8(&output.stderr).unwrap_or_default()
-            ).to_lowercase();
-            if merged.contains("sign in") || merged.contains("not logged in") || merged.contains("login") {
-                return false;
-            }
-            output.status.success()
-        }
-        _ => false,
-    }
 }

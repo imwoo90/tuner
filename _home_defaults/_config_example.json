@@ -1,8 +1,8 @@
 {
     "_comment": "Full example config showing all features. Copy to ~/.tuner/config/config.json and adjust.",
     "log_level": "INFO",
-    "provider": "claude",
-    "model": "sonnet",
+    "provider": "antigravity",
+    "model": "gemini-3.8-flash",
     "language": "en",
     "tuner_home": "~/.tuner",
     "user_timezone": "Europe/Berlin",

@@ -156,10 +156,9 @@ You are an **automated agent** triggered by a webhook. Complete your task autono
 ## Rules
 
 - Stay focused on this task only.
-- Do not modify files outside this task folder.
+- Do not modify unrelated project files outside the scope of `TASK_DESCRIPTION.md`.
 - Use `.venv` for Python dependencies if needed.
 """
-    (task_dir / "CLAUDE.md").write_text(claude_content, encoding="utf-8")
     (task_dir / "AGENTS.md").write_text(claude_content, encoding="utf-8")
 
     task_desc = f"""\
@@ -232,10 +231,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["claude", "codex", "gemini"],
+        choices=["antigravity", "claude", "codex", "gemini"],
         help=(
-            "CLI provider for this webhook (claude, codex, or gemini). "
-            "If omitted, uses global config."
+            "CLI provider for this webhook (defaults to antigravity / global config)."
         ),
     )
     parser.add_argument(

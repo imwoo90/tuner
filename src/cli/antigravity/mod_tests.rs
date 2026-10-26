@@ -137,50 +137,24 @@ fn test_antigravity_plain_workspace_unchanged() {
 }
 
 #[test]
-fn test_format_prompt_injects_workspace_rules_and_memory() {
+fn test_format_prompt_injects_system_prompts_without_duplicating_native_rules() {
     let base = create_test_dir("prompt_inject_test");
-    
-    // Create AGENTS.md
-    let agents_path = base.join("AGENTS.md");
-    std::fs::write(&agents_path, "AGENTS_RULES_CONTENT").unwrap();
+    std::fs::write(base.join("AGENTS.md"), "NATIVE_AGENTS_RULES").unwrap();
 
-    // Create .agents/rules/constraints.md
-    let rules_dir = base.join(".agents").join("rules");
-    std::fs::create_dir_all(&rules_dir).unwrap();
-    let constraints_path = rules_dir.join("constraints.md");
-    std::fs::write(&constraints_path, "---\ntrigger: always_on\n---\nCONSTRAINTS_CONTENT").unwrap();
-    
-    // Create memory_system/MAINMEMORY.md
-    let mem_dir = base.join("memory_system");
-    std::fs::create_dir_all(&mem_dir).unwrap();
-    let mem_path = mem_dir.join("MAINMEMORY.md");
-    std::fs::write(&mem_path, "MAINMEMORY_CONTENT").unwrap();
-    
     let config = CliConfig {
         provider: "antigravity".to_string(),
-        working_dir: base.clone(),
+        working_dir: base,
+        system_prompt: Some("CUSTOM_SYSTEM".to_string()),
+        append_system_prompt: Some("CUSTOM_APPEND".to_string()),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
     let final_prompt = cli.format_prompt("user_prompt");
-    
-    assert!(final_prompt.contains("AGENTS_RULES_CONTENT"));
-    assert!(final_prompt.contains("CONSTRAINTS_CONTENT"));
-    assert!(final_prompt.contains("MAINMEMORY_CONTENT"));
-    assert!(final_prompt.contains("user_prompt"));
 
-    // Also test fallback to GEMINI.md if AGENTS.md is absent
-    let base_fallback = create_test_dir("prompt_inject_gemini_fallback");
-    let gemini_path = base_fallback.join("GEMINI.md");
-    std::fs::write(&gemini_path, "LEGACY_GEMINI_RULES").unwrap();
-    let config_fallback = CliConfig {
-        provider: "antigravity".to_string(),
-        working_dir: base_fallback.clone(),
-        ..Default::default()
-    };
-    let cli_fallback = AntigravityCli::new(config_fallback);
-    let final_prompt_fallback = cli_fallback.format_prompt("user_prompt");
-    assert!(final_prompt_fallback.contains("LEGACY_GEMINI_RULES"));
+    assert!(final_prompt.contains("CUSTOM_SYSTEM"));
+    assert!(final_prompt.contains("CUSTOM_APPEND"));
+    assert!(final_prompt.contains("user_prompt"));
+    assert!(!final_prompt.contains("NATIVE_AGENTS_RULES"));
 }
 
 #[test]
@@ -192,5 +166,13 @@ fn test_resolve_cli_model_effort_argon_defaults_to_high() {
     let (m2, eff2) = AntigravityCli::resolve_cli_model_effort(Some("gemini-4-argon"), Some("low"));
     assert_eq!(m2.as_deref(), Some("gemini-4-argon"));
     assert_eq!(eff2.as_deref(), Some("low"));
+
+    let (m3, eff3) = AntigravityCli::resolve_cli_model_effort(Some("gemini-3.1-pro-high"), None);
+    assert_eq!(m3.as_deref(), Some("gemini-4-argon"));
+    assert_eq!(eff3.as_deref(), Some("high"));
+
+    let (m4, eff4) = AntigravityCli::resolve_cli_model_effort(Some("gemini-3.6-flash"), Some("high"));
+    assert_eq!(m4.as_deref(), Some("gemini-3.8-flash"));
+    assert_eq!(eff4.as_deref(), Some("high"));
 }
 

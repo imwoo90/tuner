@@ -103,21 +103,47 @@ impl AntigravityCli {
         discovery::discover_models("agy").await
     }
 
+    pub(crate) fn normalize_model_id(raw: &str) -> &str {
+        match raw {
+            "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
+            "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
+            "flash" | "gemini" | "gemini-2.5-flash" | "gemini-3.0-flash" | "gemini-3.5-flash"
+            | "gemini-3.6-flash" | "gemini-3.7-flash" | "gemini-3.8-flash" => "gemini-3.8-flash",
+            "argon" | "gemini-argon" | "gemini-4-argon" | "pro" | "gemini-2.5-pro"
+            | "gemini-3.0-pro" | "gemini-3.1-pro" => "gemini-4-argon",
+            other => other,
+        }
+    }
+
     pub(crate) fn resolve_cli_model_effort(model: Option<&str>, effort: Option<&str>) -> (Option<String>, Option<String>) {
-        let Some(m) = model.filter(|&s| s != "antigravity-default") else {
+        let Some(raw_m) = model.map(str::trim).filter(|&s| !s.is_empty() && s != "antigravity-default") else {
             return (None, None);
         };
-        let mut eff = effort.filter(|&e| !e.is_empty()).map(|s| s.to_string());
+        let mut base = raw_m;
+        let mut suffix_eff = None;
+        for (suf, eff_val) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
+            if let Some(stripped) = raw_m.strip_suffix(suf) {
+                base = stripped;
+                suffix_eff = Some(eff_val.to_string());
+                break;
+            }
+        }
+        let canonical = Self::normalize_model_id(base);
+        let mut eff = effort
+            .map(str::trim)
+            .filter(|&e| !e.is_empty())
+            .map(str::to_string)
+            .or(suffix_eff);
         if eff.is_none()
-            && (m.contains("claude-")
-                || m.contains("opus")
-                || m.contains("sonnet")
-                || m.contains("pro")
-                || m.contains("argon"))
+            && (canonical.contains("claude-")
+                || canonical.contains("opus")
+                || canonical.contains("sonnet")
+                || canonical.contains("pro")
+                || canonical.contains("argon"))
         {
             eff = Some("high".to_string());
         }
-        (Some(m.to_string()), eff)
+        (Some(canonical.to_string()), eff)
     }
 
     /// Executes `build_command` (build command).
@@ -204,18 +230,6 @@ impl AntigravityCli {
         (tokio::time::Duration::from_secs(effective), base)
     }
 
-fn strip_frontmatter(raw: &str) -> &str {
-    if let Some(after_open) = raw.strip_prefix("---") {
-        if let Some(end_idx) = after_open.find("---") {
-            after_open[end_idx + 3..].trim_start()
-        } else {
-            raw
-        }
-    } else {
-        raw
-    }
-}
-
 fn append_section(target: &mut String, content: &str) {
     let trimmed = content.trim();
     if !trimmed.is_empty() {
@@ -234,26 +248,6 @@ fn append_section(target: &mut String, content: &str) {
         if let Some(ref asp) = self.config.append_system_prompt {
             Self::append_section(&mut final_prompt, asp);
         }
-
-        let agents_path = self.config.working_dir.join("AGENTS.md");
-        let legacy_gemini = self.config.working_dir.join("GEMINI.md");
-        let rpath = if agents_path.is_file() { agents_path } else { legacy_gemini };
-        if let Ok(rules) = std::fs::read_to_string(rpath) {
-            Self::append_section(&mut final_prompt, &rules);
-        }
-
-        let cpath = self.config.working_dir.join(".agents").join("rules").join("constraints.md");
-        if let Ok(raw_c) = std::fs::read_to_string(cpath) {
-            Self::append_section(&mut final_prompt, Self::strip_frontmatter(&raw_c));
-        }
-
-        let rmem = self.config.working_dir.join(".agents").join("rules").join("mainmemory.md");
-        let lmem = self.config.working_dir.join("memory_system").join("MAINMEMORY.md");
-        let mpath = if rmem.is_file() { rmem } else { lmem };
-        if let Ok(raw_m) = std::fs::read_to_string(mpath) {
-            Self::append_section(&mut final_prompt, Self::strip_frontmatter(&raw_m));
-        }
-
         Self::append_section(&mut final_prompt, prompt);
         final_prompt
     }

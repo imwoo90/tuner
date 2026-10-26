@@ -212,7 +212,7 @@ impl Default for HeartbeatConfig {
 impl Default for CliConfig {
     fn default() -> Self {
         Self {
-            provider: "claude".to_string(),
+            provider: "antigravity".to_string(),
             working_dir: PathBuf::from("."),
             model: None,
             effort: None,

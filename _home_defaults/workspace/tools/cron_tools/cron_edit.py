@@ -96,7 +96,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--timezone", help="IANA timezone for this job (e.g. 'Europe/Berlin')")
     parser.add_argument(
         "--provider",
-        choices=["claude", "codex", "gemini"],
+        choices=["antigravity", "claude", "codex", "gemini"],
         help="Provider override for this job.",
     )
     parser.add_argument(
@@ -236,9 +236,8 @@ def _rename_task_folder(
         notes.append("No legacy memory file found to rename.")
 
     rule_content = render_cron_task_claude_md(new_name)
-    (new_folder / "CLAUDE.md").write_text(rule_content, encoding="utf-8")
     (new_folder / "AGENTS.md").write_text(rule_content, encoding="utf-8")
-    notes.append("Updated CLAUDE.md/AGENTS.md for renamed memory file reference.")
+    notes.append("Updated AGENTS.md for renamed memory file reference.")
 
     return True, memory_renamed, notes
 

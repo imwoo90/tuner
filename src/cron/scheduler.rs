@@ -88,23 +88,17 @@ impl CronScheduler {
             if let Ok(jobs) = self.manager.list_jobs().await {
                 let mut updated_times = HashMap::new();
                 let mut updated_configs = HashMap::new();
-                for job in jobs {
-                    if job.enabled {
-                        let config_key = (job.schedule.clone(), job.timezone.clone());
-                        let has_changed = match loaded_jobs_configs.get(&job.id) {
-                            Some(old_cfg) => old_cfg != &config_key,
-                            None => true,
+                for job in jobs.into_iter().filter(|j| j.enabled) {
+                    let key = (job.schedule.clone(), job.timezone.clone());
+                    let changed = loaded_jobs_configs.get(&job.id) != Some(&key);
+                    if let Ok(next) = self.calculate_next_run(&job) {
+                        let next_run = if changed {
+                            next
+                        } else {
+                            next_run_times.get(&job.id).filter(|&&e| e > Utc::now()).copied().unwrap_or(next)
                         };
-
-                        if let Ok(next) = self.calculate_next_run(&job) {
-                            let next_run = if has_changed {
-                                next
-                            } else {
-                                next_run_times.get(&job.id).filter(|&&e| e > Utc::now()).copied().unwrap_or(next)
-                            };
-                            updated_times.insert(job.id.clone(), next_run);
-                            updated_configs.insert(job.id, config_key);
-                        }
+                        updated_times.insert(job.id.clone(), next_run);
+                        updated_configs.insert(job.id, key);
                     }
                 }
                 *next_run_times = updated_times;
@@ -166,35 +160,31 @@ impl CronScheduler {
     }
 
     async fn submit_cron_result(&self, title: &str, res: &str, stat: &str, cid: i64, tid: Option<i64>) {
+        let chat_opt = if cid == 0 { None } else { Some(cid) };
         let mut env = crate::bus::adapters::from_cron_result(
-            title, res, stat, Some(cid), tid, Some(&self.config.transport)
+            title, res, stat, chat_opt, tid, Some(&self.config.transport)
         );
         self.bus.submit(&mut env).await;
     }
 
     async fn run_cli_command(&self, job: &CronJob, workspace: std::path::PathBuf, cli: &AntigravityCli) -> Result<(), String> {
-        let job_id = job.id.clone();
-        let job_title = job.title.clone();
-        let chat_id = job.chat_id;
-        let topic_id = job.topic_id;
         let enriched = self.get_enriched_prompt(&job.agent_instruction, &job.task_folder);
-        let res = cli.send(&enriched, None, false, workspace).await;
-        match res {
+        match cli.send(&enriched, None, false, workspace).await {
             Ok(resp) => {
                 let status = if resp.is_error {
                     format!("error:exit_{}", resp.returncode.unwrap_or(1))
                 } else {
                     "success".to_string()
                 };
-                self.manager.update_run_status(&job_id, &status).await?;
+                self.manager.update_run_status(&job.id, &status).await?;
                 if !job.silent_on_success || resp.is_error {
-                    self.submit_cron_result(&job_title, &resp.result, &status, chat_id, topic_id).await;
+                    self.submit_cron_result(&job.title, &resp.result, &status, job.chat_id, job.topic_id).await;
                 }
             }
             Err(e) => {
                 let err_status = format!("error:{}", e);
-                self.manager.update_run_status(&job_id, &err_status).await?;
-                self.submit_cron_result(&job_title, "", &err_status, chat_id, topic_id).await;
+                self.manager.update_run_status(&job.id, &err_status).await?;
+                self.submit_cron_result(&job.title, "", &err_status, job.chat_id, job.topic_id).await;
             }
         }
         Ok(())
@@ -220,6 +210,12 @@ impl CronScheduler {
         }
 
         let mut jc = (*self.config).clone();
+        if let Some(prof_dir) = self.manager.jobs_path().parent() {
+            let prof_cfg = prof_dir.join("config").join("config.json");
+            if prof_cfg.is_file() {
+                let _ = jc.merge_profile_file(&prof_cfg);
+            }
+        }
         jc.working_dir = workspace.clone();
         jc.chat_id = job.chat_id;
         jc.topic_id = job.topic_id;

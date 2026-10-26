@@ -85,8 +85,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["claude", "codex", "gemini"],
-        help="Change CLI provider (claude, codex, or gemini)",
+        choices=["antigravity", "claude", "codex", "gemini"],
+        help="Change CLI provider (defaults to antigravity)",
     )
     parser.add_argument(
         "--model",

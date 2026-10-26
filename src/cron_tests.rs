@@ -195,7 +195,7 @@ mod tests {
         let cmd = cli.build_command("Prompt", None, false);
         assert!(cmd.contains(&"--model".to_string()));
         let idx = cmd.iter().position(|s| s == "--model").unwrap();
-        assert_eq!(cmd[idx + 1], "sonnet");
+        assert_eq!(cmd[idx + 1], "claude-sonnet-5-5");
     }
 
     #[test]
@@ -248,7 +248,7 @@ mod tests {
         let cli = AntigravityCli::new(jc);
         let cmd = cli.build_command("Prompt", None, false);
         let idx = cmd.iter().position(|s| s == "--model").unwrap();
-        assert_eq!(cmd[idx + 1], "opus");
+        assert_eq!(cmd[idx + 1], "claude-opus-5-5");
 
         job.provider = Some("antigravity".to_string());
         let mut jc2 = cfg.clone();

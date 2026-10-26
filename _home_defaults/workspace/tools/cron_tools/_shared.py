@@ -36,8 +36,8 @@ CONFIG_PATH = TUNER_HOME / "config" / "config.json"
 JOBS_PATH = TUNER_HOME / "cron_jobs.json"
 CRON_TASKS_DIR = _WORKSPACE_DIR / "cron_tasks"
 
-# Provider rule files — only create for authenticated providers.
-_RULE_FILENAMES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
+# Provider rule files — Antigravity uses AGENTS.md.
+_RULE_FILENAMES = ("AGENTS.md",)
 
 
 def read_user_timezone() -> str:
@@ -86,7 +86,7 @@ Complete your task autonomously and update memory when done.
 ## Rules
 
 - Stay focused on this task only. Do not deviate.
-- Do not modify files outside this task folder.
+- Do not modify unrelated project files outside the scope of `TASK_DESCRIPTION.md`.
 - Check whether all scripts are already present in the script folder! (IF they are needed!)
 - Use `.venv` for Python dependencies: `source .venv/bin/activate`
 
