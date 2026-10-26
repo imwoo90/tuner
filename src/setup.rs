@@ -69,8 +69,108 @@ pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
     let service_file = systemd_dir.join("tuner.service");
     std::fs::write(&service_file, unit_content).map_err(|e| e.to_string())?;
     println!("🤖 [tuner] Installed successfully to {:?}", service_file);
+
+    install_agy_vault_systemd_if_present(&home, &systemd_dir);
+
     println!("💡 Run: systemctl --user daemon-reload && systemctl --user restart tuner");
     Ok(())
+}
+
+/// Locates the `agy-vault` companion binary in standard user/system directories.
+pub fn find_agy_vault_bin(home: &str) -> Option<std::path::PathBuf> {
+    let candidates = [
+        std::path::PathBuf::from(home).join(".local/bin/agy-vault"),
+        std::path::PathBuf::from(home).join(".tuner/bin/agy-vault"),
+        std::path::PathBuf::from("/usr/local/bin/agy-vault"),
+        std::path::PathBuf::from("/usr/bin/agy-vault"),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+fn install_agy_vault_systemd_if_present(home: &str, systemd_dir: &Path) {
+    let agy_dir = std::path::PathBuf::from(home).join(".gemini/antigravity-cli");
+    let Some(vault_bin) = find_agy_vault_bin(home) else {
+        return;
+    };
+    if !agy_dir.is_dir() {
+        return;
+    }
+    let vault_service = systemd_dir.join("agy-vault.service");
+    if vault_service.exists() {
+        println!("🗄️ [tuner] Existing companion service preserved at {:?}", vault_service);
+        return;
+    }
+    let unit = format!(
+        "[Unit]\nDescription=Zero-Knowledge Antigravity Session Preservation & Auto-Restore Daemon (agy-vault)\n\
+         After=default.target\nStartLimitIntervalSec=0\n\n[Service]\nType=simple\n\
+         ExecStart={} daemon --poll-ms 1000\nRestart=always\nRestartSec=3\n\
+         Nice=5\nOOMScoreAdjust=-500\n\n[Install]\nWantedBy=default.target\n",
+        vault_bin.to_string_lossy()
+    );
+    if std::fs::write(&vault_service, unit).is_ok() {
+        println!("🗄️ [tuner] Companion service installed to {:?}", vault_service);
+    }
+}
+
+/// Returns `true` if an `agy-vault daemon` process is already running in `/proc`.
+pub fn is_agy_vault_daemon_running() -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if !name.to_string_lossy().chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        if let Ok(cmdline) = std::fs::read(entry.path().join("cmdline")) {
+            let text = String::from_utf8_lossy(&cmdline);
+            if text.contains("agy-vault") && text.contains("daemon") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Ensures `agy-vault` binary patch and companion daemon are active when using Antigravity.
+pub fn ensure_agy_vault_companion(config: &CliConfig) {
+    if config.provider != "antigravity" {
+        return;
+    }
+    if std::env::var("TUNER_DISABLE_AGY_VAULT").ok().as_deref() == Some("1") {
+        return;
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let agy_dir = std::path::PathBuf::from(&home).join(".gemini/antigravity-cli");
+    if !agy_dir.is_dir() {
+        return;
+    }
+    let Some(vault_bin) = find_agy_vault_bin(&home) else {
+        return;
+    };
+    if is_agy_vault_daemon_running() {
+        println!("🗄️ [tuner] agy-vault companion daemon is already active.");
+        return;
+    }
+    let _ = std::process::Command::new(&vault_bin)
+        .arg("patch-binary")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match std::process::Command::new(&vault_bin)
+        .args(["daemon", "--poll-ms", "1000"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(child) => println!(
+            "🗄️ [tuner] Spawned agy-vault companion daemon (PID: {}, bin: {:?})",
+            child.id(),
+            vault_bin
+        ),
+        Err(e) => eprintln!("⚠️ [tuner] Failed to spawn agy-vault companion daemon: {}", e),
+    }
 }
 
 /// Executes `override_profile_config` (override profile config).

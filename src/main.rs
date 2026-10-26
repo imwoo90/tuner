@@ -328,6 +328,8 @@ async fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    setup::ensure_agy_vault_companion(&config);
+
     if let Some(ref p) = worker_profile {
         println!("🤖 [tuner] Starting Telegram bot worker for '{}'...", p);
         telegram::run_bot(config, paths).await

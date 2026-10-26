@@ -101,3 +101,16 @@ fn test_merge_profile_file_overrides_fields() {
     assert_eq!(config.allowed_group_ids, vec![-111]); // preserved from global
     assert_eq!(config.language, Some("ko".to_string())); // overridden
 }
+
+#[test]
+fn test_find_agy_vault_bin_resolution() {
+    let dir = tempfile::tempdir().unwrap();
+    let home_str = dir.path().to_string_lossy().to_string();
+    let tuner_bin_dir = dir.path().join(".tuner/bin");
+    std::fs::create_dir_all(&tuner_bin_dir).unwrap();
+    let fake_vault = tuner_bin_dir.join("agy-vault");
+    std::fs::write(&fake_vault, "#!/bin/sh\n").unwrap();
+
+    let found = crate::setup::find_agy_vault_bin(&home_str);
+    assert_eq!(found, Some(fake_vault));
+}

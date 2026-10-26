@@ -28,6 +28,13 @@ docker cp "$RELEASE_BIN" "$CONTAINER_NAME:$CONTAINER_HOME/.tuner/bin/tuner.new"
 docker exec "$CONTAINER_NAME" mv -f "$CONTAINER_HOME/.tuner/bin/tuner.new" "$CONTAINER_HOME/.tuner/bin/tuner"
 docker exec "$CONTAINER_NAME" chmod +x "$CONTAINER_HOME/.tuner/bin/tuner"
 
+# Sync companion agy-vault binary if present on host
+if [ -f "$HOME/.local/bin/agy-vault" ]; then
+    docker cp "$HOME/.local/bin/agy-vault" "$CONTAINER_NAME:$CONTAINER_HOME/.tuner/bin/agy-vault.new"
+    docker exec "$CONTAINER_NAME" mv -f "$CONTAINER_HOME/.tuner/bin/agy-vault.new" "$CONTAINER_HOME/.tuner/bin/agy-vault"
+    docker exec "$CONTAINER_NAME" chmod +x "$CONTAINER_HOME/.tuner/bin/agy-vault"
+fi
+
 # Copy _home_defaults assets
 if [ -d "$DEFAULTS_DIR" ]; then
     docker exec "$CONTAINER_NAME" rm -rf "$CONTAINER_HOME/.tuner/bin/_home_defaults"
