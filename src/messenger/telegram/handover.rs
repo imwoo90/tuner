@@ -14,12 +14,6 @@ pub use super::handover_helpers::*;
 /// Structured representation of compressed topic context for handover.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TopicHandoverContext {
-    /// Topic id.
-    pub topic_id: Option<i64>,
-    /// Topic name.
-    pub topic_name: Option<String>,
-    /// Previous session id.
-    pub previous_session_id: String,
     /// Topic objective.
     pub topic_objective: String,
     /// Agreed decisions.
@@ -174,9 +168,6 @@ pub fn build_topic_handover(
     let prompt = format_handover_prompt(sid_ref, &label, &obj, &decs, &prog, &excs);
 
     Some(TopicHandoverContext {
-        topic_id,
-        topic_name: resolved_name,
-        previous_session_id: session_id.to_string(),
         topic_objective: obj,
         agreed_decisions: decs,
         current_progress: prog,

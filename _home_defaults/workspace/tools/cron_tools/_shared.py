@@ -46,9 +46,6 @@ GLOBAL_CONFIG_PATH = (
 JOBS_PATH = TUNER_HOME / "cron_jobs.json"
 CRON_TASKS_DIR = _WORKSPACE_DIR / "cron_tasks"
 
-# Provider rule files — Antigravity uses AGENTS.md.
-_RULE_FILENAMES = ("AGENTS.md",)
-
 
 def read_user_timezone() -> str:
     """Read user_timezone from profile or global config.json. Returns empty string if not set."""
@@ -65,24 +62,8 @@ def read_user_timezone() -> str:
     return ""
 
 
-def detect_rule_filenames() -> list[str]:
-    """Determine which rule files to create based on parent workspace/ contents.
-
-    Checks which provider rule files (CLAUDE.md, AGENTS.md, GEMINI.md) exist
-    in the ``workspace/`` or ``cron_tasks/`` root.
-
-    Falls back to ``["AGENTS.md"]`` when no rule files are found.
-    """
-    found = [
-        name
-        for name in _RULE_FILENAMES
-        if (CRON_TASKS_DIR / name).is_file() or (_WORKSPACE_DIR / name).is_file()
-    ]
-    return found or ["AGENTS.md"]
-
-
-def render_cron_task_claude_md(name: str) -> str:
-    """Render fixed CLAUDE.md/AGENTS.md content for a cron task folder."""
+def render_cron_task_agents_md(name: str) -> str:
+    """Render fixed AGENTS.md content for a cron task folder."""
     return f"""\
 # Your Mission
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Add a cron job: creates both the JSON entry and the cron_task folder.
 
-The CronObserver detects the JSON change automatically and schedules the job.
+The CronScheduler detects the JSON change automatically and schedules the job.
 
 Usage:
-    python tools/cron_tools/cron_add.py \
+    python3 tools/cron_tools/cron_add.py \
         --name "daily-report" \
         --title "Daily Report" \
         --description "Generate daily status report" \
@@ -23,10 +23,9 @@ from pathlib import Path
 from _shared import (
     CRON_TASKS_DIR,
     JOBS_PATH,
-    detect_rule_filenames,
     load_jobs_or_default,
     read_user_timezone,
-    render_cron_task_claude_md,
+    render_cron_task_agents_md,
     sanitize_name,
     save_jobs,
 )
@@ -39,10 +38,10 @@ _TUTORIAL = """\
 CRON ADD -- Create a scheduled cron job with its own workspace.
 
 This tool does TWO things in one step:
-  1. Creates a cron_task folder (rule files for authenticated providers, TASK_DESCRIPTION.md, Memory, scripts/)
+  1. Creates a cron_task folder (AGENTS.md, TASK_DESCRIPTION.md, Memory, scripts/)
   2. Adds a job entry to cron_jobs.json
 
-The CronObserver picks up the JSON change automatically and schedules the job.
+The CronScheduler picks up the JSON change automatically and schedules the job.
 
 REQUIRED PARAMETERS:
   --name          Unique job/folder ID (lowercase, hyphens ok)
@@ -51,31 +50,20 @@ REQUIRED PARAMETERS:
   --schedule      Cron expression (see format below)
 
 OPTIONAL:
-  --timezone      IANA timezone override for this job (e.g. 'Europe/Berlin')
+  --timezone      IANA timezone override for this job (e.g. 'Asia/Seoul')
                   If omitted, uses user_timezone from config.json.
                   If config has no user_timezone either, falls back to UTC.
 
 EXECUTION OVERRIDES (optional, override global config for this specific job):
-  --provider          CLI provider: 'claude', 'codex', or 'gemini' (defaults to global config)
-  --model             Model name (e.g. 'opus', 'sonnet', 'gpt-5.4')
-  --reasoning-effort  Thinking level for Codex: 'low', 'medium', 'high', 'xhigh'
-  --cli-parameters    Additional CLI flags as JSON array (e.g. '["--chrome"]' for Claude only)
+  --provider          CLI provider: 'antigravity' (defaults to global config)
+  --model             Model name (e.g. 'gemini-3.8-flash', 'gemini-4-argon', 'claude-opus-5-5')
+  --effort            Thinking effort level: 'low', 'medium', 'high'
+  --cli-parameters    Additional CLI flags as JSON array
 
 QUIET HOURS (optional, prevent jobs from running during specific hours):
   --quiet-start       Start of quiet hours (0-23, job WON'T run during this time)
   --quiet-end         End of quiet hours (0-23, exclusive)
-                      If omitted, uses global heartbeat.quiet_start/quiet_end from config.
                       Supports wrap-around: --quiet-start 21 --quiet-end 8 means 21:00-07:59.
-                      Set both to same value to disable quiet hours for this job.
-                      Example: --quiet-start 22 --quiet-end 7 (no execution 22:00-06:59)
-
-DEPENDENCIES (optional, prevent concurrent resource conflicts):
-  --dependency        Resource identifier (e.g. 'chrome_browser', 'api_token', 'database')
-                      Jobs with the SAME dependency run sequentially (one at a time, FIFO).
-                      Jobs with DIFFERENT dependencies or no dependency run in parallel.
-                      Use this when jobs share resources that can't be used concurrently.
-                      Examples: --dependency chrome_browser (multiple browser automation jobs)
-                                --dependency api_rate_limit (API calls with rate limiting)
 
 DELIVERY (optional):
   --silent-on-success Skip the Telegram push when the job succeeds (errors are
@@ -84,8 +72,6 @@ DELIVERY (optional):
 
 TIMEZONE REMINDER:
   Hours in cron expressions are interpreted in the user's timezone.
-  If user_timezone is NOT set in config.json, ask the user where they are
-  and set it BEFORE creating the job. Otherwise schedules will fire in UTC.
   Use cron_time.py to check the current timezone configuration.
 
 CRON EXPRESSION FORMAT:
@@ -103,62 +89,6 @@ EXAMPLES:
   "0 9 * * 1-5"    Weekdays at 09:00
   "0 0 1 * *"      First day of each month at midnight
   "30 8,12,18 * * *"  At 08:30, 12:30, and 18:30
-
-FULL EXAMPLES:
-
-Basic job (uses global config):
-  python tools/cron_tools/cron_add.py \\
-      --name "weather-check" \\
-      --title "Weather Check Muenster" \\
-      --description "Check current weather and summarize" \\
-      --schedule "0 8 * * *"
-
-Codex job with high reasoning:
-  python tools/cron_tools/cron_add.py \\
-      --name "data-analysis" \\
-      --title "Daily Data Analysis" \\
-      --description "Analyze data with extended thinking" \\
-      --schedule "0 9 * * *" \\
-      --provider codex \\
-      --model gpt-5.4 \\
-      --reasoning-effort high
-
-Claude job with browser automation:
-  python tools/cron_tools/cron_add.py \\
-      --name "web-scraper" \\
-      --title "News Scraper" \\
-      --description "Scrape news sites with browser" \\
-      --schedule "*/30 * * * *" \\
-      --provider claude \\
-      --model sonnet \\
-      --cli-parameters '["--chrome"]'
-
-Job with quiet hours (don't run at night):
-  python tools/cron_tools/cron_add.py \\
-      --name "daily-summary" \\
-      --title "Daily Summary" \\
-      --description "Summarize day's activities" \\
-      --schedule "0 20 * * *" \\
-      --quiet-start 22 \\
-      --quiet-end 8
-  # This job is scheduled for 20:00, but if it's delayed it won't run 22:00-07:59
-
-Job with dependency (prevent Chrome conflicts):
-  python tools/cron_tools/cron_add.py \\
-      --name "linkedin-scraper" \\
-      --title "LinkedIn Scraper" \\
-      --description "Scrape LinkedIn with browser" \\
-      --schedule "0 10 * * *" \\
-      --dependency chrome_browser \\
-      --cli-parameters '["--chrome"]'
-  # If multiple jobs have --dependency chrome_browser, they run one at a time
-
-WHAT HAPPENS AFTER CREATION:
-  1. Open cron_tasks/<name>/TASK_DESCRIPTION.md
-  2. Fill in the Assignment and Output sections with specific instructions
-  3. If scripts are needed: create them in cron_tasks/<name>/scripts/
-  4. If Python packages are needed: create a .venv in the task folder
-  5. The CronObserver triggers at the scheduled time and spawns a fresh agent
 """
 
 
@@ -186,9 +116,8 @@ def _create_task_folder(name: str, title: str, description: str) -> Path:
     task_dir = CRON_TASKS_DIR / name
     task_dir.mkdir(parents=True, exist_ok=False)
 
-    rule_content = render_cron_task_claude_md(name)
-    for filename in detect_rule_filenames():
-        (task_dir / filename).write_text(rule_content, encoding="utf-8")
+    rule_content = render_cron_task_agents_md(name)
+    (task_dir / "AGENTS.md").write_text(rule_content, encoding="utf-8")
 
     task_desc = _render_task_description_md(title, description)
     (task_dir / "TASK_DESCRIPTION.md").write_text(task_desc, encoding="utf-8")
@@ -210,30 +139,29 @@ def main() -> None:
     parser.add_argument("--schedule", help="Cron expression (e.g. '0 9 * * *')")
     parser.add_argument(
         "--timezone",
-        help="IANA timezone for this job (e.g. 'Europe/Berlin'). "
+        help="IANA timezone for this job (e.g. 'Asia/Seoul'). "
         "Overrides config user_timezone for this job only.",
     )
     parser.add_argument(
         "--provider",
-        choices=["antigravity", "claude", "codex", "gemini"],
-        help=(
-            "CLI provider for this job (defaults to antigravity / global config)."
-        ),
+        choices=["antigravity"],
+        help="CLI provider for this job (defaults to antigravity).",
     )
     parser.add_argument(
         "--model",
-        help="Model name for this job (e.g. 'opus', 'sonnet', 'gpt-5.4'). "
+        help="Model name for this job (e.g. 'gemini-3.8-flash', 'gemini-4-argon', 'claude-opus-5-5'). "
         "If omitted, uses global config.",
     )
     parser.add_argument(
-        "--reasoning-effort",
-        choices=["low", "medium", "high", "xhigh"],
-        help="Thinking level for Codex jobs only (low, medium, high, xhigh). "
+        "--effort",
+        dest="effort",
+        choices=["low", "medium", "high"],
+        help="Thinking effort level for this job (low, medium, high). "
         "If omitted, uses global config or model default.",
     )
     parser.add_argument(
         "--cli-parameters",
-        help="Additional CLI flags as JSON array (e.g. '[\"--chrome\"]'). "
+        help="Additional CLI flags as JSON array. "
         "If omitted, uses only global config parameters.",
     )
     parser.add_argument(
@@ -241,21 +169,14 @@ def main() -> None:
         type=int,
         choices=range(24),
         metavar="HOUR",
-        help="Start of quiet hours (0-23). Job won't run during quiet hours. "
-        "If omitted, uses global heartbeat.quiet_start from config.",
+        help="Start of quiet hours (0-23). Job won't run during quiet hours.",
     )
     parser.add_argument(
         "--quiet-end",
         type=int,
         choices=range(24),
         metavar="HOUR",
-        help="End of quiet hours (0-23, exclusive). "
-        "If omitted, uses global heartbeat.quiet_end from config.",
-    )
-    parser.add_argument(
-        "--dependency",
-        help="Resource dependency (e.g. 'chrome_browser'). "
-        "Jobs with same dependency run sequentially, different dependencies run in parallel.",
+        help="End of quiet hours (0-23, exclusive).",
     )
     parser.add_argument(
         "--silent-on-success",
@@ -309,8 +230,8 @@ def main() -> None:
         job["provider"] = args.provider
     if args.model:
         job["model"] = args.model
-    if args.reasoning_effort:
-        job["reasoning_effort"] = args.reasoning_effort
+    if args.effort:
+        job["effort"] = args.effort
     if args.cli_parameters:
         try:
             cli_params = json.loads(args.cli_parameters)
@@ -326,8 +247,6 @@ def main() -> None:
         job["quiet_start"] = args.quiet_start
     if args.quiet_end is not None:
         job["quiet_end"] = args.quiet_end
-    if args.dependency:
-        job["dependency"] = args.dependency.strip()
     if args.silent_on_success:
         job["silent_on_success"] = True
     chat_id = os.environ.get("TUNER_CHAT_ID", "")
@@ -340,8 +259,6 @@ def main() -> None:
     job["transport"] = transport
     data["jobs"].append(job)
     save_jobs(JOBS_PATH, data)
-
-    # The CronObserver detects the mtime change and auto-schedules
 
     task_path = f"cron_tasks/{name}"
     effective_tz = args.timezone.strip() if args.timezone else read_user_timezone()
@@ -363,11 +280,11 @@ def main() -> None:
             f"If Python packages are needed: create a .venv in {task_path}/ "
             "and install dependencies.",
             f"The agent's memory is {task_path}/{name}_MEMORY.md. "
-            "CLAUDE.md already tells the agent to read and update it.",
+            "AGENTS.md already tells the agent to read and update it.",
             f"To change title/description/schedule/name/enabled later: "
             f'python3 tools/cron_tools/cron_edit.py "{name}" ...',
             "To modify this task later: edit TASK_DESCRIPTION.md only. "
-            "CLAUDE.md and AGENTS.md are fixed framework files.",
+            "AGENTS.md is a fixed framework file.",
             f'To REMOVE this job later: python3 tools/cron_tools/cron_remove.py "{name}"',
         ],
     }
@@ -376,7 +293,7 @@ def main() -> None:
             "IMPORTANT: No user_timezone is configured. "
             "Cron schedules will fire in UTC which is likely WRONG for the user. "
             "Ask the user for their timezone (country/city) and set user_timezone "
-            'in config.json (e.g. "Europe/Berlin", "America/New_York").'
+            'in config.json (e.g. "Asia/Seoul", "Europe/Berlin", "America/New_York").'
         )
     if name != args.name.strip():
         result["name_sanitized"] = True

@@ -5,11 +5,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::supervisor::{Supervisor, terminate_child};
+    use crate::supervisor::Supervisor;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
-    use std::time::Duration;
     use tempfile::TempDir;
 
     fn create_script(dir: &TempDir, name: &str, content: &str) -> PathBuf {
@@ -25,7 +24,7 @@ mod tests {
     async fn test_clean_exit_stops_supervisor() {
         let dir = TempDir::new().unwrap();
         let script = create_script(&dir, "mock.sh", "#!/bin/sh\nexit 0\n");
-        let sv = Supervisor::new(script);
+        let sv = Supervisor::with_args(script, Vec::new());
         assert!(sv.run().await.is_ok());
     }
 
@@ -38,7 +37,7 @@ mod tests {
             state_file.display(), state_file.display(), state_file.display()
         );
         let script = create_script(&dir, "mock.sh", &script_content);
-        let sv = Supervisor::new(script);
+        let sv = Supervisor::with_args(script, Vec::new());
         assert!(sv.run().await.is_ok());
         assert!(!state_file.exists());
     }
@@ -52,7 +51,7 @@ mod tests {
             state_file.display(), state_file.display(), state_file.display()
         );
         let script = create_script(&dir, "mock.sh", &script_content);
-        let sv = Supervisor::new(script);
+        let sv = Supervisor::with_args(script, Vec::new());
         assert!(sv.run().await.is_ok());
     }
 
@@ -65,25 +64,7 @@ mod tests {
             state_file.display(), state_file.display(), state_file.display(), state_file.display()
         );
         let script = create_script(&dir, "mock.sh", &script_content);
-        let sv = Supervisor::new(script);
+        let sv = Supervisor::with_args(script, Vec::new());
         assert!(sv.run().await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_terminate_sends_sigterm() {
-        let dir = TempDir::new().unwrap();
-        let script = create_script(&dir, "mock.sh", "#!/bin/sh\nsleep 100\n");
-        let mut child = tokio::process::Command::new(script).spawn().unwrap();
-        let res = terminate_child(&mut child, Duration::from_millis(50)).await;
-        assert!(res.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_terminate_kills_on_timeout() {
-        let dir = TempDir::new().unwrap();
-        let script = create_script(&dir, "mock.sh", "#!/bin/sh\ntrap \"\" TERM\nsleep 100\n");
-        let mut child = tokio::process::Command::new(script).spawn().unwrap();
-        let res = terminate_child(&mut child, Duration::from_millis(50)).await;
-        assert!(res.is_ok());
     }
 }

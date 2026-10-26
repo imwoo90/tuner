@@ -7,11 +7,11 @@
 //! ## Search Tags
 //! #workspace-layout, #rules-init, #constraints-sync
 
-use crate::workspace::paths::DuctorPaths;
+use crate::workspace::paths::TunerPaths;
 use std::path::Path;
 
 /// Executes `create_workspace_directories` (create workspace directories).
-pub fn create_workspace_directories(paths: &DuctorPaths) {
+pub fn create_workspace_directories(paths: &TunerPaths) {
     let required_workspace_dirs = [
         "",
         "memory_system",
@@ -42,7 +42,7 @@ pub fn create_workspace_directories(paths: &DuctorPaths) {
 }
 
 /// Executes `migrate_legacy_data` (migrate legacy data).
-pub fn migrate_legacy_data(paths: &DuctorPaths) {
+pub fn migrate_legacy_data(paths: &TunerPaths) {
     if let Some(ref p) = paths.profile
         && p == "default" {
             let legacy_sessions = paths.tuner_home.join("sessions.json");

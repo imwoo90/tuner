@@ -2,10 +2,10 @@
 use crate::cli::antigravity::AntigravityCli;
 use crate::config::CliConfig;
 use crate::cli::{AgentProvider, StreamEvent};
+use crate::telegram::TEST_ENV_MUTEX;
+use crate::telegram::test_helpers::helpers::EnvGuard;
 use std::path::{Path, PathBuf};
 use futures::StreamExt;
-
-static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn test_build_env_injects_agent_info() {
@@ -25,12 +25,11 @@ fn test_build_env_injects_agent_info() {
     assert_eq!(env.get("NO_COLOR").unwrap(), "1");
     assert!(env.contains_key("SSH_CONNECTION"));
     assert!(env.contains_key("TUNER_HOME"));
-    assert!(env.contains_key("TUNER_SHARED_MEMORY_PATH"));
 }
 
 #[test]
 fn test_strip_ansi_removes_color_and_control_codes() {
-    use super::provider::strip_ansi;
+    use super::pty_spawner::strip_ansi;
     let colored = "\x1b[?2004h\x1b[>4;2m\x1b[>1u\x1b[94m> \x1b[mHello \x1b[?25hWorld\x1b[2J";
     let clean = strip_ansi(colored);
     assert_eq!(clean, "> Hello World");
@@ -69,16 +68,10 @@ fi
 
 #[tokio::test]
 async fn test_send_streaming_delegates_to_send_as_delta_and_result() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
     create_mock_agy(temp_dir.path());
-    
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
-    path_env = format!("{}:{}", temp_dir.path().to_string_lossy(), path_env);
-    unsafe {
-        std::env::set_var("PATH", path_env);
-        std::env::set_var("HOME", temp_dir.path().to_string_lossy().to_string());
-    }
+    let _env = EnvGuard::new(&temp_dir);
     
     let config = CliConfig {
         provider: "antigravity".to_string(),
@@ -111,16 +104,10 @@ async fn test_send_streaming_delegates_to_send_as_delta_and_result() {
 
 #[tokio::test]
 async fn test_send_prefers_transcript_over_stdout() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
     write_mock_script(temp_dir.path(), "#!/bin/sh\necho 'verbose narration on stdout'\n");
-    
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
-    path_env = format!("{}:{}", temp_dir.path().to_string_lossy(), path_env);
-    unsafe {
-        std::env::set_var("PATH", path_env);
-        std::env::set_var("HOME", temp_dir.path().to_string_lossy().to_string());
-    }
+    let _env = EnvGuard::new(&temp_dir);
 
     let workspace = temp_dir.path().to_path_buf();
     let cache_dir = temp_dir.path().join(".gemini").join("antigravity-cli").join("cache");
@@ -153,16 +140,10 @@ async fn test_send_prefers_transcript_over_stdout() {
 
 #[tokio::test]
 async fn test_send_falls_back_to_stdout_without_transcript() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
     write_mock_script(temp_dir.path(), "#!/bin/sh\necho '{\"result\":\"plain stdout answer\"}'\n");
-    
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
-    path_env = format!("{}:{}", temp_dir.path().to_string_lossy(), path_env);
-    unsafe {
-        std::env::set_var("PATH", path_env);
-        std::env::set_var("HOME", temp_dir.path().to_string_lossy().to_string());
-    }
+    let _env = EnvGuard::new(&temp_dir);
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
@@ -178,7 +159,7 @@ async fn test_send_falls_back_to_stdout_without_transcript() {
 
 #[tokio::test]
 async fn test_send_automatically_trusts_workspace() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
     
     // Create the expected parent folder structure inside the mock HOME
@@ -186,13 +167,7 @@ async fn test_send_automatically_trusts_workspace() {
     std::fs::create_dir_all(&parent).unwrap();
 
     write_mock_script(temp_dir.path(), "#!/bin/sh\necho '{\"result\":\"ok\"}'\n");
-    
-    let mut path_env = std::env::var("PATH").unwrap_or_default();
-    path_env = format!("{}:{}", temp_dir.path().to_string_lossy(), path_env);
-    unsafe {
-        std::env::set_var("PATH", path_env);
-        std::env::set_var("HOME", temp_dir.path().to_string_lossy().to_string());
-    }
+    let _env = EnvGuard::new(&temp_dir);
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
@@ -219,12 +194,10 @@ async fn test_send_automatically_trusts_workspace() {
 
 #[test]
 fn test_is_session_alive_detects_valid_and_expired_sessions() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
+    let _env = EnvGuard::new(&temp_dir);
     let home = temp_dir.path();
-    unsafe {
-        std::env::set_var("HOME", home.to_string_lossy().to_string());
-    }
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
@@ -254,12 +227,10 @@ fn test_is_session_alive_detects_valid_and_expired_sessions() {
 
 #[tokio::test]
 async fn test_run_in_pty_session_fails_fast_on_expired_session() {
-    let _guard = ENV_MUTEX.lock().unwrap();
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();
+    let _env = EnvGuard::new(&temp_dir);
     let home = temp_dir.path();
-    unsafe {
-        std::env::set_var("HOME", home.to_string_lossy().to_string());
-    }
 
     let config = CliConfig {
         provider: "antigravity".to_string(),

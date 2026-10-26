@@ -6,7 +6,7 @@
 //!
 //! ## Submodules
 //! - [`paths`] (`paths.rs`): Verifies path targets are restricted to authorized workspace directories.
-//! - [`vault`] (`vault.rs`): Encrypted per-profile credential store and RFC 6238 TOTP generator.
+//! - [`vault`] (`vault.rs`): Encrypted per-profile credential store (`XSalsa20-Poly1305`) and session persistence.
 //! - [`vault_cli`] (`vault_cli.rs`): Zero-knowledge `--vault` CLI runner with output secret redaction.
 //!
 //! ## Search Tags

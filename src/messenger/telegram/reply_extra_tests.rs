@@ -34,14 +34,14 @@ mod tests {
         // Scenario 1: Session effort is None, should fallback to config.effort (high)
         let (mut sess, _) = mgr.resolve_session(&key, "antigravity", "gemini-3.6-flash").await.unwrap();
         sess.effort = None;
-        mgr.update_session(&sess, 0.0, 0).await.unwrap();
+        mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
         assert_eq!(model_str, "gemini-3.6-flash (effort: high)");
         
         // Scenario 2: Session effort is Some("medium"), should use session effort
         sess.effort = Some("medium".to_string());
-        mgr.update_session(&sess, 0.0, 0).await.unwrap();
+        mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
         assert_eq!(model_str, "gemini-3.6-flash (effort: medium)");
@@ -49,7 +49,7 @@ mod tests {
         // Scenario 3: Config effort is None and session effort is None
         cfg.effort = None;
         sess.effort = None;
-        mgr.update_session(&sess, 0.0, 0).await.unwrap();
+        mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
         assert_eq!(model_str, "gemini-3.6-flash");

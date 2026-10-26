@@ -5,7 +5,7 @@ edition = "2024"
 license = "Apache-2.0"
 
 [dependencies]
-tokio = { version = "1.38", features = ["full", "test-util"] }
+tokio = { version = "1.38", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 async-trait = "0.1"
@@ -17,7 +17,6 @@ chrono-tz = "0.9"
 regex = "1.10"
 html-escape = "0.2"
 cron = "0.12"
-filetime = "0.2"
 toml = "0.8"
 flate2 = "1.0"
 tar = "0.4"
@@ -32,7 +31,6 @@ sha2 = "0.10"
 sha1 = "0.10"
 hex = "0.4"
 base64 = "0.22"
-mime_guess = "2.0"
 rand = "0.8"
 anyhow = "1.0"
 url = "2.5"
@@ -43,8 +41,9 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2
 
 
 [dev-dependencies]
+filetime = "0.2"
 tempfile = "3.10"
-tower = { version = "0.4", features = ["util"] }
+tokio = { version = "1.38", features = ["test-util"] }
 
 [build-dependencies]
 syn = { version = "2.0", features = ["full", "visit"] }

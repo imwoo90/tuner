@@ -22,9 +22,9 @@ mod tests {
         }).to_string() + "\n";
         std::fs::write(&transcript, &turn1).unwrap();
 
-        let (s1, delta1, _) = parser.parse_log_delta(&transcript, Some(last_size));
-        last_size = s1;
-        assert_eq!(delta1.unwrap(), "Async turn 1");
+        let d1 = parser.parse_log_delta_structured(&transcript, Some(last_size));
+        last_size = d1.new_size;
+        assert_eq!(d1.formatted.unwrap(), "Async turn 1");
 
         // Reset parser state as done in check_and_dispatch_delta
         parser = AntigravityLogParser::new();
@@ -39,8 +39,8 @@ mod tests {
         let mut file = std::fs::OpenOptions::new().append(true).open(&transcript).unwrap();
         file.write_all(turn2.as_bytes()).unwrap();
 
-        let (_, delta2, _) = parser.parse_log_delta(&transcript, Some(last_size));
-        assert_eq!(delta2.unwrap(), "Async turn 2");
+        let d2 = parser.parse_log_delta_structured(&transcript, Some(last_size));
+        assert_eq!(d2.formatted.unwrap(), "Async turn 2");
     }
 
     #[test]

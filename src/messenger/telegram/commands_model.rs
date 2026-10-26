@@ -168,7 +168,7 @@ async fn handle_model_command_switch(
     let (model_part, effort_part) = parse_model_effort_args(args);
     sess.model = model_part;
     sess.effort = effort_part.clone();
-    let _ = sessions.update_session(&sess, 0.0, 0).await;
+    let _ = sessions.preserve_session_identity(&sess).await;
     
     let sid = sess.get_session_id(&sess.provider);
     apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
@@ -236,7 +236,7 @@ pub(crate) async fn handle_effort_command(
         let level = args.trim().to_lowercase();
         if level == "high" || level == "medium" || level == "low" {
             sess.effort = Some(level.clone());
-            let _ = sessions.update_session(&sess, 0.0, 0).await;
+            let _ = sessions.preserve_session_identity(&sess).await;
             let sid = sess.get_session_id(&sess.provider);
             apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
             let status_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", level);

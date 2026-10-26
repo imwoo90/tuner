@@ -73,7 +73,7 @@ pub fn delete_old_files(path: &Path, max_age_days: u64) -> u64 {
                 walk(&entry_path, now, max_age, deleted_count, false);
             } else if entry_path.is_file() {
                 let fname = entry_path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                if matches!(fname, "RULES.md" | "AGENTS.md" | "CLAUDE.md" | "GEMINI.md" | ".gitkeep") {
+                if matches!(fname, "RULES.md" | "AGENTS.md" | ".gitkeep") {
                     continue;
                 }
                 if let Ok(metadata) = entry.metadata()

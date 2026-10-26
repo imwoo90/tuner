@@ -108,9 +108,9 @@ fn prompt_input(query: &str) -> Result<String, String> {
     Ok(input.trim().to_string())
 }
 
-fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
+fn run_setup_wizard(paths: &workspace::paths::TunerPaths) -> Result<(), String> {
     println!("🤖 [tuner] Setup Wizard");
-    workspace::init::init_workspace(paths)?;
+    workspace::sync::init_workspace(paths)?;
     
     let token = loop {
         let t = prompt_input("Enter your Telegram Bot Token: ")?;
@@ -126,6 +126,7 @@ fn run_setup_wizard(paths: &workspace::paths::DuctorPaths) -> Result<(), String>
     if let Some(obj) = config_val.as_object_mut() {
         obj.insert("telegram_token".to_string(), serde_json::Value::String(token));
         obj.insert("allowed_user_ids".to_string(), serde_json::Value::Array(Vec::new()));
+        obj.insert("allowed_group_ids".to_string(), serde_json::Value::Array(Vec::new()));
     }
 
     let config_content = serde_json::to_string_pretty(&config_val).map_err(|e| e.to_string())?;
@@ -201,7 +202,7 @@ async fn monitor_workers(workers: &mut [(String, tokio::process::Child)], curren
     Ok(())
 }
 
-async fn run_master_mode(config: config::CliConfig, paths: &workspace::paths::DuctorPaths) -> Result<(), String> {
+async fn run_master_mode(config: config::CliConfig, paths: &workspace::paths::TunerPaths) -> Result<(), String> {
     println!("🤖 [tuner] Starting in Master Mode (Supervisor)...");
     let current_exe = std::env::current_exe()
         .map_err(|e| format!("Failed to resolve current binary path: {}", e))?;
@@ -231,7 +232,7 @@ async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
         return Ok(Some(()));
     }
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("tuner {}\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|otp|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"));
+        println!("tuner {}\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"));
         return Ok(Some(()));
     }
     if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
@@ -279,7 +280,7 @@ async fn main() -> Result<(), String> {
     }
 
     let _ = setup::load_env_file(&paths.env_file());
-    workspace::init::init_workspace(&paths)?;
+    workspace::sync::init_workspace(&paths)?;
 
     let mut config = config::CliConfig::load_from_file(&paths.config_path())?;
     config.working_dir = paths.workspace().clone();

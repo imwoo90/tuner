@@ -121,10 +121,8 @@ async fn dispatch_terminal_event(
 
     if let Some(ask) = delta.ask_question {
         if let Some(turn) = active_turn { turn.typing.abort(); }
-        let sess_data = crate::session::data::SessionData {
-            session_id: Some(ctx.session_id.clone()),
-            ..Default::default()
-        };
+        let mut sess_data = crate::session::data::SessionData::default();
+        sess_data.set_session_id(&ctx.config.provider, &ctx.session_id);
         let _ = super::ask_process::handle_ask_question_event(
             &ctx.bot, ctx.chat_id, ctx.thread_id, ask, &sess_data, &ctx.config, &ctx.cli,
         ).await;

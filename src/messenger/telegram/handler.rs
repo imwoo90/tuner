@@ -178,7 +178,6 @@ pub(crate) async fn handle_message(
         cli,
         cron_manager,
         topic_cache,
-        bot_info,
     };
 
     if super::commands_registry::is_lock_free_command(&text) {

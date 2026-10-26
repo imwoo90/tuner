@@ -17,7 +17,7 @@ use super::commands;
 use super::reply;
 use super::callbacks;
 use super::handle_message;
-use crate::workspace::paths::DuctorPaths;
+use crate::workspace::paths::TunerPaths;
 
 pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>, config: &CliConfig) -> SessionManager {
     let tz = config.user_timezone.clone().unwrap_or_else(|| "UTC".to_string());
@@ -34,9 +34,8 @@ pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache
 
 fn spawn_webhook_if_enabled(
     cfg: Arc<CliConfig>,
-    cli: Arc<AntigravityCli>,
     bus: Arc<crate::bus::bus::MessageBus>,
-    paths: &DuctorPaths,
+    paths: &TunerPaths,
 ) {
     if !cfg.webhooks.enabled {
         return;
@@ -46,7 +45,6 @@ fn spawn_webhook_if_enabled(
         wh_mgr,
         paths.webhooks_path(),
         cfg,
-        cli,
     ));
     let obs_wire = crate::bus::observers_wire::ObserverManager {
         webhook: Some(wh_obs.clone()),
@@ -67,9 +65,9 @@ fn start_schedulers(
     cfg: Arc<CliConfig>,
     sess: Arc<SessionManager>,
     cli: Arc<AntigravityCli>,
-    paths: DuctorPaths,
+    paths: TunerPaths,
 ) -> Arc<crate::cron::manager::CronManager> {
-    let bus = Arc::new(crate::bus::bus::MessageBus::new());
+    let bus = Arc::new(crate::bus::bus::MessageBus::with_lock_pool(sess.lock_pool.clone()));
     let targets = if !cfg.allowed_group_ids.is_empty() {
         cfg.allowed_group_ids.clone()
     } else {
@@ -81,16 +79,16 @@ fn start_schedulers(
         sess.clone(),
         cfg.clone(),
     )));
-    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
+    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli, bus.clone())).start();
     let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
-    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli.clone(), bus.clone())).start();
-    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
+    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), bus.clone())).start();
+    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), paths.telegram_files_dir(), paths.output_to_user_dir()));
     tokio::spawn(async move { clean.start().await; });
     let skill_paths = paths.clone();
     tokio::spawn(async move {
         let _ = crate::workspace::skills::watch_skill_sync(&skill_paths, 30_000).await;
     });
-    spawn_webhook_if_enabled(cfg, cli, bus, &paths);
+    spawn_webhook_if_enabled(cfg, bus, &paths);
     cron
 }
 
@@ -131,7 +129,7 @@ fn spawn_restart_watcher(tuner_home: std::path::PathBuf) {
     });
 }
 
-fn spawn_web_warmup(paths: &DuctorPaths) {
+fn spawn_web_warmup(paths: &TunerPaths) {
     let review_path = paths.review_sessions_path();
     let vault_prof = paths.profile.clone().unwrap_or_else(|| "default".to_string());
     let vault_dir = paths.vault_dir();
@@ -146,7 +144,7 @@ fn spawn_web_warmup(paths: &DuctorPaths) {
 }
 
 /// Executes `run_bot` (run bot).
-pub async fn run_bot(config: CliConfig, paths: DuctorPaths) -> Result<(), String> {
+pub async fn run_bot(config: CliConfig, paths: TunerPaths) -> Result<(), String> {
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
     let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;
     let _ = commands::register_commands(&bot).await;

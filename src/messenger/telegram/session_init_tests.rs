@@ -32,7 +32,7 @@ mod tests {
         let (mut sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
 
         sess.set_session_id("antigravity", "expired-uuid-12345");
-        mgr.update_session(&sess, 0.0, 0).await.unwrap();
+        mgr.update_session(&sess).await.unwrap();
 
         let msg = make_msg(r#"{"message_id":13,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"hello"}"#);
 
@@ -63,7 +63,7 @@ mod tests {
         let (mut sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
 
         sess.set_session_id("antigravity", "mock-session-valid");
-        mgr.update_session(&sess, 0.0, 0).await.unwrap();
+        mgr.update_session(&sess).await.unwrap();
 
         let msg = make_msg(r#"{"message_id":14,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"hello"}"#);
 

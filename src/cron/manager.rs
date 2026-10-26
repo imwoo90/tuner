@@ -45,8 +45,9 @@ pub struct CronJob {
     pub provider: Option<String>,
     /// Model.
     pub model: Option<String>,
-    /// Reasoning effort.
-    pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    /// Effort.
+    pub effort: Option<String>,
     #[serde(default, deserialize_with = "deserialize_null_as_default")]
     /// Cli parameters.
     pub cli_parameters: Vec<String>,
@@ -54,8 +55,6 @@ pub struct CronJob {
     pub quiet_start: Option<u32>,
     /// Quiet end.
     pub quiet_end: Option<u32>,
-    /// Dependency.
-    pub dependency: Option<String>,
     #[serde(default, deserialize_with = "deserialize_null_as_default")]
     /// Chat id.
     pub chat_id: i64,
@@ -111,11 +110,10 @@ impl CronJob {
             last_run_status: None,
             provider: None,
             model: None,
-            reasoning_effort: None,
+            effort: None,
             cli_parameters: Vec::new(),
             quiet_start: None,
             quiet_end: None,
-            dependency: None,
             chat_id,
             topic_id,
             transport: "tg".to_string(),
@@ -149,6 +147,21 @@ impl CronManager {
         &self.jobs_path
     }
 
+    /// Resolves the fallback timezone from the profile's `config/config.json` (or `"UTC"`).
+    pub fn default_timezone(&self) -> String {
+        if let Some(parent) = self.jobs_path.parent() {
+            let cfg_path = parent.join("config").join("config.json");
+            if let Ok(content) = fs::read_to_string(&cfg_path)
+                && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+                && let Some(tz) = val.get("user_timezone").and_then(|v| v.as_str())
+                && !tz.is_empty()
+            {
+                return tz.to_string();
+            }
+        }
+        "UTC".to_string()
+    }
+
     /// Executes `load` (load).
     pub fn load(&self) -> Result<Vec<CronJob>, String> {
         if !self.jobs_path.exists() {
@@ -173,31 +186,6 @@ impl CronManager {
         fs::write(&temp_path, content).map_err(|e| e.to_string())?;
         fs::rename(&temp_path, &self.jobs_path).map_err(|e| e.to_string())?;
         Ok(())
-    }
-
-    /// Executes `add_job` (add job).
-    pub async fn add_job(&self, job: CronJob) -> Result<(), String> {
-        let _guard = self.lock.lock().await;
-        let mut jobs = self.load()?;
-        if jobs.iter().any(|j| j.id == job.id) {
-            return Err(format!("Job '{}' already exists", job.id));
-        }
-        jobs.push(job);
-        self.save(&jobs)?;
-        Ok(())
-    }
-
-    /// Executes `remove_job` (remove job).
-    pub async fn remove_job(&self, job_id: &str) -> Result<bool, String> {
-        let _guard = self.lock.lock().await;
-        let mut jobs = self.load()?;
-        let before_len = jobs.len();
-        jobs.retain(|j| j.id != job_id);
-        let removed = jobs.len() < before_len;
-        if removed {
-            self.save(&jobs)?;
-        }
-        Ok(removed)
     }
 
     /// Executes `list_jobs` (list jobs).

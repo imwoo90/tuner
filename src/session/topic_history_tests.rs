@@ -1,11 +1,10 @@
 //! # Topic History and Session Retention Tests
 //!
 //! ## Overview
-//! Tests session rotation, historical session persistence, topic.json generation,
-//! and topic-based session querying.
+//! Tests session rotation, historical session persistence, and `topic.json` generation.
 
 use crate::session::data::SessionData;
-use crate::messenger::telegram::history::{find_sessions_for_topic, TopicMetadata};
+use crate::messenger::telegram::history::TopicMetadata;
 use tempfile::tempdir;
 
 #[allow(clippy::too_many_arguments)]
@@ -33,8 +32,8 @@ fn log_telegram_message(
 
 #[test]
 fn test_provider_session_past_ids_retention() {
-    let mut sess = SessionData::new(100, "tg".to_string(), Some(42), "antigravity".to_string(), "gemini".to_string());
-    
+    let mut sess = SessionData::new(100, "tg".to_string(), Some(42), "antigravity".to_string(), "gemini-3.8-flash".to_string());
+
     // First session
     sess.set_session_id("antigravity", "sess-1");
     assert_eq!(sess.get_session_id("antigravity"), "sess-1");
@@ -57,7 +56,7 @@ fn test_provider_session_past_ids_retention() {
     // Set new session 3
     sess.set_session_id("antigravity", "sess-3");
     assert_eq!(sess.get_session_id("antigravity"), "sess-3");
-    assert_eq!(sess.get_all_session_ids("antigravity"), vec!["sess-1".to_string(), "sess-2".to_string(), "sess-3".to_string()]);
+    assert_eq!(sess.get_past_session_ids("antigravity"), vec!["sess-1".to_string(), "sess-2".to_string()]);
 }
 
 #[test]
@@ -92,28 +91,8 @@ fn test_log_telegram_message_and_topic_json() {
     assert!(h_content.contains("\"topic_name\":\"Project X\""));
 }
 
-#[test]
-fn test_find_sessions_for_topic_query() {
-    let tmp = tempdir().unwrap();
-    let ws = tmp.path();
-
-    log_telegram_message(ws, "s-1", Some(77), Some("A"), "user", Some(1), "msg 1", true, None);
-    log_telegram_message(ws, "s-2", Some(77), Some("A"), "user", Some(2), "msg 2", true, None);
-    log_telegram_message(ws, "s-3", Some(88), Some("B"), "user", Some(3), "msg 3", true, None);
-
-    let found_77 = find_sessions_for_topic(ws, 77);
-    assert_eq!(found_77.len(), 2);
-    assert!(found_77.contains(&"s-1".to_string()));
-    assert!(found_77.contains(&"s-2".to_string()));
-
-    let found_88 = find_sessions_for_topic(ws, 88);
-    assert_eq!(found_88, vec!["s-3".to_string()]);
-
-    assert!(find_sessions_for_topic(ws, 999).is_empty());
-}
-
 fn mock_sess(tid: i64, name: &str) -> SessionData {
-    let mut s = SessionData::new(1, "tg".to_string(), Some(tid), "antigravity".to_string(), "flash".to_string());
+    let mut s = SessionData::new(1, "tg".to_string(), Some(tid), "antigravity".to_string(), "gemini-3.8-flash".to_string());
     s.topic_name = Some(name.to_string());
     s
 }
@@ -141,12 +120,4 @@ fn test_multi_topic_session_lifecycle_simulation() {
     assert_eq!(sess_a.get_session_id("antigravity"), "sess-a2");
     assert_eq!(sess_b.get_past_session_ids("antigravity"), vec!["sess-b1".to_string()]);
     assert_eq!(sess_b.get_session_id("antigravity"), "sess-b2");
-
-    let sessions_a = find_sessions_for_topic(ws, 10);
-    assert_eq!(sessions_a.len(), 2);
-    assert!(sessions_a.contains(&"sess-a1".to_string()) && sessions_a.contains(&"sess-a2".to_string()));
-
-    let sessions_b = find_sessions_for_topic(ws, 20);
-    assert_eq!(sessions_b.len(), 2);
-    assert!(sessions_b.contains(&"sess-b1".to_string()) && sessions_b.contains(&"sess-b2".to_string()));
 }

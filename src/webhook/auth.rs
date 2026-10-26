@@ -53,11 +53,6 @@ impl RateLimiter {
             true
         }
     }
-
-    /// Executes `reset` (reset).
-    pub async fn reset(&self) {
-        self.timestamps.lock().await.clear();
-    }
 }
 
 /// Executes `safe_compare` (safe compare).

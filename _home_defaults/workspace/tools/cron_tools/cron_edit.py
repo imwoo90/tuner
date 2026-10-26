@@ -4,9 +4,9 @@
 Supports metadata updates and safe rename of id + task folder.
 
 Usage:
-    python tools/cron_tools/cron_edit.py "daily-report" --schedule "30 10 * * *"
-    python tools/cron_tools/cron_edit.py "daily-report" --title "Daily Report 2"
-    python tools/cron_tools/cron_edit.py "daily-report" --name "daily-report-v2"
+    python3 tools/cron_tools/cron_edit.py "daily-report" --schedule "30 10 * * *"
+    python3 tools/cron_tools/cron_edit.py "daily-report" --title "Daily Report 2"
+    python3 tools/cron_tools/cron_edit.py "daily-report" --name "daily-report-v2"
 """
 
 from __future__ import annotations
@@ -17,12 +17,11 @@ import sys
 from typing import Any
 
 from _shared import (
-    CRON_TASKS_DIR,
     JOBS_PATH,
     available_job_ids,
     find_job_by_id_or_task_folder,
     load_jobs_strict,
-    render_cron_task_claude_md,
+    render_cron_task_agents_md,
     safe_task_dir,
     sanitize_name,
     save_jobs,
@@ -35,51 +34,45 @@ This tool edits cron_jobs.json and (on rename) updates cron_tasks/<name>/ folder
 It does NOT remove jobs.
 
 USAGE:
-  python tools/cron_tools/cron_edit.py "<job-id>" [changes...]
+  python3 tools/cron_tools/cron_edit.py "<job-id>" [changes...]
 
 CHANGES:
   --name "<new-id>"          Rename job id + task folder (sanitized)
   --title "<new-title>"      Update display title
   --description "<text>"     Update metadata description
   --schedule "<cron-expr>"   Update execution schedule
-  --timezone "<iana>"        Set per-job timezone override (e.g. 'Europe/Berlin')
-  --provider "<name>"        Set provider override ('claude', 'codex', 'gemini')
-  --model "<model-id>"       Set model override (e.g. 'opus', 'gpt-5.4')
-  --reasoning-effort <lvl>   Set Codex thinking level (low, medium, high, xhigh)
+  --timezone "<iana>"        Set per-job timezone override (e.g. 'Asia/Seoul')
+  --provider "<name>"        Set provider override ('antigravity')
+  --model "<model-id>"       Set model override (e.g. 'gemini-3.8-flash', 'gemini-4-argon')
+  --effort <lvl>             Set thinking effort level (low, medium, high)
   --cli-parameters "<json>"  Set extra CLI flags as JSON array
   --quiet-start <hour>       Start of quiet hours (0-23, job won't run during this time)
   --quiet-end <hour>         End of quiet hours (0-23, exclusive)
-  --dependency "<name>"      Resource dependency for sequential execution (e.g. 'chrome_browser')
   --chat-id <id>             Redirect delivery to this chat ID
   --topic-id <id>            Redirect delivery to this forum topic (thread) ID
-  --transport <tg|mx>        Delivery transport: 'tg' (Telegram) or 'mx' (Matrix)
+  --transport tg             Delivery transport: 'tg' (Telegram)
   --clear-topic-id           Route to the chat's main thread instead of a topic
   --silent-on-success        Suppress the push on success (errors still delivered)
   --no-silent-on-success     Always deliver results, even on success (default)
   --clear-provider           Remove provider override (use global config)
   --clear-model              Remove model override (use global config)
-  --clear-reasoning-effort   Remove reasoning override (use global config/model default)
+  --clear-effort             Remove effort override (use global config/model default)
   --clear-cli-parameters     Remove job-specific CLI parameters
-  --clear-quiet-hours        Remove quiet hour settings (use global config)
-  --clear-dependency         Remove dependency (allow parallel execution)
+  --clear-quiet-hours        Remove quiet hour settings
   --enable                   Set enabled=true
   --disable                  Set enabled=false
 
 EXAMPLES:
-  python tools/cron_tools/cron_edit.py "weather-check" --schedule "30 8 * * *"
-  python tools/cron_tools/cron_edit.py "weather-check" --title "Weather 08:30"
-  python tools/cron_tools/cron_edit.py "weather-check" --name "weather-morning"
-  python tools/cron_tools/cron_edit.py "weather-check" --disable
-  python tools/cron_tools/cron_edit.py "analysis-job" --provider codex --model gpt-5.4
-  python tools/cron_tools/cron_edit.py "analysis-job" --reasoning-effort xhigh
-  python tools/cron_tools/cron_edit.py "analysis-job" --cli-parameters '["--search"]'
-  python tools/cron_tools/cron_edit.py "web-scraper" --quiet-start 22 --quiet-end 7
-  python tools/cron_tools/cron_edit.py "web-scraper" --dependency chrome_browser
-  python tools/cron_tools/cron_edit.py "web-scraper" --clear-quiet-hours
-  python tools/cron_tools/cron_edit.py "web-scraper" --clear-dependency
-  python tools/cron_tools/cron_edit.py "morning-brief" --topic-id 42
-  python tools/cron_tools/cron_edit.py "morning-brief" --chat-id -1001234567890 --clear-topic-id
-  python tools/cron_tools/cron_edit.py "reindex-nightly" --silent-on-success
+  python3 tools/cron_tools/cron_edit.py "weather-check" --schedule "30 8 * * *"
+  python3 tools/cron_tools/cron_edit.py "weather-check" --title "Weather 08:30"
+  python3 tools/cron_tools/cron_edit.py "weather-check" --name "weather-morning"
+  python3 tools/cron_tools/cron_edit.py "weather-check" --disable
+  python3 tools/cron_tools/cron_edit.py "analysis-job" --model gemini-4-argon --effort high
+  python3 tools/cron_tools/cron_edit.py "web-scraper" --quiet-start 22 --quiet-end 7
+  python3 tools/cron_tools/cron_edit.py "web-scraper" --clear-quiet-hours
+  python3 tools/cron_tools/cron_edit.py "morning-brief" --topic-id 42
+  python3 tools/cron_tools/cron_edit.py "morning-brief" --chat-id -1001234567890 --clear-topic-id
+  python3 tools/cron_tools/cron_edit.py "reindex-nightly" --silent-on-success
 """
 
 
@@ -93,24 +86,25 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--title", help="New display title")
     parser.add_argument("--description", help="New description text")
     parser.add_argument("--schedule", help="New cron expression")
-    parser.add_argument("--timezone", help="IANA timezone for this job (e.g. 'Europe/Berlin')")
+    parser.add_argument("--timezone", help="IANA timezone for this job (e.g. 'Asia/Seoul')")
     parser.add_argument(
         "--provider",
-        choices=["antigravity", "claude", "codex", "gemini"],
+        choices=["antigravity"],
         help="Provider override for this job.",
     )
     parser.add_argument(
         "--model",
-        help="Model override for this job (e.g. 'opus', 'gpt-5.4').",
+        help="Model override for this job (e.g. 'gemini-3.8-flash', 'gemini-4-argon').",
     )
     parser.add_argument(
-        "--reasoning-effort",
-        choices=["low", "medium", "high", "xhigh"],
-        help="Codex thinking level override.",
+        "--effort",
+        dest="effort",
+        choices=["low", "medium", "high"],
+        help="Thinking effort level override.",
     )
     parser.add_argument(
         "--cli-parameters",
-        help="Additional CLI flags as JSON array (e.g. '[\"--search\"]').",
+        help="Additional CLI flags as JSON array.",
     )
     parser.add_argument(
         "--quiet-start",
@@ -127,10 +121,6 @@ def _parse_args() -> argparse.Namespace:
         help="End of quiet hours (0-23, exclusive).",
     )
     parser.add_argument(
-        "--dependency",
-        help="Resource dependency (e.g. 'chrome_browser'). Jobs with same dependency run sequentially.",
-    )
-    parser.add_argument(
         "--chat-id",
         type=int,
         help="Redirect delivery to this chat ID.",
@@ -142,8 +132,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--transport",
-        choices=["tg", "mx"],
-        help="Delivery transport: 'tg' (Telegram) or 'mx' (Matrix).",
+        choices=["tg"],
+        help="Delivery transport: 'tg' (Telegram).",
     )
     parser.add_argument(
         "--clear-topic-id",
@@ -153,7 +143,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clear-quiet-hours",
         action="store_true",
-        help="Remove quiet hour settings (use global config).",
+        help="Remove quiet hour settings.",
     )
     parser.add_argument(
         "--clear-provider",
@@ -166,19 +156,15 @@ def _parse_args() -> argparse.Namespace:
         help="Remove model override (use global config).",
     )
     parser.add_argument(
-        "--clear-reasoning-effort",
+        "--clear-effort",
+        dest="clear_effort",
         action="store_true",
-        help="Remove reasoning effort override (use global config/model default).",
+        help="Remove effort override (use global config/model default).",
     )
     parser.add_argument(
         "--clear-cli-parameters",
         action="store_true",
         help="Remove job-specific CLI parameters.",
-    )
-    parser.add_argument(
-        "--clear-dependency",
-        action="store_true",
-        help="Remove dependency (allow parallel execution).",
     )
     enabled_group = parser.add_mutually_exclusive_group()
     enabled_group.add_argument("--enable", action="store_true", help="Enable the job")
@@ -235,7 +221,7 @@ def _rename_task_folder(
     if not memory_renamed:
         notes.append("No legacy memory file found to rename.")
 
-    rule_content = render_cron_task_claude_md(new_name)
+    rule_content = render_cron_task_agents_md(new_name)
     (new_folder / "AGENTS.md").write_text(rule_content, encoding="utf-8")
     notes.append("Updated AGENTS.md for renamed memory file reference.")
 
@@ -287,9 +273,9 @@ def _apply_updates(args: argparse.Namespace, job: dict[str, Any]) -> tuple[list[
             job["model"] = model
             updated_fields.append("model")
 
-    if args.reasoning_effort is not None and job.get("reasoning_effort") != args.reasoning_effort:
-        job["reasoning_effort"] = args.reasoning_effort
-        updated_fields.append("reasoning_effort")
+    if args.effort is not None and job.get("effort") != args.effort:
+        job["effort"] = args.effort
+        updated_fields.append("effort")
 
     if args.cli_parameters is not None:
         try:
@@ -313,12 +299,6 @@ def _apply_updates(args: argparse.Namespace, job: dict[str, Any]) -> tuple[list[
         if job.get("quiet_end") != args.quiet_end:
             job["quiet_end"] = args.quiet_end
             updated_fields.append("quiet_end")
-
-    if args.dependency is not None:
-        dep_val = args.dependency.strip()
-        if job.get("dependency") != dep_val:
-            job["dependency"] = dep_val
-            updated_fields.append("dependency")
 
     if args.chat_id is not None and job.get("chat_id") != args.chat_id:
         job["chat_id"] = args.chat_id
@@ -358,18 +338,13 @@ def _apply_updates(args: argparse.Namespace, job: dict[str, Any]) -> tuple[list[
         job.pop("model", None)
         updated_fields.append("model (cleared)")
 
-    if args.clear_reasoning_effort and "reasoning_effort" in job:
-        job.pop("reasoning_effort", None)
-        updated_fields.append("reasoning_effort (cleared)")
+    if args.clear_effort and "effort" in job:
+        job.pop("effort", None)
+        updated_fields.append("effort (cleared)")
 
     if args.clear_cli_parameters and "cli_parameters" in job:
         job.pop("cli_parameters", None)
         updated_fields.append("cli_parameters (cleared)")
-
-    if args.clear_dependency:
-        if "dependency" in job:
-            job.pop("dependency", None)
-            updated_fields.append("dependency (cleared)")
 
     if args.enable and job.get("enabled", True) is not True:
         job["enabled"] = True
@@ -401,11 +376,10 @@ def main() -> None:
             args.timezone is not None,
             args.provider is not None,
             args.model is not None,
-            args.reasoning_effort is not None,
+            args.effort is not None,
             args.cli_parameters is not None,
             args.quiet_start is not None,
             args.quiet_end is not None,
-            args.dependency is not None,
             args.chat_id is not None,
             args.topic_id is not None,
             args.transport is not None,
@@ -413,9 +387,8 @@ def main() -> None:
             args.clear_quiet_hours,
             args.clear_provider,
             args.clear_model,
-            args.clear_reasoning_effort,
+            args.clear_effort,
             args.clear_cli_parameters,
-            args.clear_dependency,
             args.enable,
             args.disable,
             args.silent_on_success,
@@ -500,7 +473,6 @@ def main() -> None:
     updated_fields.extend(meta_updates)
     notes.extend(meta_notes)
 
-    # Keep order stable but unique
     seen_fields: set[str] = set()
     unique_fields: list[str] = []
     for field in updated_fields:

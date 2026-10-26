@@ -94,3 +94,48 @@ fn test_find_agy_vault_bin_resolution() {
     let found = crate::setup::find_agy_vault_bin(&home_str);
     assert_eq!(found, Some(fake_vault));
 }
+
+#[test]
+fn test_override_profile_config_copies_effort_and_model() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = crate::workspace::paths::TunerPaths::new(
+        dir.path().to_path_buf(),
+        dir.path().join("defaults"),
+        Some("default".to_string()),
+    );
+    let mut cfg = CliConfig::default();
+    cfg.profiles.push(ProfileConfig {
+        name: "default".to_string(),
+        telegram_token: "123:tok".to_string(),
+        allowed_user_ids: vec![42],
+        allowed_group_ids: vec![-100],
+        working_dir: None,
+        model: Some("gemini-4-argon".to_string()),
+        effort: Some("high".to_string()),
+        system_prompt: None,
+        append_system_prompt: None,
+        language: Some("ko".to_string()),
+    });
+    crate::setup::override_profile_config(&mut cfg, "default", &paths).unwrap();
+    assert_eq!(cfg.model.as_deref(), Some("gemini-4-argon"));
+    assert_eq!(cfg.effort.as_deref(), Some("high"));
+    assert_eq!(cfg.language.as_deref(), Some("ko"));
+}
+
+#[test]
+fn test_load_from_file_strips_template_placeholder_ids() {
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("config.json");
+    let json = r#"{
+        "telegram_token": "YOUR_BOT_TOKEN_HERE",
+        "allowed_user_ids": [123456789],
+        "allowed_group_ids": [-1001234567890]
+    }"#;
+    std::fs::write(&config_path, json).unwrap();
+
+    let config = CliConfig::load_from_file(&config_path).unwrap();
+    assert!(config.allowed_user_ids.is_empty());
+    assert!(config.allowed_group_ids.is_empty());
+    assert!(config.profiles[0].allowed_user_ids.is_empty());
+    assert!(config.profiles[0].allowed_group_ids.is_empty());
+}

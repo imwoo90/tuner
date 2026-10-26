@@ -23,26 +23,3 @@ pub mod sync_helpers;
 pub mod sync_layout;
 pub mod skills;
 pub mod skills_helpers;
-
-/// Alias module for workspace initialization tests.
-pub mod init {
-    pub use super::sync::init_workspace;
-}
-
-/// Alias module for rules selector tests.
-pub mod rules_selector {
-    pub use super::rules::RulesSelector;
-}
-
-/// Alias module for rule sync tests.
-pub mod rule_sync {
-    pub use super::sync::sync_rule_files;
-}
-
-/// Alias module for skill sync tests.
-pub mod skill_sync {
-    pub use super::skills::{
-        cleanup_ductor_links, discover_skills, has_valid_skill_frontmatter,
-        sync_bundled_skills, sync_skills, watch_skill_sync,
-    };
-}

@@ -56,7 +56,7 @@ Connecting Tuner to Telegram takes 3 simple steps:
   "model": "gemini-3.8-flash",
   "effort": "high",
   "language": "ko",
-  "timezone": "Asia/Seoul"
+  "user_timezone": "Asia/Seoul"
 }
 ```
 </details>
@@ -98,7 +98,7 @@ Connecting Tuner to Telegram takes 3 simple steps:
 2. **Responsive Web File & 3D Review Viewer v2**:
    - Automatically extracts `file://` links and generated artifacts into a unified `🔍 Open File Viewer` button backed by an ephemeral Cloudflare Quick Tunnel, supporting desktop tree / mobile bottom-sheet navigation, 3D STEP/STL/GLTF rendering, multi-image gallery grids, ZIP archive inspection, row-synchronized syntax-highlighted code, Markdown, PDF, and inline `.html` `<iframe>` previews.
 3. **Zero-Knowledge Per-Profile Credential Vault (`/vault` & `tuner --vault`)**:
-   - Stores site credentials encrypted at rest (`XSalsa20-Poly1305`, `0600` permissions) isolated per profile. Agents execute commands via `tuner --vault exec <site> -- <cmd>` with environment variable injection (`VAULT_USER`, `VAULT_PASS`, etc.) and automatic stdout/stderr secret redaction (`***REDACTED***`) so plaintext secrets never enter the LLM context.
+   - Stores site credentials encrypted at rest (`XSalsa20-Poly1305`, `0600` permissions in `vault/vault.enc` and `vault/vault.key`) isolated per profile. Agents execute commands via `tuner --vault exec <site> -- <cmd>` with environment variable injection (`TUNER_VAULT_SITE`, `TUNER_VAULT_TITLE`, `TUNER_VAULT_URL`, `TUNER_VAULT_USER`, `TUNER_VAULT_PASS`) and automatic stdout/stderr secret redaction (`***REDACTED***`) so plaintext secrets never enter the LLM context.
 4. **Autonomous Background Task Wakeup & Session Handover**:
    - Detects asynchronous background command completions (`spawn_session_async_observer`) and pushes follow-up agent responses directly to the originating Telegram topic. Preserves cross-session continuity across `/new` resets via structured handover summaries.
 
@@ -180,12 +180,12 @@ graph LR
     subgraph Core["Control Plane"]
         Super["Supervisor (Master)"]
         Bus["MessageBus"]
-        Lock["Two-Tier LockPool"]
+        Lock["Shared Weak LockPool"]
         Store["Atomic SessionStore"]
     end
 
     subgraph Runtime["Agent Runtime"]
-        PTY["Virtual PTY (24x80)"]
+        PTY["Virtual PTY (50x100)"]
         Poller["Log Poller (inotify)"]
         Parser["Incremental JSONL"]
     end
@@ -200,19 +200,19 @@ graph LR
 
 ### 🛡️ Core Architectural Pillars & Invariants
 
-1. **Virtual PTY Runtime (`openpty`, `24x80`, `setsid`)**:
+1. **Virtual PTY Runtime (`openpty`, `50x100`, `setsid`, `ioctl(0, TIOCSCTTY, 0)`)**:
    - Eliminates C stdio block-buffering deadlocks (`_IOFBF`) and `isatty(3)` layout panics.
-   - Sets child process group leadership (`PGID = PID`) with `-pgid SIGKILL` and master-close `SIGHUP` cascade for zero-leak process reclamation.
-2. **Two-Tier Synchronization Hierarchy (`LockPool`)**:
-   - Forum topics execute concurrently with $O(1)$ parallelism (`chat_rwlock.read()`), while chat-wide broadcasts serialize safely (`chat_rwlock.write()`).
+   - Sets child session and controlling terminal leadership (`setsid` + `TIOCSCTTY`) with `-pgid SIGKILL` and master-close `SIGHUP` cascade for zero-leak process reclamation.
+2. **Shared Weak LockPool Synchronization (`LockPool`)**:
+   - Forum topics execute concurrently with $O(1)$ parallelism via weakly-referenced per-`(chat_id, Option<topic_id>)` `TokioMutex` locks shared across `SessionManager` and `MessageBus`, pruning idle locks automatically once all strong guards drop.
    - Single-Lock Discipline guarantees provable mathematical deadlock freedom ($P(\text{Deadlock}) = 0$).
 3. **Dual-Path Streaming & Invariant Polling**:
    - Streaming is decoupled from PTY stdout and tails on-disk structured logs (`transcript_full.jsonl`) via `inotify` + adaptive interval ticks.
    - Log cursor advances strictly to complete newline (`\n`) horizons, guaranteeing zero byte cleavage and zero dropped tool calls.
 4. **Resilient Liveness Contract (Sliding Inactivity Window)**:
-   - Replaces crude wall-clock timeouts with a 180s inactivity contract, honoring deep reasoning and long-running compilations without premature termination.
+   - Replaces crude wall-clock timeouts with a 300s inactivity contract, honoring deep reasoning and long-running compilations without premature termination.
 5. **Two-Phase Crash-Proof Persistence**:
-   - Sibling temporary writes (`path.with_extension("tmp")`) + `rename(2)` + physical `file.sync_all()` guarantee atomic state persistence immune to cross-device `EXDEV` errors.
+   - Sibling temporary writes (`path.with_extension("tmp")`) + `rename(2)` guarantee atomic state persistence immune to cross-device `EXDEV` errors.
 
 📖 **For the full architectural specification, mathematical proofs, shadow plane security, and second-order failure mode analyses, see [ARCHITECTURE.md](ARCHITECTURE.md).**
 
@@ -220,7 +220,7 @@ graph LR
 
 ## 🧪 Testing
 
-`tuner` enforces compiler-checked Agent-Native invariants and a comprehensive suite of 317 Rust unit, integration, and documentation tests:
+`tuner` enforces compiler-checked Agent-Native invariants and a comprehensive suite of 365+ Rust unit, integration, and documentation tests:
 
 ```bash
 # Run compiler linter, unit/integration/doc tests, Clippy, and Rustdoc verification

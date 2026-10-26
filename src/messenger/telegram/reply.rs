@@ -101,7 +101,7 @@ fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> 
     if !t.starts_with('@') { return None; }
     let dir = t.split_whitespace().next().unwrap_or("");
     let m = &dir[1..];
-    if ["opus", "sonnet", "argon", "pro", "flash", "haiku", "gpt-4o", "gpt-4-turbo"].contains(&m) {
+    if ["opus", "sonnet", "argon", "pro", "flash", "gemini"].contains(&m) {
         let (canonical, default_eff) = normalize_model_alias(m);
         return Some((Some(canonical), default_eff, t[dir.len()..].trim()));
     }
@@ -195,7 +195,7 @@ pub(crate) async fn send_startup_notification(
         Ok(sess_list) => {
             println!("🤖 [tuner] Loaded {} sessions for startup notification", sess_list.len());
             if let Some(sess) = find_last_active_session(&sess_list) {
-                let active_lang = sess.language.clone().unwrap_or_else(|| "en".to_string());
+                let active_lang = sess.language.clone().unwrap_or_else(crate::i18n::get_language);
                 crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
                     let startup_msg = crate::t!("bot.startup_complete");
                     let chat_id = teloxide::types::ChatId(sess.chat_id);

@@ -38,11 +38,10 @@ fn make_hook(id: &str) -> WebhookEntry {
         hmac_payload_prefix_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
         provider: None,
         model: None,
-        reasoning_effort: None,
+        effort: None,
         cli_parameters: vec![],
         quiet_start: None,
         quiet_end: None,
-        dependency: None,
         trigger_count: 0,
         last_triggered_at: None,
         last_error: None,
@@ -80,8 +79,10 @@ async fn test_server_health_check() {
 #[tokio::test]
 async fn test_server_webhook_unauthorized() {
     let dir = tempfile::tempdir().unwrap();
-    let manager = Arc::new(WebhookManager::new(dir.path().join("webhooks.json")));
-    manager.add_hook(make_hook("my-hook")).await.unwrap();
+    let hooks_path = dir.path().join("webhooks.json");
+    let payload = serde_json::json!({ "hooks": [make_hook("my-hook")] });
+    std::fs::write(&hooks_path, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+    let manager = Arc::new(WebhookManager::new(hooks_path));
 
     let server = WebhookServer::new(manager, 30, "global-token".to_string(), None, 1024);
     let port = get_free_port();

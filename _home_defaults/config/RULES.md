@@ -9,7 +9,7 @@ Edit only when the user asks for behavior changes.
 2. Preserve unrelated values and structure.
 3. Never expose secrets (`telegram_token`, webhook tokens) in chat output.
 4. Keep valid JSON.
-5. Most settings are hot-reloadable (take effect within seconds). Only `telegram_token`, `docker`, `api`, `webhooks`, `log_level`, and `antigravity_api_key` require `/restart`.
+5. Trigger a restart via `/restart` or `touch ~/.tuner/restart-requested` when changing core runtime settings (`telegram_token`, `webhooks`, `heartbeat`, `cleanup`).
 
 ## Important Key Groups
 
@@ -22,48 +22,40 @@ Edit only when the user asks for behavior changes.
     - `claude-opus-5-5` - Claude frontier deep reasoning model
     - `claude-sonnet-5-5` - Claude reasoning model
 - `effort`: reasoning effort level (`high`, `medium`, `low`) for compatible models
-- `permission_mode`: CLI permission behavior
+- `permission_mode`: CLI permission behavior (`bypassPermissions` or standard)
 
 ### Time and Scheduling
 
-- `user_timezone`: IANA timezone string (for example `Europe/Berlin`)
+- `user_timezone`: IANA timezone string (for example `Asia/Seoul` or `Europe/Berlin`)
 - `daily_reset_hour`: session reset boundary (in `user_timezone`)
+- `daily_reset_enabled`: `true`/`false`
+- `idle_timeout_minutes`: minutes of inactivity before session reset (default `1440`)
+- `max_session_messages`: optional message cap per session before rotation
 - `heartbeat.quiet_start`, `heartbeat.quiet_end`: quiet hours (in `user_timezone`)
-- `cleanup.check_hour`: daily cleanup hour (in `user_timezone`, not UTC)
+- `cleanup.check_hour`: daily cleanup hour (0-23)
 
-If `user_timezone` is empty, runtime falls back to host timezone, then UTC.
+If `user_timezone` is empty, runtime falls back to UTC.
 For user-facing schedules, set `user_timezone` explicitly.
-
-### Limits and Runtime
-
-- `max_spent_usd`, `max_session_messages`
-
-### Streaming
-
-- `streaming.enabled`
-- `streaming.min_chars`, `streaming.max_chars`
-- `streaming.idle_ms`, `streaming.edit_interval_seconds`
-- `streaming.append_mode`, `streaming.sentence_break`
 
 ### Webhooks
 
-- `webhooks.enabled`
-- `webhooks.host`, `webhooks.port`
-- `webhooks.token`
+- `webhooks.enabled`: `true`/`false`
+- `webhooks.host`, `webhooks.port`: HTTP bind address and port (default `127.0.0.1:8742`)
+- `webhooks.token`: global fallback Bearer token
 - `webhooks.max_body_bytes`, `webhooks.rate_limit_per_minute`
 
 ### Cleanup
 
-- `cleanup.enabled`
-- `cleanup.media_files_days`
-- `cleanup.check_hour`
+- `cleanup.enabled`: `true`/`false`
+- `cleanup.media_files_days`: retention days for `telegram_files/` (default `30`)
+- `cleanup.output_to_user_days`: retention days for `output_to_user/` (default `30`)
+- `cleanup.check_hour`: daily cleanup hour (default `3`)
 
 ### CLI Parameters
 
 - `cli_parameters.antigravity`: List of extra CLI flags for Antigravity main agent
 
 These parameters are appended to every CLI invocation for the Antigravity provider.
-Parameters are inserted before the `--` separator in commands.
 
 **Example:**
 ```json
@@ -76,46 +68,18 @@ Parameters are inserted before the `--` separator in commands.
 
 ### Language
 
-- `language`: UI language for bot messages — `en`, `de`, `nl`, `fr`, `ru`, `es`, `pt`
-- Hot-reloadable: change without restart.
-
-### Image Processing
-
-- `image.max_dimension`: max width/height in pixels (default `2000`). Images larger than this are resized.
-- `image.output_format`: target format — `webp` (default), `png`, or `jpeg`
-- `image.quality`: compression quality 1-100 (default `85`)
-- Incoming images from all transports are auto-converted after download.
-- Hot-reloadable.
-
-### Scene Indicators
-
-- `scene.seen_reaction`: `true`/`false` (default `false`) — show a 👀 reaction on received messages
-- `scene.technical_footer`: `true`/`false` (default `false`) — append model name, token count, cost, and duration to the final response
-- Hot-reloadable.
+- `language`: UI language for bot messages — `en`, `de`, `nl`, `es`, `fr`, `id`, `pt`, `ru`, `ko`
 
 ### Heartbeat
 
 - `heartbeat.enabled`: `true`/`false` — master switch
 - `heartbeat.interval_minutes`: global tick interval for private chats (default `30`)
 - `heartbeat.quiet_start`, `heartbeat.quiet_end`: quiet hours (0-23, in `user_timezone`)
-- `heartbeat.prompt`: the prompt sent to the agent during heartbeat
 - `heartbeat.ack_token`: token the agent replies with when nothing to report (default `HEARTBEAT_OK`)
-- `heartbeat.group_targets`: list of per-group/topic heartbeat targets, each with:
-  - `enabled`, `chat_id`, `topic_id`, `prompt`, `ack_token`, `interval_minutes`, `quiet_start`, `quiet_end`
-  - Each target with its own `interval_minutes` runs independently from the global tick.
-  - Set `enabled: false` to pause a target without removing it.
-- Heartbeat is hot-reloadable.
 
-### Timeouts
+### Access Control & Profiles
 
-- `timeouts.normal`: max seconds for a normal CLI call (default `600`)
-- `timeouts.background`: max seconds for background tasks (default `1800`)
-- `timeouts.subagent`: max seconds for sub-agent tasks (default `3600`)
-- `timeouts.extend_on_activity`: auto-extend timeout when tool activity detected
-
-### Access Control
-
-- `allowed_user_ids`
-- `allowed_group_ids`
-- `group_mention_only`: when `true`, bot only responds in groups when @mentioned or replied to
-- `telegram_token`
+- `allowed_user_ids`: list of authorized Telegram user IDs
+- `allowed_group_ids`: list of authorized Telegram group IDs
+- `telegram_token`: Telegram Bot API token
+- `profiles`: list of isolated profile descriptors (`[{"name": "default"}]`)

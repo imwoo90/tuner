@@ -7,7 +7,7 @@
 //! ## Search Tags
 //! #loader
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Find the directory where translation locales are stored.
@@ -75,7 +75,7 @@ pub fn load_toml(path: &Path) -> anyhow::Result<HashMap<String, String>> {
     Ok(map)
 }
 
-/// Load the entire translation suite (chat, cli/wizard, commands) for a language.
+/// Check whether a language identifier is safe for filesystem lookup.
 fn is_safe_lang(lang: &str) -> bool {
     if lang.is_empty() {
         return false;
@@ -129,6 +129,7 @@ pub struct TranslationStore {
 }
 
 impl TranslationStore {
+    #[cfg(test)]
     /// Create a new TranslationStore using the default locales path.
     pub fn new(language: &str) -> Self {
         let root = find_locales_dir();
@@ -170,19 +171,6 @@ impl TranslationStore {
         match raw {
             Some(raw_str) => format_string(key, raw_str, args),
             None => format!("[MISSING: {}]", key),
-        }
-    }
-
-    /// Executes `all_chat_keys` (all chat keys).
-    pub fn all_chat_keys(&self) -> HashSet<String> {
-        self.en_chat.keys().cloned().collect()
-    }
-
-    /// Executes `lang_chat_keys` (lang chat keys).
-    pub fn lang_chat_keys(&self) -> HashSet<String> {
-        match &self.primary_chat {
-            Some(m) => m.keys().cloned().collect(),
-            None => self.en_chat.keys().cloned().collect(),
         }
     }
 }

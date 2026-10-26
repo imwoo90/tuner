@@ -54,11 +54,10 @@ pub(crate) async fn handle_lang_command(
         };
         
         sess.language = Some(target_lang.to_string());
-        let _ = sessions.update_session(&sess, 0.0, 0).await;
+        let _ = sessions.preserve_session_identity(&sess).await;
         
-        crate::i18n::set_language(target_lang);
-        
-        let mut req = bot.send_message(msg.chat.id, crate::t!("bot.language_switch_success", language = target_lang));
+        let confirm = crate::i18n::t_for_lang(target_lang, "bot.language_switch_success", &[("language", target_lang)]);
+        let mut req = bot.send_message(msg.chat.id, confirm);
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }

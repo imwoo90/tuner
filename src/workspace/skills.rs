@@ -1,29 +1,26 @@
 //! # Skill Directory Synchronization
 //!
 //! ## Overview
-//! Synchronizes custom agent skill folders between tuner and CLI providers.
-//! Discovers, validates, and symlinks skill directories across workspace and provider configuration folders.
+//! Synchronizes custom agent skill folders strictly within the profile workspace (`<workspace>/.agents/skills`).
+//! Discovers, validates, and symlinks skill directories across workspace and bundled folders.
 //!
 //! ## Search Tags
 //! #skills
 
-use crate::workspace::paths::DuctorPaths;
+use crate::workspace::paths::TunerPaths;
 use crate::workspace::skills_helpers::{
     clean_broken_links, clean_cross_profile_skill_links, clean_invalid_workspace_skill_links,
-    cli_skill_dirs, create_dir_link, ensure_copy, load_skill_sync_config,
-    sync_profile_agent_skills,
+    create_dir_link, is_skill_sync_enabled, sync_profile_agent_skills,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Synchronizes custom and bundled skills strictly within the profile workspace (`<workspace>/.agents/skills`).
-pub fn sync_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(), String> {
-    let (sync_enabled, _enabled_providers) = load_skill_sync_config(&paths.config_path());
-    if !sync_enabled {
+pub fn sync_skills(paths: &TunerPaths) -> Result<(), String> {
+    if !is_skill_sync_enabled(&paths.config_path()) {
         return Ok(());
     }
 
-    let _ = cleanup_ductor_links(paths);
     let _ = clean_cross_profile_skill_links(
         &paths.skills_dir(),
         &paths.profile_home(),
@@ -34,14 +31,14 @@ pub fn sync_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(), Strin
     let _ = clean_broken_links(&paths.skills_dir());
 
     let discovered = discover_skills(&paths.skills_dir());
-    sync_profile_agent_skills(&paths.agents_skills_dir(), &discovered, docker_active)
+    sync_profile_agent_skills(&paths.agents_skills_dir(), &discovered)
         .map_err(|e| format!("Failed to sync profile agent skills: {}", e))?;
 
     Ok(())
 }
 
 /// Synchronizes bundled framework templates into the user's workspace skills directory.
-pub fn sync_bundled_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(), String> {
+pub fn sync_bundled_skills(paths: &TunerPaths) -> Result<(), String> {
     let bundled = paths.bundled_skills_dir();
     if !bundled.is_dir() {
         return Ok(());
@@ -49,85 +46,49 @@ pub fn sync_bundled_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(
     let target_dir = paths.skills_dir().join("builtin");
     let _ = std::fs::create_dir_all(&target_dir);
 
-    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules"];
+    let skip_dirs = [".system", ".git", ".venv", "__pycache__", "node_modules"];
     if let Ok(entries) = std::fs::read_dir(bundled) {
         for entry in entries.flatten() {
-          let path = entry.path();
-          let name = match path.file_name().and_then(|s| s.to_str()) {
-              Some(n) => n,
-              None => continue,
-          };
-          if !path.is_dir() || name.starts_with('.') || skip_dirs.contains(&name) {
-              continue;
-          }
-          if !has_valid_skill_frontmatter(&path) {
-              continue;
-          }
-          let target = target_dir.join(name);
-          if docker_active {
-              let _ = ensure_copy(&target, &path);
-          } else {
-              if target.exists() && !target.is_symlink() {
-                  continue;
-              }
-              if target.is_symlink() {
-                  if let Ok(res) = std::fs::canonicalize(&target)
-                      && let Ok(src_canon) = std::fs::canonicalize(&path)
-                          && res == src_canon {
-                              continue;
-                          }
-                    let _ = std::fs::remove_file(&target);
+            let path = entry.path();
+            let name = match path.file_name().and_then(|s| s.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if !path.is_dir() || name.starts_with('.') || skip_dirs.contains(&name) {
+                continue;
+            }
+            if !has_valid_skill_frontmatter(&path) {
+                continue;
+            }
+            let target = target_dir.join(name);
+            if target.exists() && !target.is_symlink() {
+                continue;
+            }
+            if target.is_symlink() {
+                if let Ok(res) = std::fs::canonicalize(&target)
+                    && let Ok(src_canon) = std::fs::canonicalize(&path)
+                    && res == src_canon
+                {
+                    continue;
                 }
-                let _ = create_dir_link(&target, &path);
+                let _ = std::fs::remove_file(&target);
             }
-        }
-      }
-      Ok(())
-}
-
-/// Cleans up tuner-created symlinks and copies from provider directories.
-pub fn cleanup_ductor_links(paths: &DuctorPaths) -> Result<usize, String> {
-    let mut managed_roots = Vec::new();
-    for root in [paths.skills_dir(), paths.bundled_skills_dir()] {
-        if let Ok(canon) = std::fs::canonicalize(&root) {
-            managed_roots.push(canon);
-        } else {
-            managed_roots.push(root);
+            let _ = create_dir_link(&target, &path);
         }
     }
-
-    let mut removed = 0;
-    let providers = vec!["claude".to_string(), "codex".to_string(), "gemini".to_string()].into_iter().collect();
-    let cli_dirs = cli_skill_dirs(&providers);
-
-    for cli_dir in cli_dirs.values() {
-        if !cli_dir.is_dir() {
-            continue;
-        }
-        if let Ok(entries) = std::fs::read_dir(cli_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_symlink()
-                    && let Ok(resolved) = std::fs::canonicalize(&path)
-                        && managed_roots.iter().any(|r| resolved.starts_with(r))
-                            && std::fs::remove_file(&path).is_ok() {
-                                removed += 1;
-                            }
-            }
-        }
-    }
-    Ok(removed)
+    Ok(())
 }
 
 /// Asynchronously monitors skill folders and triggers synchronization.
-pub async fn watch_skill_sync(paths: &DuctorPaths, interval_ms: u64) -> Result<(), String> {
+pub async fn watch_skill_sync(paths: &TunerPaths, interval_ms: u64) -> Result<(), String> {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
     loop {
         interval.tick().await;
         let paths_clone = paths.clone();
         let _ = tokio::task::spawn_blocking(move || {
-            let _ = sync_skills(&paths_clone, false);
-        }).await;
+            let _ = sync_skills(&paths_clone);
+        })
+        .await;
     }
 }
 
@@ -147,7 +108,7 @@ fn scan_skill_entries(
         };
         if name.starts_with('.') || skip_dirs.contains(&name) {
             continue;
-        }
+        };
         let is_dir = path.is_dir() || (path.is_symlink() && path.exists());
         if is_dir && has_valid_skill_frontmatter(&path) {
             if overwrite {
@@ -166,7 +127,6 @@ pub fn discover_skills(dir: &Path) -> HashMap<String, PathBuf> {
         return skills;
     }
     let skip_dirs = [
-        ".claude",
         ".system",
         ".git",
         ".venv",

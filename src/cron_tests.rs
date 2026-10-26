@@ -31,11 +31,9 @@ mod tests {
         let temp = NamedTempFile::new().unwrap();
         let manager = CronManager::new(temp.path().to_path_buf());
 
-        // Verify initial list is empty
         let jobs = manager.list_jobs().await.unwrap();
         assert!(jobs.is_empty());
 
-        // Add job
         let job = CronJob::new(
             "job1".to_string(),
             "Title".to_string(),
@@ -45,36 +43,31 @@ mod tests {
             100,
             None,
         );
-        manager.add_job(job).await.unwrap();
+        manager.save(&[job]).unwrap();
 
-        // Get job
         let retrieved = manager.get_job("job1").await.unwrap().unwrap();
         assert_eq!(retrieved.title, "Title");
 
-        // Set disabled
         let changed = manager.set_enabled("job1", false).await.unwrap();
         assert!(changed);
         let retrieved_disabled = manager.get_job("job1").await.unwrap().unwrap();
         assert!(!retrieved_disabled.enabled);
 
-        // Remove job
-        let removed = manager.remove_job("job1").await.unwrap();
-        assert!(removed);
+        manager.save(&[]).unwrap();
         assert!(manager.list_jobs().await.unwrap().is_empty());
     }
 
     #[test]
-    fn test_cron_scheduler_next_run() {
-        let cfg = Arc::new(CliConfig::default());
-        let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
+    fn test_cron_scheduler_next_run_and_user_timezone_fallback() {
+        let mut cfg = CliConfig::default();
+        cfg.user_timezone = Some("Asia/Seoul".to_string());
+        let cfg = Arc::new(cfg);
         let temp = NamedTempFile::new().unwrap();
         let manager = Arc::new(CronManager::new(temp.path().to_path_buf()));
         let bus = Arc::new(crate::bus::bus::MessageBus::new());
-        let scheduler = CronScheduler::new(cfg, manager, cli, bus);
+        let scheduler = CronScheduler::new(cfg, manager, bus);
 
-
-
-        let mut job = CronJob::new(
+        let job = CronJob::new(
             "job1".to_string(),
             "Title".to_string(),
             "0 9 * * *".to_string(),
@@ -83,26 +76,12 @@ mod tests {
             100,
             None,
         );
-        job.timezone = "Asia/Seoul".to_string();
+        assert_eq!(scheduler.effective_timezone(&job), "Asia/Seoul");
 
         let next_run = scheduler.calculate_next_run(&job);
         assert!(next_run.is_ok());
         let next_time = next_run.unwrap();
         assert!(next_time > chrono::Utc::now());
-    }
-
-    #[tokio::test]
-    async fn test_cron_manager_duplicate_job_rejected() {
-        let temp = NamedTempFile::new().unwrap();
-        let manager = CronManager::new(temp.path().to_path_buf());
-
-        let job = CronJob::new(
-            "dup1".to_string(), "T".to_string(), "*/5 * * * *".to_string(),
-            "dir".to_string(), "task".to_string(), 100, None,
-        );
-        manager.add_job(job.clone()).await.unwrap();
-        let result = manager.add_job(job).await;
-        assert!(result.is_err(), "Adding a duplicate job should return Err");
     }
 
     #[tokio::test]
@@ -118,13 +97,16 @@ mod tests {
         let temp = NamedTempFile::new().unwrap();
         let manager = CronManager::new(temp.path().to_path_buf());
 
-        for id in &["job-a", "job-b"] {
-            let job = CronJob::new(
-                id.to_string(), "T".to_string(), "*/5 * * * *".to_string(),
-                "dir".to_string(), "task".to_string(), 100, None,
-            );
-            manager.add_job(job).await.unwrap();
-        }
+        let initial_jobs: Vec<CronJob> = ["job-a", "job-b"]
+            .iter()
+            .map(|id| {
+                CronJob::new(
+                    id.to_string(), "T".to_string(), "*/5 * * * *".to_string(),
+                    "dir".to_string(), "task".to_string(), 100, None,
+                )
+            })
+            .collect();
+        manager.save(&initial_jobs).unwrap();
 
         manager.set_all_enabled(false).await.unwrap();
         for job in manager.list_jobs().await.unwrap() {
@@ -137,25 +119,20 @@ mod tests {
         }
     }
 
-    fn setup_scheduler(quiet_start: Option<u32>, quiet_end: Option<u32>) -> CronScheduler {
+    fn setup_scheduler() -> CronScheduler {
         let temp = NamedTempFile::new().unwrap();
         let manager = Arc::new(CronManager::new(temp.path().to_path_buf()));
         let bus = Arc::new(crate::bus::bus::MessageBus::new());
-        let mut cfg = CliConfig::default();
-        cfg.telegram_heartbeat_quiet_start = quiet_start;
-        cfg.telegram_heartbeat_quiet_end = quiet_end;
-        cfg.telegram_heartbeat_enabled = quiet_start.is_some();
-        let cfg = Arc::new(cfg);
-        let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
-        CronScheduler::new(cfg, manager, cli, bus)
+        let cfg = Arc::new(CliConfig::default());
+        CronScheduler::new(cfg, manager, bus)
     }
 
     #[test]
     fn test_cron_quiet_hours() {
         use chrono::TimeZone;
-        let scheduler = setup_scheduler(Some(21), Some(8));
+        let scheduler = setup_scheduler();
         let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
-        
+
         let now = chrono::Utc.with_ymd_and_hms(2025, 6, 15, 23, 30, 0).unwrap();
         assert!(!scheduler.check_quiet_hours_at(&job, now));
 
@@ -183,29 +160,29 @@ mod tests {
     #[test]
     fn test_cron_override_model() {
         let mut cfg = CliConfig::default();
-        cfg.model = Some("opus".to_string());
-        cfg.provider = "claude".to_string();
+        cfg.model = Some("gemini-3.8-flash".to_string());
+        cfg.provider = "antigravity".to_string();
 
         let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
-        job.model = Some("sonnet".to_string());
-        
+        job.model = Some("gemini-4-argon".to_string());
+
         let mut jc = cfg.clone();
         if let Some(m) = &job.model { jc.model = Some(m.clone()); }
         let cli = AntigravityCli::new(jc);
         let cmd = cli.build_command("Prompt", None, false);
         assert!(cmd.contains(&"--model".to_string()));
         let idx = cmd.iter().position(|s| s == "--model").unwrap();
-        assert_eq!(cmd[idx + 1], "claude-sonnet-5-5");
+        assert_eq!(cmd[idx + 1], "gemini-4-argon");
     }
 
     #[test]
     fn test_cron_override_cli() {
         let mut cfg = CliConfig::default();
-        cfg.provider = "claude".to_string();
+        cfg.provider = "antigravity".to_string();
 
         let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
         job.cli_parameters = vec!["--chrome".to_string()];
-        
+
         let mut jc = cfg.clone();
         if !job.cli_parameters.is_empty() {
             jc.cli_parameters.insert("antigravity".to_string(), job.cli_parameters.clone());
@@ -216,16 +193,16 @@ mod tests {
     }
 
     #[test]
-    fn test_cron_override_reasoning() {
+    fn test_cron_override_effort() {
         let mut cfg = CliConfig::default();
         cfg.provider = "antigravity".to_string();
         cfg.model = Some("gemini-3.8-flash".to_string());
 
         let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
-        job.reasoning_effort = Some("low".to_string());
-        
+        job.effort = Some("low".to_string());
+
         let mut jc = cfg.clone();
-        if let Some(r) = &job.reasoning_effort {
+        if let Some(r) = &job.effort {
             jc.effort = Some(r.clone());
         }
         let cli = AntigravityCli::new(jc);
@@ -238,21 +215,16 @@ mod tests {
     #[test]
     fn test_cron_override_fallback() {
         let mut cfg = CliConfig::default();
-        cfg.model = Some("opus".to_string());
-        cfg.provider = "claude".to_string();
+        cfg.model = Some("gemini-4-argon".to_string());
+        cfg.provider = "antigravity".to_string();
 
-        let mut job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
-        
+        let job = CronJob::new("test".into(), "T".into(), "*".into(), "task".into(), "do".into(), 0, None);
+
         let mut jc = cfg.clone();
         if let Some(m) = &job.model { jc.model = Some(m.clone()); }
         let cli = AntigravityCli::new(jc);
         let cmd = cli.build_command("Prompt", None, false);
         let idx = cmd.iter().position(|s| s == "--model").unwrap();
-        assert_eq!(cmd[idx + 1], "claude-opus-5-5");
-
-        job.provider = Some("antigravity".to_string());
-        let mut jc2 = cfg.clone();
-        if let Some(p) = &job.provider { jc2.provider = p.clone(); }
-        assert_eq!(jc2.provider, "antigravity");
+        assert_eq!(cmd[idx + 1], "gemini-4-argon");
     }
 }

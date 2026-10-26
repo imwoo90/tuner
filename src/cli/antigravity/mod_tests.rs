@@ -1,13 +1,18 @@
 use super::*;
 use crate::config::CliConfig;
 
+fn create_test_dir() -> tempfile::TempDir {
+    tempfile::Builder::new().prefix("tuner_mod_").tempdir().unwrap()
+}
+
 #[test]
 fn test_antigravity_command_uses_print_and_conversation() {
-    let dir = create_test_dir("print_conv_test");
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
     let config = CliConfig {
         provider: "antigravity".to_string(),
         model: Some("antigravity-default".to_string()),
-        working_dir: dir,
+        working_dir: temp_dir.path().to_path_buf(),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -22,9 +27,11 @@ fn test_antigravity_command_uses_print_and_conversation() {
 
 #[test]
 fn test_antigravity_command_grounds_in_workspace() {
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
     let config = CliConfig {
         provider: "antigravity".to_string(),
-        working_dir: PathBuf::from("."),
+        working_dir: temp_dir.path().to_path_buf(),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -37,11 +44,12 @@ fn test_antigravity_command_grounds_in_workspace() {
 
 #[test]
 fn test_antigravity_command_includes_selected_model() {
-    let dir = create_test_dir("model_test");
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
     let config = CliConfig {
         provider: "antigravity".to_string(),
-        model: Some("claude-sonnet-4-5".to_string()),
-        working_dir: dir,
+        model: Some("claude-sonnet-5-5".to_string()),
+        working_dir: temp_dir.path().to_path_buf(),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -49,7 +57,7 @@ fn test_antigravity_command_includes_selected_model() {
 
     assert!(cmd.contains(&"--model".to_string()));
     let model_idx = cmd.iter().position(|s| s == "--model").unwrap();
-    assert_eq!(cmd[model_idx + 1], "claude-sonnet-4-5");
+    assert_eq!(cmd[model_idx + 1], "claude-sonnet-5-5");
     
     let print_idx = cmd.iter().position(|s| s == "--print").unwrap();
     assert!(model_idx < print_idx);
@@ -57,11 +65,12 @@ fn test_antigravity_command_includes_selected_model() {
 
 #[test]
 fn test_antigravity_command_continue_and_bypass() {
-    let dir = create_test_dir("continue_bypass_test");
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
     let config = CliConfig {
         provider: "antigravity".to_string(),
         permission_mode: "bypassPermissions".to_string(),
-        working_dir: dir,
+        working_dir: temp_dir.path().to_path_buf(),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -74,13 +83,14 @@ fn test_antigravity_command_continue_and_bypass() {
 
 #[test]
 fn test_antigravity_command_includes_cli_parameters() {
-    let dir = create_test_dir("cli_params_test");
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
     let mut cli_params = std::collections::HashMap::new();
     cli_params.insert("antigravity".to_string(), vec!["--log-file".to_string(), "agy.log".to_string()]);
     let config = CliConfig {
         provider: "antigravity".to_string(),
         cli_parameters: cli_params,
-        working_dir: dir,
+        working_dir: temp_dir.path().to_path_buf(),
         ..Default::default()
     };
     let cli = AntigravityCli::new(config);
@@ -94,16 +104,12 @@ fn test_antigravity_command_includes_cli_parameters() {
     assert_eq!(cmd[cmd.len() - 2..], ["--print".to_string(), "hi".to_string()]);
 }
 
-fn create_test_dir(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join("tuner_mod_tests").join(name);
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).unwrap();
-    p
-}
-
 #[test]
 fn test_antigravity_dotted_workspace_mapped_to_symlink() {
-    let base = create_test_dir("dotted_test");
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = create_test_dir();
+    let base = temp_dir.path().join(".tuner").join("workspace");
+    std::fs::create_dir_all(&base).unwrap();
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
@@ -115,6 +121,7 @@ fn test_antigravity_dotted_workspace_mapped_to_symlink() {
 
     let agy_ws_str = agy_ws.to_string_lossy();
     assert!(!agy_ws_str.contains("/."));
+    assert!(agy_ws_str.ends_with("/tuner/workspace"));
     assert_eq!(agy_ws.canonicalize().unwrap(), base.canonicalize().unwrap());
 
     let cmd = cli.build_command("hi", None, false);
@@ -138,12 +145,12 @@ fn test_antigravity_plain_workspace_unchanged() {
 
 #[test]
 fn test_format_prompt_injects_system_prompts_without_duplicating_native_rules() {
-    let base = create_test_dir("prompt_inject_test");
-    std::fs::write(base.join("AGENTS.md"), "NATIVE_AGENTS_RULES").unwrap();
+    let temp_dir = create_test_dir();
+    std::fs::write(temp_dir.path().join("AGENTS.md"), "NATIVE_AGENTS_RULES").unwrap();
 
     let config = CliConfig {
         provider: "antigravity".to_string(),
-        working_dir: base,
+        working_dir: temp_dir.path().to_path_buf(),
         system_prompt: Some("CUSTOM_SYSTEM".to_string()),
         append_system_prompt: Some("CUSTOM_APPEND".to_string()),
         ..Default::default()

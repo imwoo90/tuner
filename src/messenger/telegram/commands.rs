@@ -152,7 +152,7 @@ pub(crate) async fn handle_commands(
     }
     let trimmed = text.trim();
     if trimmed == "/usage" {
-        super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli, topic_cache).await?;
+        super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli).await?;
         return Ok(true);
     }
     if trimmed == "/remote" || trimmed.starts_with("/remote ") {

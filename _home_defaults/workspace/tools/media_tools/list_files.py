@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """List received media files with optional filtering.
 
-Reads the auto-maintained _index.yaml in the media files directory.
-Searches both telegram_files/ and matrix_files/.
+Searches telegram_files/ in the active workspace.
 
 Usage:
-    python tools/media_tools/list_files.py
-    python tools/media_tools/list_files.py --type image
-    python tools/media_tools/list_files.py --date 2025-01-15
-    python tools/media_tools/list_files.py --limit 5
+    python3 tools/media_tools/list_files.py
+    python3 tools/media_tools/list_files.py --type image
+    python3 tools/media_tools/list_files.py --date 2026-01-15
+    python3 tools/media_tools/list_files.py --limit 5
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _MEDIA_DIRS = ("telegram_files",)
-_IGNORED_FILES = frozenset({"RULES.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md"})
+_IGNORED_FILES = frozenset({"RULES.md", "AGENTS.md"})
 
 
 def _get_base_dirs() -> list[Path]:
@@ -87,7 +86,6 @@ def main() -> None:
     for base_dir in base_dirs:
         all_results.extend(_scan_dir(base_dir, args))
 
-    # Sort by date descending, limit
     all_results.sort(key=lambda r: r["date"], reverse=True)
     all_results = all_results[: args.limit]
 

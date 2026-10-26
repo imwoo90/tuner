@@ -37,11 +37,10 @@ fn make_hook(id: &str) -> WebhookEntry {
         hmac_payload_prefix_regex_cached: std::sync::Arc::new(std::sync::OnceLock::new()),
         provider: None,
         model: None,
-        reasoning_effort: None,
+        effort: None,
         cli_parameters: vec![],
         quiet_start: None,
         quiet_end: None,
-        dependency: None,
         trigger_count: 0,
         last_triggered_at: None,
         last_error: None,
@@ -49,48 +48,31 @@ fn make_hook(id: &str) -> WebhookEntry {
 }
 
 #[tokio::test]
-async fn test_add_hook_saves_to_json() {
-    let (_dir, mgr) = make_temp_manager();
-    mgr.add_hook(make_hook("email-notify")).await.unwrap();
+async fn test_load_and_get_hook_from_json() {
+    let (dir, mgr) = make_temp_manager();
+    let hooks_path = dir.path().join("webhooks.json");
+    let payload = json!({ "hooks": [make_hook("email-notify")] });
+    std::fs::write(&hooks_path, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
 
-    let hooks = mgr.list_hooks().await;
-    assert_eq!(hooks.len(), 1);
-    assert_eq!(hooks[0].id, "email-notify");
+    mgr.reload().await.unwrap();
+    let hook = mgr.get_hook("email-notify").await.unwrap();
+    assert_eq!(hook.id, "email-notify");
+    assert!(mgr.get_hook("nonexistent").await.is_none());
 }
 
 #[tokio::test]
-async fn test_add_duplicate_raises() {
-    let (_dir, mgr) = make_temp_manager();
-    mgr.add_hook(make_hook("email-notify")).await.unwrap();
-    assert!(mgr.add_hook(make_hook("email-notify")).await.is_err());
-}
+async fn test_record_trigger_updates_and_persists_state() {
+    let (dir, mgr) = make_temp_manager();
+    let hooks_path = dir.path().join("webhooks.json");
+    let payload = json!({ "hooks": [make_hook("hook-1")] });
+    std::fs::write(&hooks_path, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
 
-#[tokio::test]
-async fn test_remove_hook() {
-    let (_dir, mgr) = make_temp_manager();
-    mgr.add_hook(make_hook("email-notify")).await.unwrap();
-    assert!(mgr.remove_hook("email-notify").await.unwrap());
-    assert_eq!(mgr.list_hooks().await.len(), 0);
-}
+    mgr.reload().await.unwrap();
+    mgr.record_trigger("hook-1", Some("timeout".to_string())).await;
 
-#[tokio::test]
-async fn test_remove_nonexistent_returns_false() {
-    let (_dir, mgr) = make_temp_manager();
-    assert!(!mgr.remove_hook("missing").await.unwrap());
-}
-
-#[tokio::test]
-async fn test_update_hook() {
-    let (_dir, mgr) = make_temp_manager();
-    mgr.add_hook(make_hook("hook-1")).await.unwrap();
-
-    let updates = json!({
-        "title": "New Title",
-        "enabled": false
-    });
-    assert!(mgr.update_hook("hook-1", &updates).await.unwrap());
-
-    let hook = mgr.get_hook("hook-1").await.unwrap();
-    assert_eq!(hook.title, "New Title");
-    assert!(!hook.enabled);
+    let mgr2 = WebhookManager::new(hooks_path);
+    let hook = mgr2.get_hook("hook-1").await.unwrap();
+    assert_eq!(hook.trigger_count, 1);
+    assert!(hook.last_triggered_at.is_some());
+    assert_eq!(hook.last_error.as_deref(), Some("timeout"));
 }

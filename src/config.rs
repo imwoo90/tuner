@@ -28,16 +28,12 @@ pub struct CliConfig {
     pub append_system_prompt: Option<String>,
     /// Permission mode.
     pub permission_mode: String,
-    /// Docker container.
-    pub docker_container: Option<String>,
     /// Cli parameters.
     pub cli_parameters: std::collections::HashMap<String, Vec<String>>,
     /// Chat id.
     pub chat_id: i64,
     /// Topic id.
     pub topic_id: Option<i64>,
-    /// Process label.
-    pub process_label: String,
     /// Transport.
     pub transport: String,
     /// Telegram token.
@@ -56,16 +52,6 @@ pub struct CliConfig {
     pub daily_reset_enabled: bool,
     /// Max session messages.
     pub max_session_messages: Option<i64>,
-    /// Telegram heartbeat enabled.
-    pub telegram_heartbeat_enabled: bool,
-    /// Telegram heartbeat interval minutes.
-    pub telegram_heartbeat_interval_minutes: Option<i64>,
-    /// Telegram heartbeat quiet start.
-    pub telegram_heartbeat_quiet_start: Option<u32>,
-    /// Telegram heartbeat quiet end.
-    pub telegram_heartbeat_quiet_end: Option<u32>,
-    /// Telegram heartbeat ack token.
-    pub telegram_heartbeat_ack_token: Option<String>,
     /// Heartbeat.
     pub heartbeat: HeartbeatConfig,
     /// Cleanup.
@@ -147,11 +133,9 @@ impl Default for CliConfig {
             system_prompt: None,
             append_system_prompt: None,
             permission_mode: "bypassPermissions".to_string(),
-            docker_container: None,
             cli_parameters: std::collections::HashMap::new(),
             chat_id: 0,
             topic_id: None,
-            process_label: "main".to_string(),
             transport: "tg".to_string(),
             telegram_token: String::new(),
             allowed_user_ids: Vec::new(),
@@ -161,11 +145,6 @@ impl Default for CliConfig {
             daily_reset_hour: 4,
             daily_reset_enabled: false,
             max_session_messages: None,
-            telegram_heartbeat_enabled: false,
-            telegram_heartbeat_interval_minutes: None,
-            telegram_heartbeat_quiet_start: None,
-            telegram_heartbeat_quiet_end: None,
-            telegram_heartbeat_ack_token: None,
             heartbeat: HeartbeatConfig::default(),
             cleanup: crate::cleanup::observer::CleanupConfig::default(),
             webhooks: WebhookConfig::default(),
@@ -223,6 +202,12 @@ impl CliConfig {
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         let mut cfg: Self = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        if cfg.allowed_user_ids == vec![123456789] {
+            cfg.allowed_user_ids.clear();
+        }
+        if cfg.allowed_group_ids == vec![-1001234567890] {
+            cfg.allowed_group_ids.clear();
+        }
         if cfg.profiles.is_empty() {
             let default_profile = ProfileConfig {
                 name: "default".to_string(),

@@ -13,7 +13,8 @@ mod tests {
         std::fs::write(&file2, "[app]\nname = \"tuner\"").unwrap();
 
         let mgr = ReviewManager::new();
-        let (token, count) = mgr.create_session(&[file1.clone(), file2.clone()]).await.unwrap();
+        let (_, count) = mgr.register_session(&[file1.clone(), file2.clone()]).await.unwrap();
+        let token = mgr.activate_session(&[file1.clone(), file2.clone()]).await.unwrap();
 
         assert_eq!(count, 2);
         assert!(!token.is_empty());
@@ -41,7 +42,8 @@ mod tests {
         std::fs::write(&video_file, &fake_video_data).unwrap();
 
         let mgr = ReviewManager::new();
-        let (token, count) = mgr.create_session(std::slice::from_ref(&video_file)).await.unwrap();
+        let (_, count) = mgr.register_session(std::slice::from_ref(&video_file)).await.unwrap();
+        let token = mgr.activate_session(std::slice::from_ref(&video_file)).await.unwrap();
         assert_eq!(count, 1);
 
         let files = mgr.get_files(&token).await.unwrap();
@@ -65,7 +67,7 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
 
     #[tokio::test]
     async fn test_review_server_and_media_endpoints() {
-        let _lock = super::super::TEST_ENV_MUTEX.lock().unwrap();
+        let _lock = super::super::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempdir().unwrap();
         let py_file = dir.path().join("test.py");
         std::fs::write(&py_file, "print('hello from test')").unwrap();
@@ -73,7 +75,7 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         std::fs::write(&video_file, b"fake video byte stream content").unwrap();
 
         let mgr = global_review_manager();
-        let (token, _) = mgr.create_session(&[py_file, video_file]).await.unwrap();
+        let token = mgr.activate_session(&[py_file, video_file]).await.unwrap();
         let port = mgr.ensure_server_running().await;
 
         let client = reqwest::Client::new();
@@ -142,7 +144,8 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         std::fs::write(&big_html, &payload).unwrap();
 
         let mgr = ReviewManager::new();
-        let (token, count) = mgr.create_session(std::slice::from_ref(&big_html)).await.unwrap();
+        let (_, count) = mgr.register_session(std::slice::from_ref(&big_html)).await.unwrap();
+        let token = mgr.activate_session(std::slice::from_ref(&big_html)).await.unwrap();
         assert_eq!(count, 1);
 
         let files = mgr.get_files(&token).await.unwrap();
@@ -176,7 +179,8 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         std::fs::write(&zip_path, &zip_bytes).unwrap();
 
         let mgr = ReviewManager::new();
-        let (token, count) = mgr.create_session(std::slice::from_ref(&zip_path)).await.unwrap();
+        let (_, count) = mgr.register_session(std::slice::from_ref(&zip_path)).await.unwrap();
+        let token = mgr.activate_session(std::slice::from_ref(&zip_path)).await.unwrap();
         assert_eq!(count, 1);
 
         let files = mgr.get_files(&token).await.unwrap();

@@ -149,13 +149,6 @@ impl ReviewManager {
         Some(token)
     }
 
-    /// Executes `create_session` (create session).
-    pub async fn create_session(&self, paths: &[PathBuf]) -> Option<(String, usize)> {
-        let (_session_id, count) = self.register_session(paths).await?;
-        let token = self.activate_session(paths).await?;
-        Some((token, count))
-    }
-
     /// Executes `get_files` (get files).
     pub async fn get_files(&self, token_or_id: &str) -> Option<Vec<ReviewFile>> {
         let mut map = self.sessions.lock().await;

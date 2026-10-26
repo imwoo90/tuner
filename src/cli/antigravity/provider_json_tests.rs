@@ -38,6 +38,7 @@ fn test_parse_antigravity_json_extracts_response_field() {
 
 #[test]
 fn test_build_command_includes_output_format_json() {
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let config = CliConfig {
         provider: "antigravity".to_string(),
         ..Default::default()
@@ -53,11 +54,9 @@ fn test_build_command_includes_output_format_json() {
     assert!(idx < print_idx);
 }
 
-static TIMEOUT_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 #[test]
 fn test_resolve_oneshot_timeout_default() {
-    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let args: Vec<String> = vec!["agy".into(), "--print".into(), "hello".into()];
     let (duration, display) = AntigravityCli::resolve_oneshot_timeout(&args);
     assert_eq!(display, 3600);
@@ -66,6 +65,7 @@ fn test_resolve_oneshot_timeout_default() {
 
 #[test]
 fn test_resolve_oneshot_timeout_from_cmd_args() {
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let args1: Vec<String> = vec!["agy".into(), "--print-timeout".into(), "600".into()];
     let (duration1, display1) = AntigravityCli::resolve_oneshot_timeout(&args1);
     assert_eq!(display1, 600);
@@ -79,6 +79,7 @@ fn test_resolve_oneshot_timeout_from_cmd_args() {
 
 #[test]
 fn test_resolve_oneshot_timeout_unlimited() {
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let args: Vec<String> = vec!["agy".into(), "--print-timeout".into(), "0".into()];
     let (duration, display) = AntigravityCli::resolve_oneshot_timeout(&args);
     assert_eq!(display, 0);
@@ -87,7 +88,7 @@ fn test_resolve_oneshot_timeout_unlimited() {
 
 #[test]
 fn test_resolve_oneshot_timeout_from_env() {
-    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         std::env::set_var("TUNER_CLI_TIMEOUT_SECS", "1800");
     }
@@ -102,7 +103,7 @@ fn test_resolve_oneshot_timeout_from_env() {
 
 #[test]
 fn test_build_command_includes_print_timeout_from_env() {
-    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
     }
@@ -125,7 +126,7 @@ fn test_build_command_includes_print_timeout_from_env() {
 
 #[test]
 fn test_build_command_preserves_cli_parameters_print_timeout() {
-    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
     }
@@ -153,6 +154,7 @@ fn test_build_command_preserves_cli_parameters_print_timeout() {
 
 #[test]
 fn test_resolve_oneshot_timeout_from_cmd_args_equals_syntax() {
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let args1: Vec<String> = vec!["agy".into(), "--print-timeout=600".into()];
     let (duration1, display1) = AntigravityCli::resolve_oneshot_timeout(&args1);
     assert_eq!(display1, 600);
@@ -166,7 +168,7 @@ fn test_resolve_oneshot_timeout_from_cmd_args_equals_syntax() {
 
 #[test]
 fn test_build_command_preserves_cli_parameters_print_timeout_equals_syntax() {
-    let _guard = TIMEOUT_TEST_MUTEX.lock().unwrap();
+    let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         std::env::set_var("TUNER_PRINT_TIMEOUT", "1800s");
     }

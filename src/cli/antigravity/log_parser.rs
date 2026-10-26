@@ -204,14 +204,4 @@ impl AntigravityLogParser {
         }
         self.ingest_entries(&entries, new_size)
     }
-
-    /// Executes `parse_log_delta` (parse log delta).
-    pub fn parse_log_delta(
-        &mut self,
-        transcript_path: &Path,
-        prev_size: Option<u64>,
-    ) -> (u64, Option<String>, Option<Vec<crate::cli::AskQuestionData>>) {
-        let res = self.parse_log_delta_structured(transcript_path, prev_size);
-        (res.new_size, res.formatted, res.ask_question)
-    }
 }

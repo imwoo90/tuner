@@ -6,91 +6,35 @@
 //! ## Search Tags
 //! #rule-profiles, #markdown-rules, #profile-mapping
 
-use crate::workspace::paths::DuctorPaths;
+use crate::workspace::paths::TunerPaths;
 use std::path::{Path, PathBuf};
 
-fn check_antigravity_installed(paths: &DuctorPaths) -> bool {
-    if std::env::var("TUNER_TEST_MODE").is_ok() {
-        return false;
-    }
-    let home = if paths.tuner_home.ends_with(".tuner") {
-        paths.tuner_home.parent().unwrap_or(&paths.tuner_home).to_path_buf()
-    } else {
-        paths.tuner_home.clone()
-    };
-    home.join(".gemini").join("antigravity-cli").is_dir()
-        || home.join(".local").join("bin").join("agy").exists()
-        || home.join(".ccs").join("agy.settings.json").is_file()
-}
-
-/// Selector and deployer for variant-specific rule files.
+/// Selector and deployer for workspace `AGENTS.md` rule files.
 pub struct RulesSelector {
     /// Paths.
-    pub paths: DuctorPaths,
-    /// Claude authenticated.
-    pub claude_authenticated: bool,
-    /// Codex authenticated.
-    pub codex_authenticated: bool,
-    /// Gemini authenticated.
-    pub gemini_authenticated: bool,
-    /// Antigravity authenticated.
-    pub antigravity_authenticated: bool,
+    pub paths: TunerPaths,
 }
 
 impl RulesSelector {
     /// Returns a RulesSelector configured for the Antigravity-native Tuner environment.
-    pub fn new(paths: DuctorPaths) -> Self {
-        let antigravity_authenticated = check_antigravity_installed(&paths);
-        Self {
-            paths,
-            claude_authenticated: false,
-            codex_authenticated: false,
-            gemini_authenticated: false,
-            antigravity_authenticated,
-        }
+    pub fn new(paths: TunerPaths) -> Self {
+        Self { paths }
     }
 
-    /// Determines variant suffix (e.g. "antigravity", "claude-only").
-    pub fn get_variant_suffix(&self) -> String {
-        let auth_count = self.claude_authenticated as usize
-            + self.codex_authenticated as usize
-            + self.gemini_authenticated as usize
-            + self.antigravity_authenticated as usize;
-
-        if auth_count >= 2 {
-            "all-clis".to_string()
-        } else if self.codex_authenticated {
-            "codex-only".to_string()
-        } else if self.antigravity_authenticated {
-            "antigravity".to_string()
-        } else if self.gemini_authenticated {
-            "gemini-only".to_string()
-        } else {
-            "claude-only".to_string()
-        }
-    }
-
-    /// Selects the best template (variant or static) for a directory.
+    /// Selects the rule template file (`RULES.md` or `AGENTS.md`) from a directory.
     pub fn get_best_template(&self, directory: &Path) -> Option<PathBuf> {
-        let variant = self.get_variant_suffix();
-        let variant_template = directory.join(format!("RULES-{}.md", variant));
-        if variant_template.is_file() {
-            return Some(variant_template);
-        }
-        if variant == "antigravity" {
-            let gemini_template = directory.join("RULES-gemini-only.md");
-            if gemini_template.is_file() {
-                return Some(gemini_template);
-            }
-        }
         let static_template = directory.join("RULES.md");
         if static_template.is_file() {
             return Some(static_template);
         }
+        let agents_template = directory.join("AGENTS.md");
+        if agents_template.is_file() {
+            return Some(agents_template);
+        }
         None
     }
 
-    /// Deploys rule files to the workspace root and cleans up stale/legacy rule files.
+    /// Deploys `AGENTS.md` to the workspace root and cleans up stale rule files.
     pub fn deploy_rules(&self) -> Result<(), String> {
         let ws_template_dir = self.paths.home_defaults.join("workspace");
         let template_opt = self
@@ -102,34 +46,16 @@ impl RulesSelector {
             if let Err(e) = std::fs::create_dir_all(&dst_dir) {
                 return Err(format!("Failed to create directory {:?}: {}", dst_dir, e));
             }
-            if self.claude_authenticated {
-                let _ = std::fs::copy(&template, dst_dir.join("CLAUDE.md"));
-            }
-            if self.codex_authenticated
-                || self.antigravity_authenticated
-                || (!self.claude_authenticated && !self.gemini_authenticated)
-            {
-                let _ = std::fs::copy(&template, dst_dir.join("AGENTS.md"));
-            }
-            if self.gemini_authenticated {
-                let _ = std::fs::copy(&template, dst_dir.join("GEMINI.md"));
-            }
+            let _ = std::fs::copy(&template, dst_dir.join("AGENTS.md"));
         }
         let _ = self.cleanup_stale_files();
         Ok(())
     }
 
-    /// Removes rule files for unauthenticated CLI providers and purges legacy subdirectory rule files.
+    /// Purges legacy rule files and deprecated directories from managed profile folders.
     pub fn cleanup_stale_files(&self) -> Result<usize, String> {
-        let mut stale = Vec::new();
-        if !self.claude_authenticated {
-            stale.push("CLAUDE.md");
-        }
-        if !self.gemini_authenticated {
-            stale.push("GEMINI.md");
-        }
         let mut total_removed = 0;
-        for filename in stale {
+        for filename in &["CLAUDE.md", "GEMINI.md"] {
             total_removed += self.remove_files_by_name(filename)?;
         }
 
@@ -138,11 +64,9 @@ impl RulesSelector {
             if dir == ws {
                 continue;
             }
-            for filename in &["CLAUDE.md", "AGENTS.md", "GEMINI.md"] {
-                let file_path = dir.join(filename);
-                if file_path.is_file() && std::fs::remove_file(&file_path).is_ok() {
-                    total_removed += 1;
-                }
+            let file_path = dir.join("AGENTS.md");
+            if file_path.is_file() && std::fs::remove_file(&file_path).is_ok() {
+                total_removed += 1;
             }
         }
 
@@ -173,7 +97,7 @@ impl RulesSelector {
     }
 }
 
-fn managed_profile_rule_dirs(paths: &DuctorPaths) -> Vec<PathBuf> {
+fn managed_profile_rule_dirs(paths: &TunerPaths) -> Vec<PathBuf> {
     use crate::workspace::sync_helpers::MANAGED_SINGLE_DIRS;
     let profile_home = paths.profile_home();
     let ws = paths.workspace();
@@ -186,7 +110,7 @@ fn managed_profile_rule_dirs(paths: &DuctorPaths) -> Vec<PathBuf> {
         dirs.push(ws.join(d));
     }
     dirs.push(ws.join("cron_tasks"));
-    for container in &["tasks", "tools", "skills"] {
+    for container in &["tools", "skills"] {
         let c_path = ws.join(container);
         dirs.push(c_path.clone());
         if let Ok(entries) = std::fs::read_dir(&c_path) {
@@ -211,10 +135,9 @@ mod tests {
     fn test_cleanup_stale_files_protects_projects_dir() {
         let tmp = tempdir().unwrap();
         let home = tmp.path().join("home");
-        let paths = DuctorPaths::new(
+        let paths = TunerPaths::new(
             home,
             tmp.path().join("defaults"),
-            tmp.path().join("fw"),
             Some("default".to_string()),
         );
         let profile_ws = paths.workspace();

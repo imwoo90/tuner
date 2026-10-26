@@ -30,16 +30,16 @@ graph TD
     subgraph CoreDaemon["Tuner Core Daemon Control Plane"]
         Supervisor["Master Supervisor (Fork/Exec Worker, Exit 42 Reload)"]
         Bus["Central MessageBus & PromptInjector"]
-        LockPool["LockPool (Two-Tier RwLock & Weak TokioMutex)"]
+        LockPool["LockPool (Weakly-Referenced Per-(Chat, Topic) TokioMutex Pool)"]
         SessionMgr["SessionManager (Two-Phase Atomic .tmp + rename)"]
-        WorkspaceMgr["Workspace Engine (DuctorPaths / Rules / SkillSync)"]
+        WorkspaceMgr["Workspace Engine (TunerPaths / Rules / SkillSync)"]
         VaultStore["Zero-Knowledge Vault (XSalsa20-Poly1305 + Redactor)"]
     end
 
     subgraph AgentRuntime["Agent Execution Subsystem (cli/)"]
-        PTY["PTY Spawner (openpty, 24x80, setsid, tcsetpgrp)"]
+        PTY["PTY Spawner (openpty, 50x100, setsid, TIOCSCTTY)"]
         Holder["SessionHolder (Drop Guard: -pgid SIGKILL + master close SIGHUP)"]
-        Poller["Log Poller (inotify + 100ms/5s Adaptive Fallback)"]
+        Poller["Log Poller (inotify + 500ms/5s Fallback)"]
         Parser["AntigravityLogParser (Incremental JSONL Delta Ingestion)"]
         AsyncObs["SessionAsyncObserver (Background Task Wakeup)"]
     end
@@ -79,19 +79,19 @@ src/
 │   ├── mod.rs                # Module index & public re-exports
 │   ├── bus.rs                # MessageBus, Transport trait, PromptInjector trait
 │   ├── envelope.rs           # Canonical Envelope: Origin variants, DeliveryMode, LockMode
-│   ├── lock_pool.rs          # Two-tier chat RwLock & weakly-referenced topic TokioMutex pool
+│   ├── lock_pool.rs          # Weakly-referenced per-(chat_id, topic_id) TokioMutex pool
 │   ├── adapters.rs           # Domain event transformers for cron/heartbeat/webhook outputs
 │   └── observers_wire.rs     # ObserverManager automatic bus wiring
 │
 ├── workspace/                # Workspace governance, sandboxing & skill synchronizers
 │   ├── mod.rs                # Module index & initialization orchestrator
-│   ├── paths.rs              # DuctorPaths: Canonical profile-isolated paths single-source-of-truth
+│   ├── paths.rs              # TunerPaths: Canonical profile-isolated paths single-source-of-truth
 │   ├── rules.rs              # RulesSelector: Prompt rule file seeding (AGENTS.md / constraints.md)
 │   ├── sync.rs               # Folder initialization & non-destructive template synchronization
 │   ├── sync_helpers.rs       # Whitelist file copy helpers & directory traversal
 │   ├── sync_layout.rs        # Default workspace directory layout provisioning
 │   ├── skills.rs             # YAML frontmatter discovery (---) & bidirectional skill sync
-│   └── skills_helpers.rs     # Cross-platform symlinks, NTFS junctions, .tuner_managed copies
+│   └── skills_helpers.rs     # Cross-platform symlinks and NTFS junctions
 │
 ├── session/                  # State continuity, handover & disk serialization
 │   ├── mod.rs                # Module index & local timezone daily reset / idle freshness checks
@@ -100,11 +100,11 @@ src/
 │   └── key.rs                # Immutable composite SessionKey (transport, chat_id, topic_id)
 │
 ├── cli/                      # Agent substrate abstractions & CLI driver
-│   ├── mod.rs                # CliProvider trait, CliResponse, StreamEvent models
+│   ├── mod.rs                # AgentProvider trait, CliResponse, StreamEvent models
 │   └── antigravity/          # Google Antigravity (agy) implementation
 │       ├── mod.rs            # Driver index, AntigravityCli struct & path probing
 │       ├── provider.rs       # Provider implementation, env configuration, oneshot & PTY runs
-│       ├── pty_spawner.rs    # openpty (24x80), non-blocking AsyncFd, setsid, SessionHolder
+│       ├── pty_spawner.rs    # openpty (50x100), non-blocking AsyncFd, setsid, TIOCSCTTY, SessionHolder
 │       ├── session.rs        # In-memory PTY child registry, AskState interactive question cache
 │       ├── polling.rs        # notify inotify watcher + adaptive ticker monitoring transcript_full.jsonl
 │       ├── completion.rs     # Step completion state machine & background task detection
@@ -114,53 +114,56 @@ src/
 │       ├── error_parser.rs   # CLI exit codes & stderr failure diagnostic mapping
 │       └── trust.rs          # Auto-trust workspace injection into ~/.gemini/antigravity-cli/
 │
-├── messenger/telegram/       # Telegram Bot integration, Web Review Viewer & TUI bridge
-│   ├── mod.rs                # Subsystem index & turn orchestration
-│   ├── runner.rs             # Teloxide bot initialization, scheduler wiring, restart watcher
-│   ├── handler.rs            # Ingress message dispatcher, owner auto-registration, forum routing
-│   ├── stream.rs             # Real-time streaming consumer, 2.0s edit debouncing, HTML chunker
-│   ├── async_observer.rs     # Background async command completion observer & automatic push
-│   ├── handover.rs           # Topic session reset (/new) summary extraction & context injection
-│   ├── handover_helpers.rs   # Transcript tailing & handover prompt formatting
-│   ├── attachments.rs        # Outbound native file:// link & image embed extraction
-│   ├── attachments_dl.rs     # Inbound Telegram media/document download to telegram_files/
-│   ├── reply.rs              # Quoted prompt synthesis (> ), @model / --effort directive parser
-│   ├── ask_process.rs        # Interactive ask_question inline keyboard loop
-│   ├── ask_callbacks.rs      # Callback query dispatch for ask_question selections
-│   ├── ask_helpers.rs        # Question state persistence & multi-select formatting
-│   ├── multi_select.rs       # Interactive multi-option toggle state machine
-│   ├── review.rs             # File review bundle builder & inline button generator
-│   ├── review_server.rs      # Ephemeral Axum HTTP server + Cloudflare tunnel for Review Viewer v2
-│   ├── review_store.rs       # Token-indexed file bundle store & ZIP archive entry inspector
-│   ├── review_callback.rs    # Callback handler launching Review Viewer v2 tunnel on demand
-│   ├── review_viewer.html    # Responsive dual-UX Web File, Code, Markdown, PDF, ZIP & 3D STEP Viewer
-│   ├── vault.rs              # /vault command handler & HTTP CRUD endpoints (/vault/<token>/api/entries)
-│   ├── vault_viewer.html     # Responsive Web UI for per-profile credential management
-│   ├── commands.rs           # Primary slash command router (/help, /status, /memory, /cron, etc.)
-│   ├── commands_model.rs     # /model & /effort interactive inline selector handlers
-│   ├── commands_session.rs   # /new, /reset, /stop & /abort session control handlers
-│   ├── commands_usage.rs     # /usage live quota parser, cache & progress bar formatter
-│   ├── commands_remote.rs    # /remote dashboard & Cloudflare tunnel lifecycle controller
-│   ├── commands_remote_hub.rs# Local web terminal & remote service hub spawner
-│   ├── commands_registry.rs  # BotCommand registration & lock-free command classification
-│   ├── callbacks.rs          # Model, language, cron & remote inline callback router
-│   ├── callbacks_effort.rs   # Effort level callback handler
-│   ├── cron_selector.rs      # Paginated /cron interactive task inspector
-│   ├── cron_formatter.rs     # Cron schedule & execution status HTML formatter
-│   ├── history.rs            # Topic name cache & message history helpers
-│   ├── lang.rs               # /lang inline keyboard & per-session locale switcher
-│   ├── media.rs              # Inbound media metadata & pending_attachments queue
-│   ├── media_group.rs        # Telegram album (media_group_id) aggregation buffer
-│   ├── rate_limiter.rs       # Per-chat token-bucket rate limiter avoiding HTTP 429
-│   ├── session_init.rs       # Lazy PTY session initialization & handover preamble injection
-│   ├── transport.rs          # TelegramTransport implementing bus Transport trait
-│   ├── typing.rs             # TelegramTypingGuard (4s ChatAction::Typing + ⏳ reaction)
-│   ├── upgrade.rs            # /upgrade interactive release check & binary swap trigger
-│   └── formatting/           # Sentinel-based Markdown to Telegram HTML converter & tag balancer
-│       ├── mod.rs            # Formatting pipeline entry point
-│       ├── helpers.rs        # Markdown inline/block parser & expandable blockquote builder
-│       ├── splitting.rs      # Tag-balanced 4000-char HTML message splitter
-│       └── table.rs          # Box-drawing ASCII table renderer for Telegram <pre> blocks
+├── messenger/                # Messaging frontend adapters
+│   ├── mod.rs                # Messenger module index
+│   └── telegram/             # Telegram Bot integration, Web Review Viewer & TUI bridge
+│       ├── mod.rs            # Subsystem index & turn orchestration
+│       ├── auth.rs           # User/group authorization & first-user owner auto-registration
+│       ├── runner.rs         # Teloxide bot initialization, scheduler wiring, restart watcher
+│       ├── handler.rs        # Ingress message dispatcher, owner auto-registration, forum routing
+│       ├── stream.rs         # Real-time streaming consumer, 2.0s edit debouncing, HTML chunker
+│       ├── async_observer.rs # Background async command completion observer & automatic push
+│       ├── handover.rs       # Topic session reset (/new) summary extraction & context injection
+│       ├── handover_helpers.rs # Transcript tailing & handover prompt formatting
+│       ├── attachments.rs    # Outbound native file:// link & image embed extraction
+│       ├── attachments_dl.rs # Inbound Telegram media/document download to telegram_files/
+│       ├── reply.rs          # Quoted prompt synthesis (> ), @model / --effort directive parser
+│       ├── ask_process.rs    # Interactive ask_question inline keyboard loop
+│       ├── ask_callbacks.rs  # Callback query dispatch for ask_question selections
+│       ├── ask_helpers.rs    # Question state persistence & multi-select formatting
+│       ├── multi_select.rs   # Interactive multi-option toggle state machine
+│       ├── review.rs         # File review bundle builder & inline button generator
+│       ├── review_server.rs  # Ephemeral Axum HTTP server + Cloudflare tunnel for Review Viewer v2
+│       ├── review_store.rs   # Token-indexed file bundle store & ZIP archive entry inspector
+│       ├── review_callback.rs # Callback handler launching Review Viewer v2 tunnel on demand
+│       ├── review_viewer.html # Responsive dual-UX Web File, Code, Markdown, PDF, ZIP & 3D STEP Viewer
+│       ├── vault.rs          # /vault command handler & HTTP CRUD endpoints (/vault/<token>/api/entries)
+│       ├── vault_viewer.html # Responsive Web UI for per-profile credential management
+│       ├── commands.rs       # Primary slash command router (/help, /status, /memory, /cron, etc.)
+│       ├── commands_model.rs # /model & /effort interactive inline selector handlers
+│       ├── commands_session.rs # /new, /reset, /stop & /abort session control handlers
+│       ├── commands_usage.rs # /usage live quota parser, cache & progress bar formatter
+│       ├── commands_remote.rs # /remote dashboard & Cloudflare tunnel lifecycle controller
+│       ├── commands_remote_hub.rs # Local web terminal & remote service hub spawner
+│       ├── commands_registry.rs # BotCommand registration & lock-free command classification
+│       ├── callbacks.rs      # Model, language, cron & remote inline callback router
+│       ├── callbacks_effort.rs # Effort level callback handler
+│       ├── cron_selector.rs  # Paginated /cron interactive task inspector
+│       ├── cron_formatter.rs # Cron schedule & execution status HTML formatter
+│       ├── history.rs        # Topic name cache & message history helpers
+│       ├── lang.rs           # /lang inline keyboard & per-session locale switcher
+│       ├── media.rs          # Inbound media metadata & pending_attachments queue
+│       ├── media_group.rs    # Telegram album (media_group_id) aggregation buffer
+│       ├── rate_limiter.rs   # Per-chat token-bucket rate limiter avoiding HTTP 429
+│       ├── session_init.rs   # Lazy PTY session initialization & handover preamble injection
+│       ├── transport.rs      # TelegramTransport implementing bus Transport trait
+│       ├── typing.rs         # TelegramTypingGuard (4s ChatAction::Typing + ⏳ reaction)
+│       ├── upgrade.rs        # /upgrade interactive release check & binary swap trigger
+│       └── formatting/       # Sentinel-based Markdown to Telegram HTML converter & tag balancer
+│           ├── mod.rs        # Formatting pipeline entry point
+│           ├── helpers.rs    # Markdown inline/block parser & expandable blockquote builder
+│           ├── splitting.rs  # Tag-balanced 4000-char HTML message splitter
+│           └── table.rs      # Box-drawing ASCII table renderer for Telegram <pre> blocks
 │
 ├── cron/                     # Autonomous cron engine
 │   ├── mod.rs                # Cron models & schedule definitions
@@ -184,13 +187,13 @@ src/
 │   └── auth.rs               # subtle::ConstantTimeEq HMAC/Bearer verification & RateLimiter
 │
 ├── security/                 # Ingress, filesystem & Zero-Knowledge Vault defense-in-depth
-│   ├── mod.rs                # Security index & fullwidth character folding
+│   ├── mod.rs                # Security module index & path/vault re-exports
 │   ├── paths.rs              # Path traversal protection: canonical root containment checks
-│   ├── vault.rs              # Per-profile XSalsa20-Poly1305 encrypted credential store (vault.enc / vault.key)
-│   └── vault_cli.rs          # tuner --vault (list|get|exec) CLI & stdout/stderr secret redactor
+│   ├── vault.rs              # Per-profile XSalsa20-Poly1305 encrypted credential store (vault/vault.enc & vault/vault.key)
+│   └── vault_cli.rs          # tuner --vault (list|session|exec) CLI & stdout/stderr secret redactor
 │
 └── i18n/                     # Thread-safe multi-language localization
-    ├── mod.rs                # Context hierarchy: TASK_ACTIVE_LANG -> thread -> global -> "en"
+    ├── mod.rs                # Context hierarchy: TASK_ACTIVE_LANG -> GLOBAL_ACTIVE_LANG -> "en"
     ├── loader.rs             # TOML catalog loader & dot-notation flattener
     └── locales/              # 9 language catalogs (de, en, es, fr, id, ko, nl, pt, ru)
 ```
@@ -200,7 +203,7 @@ src/
 ## 3. The Shadow Planes
 
 ### 3.1 Workspace & Sandbox Provisioning
-* **Strict Profile Partitioning (`DuctorPaths`)**: Every profile (`--profile <name>`) operates within an independent root `~/.tuner/profiles/<profile>/` with isolated configuration, memory, sessions, encrypted vault (`config/vault.enc` & `config/vault.key`), cron tasks, and workspace trees.
+* **Strict Profile Partitioning (`TunerPaths`)**: Every profile (`--profile <name>`) operates within an independent root `~/.tuner/profiles/<profile>/` with isolated configuration, memory, sessions, encrypted vault (`vault/vault.enc` & `vault/vault.key`), cron tasks, and workspace trees.
 * **Tier-0 Native Rules Architecture**:
   - `AGENTS.md`: Framework constitution automatically updated during `/upgrade`.
   - `.agents/rules/constraints.md`: User-defined operational constraints (`trigger: always_on`), strictly preserved across upgrades.
@@ -213,52 +216,50 @@ src/
 * **Substrate-Aware Link Builder**:
   - *Unix Host*: Standard POSIX symlinks.
   - *Windows Host*: NTFS directory junctions (`mklink /J`).
-  - *Docker Container*: Managed physical copies tagged with `.tuner_managed` markers when cross-mount symlinks are unavailable.
 
 ### 3.3 Cryptographic Bastions & Zero-Knowledge Credential Vault
 * **Per-Profile Encrypted Credential Vault (`src/security/vault.rs`)**:
-  - Encryption: 256-bit symmetric key (`vault.key`, `chmod 0600`) encrypting `vault.enc` via `XSalsa20-Poly1305` (`crypto_box::SalsaBox` with fresh 24-byte `OsRng` nonces).
-  - Zero-Knowledge Execution (`tuner --vault exec <site> -- <cmd>`): Injects decrypted credentials (`VAULT_USER`, `VAULT_PASS`, `VAULT_URL`, and custom fields) directly into the child process environment while scrubbing all secret values from `stdout` and `stderr` (`***REDACTED***`), preventing credentials from leaking into the LLM transcript.
+  - Encryption: 256-bit symmetric key (`vault/vault.key`, `chmod 0600`) encrypting `vault/vault.enc` via `XSalsa20-Poly1305` (`crypto_box::SalsaBox` with fresh 24-byte `OsRng` nonces).
+  - Zero-Knowledge Execution (`tuner --vault exec <site> -- <cmd>`): Injects decrypted credentials (`TUNER_VAULT_SITE`, `TUNER_VAULT_TITLE`, `TUNER_VAULT_URL`, `TUNER_VAULT_USER`, `TUNER_VAULT_PASS`) directly into the child process environment while scrubbing all secret values from `stdout` and `stderr` (`***REDACTED***`), preventing credentials from leaking into the LLM transcript.
 * **Constant-Time Webhook Verification (`src/webhook/auth.rs`)**:
   - Webhook bearer tokens and HMAC digests (`sha256`, `sha512`, `sha1`) are validated using `subtle::ConstantTimeEq`, eliminating timing side-channel attacks.
-  - Enforces an RFC-compliant $\pm 300$-second timestamp tolerance window combined with an in-memory sliding nonce cache to reject captured replays.
+  - Enforces per-minute sliding-window rate limiting (`RateLimiter` backed by `VecDeque<Instant>`) to throttle abusive ingress spikes.
 
 ### 3.4 Context-Aware Dynamic Localization (`i18n`)
-Language resolution traverses a 4-tier task-local fallback hierarchy:
-$$\text{TASK\_ACTIVE\_LANG (tokio task-local)} \longrightarrow \text{ACTIVE\_LANG (thread-local)} \longrightarrow \text{GLOBAL\_ACTIVE\_LANG (RwLock)} \longrightarrow \text{"en"}$$
+Language resolution traverses a 3-tier task-local fallback hierarchy:
+$$\text{TASK\_ACTIVE\_LANG (tokio task-local)} \longrightarrow \text{GLOBAL\_ACTIVE\_LANG (RwLock)} \longrightarrow \text{"en"}$$
 By scoping `TASK_ACTIVE_LANG.scope(lang, ...)` around the root `Future` prior to dispatching via `tokio::spawn`, the user's active locale travels seamlessly across multi-threaded Tokio work-stealing executor migrations.
 
 ---
 
 ## 4. Concurrency Model & Lifecycle Topography
 
-### 4.1 Turn Genesis & Two-Tier Locking Hierarchy
-To resolve concurrency contention in multi-topic environments (such as Telegram Forum Supergroups) without throughput collapse, Tuner implements a **Two-Tier Synchronization Hierarchy**:
+### 4.1 Turn Genesis & Shared Weak LockPool Synchronization
+To resolve concurrency contention in multi-topic environments (such as Telegram Forum Supergroups) without throughput collapse or split-brain state races, `SessionManager` and `MessageBus` share a single `Arc<LockPool>` keyed by `LockKey = (chat_id, Option<topic_id>)`:
 
 ```text
-                             [ Chat Umbrella RwLock ]
-                                        │
-          ┌─────────────────────────────┴─────────────────────────────┐
-          ▼ (ReadLock: Concurrent Readers)                            ▼ (WriteLock: Exclusive Writer)
-[ Topic 101 Mutex ]   [ Topic 102 Mutex ]   [ Topic 103 Mutex ]    [ Global Broadcast / Chat-Wide Alert ]
-(Turn A executes)     (Turn B executes)     (Turn C executes)      (Waits for all active topics to drain)
+                       [ Shared LockPool: HashMap<(chat_id, Option<topic_id>), Weak<TokioMutex<()>>> ]
+                                                             │
+       ┌───────────────────────────────┬─────────────────────┴─────────────────────┬───────────────────────────────┐
+       ▼                               ▼                                           ▼                               ▼
+[ (Chat, Some(101)) Mutex ]     [ (Chat, Some(102)) Mutex ]                 [ (Chat, Some(103)) Mutex ]     [ (Chat, None) General Mutex ]
+(Topic 101 Turn Executes)       (Topic 102 Turn Executes)                   (Topic 103 Turn Executes)       (General / Default Turn)
 ```
 
 1. **Independent Topic Turns ($O(1)$ Parallelism)**:
-   When an event targets a specific forum topic (`(chat_id, Some(topic_id))`):
-   - Acquires `chat_rwlock.read()`.
-   - Acquires the specific `topic_mutex.lock()`.
+   When an interactive message or scheduled bus envelope targets `(chat_id, Some(topic_id))`:
+   - Retrieves or creates `Arc<TokioMutex<()>>` for `(chat_id, Some(topic_id))` from the shared `LockPool`.
    - Multiple topics within the same supergroup execute concurrently with zero cross-topic lock contention.
-2. **Chat-Wide Broadcasts (Single-Writer Barrier)**:
-   When an autonomous notification arrives without a topic target (`(chat_id, None)`):
-   - Requests `chat_rwlock.write()`.
-   - Awaits active in-flight topic turns to complete, then cleanly emits the broadcast without interleaving messages.
+2. **Unified Bus & Interactive Serialization**:
+   Because `MessageBus::with_lock_pool(sess.lock_pool.clone())` shares the exact same `LockPool` instance as `SessionManager`:
+   - Autonomous `LockMode::Required` injections (Cron, Heartbeat, Webhook wakeups) and interactive user turns targeting the same `(chat_id, topic_id)` serialize deterministically on the same `TokioMutex`.
+   - Once all strong `Arc` guards for an idle topic are dropped, `LockPool::get` automatically prunes dead `Weak` entries (`strong_count() == 0`).
 
-### 4.2 Zero-Queue Handle Decoupling with Cancellation Tokens
+### 4.2 Zero-Queue Handle Decoupling for PTY Writes
 To prevent map mutex contention during terminal input pacing:
-1. `SessionManager::write_to_session` acquires the global `holders` map mutex for **$< 2$ microseconds** purely to extract `(master_fd, cancel_token)`.
-2. The map lock is immediately released.
-3. Input writing proceeds against `master_fd` while checking `cancel_token.is_cancelled()`. When `/abort` or `/stop` is received, the token cancels, the holder closes `master_fd`, and the active turn aborts cleanly with zero trailing output leak.
+1. `SessionManager::write_to_session` acquires the global `holders` map mutex for **$< 2$ microseconds** purely to extract `master_fd` and refresh `last_active`.
+2. The map lock is immediately released before performing blocking/paced descriptor writes via `write_fd(master_fd, ...)`.
+3. When `/stop` or `/abort` is received, soft `ESC` (`\x1b`) or session termination (`SessionHolder::drop` closing `master_fd` and sending `-pgid SIGKILL`) executes immediately without waiting on the `holders` lock.
 
 ### 4.3 Autonomous Background Schedulers & Observers
 ```
@@ -305,20 +306,20 @@ To prevent map mutex contention during terminal input pacing:
 * **Substrate Capability Probe**: Pseudo-terminal allocation is treated as a capability query, not an axiom:
   ```text
   Check /dev/ptmx permissions & probe openpty
-       ├── Success ──► Full Interactive PTY Engine (SessionHolder, 24x80, setsid)
+       ├── Success ──► Full Interactive PTY Engine (SessionHolder, 50x100, setsid, TIOCSCTTY)
        └── Failure ──► Piped Headless Fallback (run_oneshot via standard POSIX pipes)
   ```
 * **Immunity to Libc Block Buffering (`_IOFBF`)**: Because streaming deltas are tailed directly from the disk transcript (`transcript_full.jsonl`) generated by the CLI agent, anonymous pipe buffering semantics have zero effect on real-time text delivery.
 * **Supervisory Resilience**:
-  - Exit code 42 enforces a minimum reboot floor ($T_{\text{floor}} \ge 2.0\text{s}$) with a sliding-window rate limit (max 5 restarts per 60s) to prevent CPU fork-bombs.
+  - Exit code 42 triggers an immediate hot reload (`fast_crash_count = 0`), while unexpected non-zero worker crashes failing within `< 10s` apply exponential backoff ($\min(2^n, 30.0)\text{s}$ in `Supervisor::run`) to prevent tight crash loops.
   - `systemd` unit files include `OOMPolicy=continue` so child compiler/browser OOM kills never bring down the `tuner.service` supervisor.
 
 ### Invariant III: Liveness Verification & The Silence Contract
 * **The Fallacy of Wall-Clock Guillotines**: A fixed timeout prematurely kills legitimate long-running tasks (e.g. 10-minute Rust compilations or containerized test suites).
 * **The Sliding Inactivity Contract**:
   $$\Delta t_{\text{silence}} = t_{\text{now}} - t_{\text{last\_activity}}$$
-  Liveness is maintained as long as $\Delta t_{\text{silence}} < 180\text{ seconds}$. Any incremental append to `transcript_full.jsonl` (reasoning token, tool call, or tool completion status) refreshes the liveness timer.
-* **Two-Phase Signal Escalation**: When true silence occurs, Tuner issues `SIGTERM` followed by a 5-second grace period before escalating to `SIGKILL`, allowing compilers and tools to release filesystem locks cleanly.
+  Liveness is maintained as long as $\Delta t_{\text{silence}} < 300\text{ seconds}$. Any incremental append to `transcript_full.jsonl` (reasoning token, tool call, or tool completion status) refreshes the liveness timer.
+* **Process-Group Termination on Silence**: When true silence exceeds 300 seconds, Tuner aborts the hung session and `SessionHolder::drop` delivers `SIGKILL` to `-pgid` along with closing `master_fd`.
 
 ### Invariant IV: Stream Integrity, Tag Balancing & Line Horizons
 * **Process-State Guarded Log Ingestion**: When parsing `transcript_full.jsonl`, the file read pointer advances **strictly to the last confirmed newline byte (`\n`)** while the child process is active:
@@ -334,12 +335,12 @@ To prevent map mutex contention during terminal input pacing:
   - An explicit `open_tags` stack closes open tags at chunk tails and rehydrates them at chunk headers, ensuring every delivered message is a balanced DOM fragment.
 
 ### Invariant V: Deterministic Teardown & POSIX Storage Atomicity
-* **Process Group Annihilation (`-pgid SIGKILL`)**: In child `pre_exec`, Tuner sets `setsid()` and foreground process group leadership (`tcsetpgrp`). Upon drop, `SessionHolder` delivers `SIGKILL` to `-pgid` (`Pid::from_raw(-(pid as i32))`), terminating the entire child and compiler process tree.
+* **Process Group Annihilation (`-pgid SIGKILL`)**: In child `pre_exec`, Tuner sets `setsid()` and controlling terminal leadership (`ioctl(0, TIOCSCTTY, 0)`). Upon drop, `SessionHolder` delivers `SIGKILL` to `-pgid` (`Pid::from_raw(-(pid as i32))`), terminating the entire child and compiler process tree.
 * **TTY Hangup Cascade (`SIGHUP`)**: Closing `master_fd` prompts the Linux TTY driver (`drivers/tty/pty.c`) to synthesize a hardware hangup signal (`SIGHUP`) across the slave foreground group, terminating any detached grandchildren.
 * **Same-Directory Inode Atomic Persistence**:
   In `SessionManager::save` and `CronManager::save`, temporary files are written as siblings in the identical profile folder (`path.with_extension("tmp")`).
   $$\text{Mount}(\text{path.tmp}) \equiv \text{Mount}(\text{path.json})$$
-  POSIX `rename(2)` is guaranteed to execute as an atomic single-inode directory swap. Cross-device link failures (`EXDEV`) are structurally impossible. Data is committed via `file.sync_all()` prior to namespace renaming to guarantee durability against sudden host power loss.
+  POSIX `rename(2)` is guaranteed to execute as an atomic single-inode directory swap. Cross-device link failures (`EXDEV`) are structurally impossible.
 
 ---
 
@@ -347,13 +348,13 @@ To prevent map mutex contention during terminal input pacing:
 
 | Invariant | Mathematical / POSIX Guarantee | Enforcement Mechanism | Failure Mode Prevented |
 | :--- | :--- | :--- | :--- |
-| **Deadlock Freedom** | $P(\text{Deadlock}) = 0$ via $|L(T_i)| \le 1$ | Two-Tier `RwLock` + Weak `LockPool` | Circular wait across topics and background schedulers |
+| **Deadlock Freedom** | $P(\text{Deadlock}) = 0$ via $|L(T_i)| \le 1$ | Shared Weak `LockPool` (`TokioMutex`) | Circular wait across topics and background schedulers |
 | **Process Reclamation** | $\forall p \in \text{Tree}(\text{PID}): \text{Terminated}$ | `setsid()` + `-pgid SIGKILL` + `close(master)` | Rogue compiler zombies and orphaned background processes |
-| **Storage Atomicity** | $\text{Mount}(\text{src}) = \text{Mount}(\text{dst})$ | Sibling `.tmp` path + `rename(2)` + `sync_all()` | `EXDEV` failures and 0-byte state files on power loss |
-| **Liveness Contract** | $\Delta t_{\text{silence}} < 180\text{s}$ | Inotify sliding activity deadline | False timeouts killing 10-minute compilation tasks |
+| **Storage Atomicity** | $\text{Mount}(\text{src}) = \text{Mount}(\text{dst})$ | Sibling `.tmp` path + `rename(2)` | `EXDEV` failures and corrupted partial state files |
+| **Liveness Contract** | $\Delta t_{\text{silence}} < 300\text{s}$ | Inotify sliding activity deadline | False timeouts killing long compilation tasks |
 | **Stream Atomicity** | $\text{Bal}(\text{Chunk}_k) = \text{True}$ | Tokenizer tag stack + entity atomicity | Telegram HTTP 400 Bad Request entity errors |
 | **Zero-Knowledge Vault** | $\text{Plaintext} \notin \text{Transcript}$ | `XSalsa20-Poly1305` + `tuner --vault exec` Redactor | Credential leakage into LLM prompts, logs, or chat history |
-| **Ingress Integrity** | $\Delta t_{\text{req}} \le 300\text{s} \land \text{Unique}(\text{Nonce})$ | RFC timestamp tolerance + Nonce LRU cache | Webhook replay attacks and forged signature replay |
+| **Ingress Integrity** | $\text{ConstantTimeEq} \land \text{RateLimiter}$ | `subtle::ConstantTimeEq` + `VecDeque<Instant>` | Timing side-channel attacks and webhook flood spikes |
 
 ---
 

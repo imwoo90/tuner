@@ -13,13 +13,6 @@ fn test_antigravity_batch_json_extracts_common_content_keys() {
     assert_eq!(parse_antigravity_json(""), "");
 }
 
-fn create_test_dir(name: &str) -> PathBuf {
-    let p = std::env::temp_dir().join("tuner_events_tests").join(name);
-    let _ = std::fs::remove_dir_all(&p);
-    std::fs::create_dir_all(&p).unwrap();
-    p
-}
-
 fn write_transcript(root: &Path, conv_id: &str, entries: Vec<serde_json::Value>) {
     let logs = root.join("brain").join(conv_id).join(".system_generated").join("logs");
     std::fs::create_dir_all(&logs).unwrap();
@@ -42,7 +35,8 @@ fn map_cwd(root: &Path, cwd: &Path, conv_id: &str) {
 
 #[test]
 fn test_returns_last_planner_response() {
-    let root = create_test_dir("returns_last_planner_response");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path();
     let cwd = root.join("ws");
     std::fs::create_dir_all(&cwd).unwrap();
 
@@ -90,7 +84,8 @@ fn test_returns_last_planner_response() {
 
 #[test]
 fn test_ignores_tool_steps_only() {
-    let root = create_test_dir("ignores_tool_steps_only");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path();
     let cwd = root.join("ws");
     std::fs::create_dir_all(&cwd).unwrap();
 
@@ -115,7 +110,8 @@ fn test_ignores_tool_steps_only() {
 
 #[test]
 fn test_falls_back_to_newest_brain_when_cwd_unmapped() {
-    let root = create_test_dir("falls_back_to_newest");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path();
     let cwd = root.join("unmapped");
     std::fs::create_dir_all(&cwd).unwrap();
 
@@ -142,7 +138,8 @@ fn test_falls_back_to_newest_brain_when_cwd_unmapped() {
 
 #[test]
 fn test_returns_none_without_state() {
-    let root = create_test_dir("without_state");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path();
     let cwd = root.join("ws");
     std::fs::create_dir_all(&cwd).unwrap();
 
@@ -184,21 +181,21 @@ fn test_falls_back_to_user_home() {
 
 #[test]
 fn test_log_parser_initializes_to_file_size() {
-    let root = create_test_dir("log_parser_init");
-    let transcript = root.join("transcript_full.jsonl");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let transcript = temp_dir.path().join("transcript_full.jsonl");
     std::fs::write(&transcript, "{\"dummy\":true}\n").unwrap();
     let initial_size = transcript.metadata().unwrap().len();
 
     let mut parser = AntigravityLogParser::new();
-    let (next_size, delta, _) = parser.parse_log_delta(&transcript, None);
-    assert_eq!(next_size, initial_size);
-    assert!(delta.is_none());
+    let res = parser.parse_log_delta_structured(&transcript, None);
+    assert_eq!(res.new_size, initial_size);
+    assert!(res.formatted.is_none());
 }
 
 #[test]
 fn test_log_parser_first_read_with_content() {
-    let root = create_test_dir("log_parser_first_read");
-    let transcript = root.join("transcript_full.jsonl");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let transcript = temp_dir.path().join("transcript_full.jsonl");
     let entry = serde_json::json!({
         "source": "MODEL",
         "type": "PLANNER_RESPONSE",
@@ -207,17 +204,17 @@ fn test_log_parser_first_read_with_content() {
     std::fs::write(&transcript, entry.to_string() + "\n").unwrap();
 
     let mut parser = AntigravityLogParser::new();
-    let (next_size, delta, _) = parser.parse_log_delta(&transcript, None);
-    assert!(next_size > 0);
-    assert!(delta.is_some());
-    let text = delta.unwrap();
+    let res = parser.parse_log_delta_structured(&transcript, None);
+    assert!(res.new_size > 0);
+    assert!(res.formatted.is_some());
+    let text = res.formatted.unwrap();
     assert!(text.contains("Initial thought process"));
 }
 
 #[test]
 fn test_log_parser_extracts_thinking_and_tools() {
-    let root = create_test_dir("log_parser_extracts");
-    let transcript = root.join("transcript_full.jsonl");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let transcript = temp_dir.path().join("transcript_full.jsonl");
     std::fs::write(&transcript, "").unwrap();
 
     let mut parser = AntigravityLogParser::new();
@@ -238,10 +235,10 @@ fn test_log_parser_extracts_thinking_and_tools() {
     });
     std::fs::write(&transcript, entry.to_string() + "\n").unwrap();
     
-    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(0));
-    assert!(next_size > 0);
-    assert!(delta.is_some());
-    let text = delta.unwrap();
+    let res = parser.parse_log_delta_structured(&transcript, Some(0));
+    assert!(res.new_size > 0);
+    assert!(res.formatted.is_some());
+    let text = res.formatted.unwrap();
     
     assert!(text.contains("💭 **Thinking Process:**"));
     assert!(text.contains(">! Let me think"));
@@ -255,8 +252,8 @@ fn test_log_parser_extracts_thinking_and_tools() {
 
 #[test]
 fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
-    let root = create_test_dir("log_parser_completions");
-    let transcript = root.join("transcript_full.jsonl");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let transcript = temp_dir.path().join("transcript_full.jsonl");
     std::fs::write(&transcript, "").unwrap();
 
     let mut parser = AntigravityLogParser::new();
@@ -284,9 +281,9 @@ fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
     }).to_string() + "\n";
     std::fs::write(&transcript, format!("{}{}", comp_only, final_entry)).unwrap();
 
-    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(d1.new_size));
-    assert!(next_size > d1.new_size);
-    let text = delta.unwrap();
+    let d2 = parser.parse_log_delta_structured(&transcript, Some(d1.new_size));
+    assert!(d2.new_size > d1.new_size);
+    let text = d2.formatted.unwrap();
     assert!(!text.contains("Tool Completions"));
     assert_eq!(text, "All done!");
 }

@@ -104,13 +104,11 @@ mod tests {
 
         let handover = build_topic_handover(ws, sid, Some(42), Some("RusTerm Monitoring".to_string()), None, &[]).unwrap();
 
-        assert_eq!(handover.topic_id, Some(42));
-        assert_eq!(handover.topic_name, Some("RusTerm Monitoring".to_string()));
-        assert_eq!(handover.previous_session_id, sid);
         assert!(handover.topic_objective.contains("RusTerm 웹 시리얼 모니터링 기능 구현해줘"));
         assert!(handover.agreed_decisions.iter().any(|d| d.contains("WebSocket 스트리밍 방식")));
         assert!(handover.current_progress.contains("차트 렌더링 컴포넌트 추가 완료했습니다"));
         assert!(handover.handover_prompt.contains("[TOPIC CONTEXT HANDOVER]"));
+        assert!(handover.handover_prompt.contains(sid));
         assert!(handover.handover_prompt.contains("RusTerm Monitoring"));
     }
 

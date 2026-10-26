@@ -11,7 +11,6 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::session::manager::SessionManager;
-use crate::cli::antigravity::session::AskState;
 use super::multi_select::get_multiselect_keystrokes_and_options;
 use super::ask_process::{
     process_answer, process_submit,
@@ -19,32 +18,6 @@ use super::ask_process::{
     spawn_cli_stream_in_background,
 };
 use super::ask_helpers::build_ask_keyboard_helper;
-
-async fn handle_write_in_transition(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    sid: &str,
-    mut state: AskState,
-    opt: &str,
-    cli: &AntigravityCli,
-    config: &CliConfig,
-) {
-    state.waiting_for_write_in = true;
-    cli.sessions.set_ask_state(sid, state).await;
-    let topic_id = super::get_topic_id(msg);
-    super::history::log_telegram_message(
-        &config.working_dir,
-        sid,
-        (topic_id, None),
-        "user",
-        Some(msg.id.0),
-        &format!("Selected Option: {} (Waiting for Write-in)", opt),
-        (true, None),
-    );
-    let txt = format!("{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요.", msg.text().unwrap_or(""));
-    let html = super::formatting::markdown_to_telegram_html(&txt);
-    let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).await;
-}
 
 pub(crate) async fn handle_ask_answer_callback(
     bot: &teloxide::Bot,
@@ -56,17 +29,6 @@ pub(crate) async fn handle_ask_answer_callback(
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };
     let Some(idx) = data.split(':').nth(2).and_then(|i| i.parse::<usize>().ok()) else { return; };
-    
-    if let Some(state) = cli.sessions.get_ask_state(sid).await
-        && let Some(current_q) = state.questions.get(state.current_index)
-            && let Some(opt) = current_q.options.get(idx) {
-                let is_write_in = opt.to_lowercase().contains("write-in") || opt.contains("직접 입력");
-                if is_write_in {
-                    let opt_clone = opt.clone();
-                    handle_write_in_transition(bot, msg, sid, state.clone(), &opt_clone, cli, config).await;
-                    return;
-                }
-            }
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
@@ -120,28 +82,11 @@ pub(crate) async fn handle_ask_submit_callback(
     }
 }
 
-pub(crate) async fn handle_ask_write_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    data: &str,
-    cli: &AntigravityCli,
-) {
-    let Some(sid) = data.split(':').nth(1) else { return; };
-    if let Some(mut state) = cli.sessions.get_ask_state(sid).await {
-        state.waiting_for_write_in = true;
-        cli.sessions.set_ask_state(sid, state).await;
-        let txt = format!("{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요.", msg.text().unwrap_or(""));
-        let html = super::formatting::markdown_to_telegram_html(&txt);
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).await;
-    }
-}
-
 pub(crate) async fn handle_ask_prev_callback(
     bot: &teloxide::Bot,
     msg: &Message,
     data: &str,
     cli: &AntigravityCli,
-    _s: &std::sync::Arc<SessionManager>,
     _c: &CliConfig,
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };

@@ -10,7 +10,6 @@ use std::sync::Arc;
 use chrono::{DateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
 
-
 use crate::config::CliConfig;
 use crate::session::manager::SessionManager;
 use crate::session::data::SessionData;
@@ -47,43 +46,31 @@ impl HeartbeatScheduler {
 
     /// Executes `heartbeat_enabled` (heartbeat enabled).
     pub fn heartbeat_enabled(&self) -> bool {
-        self.config.heartbeat.enabled || self.config.telegram_heartbeat_enabled
+        self.config.heartbeat.enabled
     }
 
     /// Executes `heartbeat_interval_minutes` (heartbeat interval minutes).
     pub fn heartbeat_interval_minutes(&self) -> i64 {
-        if self.config.heartbeat.enabled {
-            self.config.heartbeat.interval_minutes.unwrap_or(30)
-        } else {
-            self.config.telegram_heartbeat_interval_minutes.unwrap_or(30)
-        }
+        self.config.heartbeat.interval_minutes.unwrap_or(30)
     }
 
     /// Executes `heartbeat_quiet_start` (heartbeat quiet start).
     pub fn heartbeat_quiet_start(&self) -> Option<u32> {
-        if self.config.heartbeat.enabled {
-            self.config.heartbeat.quiet_start
-        } else {
-            self.config.telegram_heartbeat_quiet_start
-        }
+        self.config.heartbeat.quiet_start
     }
 
     /// Executes `heartbeat_quiet_end` (heartbeat quiet end).
     pub fn heartbeat_quiet_end(&self) -> Option<u32> {
-        if self.config.heartbeat.enabled {
-            self.config.heartbeat.quiet_end
-        } else {
-            self.config.telegram_heartbeat_quiet_end
-        }
+        self.config.heartbeat.quiet_end
     }
 
     /// Executes `heartbeat_ack_token` (heartbeat ack token).
     pub fn heartbeat_ack_token(&self) -> String {
-        if self.config.heartbeat.enabled {
-            self.config.heartbeat.ack_token.clone().unwrap_or_else(|| "HEARTBEAT_OK".to_string())
-        } else {
-            self.config.telegram_heartbeat_ack_token.clone().unwrap_or_else(|| "HEARTBEAT_OK".to_string())
-        }
+        self.config
+            .heartbeat
+            .ack_token
+            .clone()
+            .unwrap_or_else(|| "HEARTBEAT_OK".to_string())
     }
 
     /// Evaluates if the current tick falls into quiet hours and should be skipped.
@@ -104,11 +91,6 @@ impl HeartbeatScheduler {
         false
     }
 
-    /// Checks if a given chat session has active running PTY processes.
-    pub async fn is_chat_busy(&self, chat_id: i64) -> bool {
-        self.is_session_busy(chat_id, None).await
-    }
-
     /// Checks if a given chat/topic session has active running PTY processes.
     pub async fn is_session_busy(&self, chat_id: i64, topic_id: Option<i64>) -> bool {
         let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
@@ -123,7 +105,6 @@ impl HeartbeatScheduler {
 
     /// Evaluates if the session activity is still within the cooldown threshold.
     pub fn is_cooling_down(&self, session: &SessionData) -> bool {
-        // Cooldown configuration (default 30 minutes if not provided)
         let cooldown_min = self.heartbeat_interval_minutes();
         if let Ok(last) = DateTime::parse_from_rfc3339(&session.last_active) {
             let now = Utc::now();
@@ -141,7 +122,6 @@ impl HeartbeatScheduler {
         let scheduler = self.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_mins * 60));
-            // Skip the immediate first tick
             interval.tick().await;
 
             loop {
@@ -154,7 +134,6 @@ impl HeartbeatScheduler {
     /// Perform a single tick check over all persisted sessions.
     pub async fn tick(&self) -> Result<(), String> {
         let user_tz = self.config.user_timezone.as_deref().unwrap_or("UTC");
-        
         let tz = user_tz.parse::<Tz>().unwrap_or(Tz::UTC);
         let now_local = Utc::now().with_timezone(&tz);
 
@@ -164,7 +143,7 @@ impl HeartbeatScheduler {
 
         let all_sessions = self.sessions.load()?;
         for (_, session) in all_sessions {
-            if session.transport != "tg" && session.transport != "mx" {
+            if session.transport != "tg" {
                 continue;
             }
 
@@ -189,9 +168,22 @@ impl HeartbeatScheduler {
         let sid = session.get_session_id(&self.config.provider);
         let opt_sid = if sid.is_empty() { None } else { Some(&sid[..]) };
 
-        let res = self.cli.send(prompt, opt_sid, false, self.config.working_dir.clone()).await;
-        if let Ok(resp) = res
-            && !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
+        let mut cli = (*self.cli).clone();
+        cli.config.chat_id = session.chat_id;
+        cli.config.topic_id = session.topic_id;
+        cli.config.model = Some(session.model.clone());
+        cli.config.effort = session.effort.clone();
+
+        let res = cli.send(prompt, opt_sid, false, self.config.working_dir.clone()).await;
+        if let Ok(resp) = res {
+            let mut updated = session.clone();
+            if let Some(ref new_sid) = resp.session_id
+                && !new_sid.is_empty()
+            {
+                updated.set_session_id(&self.config.provider, new_sid);
+            }
+            let _ = self.sessions.update_session(&updated).await;
+            if !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
                 let mut env = crate::bus::adapters::from_heartbeat(
                     session.chat_id,
                     &resp.result,
@@ -200,7 +192,7 @@ impl HeartbeatScheduler {
                 );
                 self.bus.submit(&mut env).await;
             }
+        }
         Ok(())
     }
 }
-

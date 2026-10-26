@@ -77,8 +77,9 @@ pub struct WebhookEntry {
     pub provider: Option<String>,
     /// Model.
     pub model: Option<String>,
-    /// Reasoning effort.
-    pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    /// Effort.
+    pub effort: Option<String>,
     #[serde(default)]
     /// Cli parameters.
     pub cli_parameters: Vec<String>,
@@ -86,8 +87,6 @@ pub struct WebhookEntry {
     pub quiet_start: Option<u32>,
     /// Quiet end.
     pub quiet_end: Option<u32>,
-    /// Dependency.
-    pub dependency: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -108,21 +107,6 @@ fn default_hex() -> String {
 
 fn default_sig_prefix() -> String {
     "sha256=".to_string()
-}
-
-#[derive(Debug, Clone)]
-/// Represents `WebhookResult` (webhook result).
-pub struct WebhookResult {
-    /// Hook id.
-    pub hook_id: String,
-    /// Hook title.
-    pub hook_title: String,
-    /// Mode.
-    pub mode: String,
-    /// Result text.
-    pub result_text: String,
-    /// Status.
-    pub status: String, // "success" | "error:..."
 }
 
 /// Replace `{{field}}` placeholders with values from `payload`.

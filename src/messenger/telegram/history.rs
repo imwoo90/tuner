@@ -104,24 +104,3 @@ pub fn log_telegram_message(
         let _ = writeln!(file, "{}", serialized);
     }
 }
-
-/// Executes `find_sessions_for_topic` (find sessions for topic).
-pub fn find_sessions_for_topic(working_dir: &Path, target_topic_id: i64) -> Vec<String> {
-    let brain_dir = working_dir.join("brain");
-    let mut matching = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&brain_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                let topic_file = entry.path().join("topic.json");
-                if let Ok(content) = std::fs::read_to_string(&topic_file)
-                    && let Ok(meta) = serde_json::from_str::<TopicMetadata>(&content)
-                    && meta.topic_id == Some(target_topic_id)
-                    && let Some(sid) = entry.file_name().to_str()
-                {
-                    matching.push(sid.to_string());
-                }
-            }
-        }
-    }
-    matching
-}

@@ -7,32 +7,32 @@
 mod tests {
     use crate::cli::antigravity::discovery::{parse_models, discover_models};
 
-    const SAMPLE_OUTPUT: &str = "gemini-3.6-flash-high\ngemini-3.1-pro-low\nclaude-sonnet-4-6\n";
+    const SAMPLE_OUTPUT: &str = "gemini-3.8-flash-high\ngemini-4-argon-low\nclaude-sonnet-5-5\n";
 
     #[test]
     fn test_parse_models_keeps_display_names() {
         let parsed = parse_models(SAMPLE_OUTPUT);
         assert_eq!(parsed.len(), 3);
-        assert_eq!(parsed[0], "gemini-3.6-flash-high");
-        assert_eq!(parsed[1], "gemini-3.1-pro-low");
-        assert_eq!(parsed[2], "claude-sonnet-4-6");
+        assert_eq!(parsed[0], "gemini-3.8-flash-high");
+        assert_eq!(parsed[1], "gemini-4-argon-low");
+        assert_eq!(parsed[2], "claude-sonnet-5-5");
     }
 
     #[test]
     fn test_parse_models_handles_two_column_descriptions() {
-        let sample = "gemini-3.7-flash-high     Gemini 3.7 Flash (High)\ngemini-3.7-flash-medium   Gemini 3.7 Flash (Medium)\nclaude-sonnet-4-6         Claude Sonnet 4.6 (Thinking)\n";
+        let sample = "gemini-3.8-flash-high     Gemini 3.8 Flash (High)\ngemini-3.8-flash-medium   Gemini 3.8 Flash (Medium)\nclaude-sonnet-5-5         Claude Sonnet 5.5 (Thinking)\n";
         let parsed = parse_models(sample);
         assert_eq!(parsed.len(), 3);
-        assert_eq!(parsed[0], "gemini-3.7-flash-high");
-        assert_eq!(parsed[1], "gemini-3.7-flash-medium");
-        assert_eq!(parsed[2], "claude-sonnet-4-6");
+        assert_eq!(parsed[0], "gemini-3.8-flash-high");
+        assert_eq!(parsed[1], "gemini-3.8-flash-medium");
+        assert_eq!(parsed[2], "claude-sonnet-5-5");
     }
 
     #[test]
     fn test_parse_models_skips_blank_lines() {
-        let parsed = parse_models("\ngemini-3.6-flash-high\n\n");
+        let parsed = parse_models("\ngemini-3.8-flash-high\n\n");
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0], "gemini-3.6-flash-high");
+        assert_eq!(parsed[0], "gemini-3.8-flash-high");
     }
 
     #[test]

@@ -4,10 +4,10 @@
 The WebhookObserver detects the JSON change automatically.
 
 Usage:
-    python tools/webhook_tools/webhook_add.py \
-        --name "email-notify" --title "Neue Emails" \
-        --description "Zapier pingt bei eingehenden Emails" \
-        --mode "wake" --prompt-template "Neue Email von {{from}}: {{subject}}"
+    python3 tools/webhook_tools/webhook_add.py \
+        --name "email-notify" --title "Incoming Emails" \
+        --description "Trigger on incoming email notifications" \
+        --mode "wake" --prompt-template "New email from {{from}}: {{subject}}"
 """
 
 from __future__ import annotations
@@ -44,23 +44,15 @@ OPTIONAL:
                       Examples: "X-Hub-Signature-256" (GitHub), "Stripe-Signature" (Stripe).
 
 EXECUTION OVERRIDES (optional, for mode "cron_task"):
-  --provider          CLI provider: 'claude', 'codex', or 'gemini'
-  --model             Model name (e.g. 'opus', 'sonnet', 'gpt-5.2-codex', 'gemini-2.5-pro')
-  --reasoning-effort  Thinking level for Codex: 'low', 'medium', 'high', 'xhigh'
-  --cli-parameters    Additional CLI flags as JSON array (e.g. '["--chrome"]')
+  --provider          CLI provider: 'antigravity'
+  --model             Model name (e.g. 'gemini-3.8-flash', 'gemini-4-argon', 'claude-opus-5-5')
+  --effort            Thinking effort level: 'low', 'medium', 'high'
+  --cli-parameters    Additional CLI flags as JSON array
 
 QUIET HOURS (optional, prevent hooks from running during specific hours):
   --quiet-start       Start of quiet hours (0-23, hook WON'T run during this time)
   --quiet-end         End of quiet hours (0-23, exclusive)
-                      If omitted, uses global heartbeat.quiet_start/quiet_end from config.
                       Supports wrap-around: --quiet-start 21 --quiet-end 8 means 21:00-07:59.
-                      Example: --quiet-start 22 --quiet-end 7 (no execution 22:00-06:59)
-
-DEPENDENCIES (optional, prevent concurrent resource conflicts):
-  --dependency        Resource identifier (e.g. 'chrome_browser', 'api_token')
-                      Hooks with the SAME dependency run sequentially (one at a time, FIFO).
-                      Hooks with DIFFERENT dependencies or no dependency run in parallel.
-                      Use when webhooks trigger tasks that share resources.
 
 HMAC ADVANCED (only when --auth-mode hmac):
   --hmac-algorithm    Hash algorithm: sha256 (default), sha1, sha512.
@@ -73,63 +65,6 @@ HMAC ADVANCED (only when --auth-mode hmac):
                       Regex on header value; group 1 is prepended to body with "." separator
                       before HMAC computation. Used by Stripe/Slack where signed content is
                       "{timestamp}.{body}". Example for Stripe: "t=(\\d+)"
-
-AUTH MODES:
-  bearer (default):
-    A random Bearer token is generated automatically. The external service must
-    include it in every request: Authorization: Bearer <token>
-
-  hmac:
-    The external service signs the request body and sends the signature in a
-    specific header. Fully configurable: algorithm, encoding, signature extraction,
-    and payload construction.
-
-SERVICE PRESETS:
-  GitHub:
-    --hmac-header "X-Hub-Signature-256"
-    (defaults work: sha256, hex, "sha256=" prefix)
-
-  Stripe:
-    --hmac-header "Stripe-Signature" --hmac-sig-prefix ""
-    --hmac-sig-regex "v1=([a-f0-9]+)" --hmac-payload-prefix-regex "t=(\\d+)"
-
-  Shopify:
-    --hmac-header "X-Shopify-Hmac-Sha256" --hmac-encoding "base64" --hmac-sig-prefix ""
-
-  Twilio:
-    --hmac-header "X-Twilio-Signature" --hmac-algorithm "sha1"
-    --hmac-encoding "base64" --hmac-sig-prefix ""
-
-EXAMPLES:
-  # Bearer mode (default): token auto-generated
-  python tools/webhook_tools/webhook_add.py \\
-      --name "email-notify" --title "Neue Emails" \\
-      --description "Zapier pingt bei eingehenden Emails" \\
-      --mode "wake" --prompt-template "Neue Email von {{from}}: {{subject}}"
-
-  # HMAC mode: GitHub webhook
-  python tools/webhook_tools/webhook_add.py \\
-      --name "github-pr" --title "GitHub PRs" \\
-      --description "PR events from GitHub" \\
-      --mode "wake" --prompt-template "PR {{action}}: {{pull_request}}" \\
-      --auth-mode "hmac" --hmac-secret "your-github-secret" \\
-      --hmac-header "X-Hub-Signature-256"
-
-  # HMAC mode: Stripe webhook (custom sig extraction + timestamp payload)
-  python tools/webhook_tools/webhook_add.py \\
-      --name "stripe-payments" --title "Stripe Payments" \\
-      --description "Payment events from Stripe" \\
-      --mode "wake" --prompt-template "Payment {{type}}: {{data}}" \\
-      --auth-mode "hmac" --hmac-secret "whsec_..." \\
-      --hmac-header "Stripe-Signature" --hmac-sig-prefix "" \\
-      --hmac-sig-regex "v1=([a-f0-9]+)" --hmac-payload-prefix-regex "t=(\\d+)"
-
-  # Cron task mode: trigger isolated task
-  python tools/webhook_tools/webhook_add.py \\
-      --name "github-review" --title "PR Reviews" \\
-      --description "Code-Review bei neuem PR" \\
-      --mode "cron_task" --task-folder "github-review" \\
-      --prompt-template "Review PR #{{number}}: {{title}}"
 """
 
 
@@ -141,7 +76,7 @@ def _create_task_folder(name: str, title: str, description: str) -> Path:
 
     task_dir.mkdir(parents=True, exist_ok=True)
 
-    claude_content = f"""\
+    agents_content = f"""\
 # Your Mission
 
 You are an **automated agent** triggered by a webhook. Complete your task autonomously.
@@ -159,7 +94,7 @@ You are an **automated agent** triggered by a webhook. Complete your task autono
 - Do not modify unrelated project files outside the scope of `TASK_DESCRIPTION.md`.
 - Use `.venv` for Python dependencies if needed.
 """
-    (task_dir / "AGENTS.md").write_text(claude_content, encoding="utf-8")
+    (task_dir / "AGENTS.md").write_text(agents_content, encoding="utf-8")
 
     task_desc = f"""\
 # {title}
@@ -231,25 +166,24 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["antigravity", "claude", "codex", "gemini"],
-        help=(
-            "CLI provider for this webhook (defaults to antigravity / global config)."
-        ),
+        choices=["antigravity"],
+        help="CLI provider for this webhook (defaults to antigravity).",
     )
     parser.add_argument(
         "--model",
-        help="Model name for this webhook (e.g. 'opus', 'sonnet', 'gpt-5.2-codex'). "
+        help="Model name for this webhook (e.g. 'gemini-3.8-flash', 'gemini-4-argon'). "
         "If omitted, uses global config.",
     )
     parser.add_argument(
-        "--reasoning-effort",
-        choices=["low", "medium", "high", "xhigh"],
-        help="Thinking level for Codex webhooks only (low, medium, high, xhigh). "
+        "--effort",
+        dest="effort",
+        choices=["low", "medium", "high"],
+        help="Thinking effort level for this webhook (low, medium, high). "
         "If omitted, uses global config or model default.",
     )
     parser.add_argument(
         "--cli-parameters",
-        help="Additional CLI flags as JSON array (e.g. '[\"--verbose\"]'). "
+        help="Additional CLI flags as JSON array. "
         "If omitted, uses only global config parameters.",
     )
     parser.add_argument(
@@ -257,21 +191,14 @@ def main() -> None:
         type=int,
         choices=range(24),
         metavar="HOUR",
-        help="Start of quiet hours (0-23). Hook won't run during quiet hours. "
-        "If omitted, uses global heartbeat.quiet_start from config.",
+        help="Start of quiet hours (0-23). Hook won't run during quiet hours.",
     )
     parser.add_argument(
         "--quiet-end",
         type=int,
         choices=range(24),
         metavar="HOUR",
-        help="End of quiet hours (0-23, exclusive). "
-        "If omitted, uses global heartbeat.quiet_end from config.",
-    )
-    parser.add_argument(
-        "--dependency",
-        help="Resource dependency (e.g. 'chrome_browser'). "
-        "Hooks with same dependency run sequentially, different dependencies run in parallel.",
+        help="End of quiet hours (0-23, exclusive).",
     )
     args = parser.parse_args()
 
@@ -305,7 +232,6 @@ def main() -> None:
         print(json.dumps({"error": f"Hook '{name}' already exists"}))
         sys.exit(1)
 
-    # Create cron_task folder if needed
     folder_created = False
     task_folder = None
     if args.mode == "cron_task":
@@ -314,12 +240,10 @@ def main() -> None:
         _create_task_folder(task_folder, args.title, args.description)
         folder_created = not folder_existed
 
-    # Generate per-hook bearer token (only for bearer mode)
     token = ""
     if args.auth_mode == "bearer":
         token = secrets.token_urlsafe(32)
 
-    # Parse CLI parameters if provided
     cli_params_list = []
     if args.cli_parameters:
         try:
@@ -354,11 +278,10 @@ def main() -> None:
         "last_error": None,
         "provider": args.provider,
         "model": args.model,
-        "reasoning_effort": args.reasoning_effort,
+        "effort": args.effort,
         "cli_parameters": cli_params_list,
         "quiet_start": args.quiet_start,
         "quiet_end": args.quiet_end,
-        "dependency": args.dependency.strip() if args.dependency else None,
     }
     data["hooks"].append(hook)
     save_hooks(HOOKS_PATH, data)
@@ -379,7 +302,6 @@ def main() -> None:
                 f"Open cron_tasks/{task_folder}/TASK_DESCRIPTION.md and fill in the Assignment section.",
             ]
 
-    # Setup instructions for the user (CRITICAL for non-technical users)
     if args.auth_mode == "bearer":
         result["bearer_token"] = token
         result["setup_instructions"] = {

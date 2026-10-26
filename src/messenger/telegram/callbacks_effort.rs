@@ -5,7 +5,7 @@
 //! and reasoning effort levels.
 //!
 //! ## Search Tags
-//! #effort-callback, #model-selector, #reasoning-effort
+//! #effort-callback, #model-selector, #effort-level
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
@@ -69,7 +69,7 @@ pub async fn handle_model_base_callback(
         if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
             s.model = base.to_string();
             s.effort = None;
-            let _ = sessions.update_session(&s, 0.0, 0).await;
+            let _ = sessions.preserve_session_identity(&s).await;
             let sid = s.get_session_id(&s.provider);
             crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
             let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = base)).await;
@@ -94,7 +94,7 @@ pub async fn handle_model_effort_callback(
     if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
         s.model = base.to_string();
         s.effort = Some(effort.to_string());
-        let _ = sessions.update_session(&s, 0.0, 0).await;
+        let _ = sessions.preserve_session_identity(&s).await;
         let sid = s.get_session_id(&s.provider);
         crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
         let display = format!("{} (effort: {})", base, effort);
@@ -115,7 +115,7 @@ pub async fn handle_standalone_effort_callback(
     let dm = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
         s.effort = Some(effort.to_string());
-        let _ = sessions.update_session(&s, 0.0, 0).await;
+        let _ = sessions.preserve_session_identity(&s).await;
         let sid = s.get_session_id(&s.provider);
         crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
         let display_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort);

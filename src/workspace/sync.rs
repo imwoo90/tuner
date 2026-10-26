@@ -1,21 +1,20 @@
 //! # Workspace Folder Synchronizer
 //!
 //! ## Overview
-//! Initializes workspace layout folders (cron_tasks, telegram_files, skills) and mounts rules profiles.
+//! Initializes workspace layout folders (`cron_tasks`, `telegram_files`, `skills`) and mounts rules profiles.
 //!
 //! ## Search Tags
 //! #workspace-init, #profile-copy, #environment-setup
 
-use crate::workspace::paths::DuctorPaths;
+use crate::workspace::paths::TunerPaths;
 use crate::workspace::sync_helpers::{
-    create_workspace_directories, migrate_legacy_data, smart_merge_config, sync_constraints_rule,
-    sync_group, sync_mainmemory_rule, sync_managed_rule_dirs, walk_and_copy,
+    create_workspace_directories, migrate_legacy_data, smart_merge_config,
+    smart_merge_profile_config, sync_constraints_rule, sync_mainmemory_rule, walk_and_copy,
 };
 use std::path::Path;
 
-
 /// Initializes the workspace directory structure and configurations.
-pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
+pub fn init_workspace(paths: &TunerPaths) -> Result<(), String> {
     if paths.profile.is_none() {
         let _ = std::fs::create_dir_all(paths.config_dir());
         let _ = smart_merge_config(paths);
@@ -29,7 +28,7 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
         let _ = std::fs::rename(&old_tasks, paths.cron_tasks_dir());
     }
 
-    let _ = crate::workspace::skills::sync_bundled_skills(paths, false);
+    let _ = crate::workspace::skills::sync_bundled_skills(paths);
 
     if paths.home_defaults.is_dir() {
         walk_and_copy(&paths.home_defaults, &paths.profile_home(), &paths.home_defaults)?;
@@ -37,107 +36,41 @@ pub fn init_workspace(paths: &DuctorPaths) -> Result<(), String> {
 
     create_workspace_directories(paths);
     let _ = sync_mainmemory_rule(&paths.workspace());
-    let default_constraints = paths.home_defaults.join("workspace").join(".agents").join("rules").join("constraints.md");
+    let default_constraints = paths
+        .home_defaults
+        .join("workspace")
+        .join(".agents")
+        .join("rules")
+        .join("constraints.md");
     let _ = sync_constraints_rule(&paths.workspace(), Some(&default_constraints));
 
     let selector = crate::workspace::rules::RulesSelector::new(paths.clone());
     let _ = selector.deploy_rules();
 
-    let _ = crate::workspace::sync_helpers::smart_merge_profile_config(paths);
-
-    let _ = ensure_task_rule_files(&paths.cron_tasks_dir());
+    let _ = smart_merge_profile_config(paths);
     let _ = sync_rule_files(&paths.workspace());
-    if paths.profile.is_none() {
-        let _ = smart_merge_config(paths);
-    }
 
     if paths.workspace().is_dir()
-        && let Ok(entries) = std::fs::read_dir(paths.workspace()) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_symlink() && !path.exists() {
-                    let _ = std::fs::remove_file(&path);
-                }
+        && let Ok(entries) = std::fs::read_dir(paths.workspace())
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_symlink() && !path.exists() {
+                let _ = std::fs::remove_file(&path);
             }
         }
+    }
 
-    let _ = crate::workspace::skills::sync_skills(paths, false);
+    let _ = crate::workspace::skills::sync_skills(paths);
     Ok(())
 }
 
-
-/// Synchronizes rule files across explicitly whitelisted Tuner-managed directories in the profile workspace.
+/// Synchronizes persistent Antigravity native rule files (`mainmemory.md` and `constraints.md`) in the profile workspace.
 pub fn sync_rule_files(root: &Path) -> Result<(), String> {
     if !root.is_dir() {
         return Ok(());
     }
-    sync_group(root)?;
-    sync_managed_rule_dirs(root)?;
     let _ = sync_mainmemory_rule(root);
     let _ = sync_constraints_rule(root, None);
     Ok(())
-}
-
-/// Executes `ensure_task_rule_files` (ensure task rule files).
-pub fn ensure_task_rule_files(cron_tasks_dir: &Path) -> Result<usize, String> {
-    if !cron_tasks_dir.is_dir() {
-        return Ok(0);
-    }
-    let expected = detect_rule_filenames(cron_tasks_dir);
-    let mut created = 0;
-    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
-
-    let entries = match std::fs::read_dir(cron_tasks_dir) {
-        Ok(e) => e,
-        Err(e) => return Err(format!("Failed to read dir: {}", e)),
-    };
-
-    for entry in entries.flatten() {
-        let task_dir = entry.path();
-        if task_dir.is_dir() {
-            let mut existing = Vec::new();
-            for name in &rule_filenames {
-                if task_dir.join(name).is_file() {
-                    existing.push(*name);
-                }
-            }
-            if existing.is_empty() {
-                continue;
-            }
-            let mut missing = Vec::new();
-            for name in &expected {
-                if !task_dir.join(name).is_file() {
-                    missing.push(name.clone());
-                }
-            }
-            if missing.is_empty() {
-                continue;
-            }
-            if let Ok(source_content) = std::fs::read_to_string(task_dir.join(existing[0])) {
-                for name in missing {
-                    let _ = std::fs::write(task_dir.join(name), &source_content);
-                    created += 1;
-                }
-            }
-        }
-    }
-    Ok(created)
-}
-
-fn detect_rule_filenames(cron_tasks_dir: &Path) -> Vec<String> {
-    let rule_filenames = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"];
-    let mut found = Vec::new();
-    let ws_dir = cron_tasks_dir.parent();
-    for name in &rule_filenames {
-        let in_cron = cron_tasks_dir.join(name).is_file();
-        let in_ws = ws_dir.is_some_and(|w| w.join(name).is_file());
-        if in_cron || in_ws {
-            found.push(name.to_string());
-        }
-    }
-    if found.is_empty() {
-        vec!["AGENTS.md".to_string()]
-    } else {
-        found
-    }
 }

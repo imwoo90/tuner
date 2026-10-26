@@ -52,7 +52,8 @@ mod tests {
                 "message_id": 1,
                 "date": 123456,
                 "chat": {"id": 123, "type": "private"},
-                "text": "photo of project deployment"
+                "document": {"file_id": "file-1", "file_unique_id": "uniq-1", "file_name": "deploy.png"},
+                "caption": "photo of project deployment"
             }
         }"#;
         let msg: Message = serde_json::from_str(msg_json).unwrap();

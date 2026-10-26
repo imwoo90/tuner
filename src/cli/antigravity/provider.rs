@@ -16,12 +16,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::Command;
-#[allow(unused_imports)]
-pub(crate) use super::pty_spawner::strip_ansi;
 
 impl AntigravityCli {
     pub(crate) fn build_env(&self) -> HashMap<String, String> {
-        let mut env: HashMap<_, _> = std::env::vars().filter(|(k, _)| k != "CODEX_SANDBOX_NETWORK_DISABLED").collect();
+        let mut env: HashMap<_, _> = std::env::vars().collect();
         let th = std::env::var("TUNER_HOME").ok().map(PathBuf::from).unwrap_or_else(|| {
             PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner")
         });
@@ -32,7 +30,6 @@ impl AntigravityCli {
             ("TERM".into(), "dumb".into()),
             ("NO_COLOR".into(), "1".into()),
             ("SSH_CONNECTION".into(), "127.0.0.1 0 127.0.0.1 22".into()),
-            ("TUNER_SHARED_MEMORY_PATH".into(), th.join("SHAREDMEMORY.md").to_string_lossy().into()),
             ("TUNER_HOME".into(), th.to_string_lossy().into()),
         ]);
         if let Some(tid) = self.config.topic_id { env.insert("TUNER_TOPIC_ID".into(), tid.to_string()); }

@@ -155,11 +155,6 @@ fn parse_tunnel_url(line: &str) -> Option<String> {
     }
 }
 
-/// Executes `spawn_quick_tunnel` (spawn quick tunnel).
-pub async fn spawn_quick_tunnel(port: u16) -> Option<String> {
-    spawn_quick_tunnel_tracked(port, None).await
-}
-
 async fn spawn_quick_tunnel_tracked(
     port: u16,
     tunnel_url_slot: Option<Arc<Mutex<Option<String>>>>,

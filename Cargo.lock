@@ -2956,7 +2956,6 @@ dependencies = [
  "hex",
  "hmac",
  "html-escape",
- "mime_guess",
  "nix",
  "notify",
  "proc-macro2",

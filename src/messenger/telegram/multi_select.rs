@@ -118,15 +118,6 @@ pub(crate) async fn handle_ask_multi_callback(
     let bitmap_opt = data.split(':').nth(3);
     if let Some(mut state) = sessions.get_ask_state(sid).await {
         let q = &state.questions[state.current_index];
-        if let Some(opt) = q.options.get(idx)
-            && (opt.to_lowercase().contains("write-in") || opt.contains("직접 입력")) {
-                state.waiting_for_write_in = true;
-                sessions.set_ask_state(sid, state).await;
-                let txt = format!("{}\n\n✍️ **[직접 입력 대기 중...]**\n채팅창에 직접 원하는 답변을 입력한 후 전송해 주세요.", msg.text().unwrap_or(""));
-                let html = super::formatting::markdown_to_telegram_html(&txt);
-                let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(teloxide::types::ParseMode::Html).await;
-                return;
-            }
         let bm = bitmap_opt.unwrap_or(&state.current_bitmap);
         let nb: String = bm.chars().enumerate().map(|(i, c)| if i == idx { if c == '1' { '0' } else { '1' } } else { c }).collect();
         state.current_bitmap = nb.clone();

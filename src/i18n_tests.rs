@@ -1,7 +1,7 @@
 use crate::i18n::{
-    flatten, load_toml, TranslationStore, LANGUAGES, init, get_language, get_store, find_locales_dir
+    flatten, load_toml, TranslationStore, LANGUAGES, init, get_language, find_locales_dir
 };
-use crate::{t, t_plural};
+use crate::t;
 use std::collections::{HashMap, HashSet};
 use toml::Value;
 
@@ -72,7 +72,7 @@ fn test_load_toml_valid() {
 #[test]
 fn test_store_english() {
     let store = TranslationStore::new("en");
-    assert!(!store.all_chat_keys().is_empty());
+    assert_eq!(store.en_chat.len(), 63);
 }
 
 #[test]
@@ -85,15 +85,15 @@ fn test_store_fallback_missing_key() {
 #[test]
 fn test_store_variable_substitution() {
     let store = TranslationStore::new("en");
-    let result = store.chat("session.error_body", &[("model", "opus")]);
-    assert!(result.contains("opus"));
+    let result = store.chat("bot.model_switch_success", &[("model", "gemini-3.8-flash")]);
+    assert!(result.contains("gemini-3.8-flash"));
     assert!(!result.contains("{model}"));
 }
 
 #[test]
 fn test_store_missing_placeholder_graceful() {
     let store = TranslationStore::new("en");
-    let result = store.chat("session.error_body", &[]);
+    let result = store.chat("bot.model_switch_success", &[]);
     assert!(result.contains("{model}"));
 }
 
@@ -114,16 +114,10 @@ fn test_empty_string_fallback() {
     let en_dir = root.join("en");
     std::fs::create_dir_all(&en_dir).unwrap();
     std::fs::write(en_dir.join("chat.toml"), "hello = \"hello en\"\nempty_key = \"fallback en\"").unwrap();
-    std::fs::write(en_dir.join("cli.toml"), "").unwrap();
-    std::fs::write(en_dir.join("commands.toml"), "").unwrap();
-    std::fs::write(en_dir.join("wizard.toml"), "").unwrap();
 
     let de_dir = root.join("de");
     std::fs::create_dir_all(&de_dir).unwrap();
     std::fs::write(de_dir.join("chat.toml"), "hello = \"hallo de\"\nempty_key = \"\"").unwrap();
-    std::fs::write(de_dir.join("cli.toml"), "").unwrap();
-    std::fs::write(de_dir.join("commands.toml"), "").unwrap();
-    std::fs::write(de_dir.join("wizard.toml"), "").unwrap();
 
     let store = TranslationStore::new_with_root("de", root);
     assert_eq!(store.chat("hello", &[]), "hallo de");
@@ -153,29 +147,15 @@ fn test_init_unknown_falls_back_to_english() {
 #[test]
 fn test_t_returns_string() {
     init("en");
-    let result = crate::i18n::t("session.error_header", &[]);
-    assert!(result.contains("Session Error"));
+    let result = crate::i18n::t("bot.startup_complete", &[]);
+    assert!(result.contains("System restart"));
 }
 
 #[test]
 fn test_t_with_kwargs() {
     init("en");
-    let result = crate::i18n::t("stop.killed", &[("provider", "Antigravity")]);
-    assert!(result.contains("Antigravity"));
-}
-
-#[test]
-fn test_t_plural_one() {
-    init("en");
-    let result = crate::i18n::t_plural("tasks.cancelled", 1, &[]);
-    assert!(result.contains("1 task."));
-}
-
-#[test]
-fn test_t_plural_many() {
-    init("en");
-    let result = crate::i18n::t_plural("tasks.cancelled", 5, &[]);
-    assert!(result.contains("5 tasks."));
+    let result = crate::i18n::t("bot.unknown_topic", &[("name", "test-topic")]);
+    assert!(result.contains("test-topic"));
 }
 
 // -- Macro tests ---------------------------------------------------------------
@@ -183,38 +163,30 @@ fn test_t_plural_many() {
 #[test]
 fn test_macros() {
     init("en");
-    
-    let r1 = t!("session.error_header");
-    assert!(r1.contains("Session Error"));
 
-    let r2 = t!("stop.killed", provider = "Antigravity");
-    assert!(r2.contains("Antigravity"));
+    let r1 = t!("bot.startup_complete");
+    assert!(r1.contains("System restart"));
 
-    let r4 = t_plural!("tasks.cancelled", 1);
-    assert!(r4.contains("1 task."));
-
-    let r5 = t_plural!("tasks.cancelled", 5);
-    assert!(r5.contains("5 tasks."));
+    let r2 = t!("bot.model_switch_success", model = "gemini-3.8-flash");
+    assert!(r2.contains("gemini-3.8-flash"));
 }
 
 // -- TOML file integrity -------------------------------------------------------
 
 #[test]
 fn test_all_chat_keys_resolvable() {
-    init("en");
-    let store = get_store();
-    for key in store.all_chat_keys() {
-        let result = store.chat(&key, &[]);
+    let store = TranslationStore::new("en");
+    for key in store.en_chat.keys() {
+        let result = store.chat(key, &[]);
         assert!(!result.contains("[MISSING:"), "Key {:?} is missing", key);
     }
 }
 
 #[test]
 fn test_no_empty_values() {
-    init("en");
-    let store = get_store();
-    for key in store.all_chat_keys() {
-        let result = store.chat(&key, &[]);
+    let store = TranslationStore::new("en");
+    for key in store.en_chat.keys() {
+        let result = store.chat(key, &[]);
         assert!(!result.trim().is_empty(), "Key {:?} has empty value", key);
     }
 }
@@ -231,10 +203,9 @@ fn extract_placeholders(text: &str) -> HashSet<String> {
 
 #[test]
 fn test_chat_placeholders_are_valid() {
-    init("en");
-    let store = get_store();
-    for key in store.all_chat_keys() {
-        let val = store.chat(&key, &[]);
+    let store = TranslationStore::new("en");
+    for key in store.en_chat.keys() {
+        let val = store.chat(key, &[]);
         let phs = extract_placeholders(&val);
         for ph in phs {
             let is_ident = !ph.is_empty() && ph.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
@@ -267,7 +238,9 @@ fn test_key_completeness() {
     for &(lang, _) in LANGUAGES {
         if lang == "en" { continue; }
         let store = TranslationStore::new(lang);
-        assert!(store.all_chat_keys().difference(&store.lang_chat_keys()).next().is_none(), "[{}] missing chat keys", lang);
+        let en_keys: HashSet<String> = store.en_chat.keys().cloned().collect();
+        let lang_keys: HashSet<String> = store.primary_chat.as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default();
+        assert!(en_keys.difference(&lang_keys).next().is_none(), "[{}] missing chat keys", lang);
     }
 }
 
@@ -276,11 +249,10 @@ fn test_placeholder_match() {
     for &(lang, _) in LANGUAGES {
         if lang == "en" { continue; }
         let store = TranslationStore::new(lang);
-        for key in &store.all_chat_keys() {
-            let en_val = store.en_chat.get(key).cloned().unwrap_or_default();
+        for (key, en_val) in &store.en_chat {
             let lang_val = store.primary_chat.as_ref().and_then(|m| m.get(key)).cloned().unwrap_or_default();
             if !lang_val.is_empty() {
-                assert_eq!(extract_placeholders(&en_val), extract_placeholders(&lang_val), "chat: {}", key);
+                assert_eq!(extract_placeholders(en_val), extract_placeholders(&lang_val), "chat: {}", key);
             }
         }
     }
@@ -289,7 +261,7 @@ fn test_placeholder_match() {
 #[test]
 fn test_german_loads_without_error() {
     init("de");
-    let store = get_store();
+    let store = TranslationStore::new("de");
     assert_eq!(store.language, "de");
-    assert!(!store.lang_chat_keys().is_empty());
+    assert!(store.primary_chat.as_ref().is_some_and(|m| !m.is_empty()));
 }

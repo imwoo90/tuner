@@ -2,9 +2,9 @@
 """Edit a webhook: modify properties in place.
 
 Usage:
-    python tools/webhook_tools/webhook_edit.py "email-notify" --disable
-    python tools/webhook_tools/webhook_edit.py "email-notify" --prompt-template "..."
-    python tools/webhook_tools/webhook_edit.py "email-notify" --regenerate-token
+    python3 tools/webhook_tools/webhook_edit.py "email-notify" --disable
+    python3 tools/webhook_tools/webhook_edit.py "email-notify" --prompt-template "..."
+    python3 tools/webhook_tools/webhook_edit.py "email-notify" --regenerate-token
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ _TUTORIAL = """\
 WEBHOOK EDIT -- Modify an existing webhook in place.
 
 USAGE:
-  python tools/webhook_tools/webhook_edit.py "<hook-id>" [options]
+  python3 tools/webhook_tools/webhook_edit.py "<hook-id>" [options]
 
 OPTIONS:
   --enable              Enable the hook
@@ -38,26 +38,22 @@ OPTIONS:
   --hmac-sig-regex      Regex to extract signature (group 1)
   --hmac-payload-prefix-regex  Regex on header; group 1 prepended to body with "."
   --regenerate-token    Generate a new random Bearer token (bearer mode only)
-  --provider "..."      Change CLI provider (claude, codex, or gemini)
+  --provider "..."      Change CLI provider ('antigravity')
   --model "..."         Change model name
-  --reasoning-effort    Change thinking level for Codex (low, medium, high, xhigh)
+  --effort              Change thinking effort level (low, medium, high)
   --cli-parameters      Change CLI flags as JSON array
   --quiet-start <hour>  Start of quiet hours (0-23, webhook won't run during this time)
   --quiet-end <hour>    End of quiet hours (0-23, exclusive)
-  --dependency "..."    Resource dependency (e.g. 'chrome_browser', 'api_rate_limit')
-  --clear-quiet-hours   Remove quiet hour settings (use global config)
-  --clear-dependency    Remove dependency (allow parallel execution)
+  --clear-quiet-hours   Remove quiet hour settings
 
 EXAMPLES:
-  python tools/webhook_tools/webhook_edit.py "email-notify" --disable
-  python tools/webhook_tools/webhook_edit.py "email-notify" --prompt-template "New: {{subject}}"
-  python tools/webhook_tools/webhook_edit.py "email-notify" --regenerate-token
-  python tools/webhook_tools/webhook_edit.py "github-pr" --hmac-secret "new-secret-from-github"
-  python tools/webhook_tools/webhook_edit.py "stripe-hook" --hmac-sig-regex "v1=([a-f0-9]+)"
-  python tools/webhook_tools/webhook_edit.py "email-notify" --quiet-start 22 --quiet-end 7
-  python tools/webhook_tools/webhook_edit.py "web-scraper" --dependency chrome_browser
-  python tools/webhook_tools/webhook_edit.py "web-scraper" --clear-quiet-hours
-  python tools/webhook_tools/webhook_edit.py "web-scraper" --clear-dependency
+  python3 tools/webhook_tools/webhook_edit.py "email-notify" --disable
+  python3 tools/webhook_tools/webhook_edit.py "email-notify" --prompt-template "New: {{subject}}"
+  python3 tools/webhook_tools/webhook_edit.py "email-notify" --regenerate-token
+  python3 tools/webhook_tools/webhook_edit.py "github-pr" --hmac-secret "new-secret-from-github"
+  python3 tools/webhook_tools/webhook_edit.py "stripe-hook" --hmac-sig-regex "v1=([a-f0-9]+)"
+  python3 tools/webhook_tools/webhook_edit.py "email-notify" --quiet-start 22 --quiet-end 7
+  python3 tools/webhook_tools/webhook_edit.py "web-scraper" --clear-quiet-hours
 """
 
 
@@ -85,7 +81,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["antigravity", "claude", "codex", "gemini"],
+        choices=["antigravity"],
         help="Change CLI provider (defaults to antigravity)",
     )
     parser.add_argument(
@@ -93,13 +89,14 @@ def main() -> None:
         help="Change model name",
     )
     parser.add_argument(
-        "--reasoning-effort",
-        choices=["low", "medium", "high", "xhigh"],
-        help="Change thinking level (Codex only)",
+        "--effort",
+        dest="effort",
+        choices=["low", "medium", "high"],
+        help="Change thinking effort level (low, medium, high)",
     )
     parser.add_argument(
         "--cli-parameters",
-        help="Change CLI flags as JSON array (e.g. '[\"--verbose\"]')",
+        help="Change CLI flags as JSON array",
     )
     parser.add_argument(
         "--quiet-start",
@@ -116,18 +113,9 @@ def main() -> None:
         help="End of quiet hours (0-23, exclusive).",
     )
     parser.add_argument(
-        "--dependency",
-        help="Resource dependency (e.g. 'chrome_browser'). Tasks with same dependency run sequentially.",
-    )
-    parser.add_argument(
         "--clear-quiet-hours",
         action="store_true",
-        help="Remove quiet hour settings (use global config).",
-    )
-    parser.add_argument(
-        "--clear-dependency",
-        action="store_true",
-        help="Remove dependency (allow parallel execution).",
+        help="Remove quiet hour settings.",
     )
     args = parser.parse_args()
 
@@ -226,9 +214,9 @@ def main() -> None:
     if args.model:
         hook["model"] = args.model
         changes["model"] = args.model
-    if args.reasoning_effort:
-        hook["reasoning_effort"] = args.reasoning_effort
-        changes["reasoning_effort"] = args.reasoning_effort
+    if args.effort:
+        hook["effort"] = args.effort
+        changes["effort"] = args.effort
     if args.cli_parameters:
         try:
             cli_params = json.loads(args.cli_parameters)
@@ -246,16 +234,10 @@ def main() -> None:
     if args.quiet_end is not None:
         hook["quiet_end"] = args.quiet_end
         changes["quiet_end"] = args.quiet_end
-    if args.dependency is not None:
-        hook["dependency"] = args.dependency.strip()
-        changes["dependency"] = args.dependency.strip()
     if args.clear_quiet_hours:
         hook.pop("quiet_start", None)
         hook.pop("quiet_end", None)
         changes["quiet_hours"] = "cleared"
-    if args.clear_dependency:
-        hook.pop("dependency", None)
-        changes["dependency"] = "cleared"
 
     if not changes:
         print(json.dumps({"error": "No changes specified. Use --help for options."}))

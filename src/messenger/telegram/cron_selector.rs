@@ -30,6 +30,7 @@ fn format_job_and_button(
     number: usize,
     idx: usize,
     current_page: usize,
+    default_tz: &str,
     topic_cache: Option<&TopicNameCache>,
 ) -> (String, InlineKeyboardButton) {
     let status = if job.enabled {
@@ -46,7 +47,8 @@ fn format_job_and_button(
     let number_str = number.to_string();
     let target = format_target_topic(job, topic_cache);
     let model = job.model.as_deref().unwrap_or("default");
-    let schedule = format_schedule_display(&job.schedule, &job.timezone);
+    let effective_tz = if job.timezone.is_empty() { default_tz } else { &job.timezone };
+    let schedule = format_schedule_display(&job.schedule, effective_tz);
     let line = t!(
         "bot.cron_job_line",
         number = number_str,
@@ -112,10 +114,11 @@ pub(crate) async fn build_cron_page(
 
     let mut lines = vec![t!("bot.cron_list_header"), "".to_string()];
     let mut keyboard = Vec::new();
+    let default_tz = manager.default_timezone();
 
     for (idx, job) in page_jobs.iter().enumerate() {
         let number = start + idx + 1;
-        let (line, button) = format_job_and_button(job, number, idx, current_page, topic_cache);
+        let (line, button) = format_job_and_button(job, number, idx, current_page, &default_tz, topic_cache);
         lines.push(line);
         keyboard.push(vec![button]);
     }

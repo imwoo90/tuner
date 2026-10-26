@@ -2,7 +2,7 @@
 //!
 //! ## Overview
 //! Provides the `MessageBus` implementation for submitting envelopes, acquiring chat locks,
-//! executing prompt injection, and delivering messages to registered transports (e.g. Telegram, Matrix).
+//! executing prompt injection, and delivering messages to registered transports (such as Telegram).
 //! Handles cascading transport fallback and error resilience.
 //!
 //! ## Search Tags
@@ -16,7 +16,7 @@ use super::lock_pool::LockPool;
 #[async_trait]
 /// Defines the `Transport` (transport) interface.
 pub trait Transport: Send + Sync {
-    /// Return the identifier of this transport (e.g. "tg", "mx").
+    /// Return the identifier of this transport (e.g. "tg").
     fn transport_name(&self) -> &str;
 
     /// Deliver a unicast envelope.
@@ -40,18 +40,14 @@ pub trait PromptInjector: Send + Sync {
     ) -> Result<String, String>;
 }
 
-/// Type alias `BusHook` (bus hook).
-pub type BusHook = Arc<dyn Fn(&Envelope) + Send + Sync>;
-
 /// Represents `MessageBus` (message bus).
 pub struct MessageBus {
     transports: Mutex<Vec<Arc<dyn Transport>>>,
     lock_pool: Arc<LockPool>,
     injector: Mutex<Option<Arc<dyn PromptInjector>>>,
-    pre_deliver_hook: Mutex<Option<BusHook>>,
-    audit_hook: Mutex<Option<BusHook>>,
 }
 
+#[cfg(test)]
 impl Default for MessageBus {
     fn default() -> Self {
         Self::new()
@@ -59,25 +55,19 @@ impl Default for MessageBus {
 }
 
 impl MessageBus {
-    /// Create a new MessageBus.
+    /// Create a new MessageBus with an isolated LockPool for unit testing.
+    #[cfg(test)]
     pub fn new() -> Self {
-        Self::with_lock_pool(Arc::new(LockPool::new_default()))
+        Self::with_lock_pool(Arc::new(LockPool::new()))
     }
 
-    /// Create a new MessageBus with a custom LockPool.
+    /// Create a new MessageBus sharing the given LockPool.
     pub fn with_lock_pool(lock_pool: Arc<LockPool>) -> Self {
         Self {
             transports: Mutex::new(Vec::new()),
             lock_pool,
             injector: Mutex::new(None),
-            pre_deliver_hook: Mutex::new(None),
-            audit_hook: Mutex::new(None),
         }
-    }
-
-    /// Return reference to the lock pool.
-    pub fn lock_pool(&self) -> Arc<LockPool> {
-        self.lock_pool.clone()
     }
 
     /// Register a transport with the bus.
@@ -90,25 +80,10 @@ impl MessageBus {
         *self.injector.lock().unwrap_or_else(|e| e.into_inner()) = Some(injector);
     }
 
-    /// Set a pre-deliver hook function.
-    pub fn set_pre_deliver_hook(&self, hook: BusHook) {
-        *self.pre_deliver_hook.lock().unwrap_or_else(|e| e.into_inner()) = Some(hook);
-    }
-
-    /// Set an audit hook function.
-    pub fn set_audit_hook(&self, hook: BusHook) {
-        *self.audit_hook.lock().unwrap_or_else(|e| e.into_inner()) = Some(hook);
-    }
-
     /// Submit an envelope to the bus for processing and delivery.
     pub async fn submit(&self, envelope: &mut Envelope) {
         if envelope.envelope_id.is_empty() {
             envelope.envelope_id = generate_envelope_id();
-        }
-
-        let audit = self.audit_hook.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if let Some(ref hook) = audit {
-            hook(envelope);
         }
 
         if envelope.lock_mode == LockMode::Required {
@@ -149,11 +124,6 @@ impl MessageBus {
                 }
             }
 
-        let pre_deliver = self.pre_deliver_hook.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if let Some(ref hook) = pre_deliver {
-            hook(envelope);
-        }
-
         self.deliver(envelope).await;
     }
 
@@ -170,12 +140,12 @@ impl MessageBus {
             return;
         }
 
-        let target_transport = &envelope.transport;
+        let target_transport = normalize_transport_name(&envelope.transport);
         let mut matching = Vec::new();
         let mut others = Vec::new();
 
         for t in transports {
-            if t.transport_name() == target_transport {
+            if normalize_transport_name(t.transport_name()) == target_transport {
                 matching.push(t);
             } else {
                 others.push(t);
@@ -191,7 +161,7 @@ impl MessageBus {
             fallback_env.delivery = DeliveryMode::Broadcast;
             fallback_env.result_text = format!(
                 "**Delivery fallback**\n\nTarget transport '{}' is not available.\n\n---\n{}",
-                target_transport,
+                envelope.transport,
                 envelope.result_text
             );
             fallback_env.status = envelope.status.clone();
@@ -201,6 +171,14 @@ impl MessageBus {
 
             let _ = others[0].deliver_broadcast(&fallback_env).await;
         }
+    }
+}
+
+fn normalize_transport_name(name: &str) -> &str {
+    if name.eq_ignore_ascii_case("telegram") {
+        "tg"
+    } else {
+        name
     }
 }
 

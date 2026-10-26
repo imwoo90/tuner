@@ -99,11 +99,13 @@ mod tests {
         let cfg = std::sync::Arc::new(crate::config::CliConfig {
             provider: "antigravity".to_string(),
             allowed_user_ids: vec![100],
-            telegram_heartbeat_enabled: true,
-            telegram_heartbeat_interval_minutes: Some(30),
-            telegram_heartbeat_quiet_start: Some(22),
-            telegram_heartbeat_quiet_end: Some(7),
-            telegram_heartbeat_ack_token: Some("HEARTBEAT_OK".to_string()),
+            heartbeat: crate::config::HeartbeatConfig {
+                enabled: true,
+                interval_minutes: Some(30),
+                quiet_start: Some(22),
+                quiet_end: Some(7),
+                ack_token: Some("HEARTBEAT_OK".to_string()),
+            },
             ..Default::default()
         });
 
@@ -130,7 +132,10 @@ mod tests {
             temp.path().to_path_buf(), 30, 4, false, "UTC".to_string(), None
         ));
         let cfg = std::sync::Arc::new(crate::config::CliConfig {
-            telegram_heartbeat_interval_minutes: Some(30),
+            heartbeat: crate::config::HeartbeatConfig {
+                interval_minutes: Some(30),
+                ..Default::default()
+            },
             ..Default::default()
         });
         let cli = std::sync::Arc::new(crate::cli::antigravity::AntigravityCli::new((*cfg).clone()));

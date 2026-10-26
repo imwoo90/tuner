@@ -253,7 +253,7 @@ pub(crate) async fn consume_stream(
 
     if state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
         if let Some(sid) = state.last_sid { updated.set_session_id(&config.provider, &sid); }
-        let _ = sessions.update_session(&updated, 0.0, 0).await;
+        let _ = sessions.update_session(&updated).await;
     }
     Ok(())
 }

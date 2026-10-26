@@ -16,7 +16,6 @@ pub use loader::{TranslationStore, find_locales_dir, flatten, load_toml, load_la
 
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
-use std::cell::RefCell;
 
 /// Static list of supported languages.
 pub static LANGUAGES: &[(&str, &str)] = &[
@@ -39,10 +38,6 @@ tokio::task_local! {
     pub static TASK_ACTIVE_LANG: String;
 }
 
-thread_local! {
-    static ACTIVE_LANG: RefCell<Option<String>> = const { RefCell::new(None) };
-}
-
 /// Retrieve the static global registry, initializing it if necessary.
 fn get_registry() -> &'static HashMap<String, TranslationStore> {
     REGISTRY.get_or_init(|| {
@@ -61,25 +56,20 @@ fn get_active_language() -> String {
     if let Ok(task_lang) = TASK_ACTIVE_LANG.try_with(|l| l.clone()) {
         return task_lang;
     }
-    ACTIVE_LANG.with(|l| {
-        if let Some(ref val) = *l.borrow() {
-            return val.clone();
-        }
-        match GLOBAL_ACTIVE_LANG.read() {
-            Ok(guard) => {
-                if !guard.is_empty() {
-                    return guard.clone();
-                }
-            }
-            Err(poisoned) => {
-                let guard = poisoned.into_inner();
-                if !guard.is_empty() {
-                    return guard.clone();
-                }
+    match GLOBAL_ACTIVE_LANG.read() {
+        Ok(guard) => {
+            if !guard.is_empty() {
+                return guard.clone();
             }
         }
-        "en".to_string()
-    })
+        Err(poisoned) => {
+            let guard = poisoned.into_inner();
+            if !guard.is_empty() {
+                return guard.clone();
+            }
+        }
+    }
+    "en".to_string()
 }
 
 /// Initialize the global active language.
@@ -87,7 +77,7 @@ fn get_active_language() -> String {
 /// # Examples
 /// ```no_run
 /// tuner::i18n::init("en");
-/// assert_eq!(tuner::i18n::get_language(), "en");
+/// assert!(!tuner::i18n::t("bot.startup_complete", &[]).is_empty());
 /// ```
 pub fn init(language: &str) {
     let lang = if LANGUAGES.iter().any(|(code, _)| *code == language) {
@@ -95,9 +85,6 @@ pub fn init(language: &str) {
     } else {
         "en"
     };
-    ACTIVE_LANG.with(|l| {
-        *l.borrow_mut() = Some(lang.to_string());
-    });
     match GLOBAL_ACTIVE_LANG.write() {
         Ok(mut guard) => {
             *guard = lang.to_string();
@@ -109,16 +96,13 @@ pub fn init(language: &str) {
     }
 }
 
-/// Executes `set_language` (set language).
-pub fn set_language(language: &str) {
-    let lang = if LANGUAGES.iter().any(|(code, _)| *code == language) {
-        language
-    } else {
-        "en"
+/// Translate a chat string for an explicit language code.
+pub fn t_for_lang(lang: &str, key: &str, args: &[(&str, &str)]) -> String {
+    let registry = get_registry();
+    let Some(store) = registry.get(lang).or_else(|| registry.get("en")) else {
+        return key.to_string();
     };
-    ACTIVE_LANG.with(|l| {
-        *l.borrow_mut() = Some(lang.to_string());
-    });
+    store.chat(key, args)
 }
 
 /// Translate a chat string.
@@ -126,53 +110,17 @@ pub fn set_language(language: &str) {
 /// # Examples
 /// ```no_run
 /// tuner::i18n::init("en");
-/// let val = tuner::i18n::t("session.error_header", &[]);
-/// assert!(val.contains("Session Error"));
+/// let val = tuner::i18n::t("bot.startup_complete", &[]);
+/// assert!(val.contains("System restart"));
 /// ```
 pub fn t(key: &str, args: &[(&str, &str)]) -> String {
     let lang = get_active_language();
-    let registry = get_registry();
-    let Some(store) = registry.get(&lang).or_else(|| registry.get("en")) else {
-        return key.to_string();
-    };
-    store.chat(key, args)
-}
-
-/// Translate with plural form selection.
-///
-/// # Examples
-/// ```no_run
-/// tuner::i18n::init("en");
-/// let val = tuner::i18n::t_plural("tasks.cancelled", 5, &[]);
-/// assert!(val.contains("5 tasks"));
-/// ```
-pub fn t_plural(key: &str, count: i64, args: &[(&str, &str)]) -> String {
-    let suffix = if count == 1 { "_one" } else { "_other" };
-    let count_str = count.to_string();
-    let mut new_args = Vec::with_capacity(args.len() + 1);
-    new_args.push(("count", count_str.as_str()));
-    for &(k, v) in args {
-        if k != "count" {
-            new_args.push((k, v));
-        }
-    }
-    t(&format!("{}{}", key, suffix), &new_args)
+    t_for_lang(&lang, key, args)
 }
 
 /// Get the active language code.
 pub fn get_language() -> String {
     get_active_language()
-}
-
-/// Get the current TranslationStore clone.
-pub fn get_store() -> TranslationStore {
-    let lang = get_active_language();
-    let registry = get_registry();
-    registry
-        .get(&lang)
-        .or_else(|| registry.get("en"))
-        .cloned()
-        .unwrap_or_else(|| TranslationStore::new("en"))
 }
 
 #[macro_export]
@@ -183,19 +131,6 @@ macro_rules! t {
     };
     ($key:expr, $($name:ident = $val:expr),* $(,)?) => {
         $crate::i18n::t($key, &[
-            $((stringify!($name), &format!("{}", $val) as &str)),*
-        ])
-    };
-}
-
-#[macro_export]
-/// Helper macro `t_plural!` (t plural).
-macro_rules! t_plural {
-    ($key:expr, $count:expr) => {
-        $crate::i18n::t_plural($key, $count, &[])
-    };
-    ($key:expr, $count:expr, $($name:ident = $val:expr),* $(,)?) => {
-        $crate::i18n::t_plural($key, $count, &[
             $((stringify!($name), &format!("{}", $val) as &str)),*
         ])
     };

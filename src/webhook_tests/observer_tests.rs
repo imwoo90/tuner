@@ -16,11 +16,8 @@ async fn test_observer_disabled_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
     let manager = Arc::new(WebhookManager::new(dir.path().join("webhooks.json")));
     let config = Arc::new(crate::config::CliConfig::default());
-    let cli = Arc::new(crate::cli::antigravity::AntigravityCli::new(
-        (*config).clone(),
-    ));
 
-    let observer = WebhookObserver::new(manager, dir.path().join("webhooks.json"), config, cli);
+    let observer = WebhookObserver::new(manager, dir.path().join("webhooks.json"), config);
     assert!(observer.start().await.is_ok());
     observer.stop().await;
 }
@@ -46,8 +43,8 @@ fn make_test_hook(quiet_start: Option<u32>, quiet_end: Option<u32>) -> WebhookEn
 #[test]
 fn test_webhook_ignores_heartbeat_quiet_hours() {
     let mut config = CliConfig::default();
-    config.telegram_heartbeat_quiet_start = Some(21);
-    config.telegram_heartbeat_quiet_end = Some(8);
+    config.heartbeat.quiet_start = Some(21);
+    config.heartbeat.quiet_end = Some(8);
     config.user_timezone = Some("UTC".to_string());
 
     let hook = make_test_hook(None, None);

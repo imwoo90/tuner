@@ -16,7 +16,7 @@ use crate::config::CliConfig;
 use crate::session::manager::SessionManager;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cron::manager::CronManager;
-use crate::telegram::topic_cache::{BotInfo, TopicNameCache};
+use crate::telegram::topic_cache::TopicNameCache;
 use crate::telegram::reply::download_telegram_media;
 
 #[derive(Clone)]
@@ -32,8 +32,6 @@ pub struct MediaGroupDeps {
     pub cron_manager: Arc<CronManager>,
     /// Forum topic name cache.
     pub topic_cache: Arc<TopicNameCache>,
-    /// Bot identity metadata.
-    pub bot_info: Arc<BotInfo>,
 }
 
 /// Represents `MediaGroupManager` (media group manager).

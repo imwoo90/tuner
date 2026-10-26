@@ -1,7 +1,8 @@
 #![allow(clippy::await_holding_lock)]
 #[cfg(test)]
 mod tests {
-    use crate::telegram::{handle_message, TopicNameCache, BotInfo};
+    use crate::telegram::{handle_message, TopicNameCache, BotInfo, TEST_ENV_MUTEX};
+    use crate::telegram::test_helpers::helpers::{EnvGuard, mock_brain_dir, make_msg};
     use crate::config::CliConfig;
     use crate::cli::antigravity::AntigravityCli;
     use crate::session::key::SessionKey;
@@ -11,47 +12,12 @@ mod tests {
     use teloxide::Bot;
     use teloxide::types::Message;
 
-    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    struct EnvGuard {
-        p: String,
-        h: String,
-    }
-
-    impl EnvGuard {
-        fn new(temp: &tempfile::TempDir) -> Self {
-            let p = std::env::var("PATH").unwrap_or_default();
-            let h = std::env::var("HOME").unwrap_or_default();
-            let path_env = format!("{}:{}", temp.path().to_string_lossy(), p);
-            unsafe {
-                std::env::set_var("PATH", &path_env);
-                std::env::set_var("HOME", temp.path().to_string_lossy().to_string());
-            }
-            Self { p, h }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            unsafe {
-                std::env::set_var("PATH", &self.p);
-                std::env::set_var("HOME", &self.h);
-            }
-        }
-    }
-
-    fn mock_brain_dir(temp_dir: &tempfile::TempDir, sess_id: &str) {
-        let p = temp_dir.path().join(format!(".gemini/antigravity-cli/brain/{}/.system_generated/logs", sess_id));
-        std::fs::create_dir_all(&p).unwrap();
-        std::fs::write(p.join("transcript_full.jsonl"), "").unwrap();
-    }
-
     fn make_message_json(chat_id: i64, user_id: i64, text: &str) -> Message {
         let raw = format!(
             r#"{{"message_id":100,"date":1,"chat":{{"id":{},"type":"private"}},"from":{{"id":{},"is_bot":false,"first_name":"User"}},"text":"{}"}}"#,
             chat_id, user_id, text
         );
-        serde_json::from_str(&raw).unwrap()
+        make_msg(&raw)
     }
 
     fn write_mock_agy(dir: &std::path::Path) {
@@ -95,7 +61,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_telegram_active_ask_feeds_on_new_message() {
-        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let temp_dir = tempfile::tempdir().unwrap();
         let session_id = "test-session-abort-ask";
         mock_brain_dir(&temp_dir, session_id);
@@ -107,7 +73,7 @@ mod tests {
         let (sess, _) = ctx.mgr.resolve_session(&key, &ctx.cfg.provider, "opus").await.unwrap();
         let mut updated = sess.clone();
         updated.set_session_id("antigravity", session_id);
-        ctx.mgr.update_session(&updated, 0.05, 1).await.unwrap();
+        ctx.mgr.update_session(&updated).await.unwrap();
         let mut env = std::collections::HashMap::new();
         env.insert("TUNER_CHAT_ID".to_string(), chat_id.to_string());
         ctx.cli.sessions.ensure_session(session_id, temp_dir.path(), "sleep", &["10".to_string()], &env).await.unwrap();
@@ -125,7 +91,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_feed_active_session_waits_for_running_turn_and_returns_false() {
-        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let temp_dir = tempfile::tempdir().unwrap();
         let session_id = "test-session-running-turn";
         mock_brain_dir(&temp_dir, session_id);

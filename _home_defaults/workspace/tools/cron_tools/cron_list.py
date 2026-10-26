@@ -60,7 +60,7 @@ def main() -> None:
                         '"<job-id>" --name "<new-id>".'
                     ),
                     "never_do": (
-                        "Do NOT edit CLAUDE.md or AGENTS.md (fixed framework files). "
+                        "Do NOT edit AGENTS.md (fixed framework file). "
                         "Do NOT delete/recreate a job just to change title, description, schedule, "
                         "enabled state, or name."
                     ),

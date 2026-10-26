@@ -17,14 +17,6 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    /// Creates a new instance.
-    pub fn new(child_path: PathBuf) -> Self {
-        Self {
-            child_path,
-            args: Vec::new(),
-        }
-    }
-
     /// Executes `with_args` (with args).
     pub fn with_args(child_path: PathBuf, args: Vec<String>) -> Self {
         Self { child_path, args }
@@ -63,36 +55,5 @@ impl Supervisor {
 
         let status = child.wait().await.map_err(|e| format!("Wait failed: {}", e))?;
         Ok((status.code().unwrap_or(-1), start.elapsed()))
-    }
-}
-
-/// Executes `terminate_child` (terminate child).
-pub async fn terminate_child(child: &mut tokio::process::Child, timeout: Duration) -> Result<(), std::io::Error> {
-    if child.try_wait()?.is_some() {
-        return Ok(());
-    }
-
-    #[cfg(unix)]
-    {
-        if let Some(pid) = child.id() {
-            let pid = nix::unistd::Pid::from_raw(pid as i32);
-            let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = child.kill().await;
-    }
-
-    match tokio::time::timeout(timeout, child.wait()).await {
-        Ok(res) => {
-            res?;
-            Ok(())
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            Ok(())
-        }
     }
 }

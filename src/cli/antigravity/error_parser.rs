@@ -71,7 +71,7 @@ const SUGG_MODEL_404: &str = "💡 Suggestion: The selected model does not exist
 const SUGG_AUTH: &str = "💡 Suggestion: Verify your API key in ~/.tuner/.env or check permissions for your account.";
 
 const MSG_CODE_3: &str = "❌ [tuner] Antigravity model or agent failure (exit code 3).\n💡 Suggestion: The model provider or agent failed to complete the turn. Try again in a moment, or switch models with /model.";
-const MSG_MISSING_KEY: &str = "❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. ANTHROPIC_API_KEY=sk-...) to make it globally available.";
+const MSG_MISSING_KEY: &str = "❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. PPLX_API_KEY=sk-...) to make it globally available.";
 const MSG_TIMEOUT: &str = "❌ [tuner] Antigravity execution timed out.\n💡 Suggestion: The turn took longer than the configured timeout limit. You can retry with a smaller prompt, or extend the execution timeout.";
 const MSG_PERM_DENIED: &str = "❌ [tuner] Permission denied when executing agy.\n💡 Suggestion: Check execute permissions (chmod +x) for the agy binary or workspace path.";
 const MSG_NOT_FOUND: &str = "❌ [tuner] agy CLI is not installed or not in PATH.\n💡 Suggestion: Install agy CLI and verify it is accessible from the system PATH.";

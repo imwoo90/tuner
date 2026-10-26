@@ -196,7 +196,7 @@ async fn handle_model_override(
     let (mo, eff) = model_and_effort;
     sess.model = mo.to_string();
     sess.effort = eff.map(|s| s.to_string());
-    let _ = sessions.update_session(sess, 0.0, 0).await;
+    let _ = sessions.preserve_session_identity(sess).await;
     let sid = sess.get_session_id(&sess.provider);
     commands_model::apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
     if empty {

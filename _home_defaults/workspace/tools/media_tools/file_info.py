@@ -2,7 +2,7 @@
 """Get metadata about a specific received media file.
 
 Usage:
-    python tools/media_tools/file_info.py --file /path/to/media_files/2025-01-15/photo_abc.jpg
+    python3 tools/media_tools/file_info.py --file /path/to/telegram_files/photo_abc.jpg
 """
 from __future__ import annotations
 
@@ -51,38 +51,7 @@ def main() -> None:
         "modified": mtime,
     }
 
-    caption = _find_caption(path)
-    if caption is not None:
-        result["caption"] = caption
-
     print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-def _find_caption(path: Path) -> str | None:
-    """Look up caption for a file in the nearest _index.yaml."""
-    try:
-        import yaml
-    except ImportError:
-        return None
-
-    candidate = path.parent.parent / "_index.yaml"
-    if not candidate.exists():
-        candidate = path.parent / "_index.yaml"
-    if not candidate.exists():
-        return None
-
-    try:
-        data = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
-    except Exception:
-        return None
-
-    tree = data.get("tree", {})
-    date_dir = path.parent.name
-    files = tree.get(date_dir, [])
-    for f in files:
-        if f.get("name") == path.name:
-            return f.get("caption")
-    return None
 
 
 def _human_size(size: int) -> str:

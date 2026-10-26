@@ -129,6 +129,19 @@ async fn test_unicast_calls_deliver() {
 }
 
 #[tokio::test]
+async fn test_unicast_normalizes_telegram_transport_alias() {
+    let bus = MessageBus::new();
+    let transport = Arc::new(MockTransport::new("tg"));
+    bus.register_transport(transport.clone());
+
+    let mut env = test_envelope(DeliveryMode::Unicast, "telegram");
+    bus.submit(&mut env).await;
+
+    assert_eq!(transport.deliver_calls.lock().unwrap().len(), 1);
+    assert_eq!(transport.deliver_broadcast_calls.lock().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn test_broadcast_calls_deliver_broadcast() {
     let bus = MessageBus::new();
     let transport = Arc::new(MockTransport::new("tg"));
@@ -145,7 +158,7 @@ async fn test_broadcast_calls_deliver_broadcast() {
 async fn test_multiple_transports() {
     let bus = MessageBus::new();
     let t1 = Arc::new(MockTransport::new("tg"));
-    let t2 = Arc::new(MockTransport::new("mx"));
+    let t2 = Arc::new(MockTransport::new("custom"));
     bus.register_transport(t1.clone());
     bus.register_transport(t2.clone());
 
@@ -158,7 +171,7 @@ async fn test_multiple_transports() {
 
 #[tokio::test]
 async fn test_lock_required_acquires_lock() {
-    let pool = Arc::new(LockPool::new(10));
+    let pool = Arc::new(LockPool::new());
     let bus = MessageBus::with_lock_pool(pool.clone());
 
     let lock_acquired_inside = Arc::new(Mutex::new(false));
@@ -174,7 +187,7 @@ async fn test_lock_required_acquires_lock() {
         fn transport_name(&self) -> &str { "tg" }
         async fn deliver(&self, env: &Envelope) -> Result<(), String> {
             let mut guard = self.acquired.lock().unwrap();
-            *guard = self.pool.is_locked(env.lock_key());
+            *guard = self.pool.get(env.lock_key()).try_lock().is_err();
             Ok(())
         }
         async fn deliver_broadcast(&self, _: &Envelope) -> Result<(), String> { Ok(()) }
@@ -190,7 +203,7 @@ async fn test_lock_required_acquires_lock() {
     bus.submit(&mut env).await;
 
     assert!(*lock_acquired_inside.lock().unwrap());
-    assert!(!pool.is_locked((42, None))); // Released after submission completes
+    assert!(pool.get((42, None)).try_lock().is_ok()); // Released after submission completes
 }
 
 #[tokio::test]
@@ -234,37 +247,18 @@ async fn test_injection_failure_sets_error() {
 }
 
 #[tokio::test]
-async fn test_pre_deliver_hook_called() {
-    let bus = MessageBus::new();
-    let transport = Arc::new(MockTransport::new("tg"));
-    bus.register_transport(transport);
-
-    let called = Arc::new(Mutex::new(false));
-    let called_clone = called.clone();
-    bus.set_pre_deliver_hook(Arc::new(move |_| {
-        let mut guard = called_clone.lock().unwrap();
-        *guard = true;
-    }));
-
-    let mut env = test_envelope(DeliveryMode::Unicast, "tg");
-    bus.submit(&mut env).await;
-
-    assert!(*called.lock().unwrap());
-}
-
-#[tokio::test]
 async fn test_deliver_routes_to_matching_transport() {
     let bus = MessageBus::new();
     let tg = Arc::new(MockTransport::new("tg"));
-    let mx = Arc::new(MockTransport::new("mx"));
+    let other = Arc::new(MockTransport::new("other"));
     bus.register_transport(tg.clone());
-    bus.register_transport(mx.clone());
+    bus.register_transport(other.clone());
 
     let mut env = test_envelope(DeliveryMode::Unicast, "tg");
     bus.submit(&mut env).await;
 
     assert_eq!(tg.deliver_calls.lock().unwrap().len(), 1);
-    assert_eq!(mx.deliver_calls.lock().unwrap().len(), 0);
+    assert_eq!(other.deliver_calls.lock().unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -273,23 +267,23 @@ async fn test_deliver_fallback_when_transport_missing() {
     let tg = Arc::new(MockTransport::new("tg"));
     bus.register_transport(tg.clone());
 
-    let mut env = test_envelope(DeliveryMode::Unicast, "mx");
+    let mut env = test_envelope(DeliveryMode::Unicast, "custom");
     env.result_text = "heartbeat alert".to_string();
 
     bus.submit(&mut env).await;
 
     assert_eq!(tg.deliver_calls.lock().unwrap().len(), 0);
     assert_eq!(tg.deliver_broadcast_calls.lock().unwrap().len(), 1);
-    
+
     let fallback_env = &tg.deliver_broadcast_calls.lock().unwrap()[0];
-    assert!(fallback_env.result_text.contains("mx"));
+    assert!(fallback_env.result_text.contains("custom"));
     assert!(fallback_env.result_text.contains("not available"));
     assert!(fallback_env.result_text.contains("heartbeat alert"));
 }
 
 #[tokio::test]
 async fn test_busy_main_injection_not_dropped() {
-    let pool = Arc::new(LockPool::new(10));
+    let pool = Arc::new(LockPool::new());
     let bus = Arc::new(MessageBus::with_lock_pool(pool.clone()));
 
     let chat_lock = pool.get((8452932024, None));
@@ -300,7 +294,7 @@ async fn test_busy_main_injection_not_dropped() {
     let completed_clone = completed.clone();
 
     let handle = tokio::spawn(async move {
-        let mut env = Envelope::new(Origin::Interagent, 8452932024);
+        let mut env = Envelope::new(Origin::WebhookWake, 8452932024);
         env.lock_mode = LockMode::Required;
         bus_clone.submit(&mut env).await;
         let mut guard = completed_clone.lock().unwrap();

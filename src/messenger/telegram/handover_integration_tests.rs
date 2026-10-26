@@ -122,7 +122,7 @@ mod tests {
         let (sess, _) = mgr.resolve_session(key, prov, "opus").await.unwrap();
         let mut updated = sess.clone();
         updated.set_session_id(prov, sid);
-        mgr.update_session(&updated, 0.0, 0).await.unwrap();
+        mgr.update_session(&updated).await.unwrap();
     }
 
     #[tokio::test]

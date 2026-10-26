@@ -37,8 +37,6 @@ pub struct SessionHolder {
     pub output: std::sync::Arc<Mutex<Vec<u8>>>,
     /// Initialized.
     pub initialized: bool,
-    /// Cmd args.
-    pub cmd_args: Vec<String>,
     /// Turn start offset.
     pub turn_start_offset: usize,
 }
@@ -72,13 +70,6 @@ pub fn write_fd(fd: std::os::unix::io::RawFd, input: &str) -> Result<(), String>
         }
     }
     Ok(())
-}
-
-impl SessionHolder {
-    /// Executes `write_input` (write input).
-    pub fn write_input(&self, input: &str) -> Result<(), String> {
-        write_fd(self.master_fd, input)
-    }
 }
 
 fn disable_echo<Fd: AsFd>(fd: Fd) -> Result<(), String> {
@@ -168,7 +159,6 @@ pub fn spawn_session(
         output,
         initialized: false,
         turn_start_offset: 0,
-        cmd_args: args.to_vec(),
     })
 }
 

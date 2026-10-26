@@ -30,8 +30,6 @@ pub struct WebhookObserver {
     pub webhooks_path: std::path::PathBuf,
     /// Config.
     pub config: Arc<crate::config::CliConfig>,
-    /// Cli.
-    pub cli: Arc<crate::cli::antigravity::AntigravityCli>,
     /// Server.
     pub server: Arc<Mutex<Option<WebhookServer>>>,
     /// Stop watcher tx.
@@ -50,14 +48,12 @@ impl WebhookObserver {
         manager: Arc<WebhookManager>,
         webhooks_path: std::path::PathBuf,
         config: Arc<crate::config::CliConfig>,
-        cli: Arc<crate::cli::antigravity::AntigravityCli>,
     ) -> Self {
         Self {
             manager,
             webhooks_path,
             allowed_user_ids: config.allowed_user_ids.clone(),
             config,
-            cli,
             server: Arc::new(Mutex::new(None)),
             stop_watcher_tx: std::sync::Mutex::new(None),
             result_handler: Arc::new(Mutex::new(None)),
@@ -297,9 +293,9 @@ async fn handle_cron_task_mode(
     tcfg.working_dir = workspace_dir.clone();
     if let Some(p) = &hook.provider { tcfg.provider = p.clone(); }
     if let Some(m) = &hook.model { tcfg.model = Some(m.clone()); }
-    if let Some(r) = &hook.reasoning_effort { tcfg.effort = Some(r.clone()); }
+    if let Some(r) = &hook.effort { tcfg.effort = Some(r.clone()); }
     if !hook.cli_parameters.is_empty() {
-        tcfg.cli_parameters.insert(tcfg.provider.clone(), hook.cli_parameters.clone());
+        tcfg.cli_parameters.insert("antigravity".to_string(), hook.cli_parameters.clone());
     }
     let tcli = crate::cli::antigravity::AntigravityCli::new(tcfg);
     use crate::cli::AgentProvider;

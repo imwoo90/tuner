@@ -72,7 +72,7 @@ async fn test_telegram_command_new() {
     let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
     let mut updated = sess.clone();
     updated.set_session_id("antigravity", "active-conv-xyz");
-    mgr.update_session(&updated, 0.0, 0).await.unwrap();
+    mgr.update_session(&updated).await.unwrap();
 
     let msg = make_msg(r#"{"message_id":3,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/new"}"#);
     
@@ -188,7 +188,7 @@ async fn test_telegram_command_reset_alias() {
     let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
     let mut updated = sess.clone();
     updated.set_session_id("antigravity", "active-conv-reset");
-    mgr.update_session(&updated, 0.0, 0).await.unwrap();
+    mgr.update_session(&updated).await.unwrap();
 
     let msg = make_msg(r#"{"message_id":11,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"/reset"}"#);
     handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
@@ -208,7 +208,7 @@ async fn test_telegram_command_new_with_topicname() {
     let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
     let mut updated = sess.clone();
     updated.set_session_id("antigravity", "topic-777-session");
-    mgr.update_session(&updated, 0.0, 0).await.unwrap();
+    mgr.update_session(&updated).await.unwrap();
 
     let msg = make_msg(r#"{"message_id":12,"date":1,"chat":{"id":123,"type":"supergroup","is_forum":true},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"/new @Deployments"}"#);
     handle_message(bot, msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();

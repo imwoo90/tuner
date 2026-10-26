@@ -185,10 +185,12 @@ Press Esc or q to exit
     #[test]
     fn test_load_home_defaults_cron_jobs() {
         let content = std::fs::read_to_string("_home_defaults/cron_jobs.json").unwrap();
-        let jobs_res: Result<crate::cron::manager::CronJob, _> =
-            serde_json::from_str(&serde_json::from_str::<serde_json::Value>(&content).unwrap()["jobs"][0].to_string());
-        println!("Jobs parse result: {:?}", jobs_res);
-        assert!(jobs_res.is_ok());
+        let job: crate::cron::manager::CronJob =
+            serde_json::from_str(&serde_json::from_str::<serde_json::Value>(&content).unwrap()["jobs"][0].to_string())
+                .unwrap();
+        assert_eq!(job.id, "memory-consolidator");
+        assert_eq!(job.model.as_deref(), Some("gemini-4-argon"));
+        assert_eq!(job.effort.as_deref(), Some("high"));
     }
 
     #[tokio::test]

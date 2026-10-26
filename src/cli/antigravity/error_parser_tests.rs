@@ -9,7 +9,7 @@ mod tests {
 
     #[test]
     fn test_parse_cli_error_missing_api_key() {
-        let stderr = "Error: Anthropic API key not found. Please set ANTHROPIC_API_KEY environment variable.";
+        let stderr = "Error: API key not found. Please set PPLX_API_KEY environment variable.";
         let suggestion = parse_cli_error(stderr, 1);
         assert!(suggestion.contains("API key is missing"));
         assert!(suggestion.contains("~/.tuner/.env"));

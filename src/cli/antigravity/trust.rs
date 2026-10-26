@@ -107,7 +107,6 @@ pub fn parse_models(output: &str) -> Vec<String> {
 pub async fn discover_models(cmd_name: &str) -> Vec<String> {
     let mut cmd = Command::new(cmd_name);
     cmd.arg("models")
-        .env_remove("CODEX_SANDBOX_NETWORK_DISABLED")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if std::env::var_os("SSH_CONNECTION").is_none() {

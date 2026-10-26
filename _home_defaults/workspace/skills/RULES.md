@@ -38,8 +38,8 @@ last_relevant_at: YYYY-MM-DD
 
 ## Bundled Skills
 
-Bundled framework skills (`memory-system`, `skill-creator`) live in `skills/builtin/` and are linked automatically.
-To customize one for a specific profile, place a real directory of the same name in `skills/<name>/`.
+Bundled framework skills (`memory-system`, `skill-creator`) are provisioned directly into `skills/<name>/` from `_home_defaults/workspace/skills/` and linked into `.agents/skills/<name>` automatically.
+To customize one for a specific profile, edit or replace its directory in `skills/<name>/`.
 
 ## Do Not
 

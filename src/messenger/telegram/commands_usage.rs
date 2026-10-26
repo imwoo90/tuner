@@ -12,7 +12,6 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use crate::session::{key::SessionKey, manager::SessionManager};
 use crate::cli::antigravity::{pty_spawner::strip_ansi, AntigravityCli};
-use crate::messenger::telegram::topic_cache::TopicNameCache;
 use super::commands::send_reply;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -293,7 +292,6 @@ pub(crate) async fn handle_usage_command(
     config: &CliConfig,
     sessions: &SessionManager,
     cli: &AntigravityCli,
-    _topic_cache: &TopicNameCache,
 ) -> Result<(), teloxide::RequestError> {
     let Some(sid) = resolve_session_id(bot, msg, config, sessions, cli).await else {
         return Ok(());

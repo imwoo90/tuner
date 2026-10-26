@@ -26,8 +26,6 @@ pub struct CronScheduler {
     pub config: Arc<CliConfig>,
     /// Manager.
     pub manager: Arc<CronManager>,
-    /// Cli.
-    pub cli: Arc<AntigravityCli>,
     /// Bus.
     pub bus: Arc<crate::bus::bus::MessageBus>,
 }
@@ -37,14 +35,21 @@ impl CronScheduler {
     pub fn new(
         config: Arc<CliConfig>,
         manager: Arc<CronManager>,
-        cli: Arc<AntigravityCli>,
         bus: Arc<crate::bus::bus::MessageBus>,
     ) -> Self {
-        Self { config, manager, cli, bus }
+        Self { config, manager, bus }
+    }
+
+    pub(crate) fn effective_timezone<'a>(&'a self, job: &'a CronJob) -> &'a str {
+        if !job.timezone.is_empty() {
+            &job.timezone
+        } else {
+            self.config.user_timezone.as_deref().unwrap_or("UTC")
+        }
     }
 
     pub(crate) fn calculate_next_run(&self, job: &CronJob) -> Result<DateTime<Utc>, String> {
-        let next = calculate_job_next_run(&job.schedule, &job.timezone)?;
+        let next = calculate_job_next_run(&job.schedule, self.effective_timezone(job))?;
         Ok(next.with_timezone(&Utc))
     }
 
@@ -116,7 +121,7 @@ impl CronScheduler {
         }
         for job_id in jobs_to_run {
             if let Ok(Some(job)) = self.manager.get_job(&job_id).await {
-                let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.cli.clone(), self.bus.clone()));
+                let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.bus.clone()));
                 let job_for_task = job.clone();
                 tokio::spawn(async move { let _ = self_clone.execute_job(job_for_task).await; });
                 if let Ok(next_run) = self.calculate_next_run(&job) {
@@ -136,7 +141,7 @@ impl CronScheduler {
     /// Executes `check_quiet_hours_at` (check quiet hours at).
     pub fn check_quiet_hours_at(&self, job: &CronJob, now: DateTime<Utc>) -> bool {
         if let (Some(qs), Some(qe)) = (job.quiet_start, job.quiet_end) {
-            let tz_str = if job.timezone.is_empty() { "UTC" } else { &job.timezone };
+            let tz_str = self.effective_timezone(job);
             if let Ok(tz) = tz_str.parse::<Tz>() {
                 let now_local = now.with_timezone(&tz);
                 let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap_or_default();
@@ -225,7 +230,7 @@ impl CronScheduler {
         if !job.cli_parameters.is_empty() {
             jc.cli_parameters.insert("antigravity".to_string(), job.cli_parameters.clone());
         }
-        if let Some(r) = &job.reasoning_effort {
+        if let Some(r) = &job.effort {
             jc.effort = Some(r.clone());
         }
 

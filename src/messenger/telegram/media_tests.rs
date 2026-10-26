@@ -112,7 +112,7 @@ while True:
 
         let mut updated = sess.clone();
         updated.set_session_id("antigravity", "conv-xyz");
-        mgr.update_session(&updated, 0.0, 0).await.unwrap();
+        mgr.update_session(&updated).await.unwrap();
 
         handle_message(bot, text_msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
 
@@ -134,7 +134,7 @@ while True:
         let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
         let mut updated = sess.clone();
         updated.set_session_id("antigravity", "conv-xyz");
-        mgr.update_session(&updated, 0.0, 0).await.unwrap();
+        mgr.update_session(&updated).await.unwrap();
 
         let msg = make_msg(r#"{"message_id":103,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-123","file_unique_id":"unique-123","file_name":"test_doc.pdf"},"caption":"Analyze this file"}"#);
 
@@ -159,7 +159,7 @@ while True:
         let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
         let mut updated = sess.clone();
         updated.set_session_id("antigravity", "conv-xyz");
-        mgr.update_session(&updated, 0.0, 0).await.unwrap();
+        mgr.update_session(&updated).await.unwrap();
 
         let msg1 = make_msg(r#"{"message_id":104,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-1","file_unique_id":"unique-1","file_name":"file1.pdf"},"media_group_id":"group-999"}"#);
         let msg2 = make_msg(r#"{"message_id":105,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-2","file_unique_id":"unique-2","file_name":"file2.pdf"},"media_group_id":"group-999","caption":"Analyze album"}"#);

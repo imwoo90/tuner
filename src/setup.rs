@@ -177,7 +177,7 @@ pub fn ensure_agy_vault_companion(config: &CliConfig) {
 pub fn override_profile_config(
     config: &mut CliConfig,
     profile_name: &str,
-    paths: &crate::workspace::paths::DuctorPaths,
+    paths: &crate::workspace::paths::TunerPaths,
 ) -> Result<(), String> {
     let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
         .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
@@ -195,6 +195,9 @@ pub fn override_profile_config(
     config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
     if let Some(ref m) = profile_cfg.model {
         config.model = Some(m.clone());
+    }
+    if let Some(ref e) = profile_cfg.effort {
+        config.effort = Some(e.clone());
     }
     if let Some(ref p) = profile_cfg.system_prompt {
         config.system_prompt = Some(p.clone());

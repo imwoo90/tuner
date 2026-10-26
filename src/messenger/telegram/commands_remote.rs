@@ -151,7 +151,10 @@ pub async fn handle_remote_callback(
     }
 
     let status = query_remote_hub_status(&config.working_dir);
-    let (text, markup) = render_remote_dashboard(&status);
+    let (mut text, markup) = render_remote_dashboard(&status);
+    if data == "rem:agy:install" {
+        text.push_str("\n\n📥 <b>Antigravity 설치 안내</b>\n서버 터미널에서 <code>agy</code> CLI 바이너리를 <code>PATH</code>(예: <code>~/.local/bin/agy</code>)에 설치한 뒤 새로고침을 눌러 주세요.");
+    }
 
     let _ = bot
         .edit_message_text(msg.chat.id, msg.id, text)

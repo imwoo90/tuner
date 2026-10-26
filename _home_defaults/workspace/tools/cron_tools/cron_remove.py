@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove a cron job: deletes both the JSON entry and the cron_task folder.
 
-The CronObserver detects the JSON change and cancels the scheduled job.
+The CronScheduler detects the JSON change and cancels the scheduled job.
 
 Usage:
     python tools/cron_tools/cron_remove.py "daily-report"
@@ -30,7 +30,7 @@ This tool does TWO things:
   1. Removes the job entry from cron_jobs.json
   2. Deletes the cron_tasks/<name>/ folder (including all files!)
 
-The CronObserver picks up the JSON change automatically and cancels the job.
+The CronScheduler picks up the JSON change automatically and cancels the job.
 
 USAGE:
   python tools/cron_tools/cron_remove.py "<job-id>"
@@ -143,7 +143,7 @@ def main() -> None:
             "Always use the exact job ID from cron_list.py."
         )
 
-    # The CronObserver detects the mtime change and cancels the job
+    # The CronScheduler detects the mtime change and cancels the job
 
     print(json.dumps(result))
     sys.exit(0 if json_removed else 1)

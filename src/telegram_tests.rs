@@ -74,7 +74,7 @@ mod tests {
         let (sess, _) = mgr.resolve_session(&old_key, &cfg.provider, "opus").await.unwrap();
         let mut updated = sess.clone();
         updated.set_session_id("antigravity", "migrated-session-123");
-        mgr.update_session(&updated, 0.05, 100).await.unwrap();
+        mgr.update_session(&updated).await.unwrap();
 
         let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
         let bot = Bot::new("123:abc");

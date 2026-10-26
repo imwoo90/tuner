@@ -1,6 +1,6 @@
 # Media File Tools
 
-Scripts for processing files received via any transport (Telegram, Matrix, API).
+Scripts for processing files received via Telegram (`telegram_files/`).
 
 ## Common Commands
 
@@ -26,10 +26,9 @@ python3 tools/media_tools/process_video.py --file /absolute/path/to/video.mp4
 
 - always available: `file_info.py`, `list_files.py`
 - PDF parsing: `pypdf`
-- YAML listing: `pyyaml`
 - audio transcription: OpenAI API key or local Whisper variants
 - video processing: `ffmpeg`
 
 ## Response UX
 
-After processing, offer concise next actions (optional buttons) when helpful.
+After processing, offer concise next actions when helpful.

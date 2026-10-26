@@ -11,24 +11,21 @@ use std::path::PathBuf;
 
 /// Immutable paths resolved for the workspace layout.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct DuctorPaths {
+pub struct TunerPaths {
     /// Tuner home.
     pub tuner_home: PathBuf,
     /// Home defaults.
     pub home_defaults: PathBuf,
-    /// Framework root.
-    pub framework_root: PathBuf,
     /// Profile.
     pub profile: Option<String>,
 }
 
-impl DuctorPaths {
-    /// Create a new DuctorPaths instance.
-    pub fn new(tuner_home: PathBuf, home_defaults: PathBuf, framework_root: PathBuf, profile: Option<String>) -> Self {
+impl TunerPaths {
+    /// Create a new TunerPaths instance.
+    pub fn new(tuner_home: PathBuf, home_defaults: PathBuf, profile: Option<String>) -> Self {
         Self {
             tuner_home,
             home_defaults,
-            framework_root,
             profile,
         }
     }
@@ -50,11 +47,6 @@ impl DuctorPaths {
     /// User agent workspace directory
     pub fn workspace(&self) -> PathBuf {
         self.profile_join("workspace")
-    }
-
-    /// Dedicated remote development workspace directory: `~/.tuner/profiles/<profile_name>/remote_workspace`
-    pub fn remote_workspace(&self) -> PathBuf {
-        self.profile_join("remote_workspace")
     }
 
     /// Configuration directory: `~/.tuner/config`
@@ -92,19 +84,9 @@ impl DuctorPaths {
         self.profile_join("webhooks.json")
     }
 
-    /// Logs directory: `~/.tuner/logs`
-    pub fn logs_dir(&self) -> PathBuf {
-        self.tuner_home.join("logs")
-    }
-
     /// Cron tasks directory: `~/.tuner/workspace/cron_tasks`
     pub fn cron_tasks_dir(&self) -> PathBuf {
         self.workspace().join("cron_tasks")
-    }
-
-    /// Tools directory: `~/.tuner/workspace/tools`
-    pub fn tools_dir(&self) -> PathBuf {
-        self.workspace().join("tools")
     }
 
     /// Output to user directory: `~/.tuner/workspace/output_to_user`
@@ -137,29 +119,24 @@ impl DuctorPaths {
         self.tuner_home.join(".env")
     }
 
-    /// Main memory path: `~/.tuner/workspace/.agents/rules/mainmemory.md`
-    pub fn mainmemory_path(&self) -> PathBuf {
-        self.workspace().join(".agents").join("rules").join("mainmemory.md")
-    }
-
-    /// Config example path: `{framework_root}/config.example.json` or fallback.
+    /// Config example path: `{home_defaults}/config/config.json` or fallback.
     pub fn config_example_path(&self) -> PathBuf {
-        let repo_path = self.framework_root.join("config.example.json");
-        if repo_path.is_file() {
-            repo_path
+        let default_cfg = self.home_defaults.join("config").join("config.json");
+        if default_cfg.is_file() {
+            default_cfg
         } else {
             self.home_defaults.join("_config_example.json")
         }
     }
 }
 
-/// Resolves DuctorPaths from explicit values, environment variables, or defaults.
+/// Resolves TunerPaths from explicit values, environment variables, or defaults.
 pub fn resolve_paths(
     tuner_home: Option<PathBuf>,
     framework_root: Option<PathBuf>,
     home_defaults: Option<PathBuf>,
     profile: Option<String>,
-) -> DuctorPaths {
+) -> TunerPaths {
     let home = tuner_home
         .or_else(|| std::env::var("TUNER_HOME").ok().map(PathBuf::from))
         .unwrap_or_else(|| {
@@ -167,16 +144,35 @@ pub fn resolve_paths(
             PathBuf::from(base).join(".tuner")
         });
 
-    let root = framework_root
-        .or_else(|| std::env::var("TUNER_FRAMEWORK_ROOT").ok().map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("."));
+    let explicit_root = framework_root
+        .or_else(|| std::env::var("TUNER_FRAMEWORK_ROOT").ok().map(PathBuf::from));
 
     let defaults = home_defaults
         .or_else(|| std::env::var("TUNER_HOME_DEFAULTS").ok().map(PathBuf::from))
-        .unwrap_or_else(|| root.join("_home_defaults"));
+        .unwrap_or_else(|| {
+            if let Some(root) = explicit_root {
+                return root.join("_home_defaults");
+            }
+            let cwd_defaults = PathBuf::from(".").join("_home_defaults");
+            if cwd_defaults.is_dir() {
+                return cwd_defaults;
+            }
+            let bin_defaults = home.join("bin").join("_home_defaults");
+            if bin_defaults.is_dir() {
+                return bin_defaults;
+            }
+            if let Some(exe_defaults) = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("_home_defaults")))
+                && exe_defaults.is_dir()
+            {
+                return exe_defaults;
+            }
+            cwd_defaults
+        });
     let defaults = std::fs::canonicalize(&defaults).unwrap_or(defaults);
 
-    DuctorPaths::new(home, defaults, root, profile)
+    TunerPaths::new(home, defaults, profile)
 }
 
 /// Extracts `(profile_name, vault_dir)` when `working_dir` points to `<tuner_home>/profiles/<profile>/workspace`.

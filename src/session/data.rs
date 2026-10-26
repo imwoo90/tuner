@@ -12,7 +12,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use crate::session::key::SessionKey;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 /// Represents `ProviderSessionData` (provider session data).
 pub struct ProviderSessionData {
     #[serde(default)]
@@ -24,24 +24,6 @@ pub struct ProviderSessionData {
     #[serde(default)]
     /// Message count.
     pub message_count: i64,
-    #[serde(default)]
-    /// Total cost usd.
-    pub total_cost_usd: f64,
-    #[serde(default)]
-    /// Total tokens.
-    pub total_tokens: i64,
-}
-
-impl Default for ProviderSessionData {
-    fn default() -> Self {
-        Self {
-            session_id: String::new(),
-            past_session_ids: Vec::new(),
-            message_count: 0,
-            total_cost_usd: 0.0,
-            total_tokens: 0,
-        }
-    }
 }
 
 impl Default for SessionData {
@@ -62,10 +44,6 @@ impl Default for SessionData {
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
             last_handover_summary: None,
-            session_id: None,
-            message_count: None,
-            total_cost_usd: None,
-            total_tokens: None,
         }
     }
 }
@@ -112,25 +90,11 @@ pub struct SessionData {
     #[serde(default)]
     /// Last handover summary.
     pub last_handover_summary: Option<String>,
-
-    // Legacy fields used for migration
-    #[serde(skip_serializing, default)]
-    /// Session id.
-    pub session_id: Option<String>,
-    #[serde(skip_serializing, default)]
-    /// Message count.
-    pub message_count: Option<i64>,
-    #[serde(skip_serializing, default)]
-    /// Total cost usd.
-    pub total_cost_usd: Option<f64>,
-    #[serde(skip_serializing, default)]
-    /// Total tokens.
-    pub total_tokens: Option<i64>,
 }
 
 fn default_transport() -> String { "tg".to_string() }
-fn default_provider() -> String { "claude".to_string() }
-fn default_model() -> String { "opus".to_string() }
+fn default_provider() -> String { "antigravity".to_string() }
+fn default_model() -> String { "gemini-3.8-flash".to_string() }
 fn default_now_iso() -> String { Utc::now().to_rfc3339() }
 
 impl SessionData {
@@ -152,10 +116,6 @@ impl SessionData {
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
             last_handover_summary: None,
-            session_id: None,
-            message_count: None,
-            total_cost_usd: None,
-            total_tokens: None,
         }
     }
 
@@ -179,9 +139,10 @@ impl SessionData {
     pub fn set_session_id(&mut self, provider: &str, session_id: &str) {
         let ps = self.provider_sessions.entry(provider.to_string()).or_default();
         if !ps.session_id.is_empty() && ps.session_id != session_id
-            && !ps.past_session_ids.contains(&ps.session_id) {
-                ps.past_session_ids.push(ps.session_id.clone());
-            }
+            && !ps.past_session_ids.contains(&ps.session_id)
+        {
+            ps.past_session_ids.push(ps.session_id.clone());
+        }
         ps.session_id = session_id.to_string();
     }
 
@@ -190,43 +151,6 @@ impl SessionData {
         self.provider_sessions.get(provider)
             .map(|ps| ps.past_session_ids.clone())
             .unwrap_or_default()
-    }
-
-    /// Executes `get_all_session_ids` (get all session ids).
-    pub fn get_all_session_ids(&self, provider: &str) -> Vec<String> {
-        if let Some(ps) = self.provider_sessions.get(provider) {
-            let mut list = ps.past_session_ids.clone();
-            if !ps.session_id.is_empty() && !list.contains(&ps.session_id) {
-                list.push(ps.session_id.clone());
-            }
-            list
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Executes `migrate_legacy_metrics` (migrate legacy metrics).
-    pub fn migrate_legacy_metrics(&mut self) {
-        let has_legacy = self.session_id.is_some()
-            || self.message_count.is_some()
-            || self.total_cost_usd.is_some()
-            || self.total_tokens.is_some();
-
-        if has_legacy && !self.provider.is_empty() {
-            let ps = self.provider_sessions.entry(self.provider.clone()).or_default();
-            if let Some(ref sid) = self.session_id {
-                ps.session_id = sid.clone();
-            }
-            if let Some(cnt) = self.message_count {
-                ps.message_count = cnt;
-            }
-            if let Some(cost) = self.total_cost_usd {
-                ps.total_cost_usd = cost;
-            }
-            if let Some(tok) = self.total_tokens {
-                ps.total_tokens = tok;
-            }
-        }
     }
 
     /// Executes `clear_provider_session` (clear provider session).

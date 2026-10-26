@@ -5,74 +5,70 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::workspace::paths::{resolve_paths, DuctorPaths};
-    use crate::workspace::init::init_workspace;
-    use crate::workspace::rules_selector::RulesSelector;
-    use crate::workspace::rule_sync::sync_rule_files;
-    use crate::workspace::skill_sync::{
-        cleanup_ductor_links, discover_skills, sync_skills,
-    };
+    use crate::workspace::paths::{resolve_paths, TunerPaths};
+    use crate::workspace::rules::RulesSelector;
+    use crate::workspace::skills::{discover_skills, sync_skills};
+    use crate::workspace::sync::{init_workspace, sync_rule_files};
     use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
 
     fn setup_mock_defaults(fw: &Path) {
-        unsafe { std::env::set_var("TUNER_TEST_MODE", "1"); }
-        let ws = fw.join("workspace");
+        let defaults = fw.join("_home_defaults");
+        let cfg_dir = defaults.join("config");
+        fs::create_dir_all(&cfg_dir).unwrap();
+        fs::write(cfg_dir.join("config.json"), r#"{"provider":"antigravity","model":"gemini-3.8-flash"}"#).unwrap();
+
+        let ws = defaults.join("workspace");
         fs::create_dir_all(&ws).unwrap();
-        fs::write(ws.join("CLAUDE.md"), "# Framework CLAUDE.md").unwrap();
+        fs::write(ws.join("RULES.md"), "# Tuner Workspace Prompt").unwrap();
 
-        let inner_ws = ws.join("workspace");
-        fs::create_dir_all(&inner_ws).unwrap();
-        fs::write(inner_ws.join("CLAUDE.md"), "# Inner CLAUDE.md").unwrap();
-
-        let ms = inner_ws.join("memory_system");
+        let ms = ws.join("memory_system");
         fs::create_dir_all(&ms).unwrap();
-        fs::write(ms.join("CLAUDE.md"), "# ms CLAUDE.md").unwrap();
-        fs::write(ms.join("MAINMEMORY.md"), "# memory").unwrap();
+        fs::write(ms.join("RULES.md"), "# Memory System Rules").unwrap();
 
-        let tools = inner_ws.join("tools");
+        let tools = ws.join("tools");
         let media = tools.join("media_tools");
         fs::create_dir_all(&media).unwrap();
-        fs::write(media.join("RULES.md"), "# media tools rules").unwrap();
+        fs::write(media.join("RULES.md"), "# Media Tools Rules").unwrap();
         fs::write(media.join("transcribe_audio.py"), "# audio tool").unwrap();
-
-        fs::write(fw.join("config.example.json"), r#"{"provider":"claude","model":"opus"}"#).unwrap();
     }
 
     #[test]
     fn test_workspace_paths_properties() {
         let home = PathBuf::from("/home/user/.tuner");
-        let fw = PathBuf::from("/opt/ductor");
-        let hd = fw.join("workspace");
-        let paths = DuctorPaths::new(home, hd, fw, None);
+        let fw = PathBuf::from("/opt/tuner");
+        let hd = fw.join("_home_defaults");
+        let paths = TunerPaths::new(home, hd, None);
 
         assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/workspace"));
         assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
-        assert_eq!(paths.logs_dir(), PathBuf::from("/home/user/.tuner/logs"));
-        assert_eq!(paths.mainmemory_path(), PathBuf::from("/home/user/.tuner/workspace/.agents/rules/mainmemory.md"));
+        assert_eq!(paths.cron_jobs_path(), PathBuf::from("/home/user/.tuner/cron_jobs.json"));
+        assert_eq!(paths.webhooks_path(), PathBuf::from("/home/user/.tuner/webhooks.json"));
     }
 
     #[test]
     fn test_workspace_paths_properties_with_profile() {
         let home = PathBuf::from("/home/user/.tuner");
-        let fw = PathBuf::from("/opt/ductor");
-        let hd = fw.join("workspace");
-        let paths = DuctorPaths::new(home, hd, fw, Some("my-profile".to_string()));
+        let fw = PathBuf::from("/opt/tuner");
+        let hd = fw.join("_home_defaults");
+        let paths = TunerPaths::new(home, hd, Some("my-profile".to_string()));
 
         assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/profiles/my-profile/workspace"));
         assert_eq!(paths.sessions_path(), PathBuf::from("/home/user/.tuner/profiles/my-profile/sessions.json"));
-        assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json")); // global
+        assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
     }
 
     #[test]
     fn test_resolve_paths_explicit() {
-        let _paths = resolve_paths(
+        let paths = resolve_paths(
             Some(PathBuf::from("/h")),
             Some(PathBuf::from("/f")),
             Some(PathBuf::from("/d")),
-            None,
+            Some("default".to_string()),
         );
+        assert_eq!(paths.tuner_home, PathBuf::from("/h"));
+        assert_eq!(paths.profile.as_deref(), Some("default"));
     }
 
     #[test]
@@ -81,69 +77,37 @@ mod tests {
         let fw = tmp.path().join("fw");
         setup_mock_defaults(&fw);
 
-        let paths = DuctorPaths::new(
+        let paths = TunerPaths::new(
             tmp.path().join("home"),
-            fw.join("workspace"),
-            fw,
+            fw.join("_home_defaults"),
             Some("default".to_string()),
         );
 
         init_workspace(&paths).unwrap();
-    }
-
-
-    #[test]
-    fn test_rules_selector_get_variant_suffix() {
-        unsafe { std::env::set_var("TUNER_TEST_MODE", "1"); }
-        let home = PathBuf::from("/h");
-        let fw = PathBuf::from("/f");
-        let paths = DuctorPaths::new(home.clone(), fw.join("w"), fw, None);
-        let selector = RulesSelector::new(paths);
-        assert_eq!(selector.get_variant_suffix(), "claude-only");
+        assert!(paths.workspace().join("AGENTS.md").is_file());
+        assert!(paths.workspace().join(".agents").join("rules").join("constraints.md").is_file());
     }
 
     #[test]
-    fn test_sync_rule_files_newer_overwrites() {
-        let tmp = tempdir().unwrap();
-        let claude = tmp.path().join("CLAUDE.md");
-        let agents = tmp.path().join("AGENTS.md");
-        fs::write(&claude, "newer rules").unwrap();
-        fs::write(&agents, "older rules").unwrap();
-
-        sync_rule_files(tmp.path()).unwrap();
-    }
-
-    #[test]
-    fn test_sync_rule_files_whitelist_protects_projects_and_scratch() {
+    fn test_sync_rule_files_migrates_mainmemory_and_protects_projects() {
         let tmp = tempdir().unwrap();
         let ws = tmp.path();
 
         let proj_dir = ws.join("projects").join("rust-agent-native-template");
-        let scratch_dir = ws.join("scratch").join("exp");
-        let managed_tool_dir = ws.join("tools").join("cron_tools");
+        let ms_dir = ws.join("memory_system");
         fs::create_dir_all(&proj_dir).unwrap();
-        fs::create_dir_all(&scratch_dir).unwrap();
-        fs::create_dir_all(&managed_tool_dir).unwrap();
+        fs::create_dir_all(&ms_dir).unwrap();
 
         fs::write(proj_dir.join("AGENTS.md"), "proj agents original").unwrap();
-        let ft_old = filetime::FileTime::from_unix_time(1_700_000_000, 0);
-        filetime::set_file_mtime(proj_dir.join("AGENTS.md"), ft_old).unwrap();
-        fs::write(proj_dir.join("GEMINI.md"), "proj gemini newer").unwrap();
-
-        fs::write(scratch_dir.join("AGENTS.md"), "scratch agents original").unwrap();
-        filetime::set_file_mtime(scratch_dir.join("AGENTS.md"), ft_old).unwrap();
-        fs::write(scratch_dir.join("GEMINI.md"), "scratch gemini newer").unwrap();
-
-        fs::write(managed_tool_dir.join("AGENTS.md"), "tool old").unwrap();
-        filetime::set_file_mtime(managed_tool_dir.join("AGENTS.md"), ft_old).unwrap();
-        fs::write(managed_tool_dir.join("CLAUDE.md"), "tool newer").unwrap();
+        fs::write(proj_dir.join("GEMINI.md"), "proj gemini pointer").unwrap();
+        fs::write(ms_dir.join("MAINMEMORY.md"), "# User Facts").unwrap();
 
         sync_rule_files(ws).unwrap();
 
         assert_eq!(fs::read_to_string(proj_dir.join("AGENTS.md")).unwrap(), "proj agents original");
-        assert_eq!(fs::read_to_string(proj_dir.join("GEMINI.md")).unwrap(), "proj gemini newer");
-        assert_eq!(fs::read_to_string(scratch_dir.join("AGENTS.md")).unwrap(), "scratch agents original");
-        assert_eq!(fs::read_to_string(managed_tool_dir.join("AGENTS.md")).unwrap(), "tool newer");
+        assert_eq!(fs::read_to_string(proj_dir.join("GEMINI.md")).unwrap(), "proj gemini pointer");
+        assert!(ws.join(".agents").join("rules").join("mainmemory.md").is_file());
+        assert!(ws.join(".agents").join("rules").join("constraints.md").is_file());
     }
 
     #[test]
@@ -161,13 +125,12 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_skills_creates_symlinks() {
+    fn test_sync_skills_creates_symlinks_and_prunes_cross_profile_leaks() {
         let tmp = tempdir().unwrap();
         let home = tmp.path().join("home");
-        let paths = DuctorPaths::new(
+        let paths = TunerPaths::new(
             home.clone(),
-            tmp.path().join("fw").join("workspace"),
-            tmp.path().join("fw"),
+            tmp.path().join("fw").join("_home_defaults"),
             Some("default".to_string()),
         );
         let skill_dir = paths.skills_dir().join("custom_skill");
@@ -186,7 +149,7 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(&other_prof_skill, paths.skills_dir().join("leaked_skill")).unwrap();
 
-        sync_skills(&paths, false).unwrap();
+        sync_skills(&paths).unwrap();
 
         assert!(paths.agents_skills_dir().join("custom_skill").exists());
         assert!(!paths.skills_dir().join("leaked_skill").exists());
@@ -195,38 +158,24 @@ mod tests {
         let archive_dir = paths.skills_dir().join("archive");
         fs::create_dir_all(&archive_dir).unwrap();
         fs::rename(&skill_dir, archive_dir.join("custom_skill")).unwrap();
-        sync_skills(&paths, false).unwrap();
+        sync_skills(&paths).unwrap();
         assert!(!paths.agents_skills_dir().join("custom_skill").exists());
         assert!(archive_dir.join("custom_skill").join("SKILL.md").is_file());
     }
 
     #[test]
-    fn test_cleanup_ductor_links() {
-        let tmp = tempdir().unwrap();
-        let paths = DuctorPaths::new(
-            tmp.path().join("home"),
-            tmp.path().join("fw").join("workspace"),
-            tmp.path().join("fw"),
-            Some("default".to_string()),
-        );
-
-        cleanup_ductor_links(&paths).unwrap();
-    }
-
-    #[test]
-    fn test_deploy_rules_deploys_agents_and_cleans_up_gemini_for_antigravity() {
+    fn test_deploy_rules_deploys_agents_and_cleans_up_legacy_files() {
         let tmp = tempdir().unwrap();
         let home = tmp.path().join("home");
         let fw = tmp.path().join("fw");
-        let defaults = fw.join("defaults");
+        let defaults = fw.join("_home_defaults");
         let ws = defaults.join("workspace");
         fs::create_dir_all(&ws).unwrap();
         fs::write(ws.join("RULES.md"), "# Base Rules").unwrap();
 
-        let paths = DuctorPaths::new(
-            home.clone(),
+        let paths = TunerPaths::new(
+            home,
             defaults,
-            fw,
             Some("default".to_string()),
         );
 
@@ -239,12 +188,7 @@ mod tests {
         fs::write(out_dir.join("AGENTS.md"), "# Legacy output_to_user AGENTS").unwrap();
         fs::write(tools_dir.join("AGENTS.md"), "# Legacy cron_tools AGENTS").unwrap();
 
-        let mut selector = RulesSelector::new(paths.clone());
-        selector.claude_authenticated = false;
-        selector.codex_authenticated = false;
-        selector.gemini_authenticated = false;
-        selector.antigravity_authenticated = true;
-
+        let selector = RulesSelector::new(paths);
         selector.deploy_rules().unwrap();
 
         assert!(profile_ws.join("AGENTS.md").is_file());
