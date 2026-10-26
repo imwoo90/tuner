@@ -132,19 +132,6 @@ pub fn clean_tool_call_args(tc: &serde_json::Value) -> String {
     format!("`{}({})`", name, args_str)
 }
 
-/// Executes `get_friendly_name` (get friendly name).
-pub fn get_friendly_name(t: &str) -> &str {
-    match t {
-        "RUN_COMMAND" => "run_command (execute)",
-        "VIEW_FILE" => "view_file (read)",
-        "LIST_DIRECTORY" => "list_dir (list)",
-        "GREP_SEARCH" => "grep_search (search)",
-        "CODE_ACTION" => "replace_file_content (edit)",
-        "GENERIC" => "tool_call (execute)",
-        _ => t,
-    }
-}
-
 /// Executes `parse_ask_question_tool` (parse ask question tool).
 pub fn parse_ask_question_tool(tc: &serde_json::Value) -> Option<Vec<crate::cli::AskQuestionData>> {
     let name = tc.get("name").and_then(|n| n.as_str()).unwrap_or("");

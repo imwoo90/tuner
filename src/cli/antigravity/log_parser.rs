@@ -10,14 +10,13 @@
 use std::path::Path;
 use super::log_helpers::{
     get_new_content_string, parse_entries, parse_ask_question_tool, clean_tool_call_args,
-    get_friendly_name, format_thinking, format_bullets
+    format_thinking, format_bullets
 };
 
 fn process_planner_response(
     entry: &serde_json::Value,
     thinking_blocks: &mut Vec<String>,
     tool_calls: &mut Vec<String>,
-    tool_completions: &mut Vec<String>,
     final_content: &mut Option<String>,
     ask_question: &mut Option<Vec<crate::cli::AskQuestionData>>,
     status: Option<&str>,
@@ -27,9 +26,6 @@ fn process_planner_response(
     if has_thinking || has_tcalls {
         thinking_blocks.clear();
         tool_calls.clear();
-        if has_tcalls {
-            tool_completions.clear();
-        }
     }
     if let Some(thinking) = entry.get("thinking").and_then(|t| t.as_str())
         && !thinking.trim().is_empty() {
@@ -56,7 +52,7 @@ fn process_entry(
     entry: &serde_json::Value,
     thinking_blocks: &mut Vec<String>,
     tool_calls: &mut Vec<String>,
-    tool_completions: &mut Vec<String>,
+    tool_completed: &mut bool,
     final_content: &mut Option<String>,
     ask_question: &mut Option<Vec<crate::cli::AskQuestionData>>,
     system_event: &mut bool,
@@ -68,7 +64,7 @@ fn process_entry(
     if etype == Some("USER_INPUT") {
         thinking_blocks.clear();
         tool_calls.clear();
-        tool_completions.clear();
+        *tool_completed = false;
         *final_content = None;
         *ask_question = None;
         return;
@@ -80,11 +76,10 @@ fn process_entry(
 
     if source == Some("MODEL") {
         if etype == Some("PLANNER_RESPONSE") {
-            process_planner_response(entry, thinking_blocks, tool_calls, tool_completions, final_content, ask_question, status);
-        } else if status == Some("DONE")
-            && let Some(t) = etype {
-                tool_completions.push(format!("`{}` completed", get_friendly_name(t)));
-            }
+            process_planner_response(entry, thinking_blocks, tool_calls, final_content, ask_question, status);
+        } else if status == Some("DONE") && etype.is_some() {
+            *tool_completed = true;
+        }
     }
 }
 
@@ -92,7 +87,6 @@ fn process_entry(
 fn build_formatted_progress(
     thinking: &[String],
     calls: &[String],
-    completions: &[String],
     final_content: Option<&str>,
 ) -> Option<String> {
     let mut parts = Vec::new();
@@ -101,9 +95,6 @@ fn build_formatted_progress(
     }
     if let Some(c) = format_bullets("🛠️ **Tool Calls:", calls) {
         parts.push(c);
-    }
-    if let Some(comp) = format_bullets("📥 **Tool Completions:", completions) {
-        parts.push(comp);
     }
     if let Some(final_ans) = final_content {
         parts.push(final_ans.to_string());
@@ -147,7 +138,7 @@ impl AntigravityLogParser {
     fn ingest_entries(&mut self, entries: &[serde_json::Value], new_size: u64) -> ParsedLogDelta {
         let mut thinking_blocks = Vec::new();
         let mut tool_calls = Vec::new();
-        let mut tool_completions = Vec::new();
+        let mut tool_completed = false;
         let mut final_content = None;
         let mut ask_question = None;
         let mut system_event = false;
@@ -160,7 +151,7 @@ impl AntigravityLogParser {
                 entry,
                 &mut thinking_blocks,
                 &mut tool_calls,
-                &mut tool_completions,
+                &mut tool_completed,
                 &mut final_content,
                 &mut ask_question,
                 &mut system_event,
@@ -170,7 +161,7 @@ impl AntigravityLogParser {
         let has_activity = system_event
             || !thinking_blocks.is_empty()
             || !tool_calls.is_empty()
-            || !tool_completions.is_empty()
+            || tool_completed
             || final_content.is_some()
             || ask_question.is_some();
 
@@ -185,7 +176,6 @@ impl AntigravityLogParser {
         let formatted = build_formatted_progress(
             &thinking_blocks,
             &tool_calls,
-            &tool_completions,
             final_content.as_deref(),
         );
 

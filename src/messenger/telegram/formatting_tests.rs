@@ -247,15 +247,15 @@ mod tests {
     fn test_streaming_preview_renders_collapsible_blockquotes() {
         let long_thought = (0..60).map(|i| format!(">! thought line {}", i)).collect::<Vec<_>>().join("\n");
         let delta = format!(
-            "💭 **Thinking Process:**\n{}\n\n🛠️ **Tool Calls:**\n>! • `run_command({{\"CommandLine\":\"ls\"}})`\n\n📥 **Tool Completions:**\n>! • `run_command (execute)` completed",
+            "💭 **Thinking Process:**\n{}\n\n🛠️ **Tool Calls:**\n>! • `run_command({{\"CommandLine\":\"ls\"}})`",
             long_thought
         );
         let html = crate::telegram::stream::render_streaming_preview_html(&delta);
         assert!(html.contains("💭 <b>Thinking Process:</b>"));
         assert!(html.contains("🛠️ <b>Tool Calls:</b>"));
-        assert!(html.contains("📥 <b>Tool Completions:</b>"));
-        assert_eq!(html.matches("<blockquote expandable>").count(), 3);
-        assert_eq!(html.matches("</blockquote>").count(), 3);
+        assert!(!html.contains("Tool Completions"));
+        assert_eq!(html.matches("<blockquote expandable>").count(), 2);
+        assert_eq!(html.matches("</blockquote>").count(), 2);
         assert!(!html.contains(">! "));
         assert!(!html.contains("**Thinking Process:**"));
     }

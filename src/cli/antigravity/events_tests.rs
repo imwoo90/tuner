@@ -254,34 +254,40 @@ fn test_log_parser_extracts_thinking_and_tools() {
 }
 
 #[test]
-fn test_log_parser_extracts_tool_completions_and_final_response() {
+fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
     let root = create_test_dir("log_parser_completions");
     let transcript = root.join("transcript_full.jsonl");
     std::fs::write(&transcript, "").unwrap();
 
     let mut parser = AntigravityLogParser::new();
-    
-    let entries = [serde_json::json!({
-            "source": "MODEL",
-            "type": "RUN_COMMAND",
-            "status": "DONE"
-        }),
-        serde_json::json!({
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "content": "All done!"
-        })];
-    let content = entries.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n") + "\n";
-    std::fs::write(&transcript, content).unwrap();
-    
-    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(0));
-    assert!(next_size > 0);
-    assert!(delta.is_some());
+
+    // 1. Standalone tool completion keeps has_activity = true but emits no formatted text
+    //    so existing Thinking / Tool Calls on Telegram are not overwritten.
+    let comp_only = serde_json::json!({
+        "source": "MODEL",
+        "type": "GENERIC",
+        "status": "DONE"
+    }).to_string() + "\n";
+    std::fs::write(&transcript, &comp_only).unwrap();
+
+    let d1 = parser.parse_log_delta_structured(&transcript, Some(0));
+    assert!(d1.new_size > 0);
+    assert!(d1.has_activity);
+    assert!(d1.formatted.is_none());
+
+    // 2. Subsequent PLANNER_RESPONSE with final content emits only the final answer
+    let final_entry = serde_json::json!({
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "status": "DONE",
+        "content": "All done!"
+    }).to_string() + "\n";
+    std::fs::write(&transcript, format!("{}{}", comp_only, final_entry)).unwrap();
+
+    let (next_size, delta, _) = parser.parse_log_delta(&transcript, Some(d1.new_size));
+    assert!(next_size > d1.new_size);
     let text = delta.unwrap();
-    
-    assert!(text.contains("📥 **Tool Completions:**"));
-    assert!(text.contains("`run_command (execute)` completed"));
-    assert!(text.contains("All done!"));
+    assert!(!text.contains("Tool Completions"));
+    assert_eq!(text, "All done!");
 }
 
