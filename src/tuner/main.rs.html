@@ -328,13 +328,15 @@
 <a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#329 id=329 data-nosnippet>329</a>    }
 <a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = worker_profile {
-<a href=#332 id=332 data-nosnippet>332</a>        <span class="macro">println!</span>(<span class="string">"🤖 [tuner] Starting Telegram bot worker for '{}'..."</span>, p);
-<a href=#333 id=333 data-nosnippet>333</a>        telegram::run_bot(config, paths).<span class="kw">await
-<a href=#334 id=334 data-nosnippet>334</a>    </span>} <span class="kw">else </span>{
-<a href=#335 id=335 data-nosnippet>335</a>        run_master_mode(config, <span class="kw-2">&amp;</span>paths).<span class="kw">await
-<a href=#336 id=336 data-nosnippet>336</a>    </span>}
-<a href=#337 id=337 data-nosnippet>337</a>}
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a><span class="comment">// install_systemd_service moved to config module
+<a href=#331 id=331 data-nosnippet>331</a>    setup::ensure_agy_vault_companion(<span class="kw-2">&amp;</span>config);
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = worker_profile {
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="macro">println!</span>(<span class="string">"🤖 [tuner] Starting Telegram bot worker for '{}'..."</span>, p);
+<a href=#335 id=335 data-nosnippet>335</a>        telegram::run_bot(config, paths).<span class="kw">await
+<a href=#336 id=336 data-nosnippet>336</a>    </span>} <span class="kw">else </span>{
+<a href=#337 id=337 data-nosnippet>337</a>        run_master_mode(config, <span class="kw-2">&amp;</span>paths).<span class="kw">await
+<a href=#338 id=338 data-nosnippet>338</a>    </span>}
+<a href=#339 id=339 data-nosnippet>339</a>}
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a><span class="comment">// install_systemd_service moved to config module
 </span></code></pre></div></section></main></body></html>

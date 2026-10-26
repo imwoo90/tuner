@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["install_systemd_service","load_env_file","override_profile_config"]};
+window.SIDEBAR_ITEMS = {"fn":["ensure_agy_vault_companion","find_agy_vault_bin","install_agy_vault_systemd_if_present","install_systemd_service","is_agy_vault_daemon_running","load_env_file","override_profile_config"]};
