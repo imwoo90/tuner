@@ -21,8 +21,26 @@ pub fn is_zone2_py_file(entry: &Path, src: &Path, root_src: &Path) -> bool {
             "workspace/tools/cron_tools",
             "workspace/tools/webhook_tools",
             "workspace/tools/media_tools",
+            "workspace/skills/memory-system/scripts",
+            "workspace/skills/skill-creator/scripts",
         ];
         return zone2_py_dirs.contains(&rel_str.as_str());
+    }
+    false
+}
+
+fn is_bundled_system_doc(name: &str, src: &Path, root_src: &Path) -> bool {
+    if let Ok(rel_dir) = src.strip_prefix(root_src) {
+        let rel_str = rel_dir.to_string_lossy().replace("\\", "/");
+        if name == "SKILL.md"
+            && (rel_str == "workspace/skills/memory-system"
+                || rel_str == "workspace/skills/skill-creator")
+        {
+            return true;
+        }
+        if name == "TASK_DESCRIPTION.md" && rel_str == "workspace/cron_tasks/memory-consolidator" {
+            return true;
+        }
     }
     false
 }
@@ -68,7 +86,7 @@ fn handle_entry(path: &Path, target: &Path, name: &str, src: &Path, root_src: &P
         if !target.is_symlink() {
             walk_and_copy(path, target, root_src)?;
         }
-    } else if name == "RULES.md" || name == "CLAUDE.md" || name == "AGENTS.md" || name == "GEMINI.md" {
+    } else if name == "RULES.md" || name == "CLAUDE.md" || name == "AGENTS.md" || name == "GEMINI.md" || is_bundled_system_doc(name, src, root_src) {
         if target.is_symlink() || target.is_file() {
             let _ = std::fs::remove_file(target);
         }

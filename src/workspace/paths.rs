@@ -137,6 +137,11 @@ impl DuctorPaths {
         self.workspace().join("skills")
     }
 
+    /// Profile-isolated Antigravity native skills directory: `~/.tuner/profiles/<profile_name>/workspace/.agents/skills`
+    pub fn agents_skills_dir(&self) -> PathBuf {
+        self.workspace().join(".agents").join("skills")
+    }
+
     /// Package-bundled skills directory: `{home_defaults}/workspace/skills`
     pub fn bundled_skills_dir(&self) -> PathBuf {
         self.home_defaults.join("workspace").join("skills")

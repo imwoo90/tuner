@@ -51,6 +51,10 @@ fn start_schedulers(
     Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), cli.clone(), bus.clone())).start();
     let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), cfg.working_dir.join("telegram_files"), cfg.working_dir.join("output_to_user")));
     tokio::spawn(async move { clean.start().await; });
+    let skill_paths = paths.clone();
+    tokio::spawn(async move {
+        let _ = crate::workspace::skills::watch_skill_sync(&skill_paths, 30_000).await;
+    });
 
     if cfg.webhooks.enabled {
         let wh_mgr = Arc::new(crate::webhook::manager::WebhookManager::new(paths.webhooks_path()));

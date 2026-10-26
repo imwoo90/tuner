@@ -33,43 +33,21 @@ pub fn load_skill_sync_config(config_path: &Path) -> (bool, HashSet<String>) {
     (enabled, providers)
 }
 
-/// Executes `is_under` (is under).
-pub fn is_under(child: &Path, parent: &Path) -> bool {
-    let child = match child.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return false,
-    };
-    let parent = match parent.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return false,
-    };
-    child.starts_with(parent)
-}
-
 /// Executes `cli_skill_dirs` (cli skill dirs).
 pub fn cli_skill_dirs(enabled_providers: &HashSet<String>) -> HashMap<String, PathBuf> {
     let mut dirs = HashMap::new();
     let home_str = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let home = Path::new(&home_str);
-
-    if enabled_providers.contains("claude") {
-        let claude_home = home.join(".claude");
-        if claude_home.is_dir() {
-            dirs.insert("claude".to_string(), claude_home.join("skills"));
-        }
-    }
-    if enabled_providers.contains("codex") {
-        let codex_home = std::env::var("CODEX_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| home.join(".codex"));
-        if codex_home.is_dir() {
-            dirs.insert("codex".to_string(), codex_home.join("skills"));
-        }
-    }
-    if enabled_providers.contains("gemini") {
-        let gemini_home = home.join(".gemini");
-        if gemini_home.is_dir() {
-            dirs.insert("gemini".to_string(), gemini_home.join("skills"));
+    for (key, folder) in [("claude", ".claude"), ("codex", ".codex"), ("gemini", ".gemini")] {
+        if enabled_providers.contains(key) {
+            let p = if key == "codex" {
+                std::env::var("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|_| home.join(folder))
+            } else {
+                home.join(folder)
+            };
+            if p.is_dir() {
+                dirs.insert(key.to_string(), p.join("skills"));
+            }
         }
     }
     dirs
@@ -194,7 +172,7 @@ pub fn clean_broken_links(directory: &Path) -> usize {
 pub fn clean_invalid_workspace_skill_links(base_dir: &Path) -> usize {
     if !base_dir.is_dir() { return 0; }
     let mut removed = 0;
-    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules", "builtin"];
+    let skip_dirs = [".claude", ".system", ".git", ".venv", "__pycache__", "node_modules", "builtin", "archive"];
     if let Ok(entries) = std::fs::read_dir(base_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -218,58 +196,82 @@ pub fn clean_invalid_workspace_skill_links(base_dir: &Path) -> usize {
     removed
 }
 
-/// Executes `link_skill_everywhere` (link skill everywhere).
-pub fn link_skill_everywhere(skill_name: &str, canonical: &Path, all_dirs: &HashMap<String, PathBuf>, docker_active: bool) -> std::io::Result<()> {
-    let mut sync_roots = HashSet::new();
-    for d in all_dirs.values() {
-        if d.is_dir()
-            && let Ok(canon) = std::fs::canonicalize(d) {
-                sync_roots.insert(canon);
+/// Removes symlinks in a profile's `skills/` directory that point to a sibling profile's workspace.
+pub fn clean_cross_profile_skill_links(
+    skills_dir: &Path,
+    profile_home: &Path,
+    tuner_home: &Path,
+    bundled_dir: &Path,
+) -> usize {
+    if !skills_dir.is_dir() {
+        return 0;
+    }
+    let Ok(profiles_canon) = std::fs::canonicalize(tuner_home.join("profiles")) else {
+        return 0;
+    };
+    let Ok(prof_canon) = std::fs::canonicalize(profile_home) else {
+        return 0;
+    };
+    let bundled_canon = std::fs::canonicalize(bundled_dir).ok();
+    let mut removed = 0;
+    if let Ok(entries) = std::fs::read_dir(skills_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_symlink()
+                && let Ok(resolved) = std::fs::canonicalize(&path)
+            {
+                let is_bundled = bundled_canon
+                    .as_ref()
+                    .is_some_and(|b| resolved.starts_with(b));
+                if resolved.starts_with(&profiles_canon)
+                    && !resolved.starts_with(&prof_canon)
+                    && !is_bundled
+                    && std::fs::remove_file(&path).is_ok()
+                {
+                    removed += 1;
+                }
             }
+        }
+    }
+    removed
+}
+
+/// Synchronizes discovered profile skills into `<workspace>/.agents/skills/<name>` and prunes stale links.
+pub fn sync_profile_agent_skills(
+    agents_skills_dir: &Path,
+    discovered: &HashMap<String, PathBuf>,
+    docker_active: bool,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(agents_skills_dir)?;
+    let mut names: Vec<&String> = discovered.keys().collect();
+    names.sort();
+
+    for name in names {
+        if let Some(skill_path) = discovered.get(name) {
+            let canonical = std::fs::canonicalize(skill_path).unwrap_or_else(|_| skill_path.clone());
+            let dest = agents_skills_dir.join(name);
+            if docker_active {
+                let _ = ensure_copy(&dest, &canonical);
+            } else {
+                let _ = ensure_link(&dest, &canonical);
+            }
+        }
     }
 
-    let canon_resolved = std::fs::canonicalize(canonical)?;
-
-    for (name_key, base_dir) in all_dirs {
-        if !base_dir.is_dir() {
-            let _ = std::fs::create_dir_all(base_dir);
-        }
-        
-        // Skip ductor workspace destination if the skill is built-in
-        if name_key == "ductor" && canonical.starts_with(base_dir.join("builtin")) {
-            continue;
-        }
-
-        let dest = base_dir.join(skill_name);
-        if let Ok(dest_canon) = std::fs::canonicalize(&dest)
-            && dest_canon == canon_resolved {
+    let _ = clean_broken_links(agents_skills_dir);
+    if let Ok(entries) = std::fs::read_dir(agents_skills_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
                 continue;
-            }
-
-        let skip = if docker_active {
-            dest.exists() && !dest.is_symlink() && !is_managed_copy(&dest)
-        } else {
-            if dest.exists() && !dest.is_symlink() {
-                true
-            } else if dest.is_symlink() && dest.exists() {
-                if let Ok(res) = std::fs::canonicalize(&dest) {
-                    !sync_roots.iter().any(|r| res.starts_with(r))
-                } else {
-                    false
+            };
+            if !discovered.contains_key(name) {
+                if path.is_symlink() {
+                    let _ = std::fs::remove_file(&path);
+                } else if is_managed_copy(&path) {
+                    let _ = std::fs::remove_dir_all(&path);
                 }
-            } else {
-                false
             }
-        };
-
-        if skip {
-            continue;
-        }
-
-        if docker_active {
-            let _ = ensure_copy(&dest, canonical);
-        } else {
-            let _ = ensure_link(&dest, canonical);
         }
     }
     Ok(())

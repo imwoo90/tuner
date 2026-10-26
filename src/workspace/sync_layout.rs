@@ -23,8 +23,10 @@ pub fn create_workspace_directories(paths: &DuctorPaths) {
         "tools/webhook_tools",
         "output_to_user",
         "skills",
+        "skills/archive",
         ".agents",
         ".agents/rules",
+        ".agents/skills",
     ];
     for rel in &required_workspace_dirs {
         let d = if rel.is_empty() {

@@ -9,9 +9,9 @@
 
 use crate::workspace::paths::DuctorPaths;
 use crate::workspace::skills_helpers::{
-    clean_broken_links, clean_invalid_workspace_skill_links, cli_skill_dirs, create_dir_link,
-    ensure_copy, load_skill_sync_config,
-    link_skill_everywhere,
+    clean_broken_links, clean_cross_profile_skill_links, clean_invalid_workspace_skill_links,
+    cli_skill_dirs, create_dir_link, ensure_copy, load_skill_sync_config,
+    sync_profile_agent_skills,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -25,50 +25,27 @@ pub struct SkillConfig {
     pub sync_providers: HashSet<String>,
 }
 
-/// Synchronizes custom skills across the workspace and CLI directories.
+/// Synchronizes custom and bundled skills strictly within the profile workspace (`<workspace>/.agents/skills`).
 pub fn sync_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(), String> {
-    let (sync_enabled, enabled_providers) = load_skill_sync_config(&paths.config_path());
+    let (sync_enabled, _enabled_providers) = load_skill_sync_config(&paths.config_path());
     if !sync_enabled {
         return Ok(());
     }
-    let cli_dirs = cli_skill_dirs(&enabled_providers);
-    let mut all_dirs = HashMap::new();
-    all_dirs.insert("ductor".to_string(), paths.skills_dir());
-    for (k, v) in cli_dirs {
-        all_dirs.insert(k, v);
-    }
 
+    let _ = cleanup_ductor_links(paths);
+    let _ = clean_cross_profile_skill_links(
+        &paths.skills_dir(),
+        &paths.profile_home(),
+        &paths.tuner_home,
+        &paths.bundled_skills_dir(),
+    );
     let _ = clean_invalid_workspace_skill_links(&paths.skills_dir());
+    let _ = clean_broken_links(&paths.skills_dir());
 
-    let mut registries = HashMap::new();
-    for (name, dir) in &all_dirs {
-        registries.insert(name.clone(), discover_skills(dir));
-    }
+    let discovered = discover_skills(&paths.skills_dir());
+    sync_profile_agent_skills(&paths.agents_skills_dir(), &discovered, docker_active)
+        .map_err(|e| format!("Failed to sync profile agent skills: {}", e))?;
 
-    let mut all_names = HashSet::new();
-    for reg in registries.values() {
-        for key in reg.keys() {
-            all_names.insert(key.clone());
-        }
-    }
-
-    let ductor_reg = registries.get("ductor").cloned().unwrap_or_default();
-    let claude_reg = registries.get("claude").cloned().unwrap_or_default();
-    let codex_reg = registries.get("codex").cloned().unwrap_or_default();
-    let gemini_reg = registries.get("gemini").cloned().unwrap_or_default();
-
-    let mut names: Vec<String> = all_names.into_iter().collect();
-    names.sort();
-
-    for name in names {
-        if let Some(canonical) = resolve_canonical(&name, &ductor_reg, &claude_reg, &codex_reg, &gemini_reg) {
-            let _ = link_skill_everywhere(&name, &canonical, &all_dirs, docker_active);
-        }
-    }
-
-    for dir in all_dirs.values() {
-        let _ = clean_broken_links(dir);
-    }
     Ok(())
 }
 
@@ -119,10 +96,13 @@ pub fn sync_bundled_skills(paths: &DuctorPaths, docker_active: bool) -> Result<(
 
 /// Cleans up tuner-created symlinks and copies from provider directories.
 pub fn cleanup_ductor_links(paths: &DuctorPaths) -> Result<usize, String> {
-    let mut managed_roots = vec![paths.skills_dir()];
-    let bundled = paths.bundled_skills_dir();
-    if bundled.is_dir() {
-        managed_roots.push(bundled);
+    let mut managed_roots = Vec::new();
+    for root in [paths.skills_dir(), paths.bundled_skills_dir()] {
+        if let Ok(canon) = std::fs::canonicalize(&root) {
+            managed_roots.push(canon);
+        } else {
+            managed_roots.push(root);
+        }
     }
 
     let mut removed = 0;
@@ -202,6 +182,7 @@ pub fn discover_skills(dir: &Path) -> HashMap<String, PathBuf> {
         "__pycache__",
         "node_modules",
         "builtin",
+        "archive",
     ];
 
     scan_skill_entries(dir, &skip_dirs, true, &mut skills);

@@ -173,14 +173,41 @@ mod tests {
     #[test]
     fn test_sync_skills_creates_symlinks() {
         let tmp = tempdir().unwrap();
+        let home = tmp.path().join("home");
         let paths = DuctorPaths::new(
-            tmp.path().join("home"),
+            home.clone(),
             tmp.path().join("fw").join("workspace"),
             tmp.path().join("fw"),
             Some("default".to_string()),
         );
+        let skill_dir = paths.skills_dir().join("custom_skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: custom_skill\ndescription: profile skill\n---\n# Body",
+        ).unwrap();
+
+        let other_prof_skill = home.join("profiles").join("other").join("workspace").join("skills").join("leaked_skill");
+        fs::create_dir_all(&other_prof_skill).unwrap();
+        fs::write(
+            other_prof_skill.join("SKILL.md"),
+            "---\nname: leaked_skill\ndescription: leaked\n---\n# Body",
+        ).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&other_prof_skill, paths.skills_dir().join("leaked_skill")).unwrap();
 
         sync_skills(&paths, false).unwrap();
+
+        assert!(paths.agents_skills_dir().join("custom_skill").exists());
+        assert!(!paths.skills_dir().join("leaked_skill").exists());
+        assert!(!paths.agents_skills_dir().join("leaked_skill").exists());
+
+        let archive_dir = paths.skills_dir().join("archive");
+        fs::create_dir_all(&archive_dir).unwrap();
+        fs::rename(&skill_dir, archive_dir.join("custom_skill")).unwrap();
+        sync_skills(&paths, false).unwrap();
+        assert!(!paths.agents_skills_dir().join("custom_skill").exists());
+        assert!(archive_dir.join("custom_skill").join("SKILL.md").is_file());
     }
 
     #[test]
