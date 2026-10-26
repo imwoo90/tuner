@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cleanup_ductor_links","discover_skills","has_valid_skill_frontmatter","resolve_canonical","scan_skill_entries","sync_bundled_skills","sync_skills","watch_skill_sync"],"struct":["SkillConfig"]};
+window.SIDEBAR_ITEMS = {"fn":["cleanup_ductor_links","discover_skills","has_valid_skill_frontmatter","scan_skill_entries","sync_bundled_skills","sync_skills","watch_skill_sync"]};

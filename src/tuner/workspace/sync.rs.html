@@ -78,82 +78,67 @@
 <a href=#78 id=78 data-nosnippet>78</a>    <span class="prelude-val">Ok</span>(())
 <a href=#79 id=79 data-nosnippet>79</a>}
 <a href=#80 id=80 data-nosnippet>80</a>
-<a href=#81 id=81 data-nosnippet>81</a><span class="doccomment">/// Asynchronously monitors changes to rule files and syncs them periodically.
-<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">pub async fn </span>watch_rule_files(root: <span class="kw-2">&amp;</span>Path, interval_ms: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span><span class="kw-2">mut </span>interval = tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">let </span>cron_tasks_dir = root.join(<span class="string">"cron_tasks"</span>);
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">loop </span>{
-<a href=#86 id=86 data-nosnippet>86</a>        interval.tick().<span class="kw">await</span>;
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>root_clone = root.to_path_buf();
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>cron_tasks_clone = cron_tasks_dir.clone();
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let _ </span>= tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-<a href=#90 id=90 data-nosnippet>90</a>            <span class="kw">let _ </span>= ensure_task_rule_files(<span class="kw-2">&amp;</span>cron_tasks_clone);
-<a href=#91 id=91 data-nosnippet>91</a>            <span class="kw">let _ </span>= sync_rule_files(<span class="kw-2">&amp;</span>root_clone);
-<a href=#92 id=92 data-nosnippet>92</a>        }).<span class="kw">await</span>;
-<a href=#93 id=93 data-nosnippet>93</a>    }
-<a href=#94 id=94 data-nosnippet>94</a>}
-<a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a><span class="doccomment">/// Executes `ensure_task_rule_files` (ensure task rule files).
-<a href=#97 id=97 data-nosnippet>97</a></span><span class="kw">pub fn </span>ensure_task_rule_files(cron_tasks_dir: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;usize, String&gt; {
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">if </span>!cron_tasks_dir.is_dir() {
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#100 id=100 data-nosnippet>100</a>    }
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let </span>expected = detect_rule_filenames(cron_tasks_dir);
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span><span class="kw-2">mut </span>created = <span class="number">0</span>;
-<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>rule_filenames = [<span class="string">"CLAUDE.md"</span>, <span class="string">"AGENTS.md"</span>, <span class="string">"GEMINI.md"</span>];
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span>entries = <span class="kw">match </span>std::fs::read_dir(cron_tasks_dir) {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="prelude-val">Ok</span>(e) =&gt; e,
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"Failed to read dir: {}"</span>, e)),
-<a href=#108 id=108 data-nosnippet>108</a>    };
-<a href=#109 id=109 data-nosnippet>109</a>
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">for </span>entry <span class="kw">in </span>entries.flatten() {
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>task_dir = entry.path();
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">if </span>task_dir.is_dir() {
-<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">let </span><span class="kw-2">mut </span>existing = Vec::new();
-<a href=#114 id=114 data-nosnippet>114</a>            <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>rule_filenames {
-<a href=#115 id=115 data-nosnippet>115</a>                <span class="kw">if </span>task_dir.join(name).is_file() {
-<a href=#116 id=116 data-nosnippet>116</a>                    existing.push(<span class="kw-2">*</span>name);
-<a href=#117 id=117 data-nosnippet>117</a>                }
-<a href=#118 id=118 data-nosnippet>118</a>            }
-<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">if </span>existing.is_empty() {
-<a href=#120 id=120 data-nosnippet>120</a>                <span class="kw">continue</span>;
+<a href=#81 id=81 data-nosnippet>81</a><span class="doccomment">/// Executes `ensure_task_rule_files` (ensure task rule files).
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">pub fn </span>ensure_task_rule_files(cron_tasks_dir: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;usize, String&gt; {
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">if </span>!cron_tasks_dir.is_dir() {
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#85 id=85 data-nosnippet>85</a>    }
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>expected = detect_rule_filenames(cron_tasks_dir);
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">let </span><span class="kw-2">mut </span>created = <span class="number">0</span>;
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">let </span>rule_filenames = [<span class="string">"CLAUDE.md"</span>, <span class="string">"AGENTS.md"</span>, <span class="string">"GEMINI.md"</span>];
+<a href=#89 id=89 data-nosnippet>89</a>
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span>entries = <span class="kw">match </span>std::fs::read_dir(cron_tasks_dir) {
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="prelude-val">Ok</span>(e) =&gt; e,
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"Failed to read dir: {}"</span>, e)),
+<a href=#93 id=93 data-nosnippet>93</a>    };
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">for </span>entry <span class="kw">in </span>entries.flatten() {
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>task_dir = entry.path();
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">if </span>task_dir.is_dir() {
+<a href=#98 id=98 data-nosnippet>98</a>            <span class="kw">let </span><span class="kw-2">mut </span>existing = Vec::new();
+<a href=#99 id=99 data-nosnippet>99</a>            <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>rule_filenames {
+<a href=#100 id=100 data-nosnippet>100</a>                <span class="kw">if </span>task_dir.join(name).is_file() {
+<a href=#101 id=101 data-nosnippet>101</a>                    existing.push(<span class="kw-2">*</span>name);
+<a href=#102 id=102 data-nosnippet>102</a>                }
+<a href=#103 id=103 data-nosnippet>103</a>            }
+<a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">if </span>existing.is_empty() {
+<a href=#105 id=105 data-nosnippet>105</a>                <span class="kw">continue</span>;
+<a href=#106 id=106 data-nosnippet>106</a>            }
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">let </span><span class="kw-2">mut </span>missing = Vec::new();
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>expected {
+<a href=#109 id=109 data-nosnippet>109</a>                <span class="kw">if </span>!task_dir.join(name).is_file() {
+<a href=#110 id=110 data-nosnippet>110</a>                    missing.push(name.clone());
+<a href=#111 id=111 data-nosnippet>111</a>                }
+<a href=#112 id=112 data-nosnippet>112</a>            }
+<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">if </span>missing.is_empty() {
+<a href=#114 id=114 data-nosnippet>114</a>                <span class="kw">continue</span>;
+<a href=#115 id=115 data-nosnippet>115</a>            }
+<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(source_content) = std::fs::read_to_string(task_dir.join(existing[<span class="number">0</span>])) {
+<a href=#117 id=117 data-nosnippet>117</a>                <span class="kw">for </span>name <span class="kw">in </span>missing {
+<a href=#118 id=118 data-nosnippet>118</a>                    <span class="kw">let _ </span>= std::fs::write(task_dir.join(name), <span class="kw-2">&amp;</span>source_content);
+<a href=#119 id=119 data-nosnippet>119</a>                    created += <span class="number">1</span>;
+<a href=#120 id=120 data-nosnippet>120</a>                }
 <a href=#121 id=121 data-nosnippet>121</a>            }
-<a href=#122 id=122 data-nosnippet>122</a>            <span class="kw">let </span><span class="kw-2">mut </span>missing = Vec::new();
-<a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>expected {
-<a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">if </span>!task_dir.join(name).is_file() {
-<a href=#125 id=125 data-nosnippet>125</a>                    missing.push(name.clone());
-<a href=#126 id=126 data-nosnippet>126</a>                }
-<a href=#127 id=127 data-nosnippet>127</a>            }
-<a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">if </span>missing.is_empty() {
-<a href=#129 id=129 data-nosnippet>129</a>                <span class="kw">continue</span>;
-<a href=#130 id=130 data-nosnippet>130</a>            }
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(source_content) = std::fs::read_to_string(task_dir.join(existing[<span class="number">0</span>])) {
-<a href=#132 id=132 data-nosnippet>132</a>                <span class="kw">for </span>name <span class="kw">in </span>missing {
-<a href=#133 id=133 data-nosnippet>133</a>                    <span class="kw">let _ </span>= std::fs::write(task_dir.join(name), <span class="kw-2">&amp;</span>source_content);
-<a href=#134 id=134 data-nosnippet>134</a>                    created += <span class="number">1</span>;
-<a href=#135 id=135 data-nosnippet>135</a>                }
-<a href=#136 id=136 data-nosnippet>136</a>            }
-<a href=#137 id=137 data-nosnippet>137</a>        }
-<a href=#138 id=138 data-nosnippet>138</a>    }
-<a href=#139 id=139 data-nosnippet>139</a>    <span class="prelude-val">Ok</span>(created)
-<a href=#140 id=140 data-nosnippet>140</a>}
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a><span class="kw">fn </span>detect_rule_filenames(cron_tasks_dir: <span class="kw-2">&amp;</span>Path) -&gt; Vec&lt;String&gt; {
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>rule_filenames = [<span class="string">"CLAUDE.md"</span>, <span class="string">"AGENTS.md"</span>, <span class="string">"GEMINI.md"</span>];
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">let </span><span class="kw-2">mut </span>found = Vec::new();
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">let </span>ws_dir = cron_tasks_dir.parent();
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>rule_filenames {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>in_cron = cron_tasks_dir.join(name).is_file();
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>in_ws = ws_dir.is_some_and(|w| w.join(name).is_file());
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">if </span>in_cron || in_ws {
-<a href=#150 id=150 data-nosnippet>150</a>            found.push(name.to_string());
-<a href=#151 id=151 data-nosnippet>151</a>        }
-<a href=#152 id=152 data-nosnippet>152</a>    }
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">if </span>found.is_empty() {
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="macro">vec!</span>[<span class="string">"AGENTS.md"</span>.to_string()]
-<a href=#155 id=155 data-nosnippet>155</a>    } <span class="kw">else </span>{
-<a href=#156 id=156 data-nosnippet>156</a>        found
-<a href=#157 id=157 data-nosnippet>157</a>    }
-<a href=#158 id=158 data-nosnippet>158</a>}
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="prelude-val">Ok</span>(created)
+<a href=#125 id=125 data-nosnippet>125</a>}
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a><span class="kw">fn </span>detect_rule_filenames(cron_tasks_dir: <span class="kw-2">&amp;</span>Path) -&gt; Vec&lt;String&gt; {
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>rule_filenames = [<span class="string">"CLAUDE.md"</span>, <span class="string">"AGENTS.md"</span>, <span class="string">"GEMINI.md"</span>];
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span><span class="kw-2">mut </span>found = Vec::new();
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span>ws_dir = cron_tasks_dir.parent();
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">for </span>name <span class="kw">in </span><span class="kw-2">&amp;</span>rule_filenames {
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>in_cron = cron_tasks_dir.join(name).is_file();
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span>in_ws = ws_dir.is_some_and(|w| w.join(name).is_file());
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">if </span>in_cron || in_ws {
+<a href=#135 id=135 data-nosnippet>135</a>            found.push(name.to_string());
+<a href=#136 id=136 data-nosnippet>136</a>        }
+<a href=#137 id=137 data-nosnippet>137</a>    }
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">if </span>found.is_empty() {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="macro">vec!</span>[<span class="string">"AGENTS.md"</span>.to_string()]
+<a href=#140 id=140 data-nosnippet>140</a>    } <span class="kw">else </span>{
+<a href=#141 id=141 data-nosnippet>141</a>        found
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>}
 </code></pre></div></section></main></body></html>

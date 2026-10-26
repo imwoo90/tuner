@@ -1,1 +1,0 @@
-rd_("ji18n_checketuner")

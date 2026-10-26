@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["api","auth","manager","models","observer","server"]};
+window.SIDEBAR_ITEMS = {"mod":["auth","manager","models","observer","server"]};

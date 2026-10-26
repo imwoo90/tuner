@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["make_paths","make_submit"],"struct":["MockProvider"]};

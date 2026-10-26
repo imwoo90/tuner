@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_health","handle_websocket","handle_ws_session"],"struct":["ApiResult"],"trait":["ApiAbortHandler","ApiMessageHandler"],"type":["ActiveStateGetter"]};
