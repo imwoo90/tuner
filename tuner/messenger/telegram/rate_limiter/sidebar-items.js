@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["global_chat_rate_limiter"],"static":["INSTANCE"],"struct":["ChatRateLimiter"]};
+window.SIDEBAR_ITEMS = {"fn":["global_chat_rate_limiter","is_message_not_modified","send_chunks_to_telegram","send_single_chunk"],"static":["INSTANCE"],"struct":["ChatRateLimiter"]};
