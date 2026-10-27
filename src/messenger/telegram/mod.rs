@@ -252,6 +252,21 @@ async fn queue_pending_files(
             }
         }
         let _ = sessions.preserve_session_identity(&sess).await;
+        let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+        typing::set_emoji_reaction(msg.id.0, msg.chat.id, tok, "👍");
+    }
+}
+
+pub(crate) fn strip_new_or_reset_prefix(text: &str) -> &str {
+    let trimmed = text.trim();
+    let Some(raw_cmd) = trimmed.split_whitespace().next() else {
+        return text;
+    };
+    let cmd = raw_cmd.split('@').next().unwrap_or(raw_cmd);
+    if cmd == "/new" || cmd == "/reset" {
+        trimmed[raw_cmd.len()..].trim()
+    } else {
+        text
     }
 }
 
@@ -307,11 +322,12 @@ pub(crate) async fn process_text_with_files(
     cli: &AntigravityCli,
     aux: (&crate::cron::manager::CronManager, &TopicNameCache),
 ) -> Result<(), teloxide::RequestError> {
-    let (text, files) = payload;
-    if text.trim().is_empty() || commands::handle_commands(bot, msg, text, config, sessions.as_ref(), cli, aux).await? {
+    let (raw_text, files) = payload;
+    if raw_text.trim().is_empty() || commands::handle_commands(bot, msg, raw_text, config, sessions.as_ref(), cli, aux).await? {
         queue_pending_files(msg, files, config, sessions.as_ref()).await;
         return Ok(());
     }
+    let text = strip_new_or_reset_prefix(raw_text);
     let Some((mut sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions.as_ref(), cli).await? else {
         queue_pending_files(msg, files, config, sessions.as_ref()).await;
         return Ok(());

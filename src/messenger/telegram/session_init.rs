@@ -25,6 +25,34 @@ pub(crate) async fn initialize_session_if_needed(
     initialize_session_with_prompt(bot, msg, sessions, sess, cli, config, None).await
 }
 
+async fn resolve_auto_handover(
+    sess: &mut SessionData,
+    config: &CliConfig,
+    sessions: &SessionManager,
+) -> Option<String> {
+    let past_ids = sess.get_past_session_ids(&config.provider);
+    if past_ids.is_empty() && sess.last_handover_summary.is_none() {
+        return None;
+    }
+    let last_sid = past_ids.last().map(String::as_str).unwrap_or("");
+    let handover = super::handover::build_topic_handover(
+        &config.working_dir,
+        last_sid,
+        sess.topic_id,
+        sess.topic_name.clone(),
+        sess.last_handover_summary.as_deref(),
+        &past_ids,
+    )?;
+    sess.last_handover_summary = Some(format!(
+        "Objective: {}\nDecisions: {}\nProgress: {}",
+        handover.topic_objective,
+        handover.agreed_decisions.join("; "),
+        handover.current_progress
+    ));
+    let _ = sessions.preserve_session_identity(sess).await;
+    Some(handover.handover_prompt)
+}
+
 pub(crate) async fn initialize_session_with_prompt(
     bot: &Bot,
     msg: &Message,
@@ -45,6 +73,13 @@ pub(crate) async fn initialize_session_with_prompt(
         let _ = sessions.preserve_session_identity(sess).await;
     }
 
+    let auto_handover = if startup_prompt.is_none() {
+        resolve_auto_handover(sess, config, sessions).await
+    } else {
+        None
+    };
+    let effective_prompt = startup_prompt.or(auto_handover.as_deref());
+
     if cfg!(test) {
         let mock_sid = "mock-session-123".to_string();
         sess.set_session_id(provider, &mock_sid);
@@ -54,7 +89,7 @@ pub(crate) async fn initialize_session_with_prompt(
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-    boot_fresh_session(bot, msg, sessions, sess, cli, config, startup_prompt).await
+    boot_fresh_session(bot, msg, sessions, sess, cli, config, effective_prompt).await
 }
 
 async fn handle_boot_success(

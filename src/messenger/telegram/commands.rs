@@ -93,19 +93,23 @@ async fn handle_info_commands(
         } else {
             t!("bot.diagnose_token_missing")
         };
-        let model_str = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
-        let report = t!(
+        let mut report = t!(
             "bot.status",
             agy_status = agy_status,
             token_present = token_present,
             session_count = session_count,
             provider = config.provider,
-            model = model_str
+            model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await
         );
+        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+        if let Ok(Some(s)) = sessions.get_active(&key).await
+            && !s.pending_attachments.is_empty()
+        {
+            report.push_str(&format!("\n📎 Pending Attachments: {}", s.pending_attachments.len()));
+        }
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
-    let trimmed = text.trim();
     if trimmed == "/restart" {
         let _ = send_reply(bot, msg, t!("bot.restart")).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -163,10 +167,10 @@ pub(crate) async fn handle_commands(
         super::vault::handle_vault_command(bot, msg, config).await?;
         return Ok(true);
     }
-    if text.starts_with("/new") || text.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {
-        return handle_session_control_commands(bot, msg, text, config, sessions, cli, topic_cache).await;
+    if trimmed.starts_with("/new") || trimmed.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {
+        return handle_session_control_commands(bot, msg, trimmed, config, sessions, cli, topic_cache).await;
     }
-    if handle_pref_commands(bot, msg, text, config, sessions, cli).await {
+    if handle_pref_commands(bot, msg, trimmed, config, sessions, cli).await {
         return Ok(true);
     }
     if trimmed == "/memory" || trimmed.starts_with("/memory@") {
@@ -190,20 +194,10 @@ async fn handle_cron_command(
     cron_manager: &crate::cron::manager::CronManager,
     topic_cache: &super::TopicNameCache,
 ) -> Result<(), teloxide::RequestError> {
-    match crate::telegram::cron_selector::build_cron_page(cron_manager, 0, None, Some(topic_cache)).await {
-        Ok((txt, markup)) => {
-            let mut req = bot.send_message(msg.chat.id, txt)
-                .parse_mode(teloxide::types::ParseMode::Html);
-            if let Some(tid) = msg.thread_id {
-                req = req.message_thread_id(tid);
-            }
-            if let Err(e) = req.reply_markup(markup).await {
-                eprintln!("❌ [tuner] Failed to send cron reply markup: {:?}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("❌ [tuner] Failed to build cron page: {:?}", e);
-        }
+    if let Ok((txt, markup)) = crate::telegram::cron_selector::build_cron_page(cron_manager, 0, None, Some(topic_cache)).await {
+        let mut req = bot.send_message(msg.chat.id, txt).parse_mode(teloxide::types::ParseMode::Html);
+        if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
+        let _ = req.reply_markup(markup).await;
     }
     Ok(())
 }
@@ -219,39 +213,25 @@ async fn try_query_live_memory(
     let model = config.model.as_deref().unwrap_or("antigravity-default");
     if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, model).await
         && let Ok(sid) = super::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await
-            && !sid.is_empty() && !sid.starts_with("mock-") {
-                let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
-                let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
-                return true;
-            }
+        && !sid.is_empty() && !sid.starts_with("mock-")
+    {
+        let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
+        let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
+        return true;
+    }
     false
 }
 
-async fn send_static_memory_fallback(
-    bot: &Bot,
-    msg: &Message,
-    config: &CliConfig,
-) -> Result<(), teloxide::RequestError> {
-    let rule_path = config.working_dir.join(".agents/rules/mainmemory.md");
-    let legacy_path = config.working_dir.join("memory_system/MAINMEMORY.md");
-    let memory_path = if rule_path.is_file() { rule_path } else { legacy_path };
-    let raw_content = std::fs::read_to_string(memory_path).unwrap_or_else(|_| t!("bot.memory_empty"));
-    let content = if let Some(after_open) = raw_content.strip_prefix("---") {
-        if let Some(end_idx) = after_open.find("---") {
-            after_open[end_idx + 3..].trim_start()
-        } else {
-            &raw_content
-        }
-    } else {
-        &raw_content
-    };
-    let html_text = crate::telegram::formatting::markdown_to_telegram_html(content);
-    for chunk in crate::telegram::formatting::split_html_message(&html_text, 4000) {
+async fn send_static_memory_fallback(bot: &Bot, msg: &Message, config: &CliConfig) -> Result<(), teloxide::RequestError> {
+    let p1 = config.working_dir.join(".agents/rules/mainmemory.md");
+    let path = if p1.is_file() { p1 } else { config.working_dir.join("memory_system/MAINMEMORY.md") };
+    let raw = std::fs::read_to_string(path).unwrap_or_else(|_| t!("bot.memory_empty"));
+    let content = raw.strip_prefix("---").and_then(|s| s.find("---").map(|i| s[i + 3..].trim_start())).unwrap_or(&raw);
+    let html = crate::telegram::formatting::markdown_to_telegram_html(content);
+    for chunk in crate::telegram::formatting::split_html_message(&html, 4000) {
         let mut req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
         if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-        if let Err(e) = req.await {
-            eprintln!("❌ [tuner] Failed to send memory chunk: {:?}", e);
-        }
+        let _ = req.await;
     }
     Ok(())
 }

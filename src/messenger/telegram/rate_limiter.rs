@@ -11,7 +11,88 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use teloxide::prelude::*;
+use teloxide::types::{MessageId, ParseMode, ThreadId};
 use tokio::sync::Mutex;
+
+pub(crate) fn is_message_not_modified(err: &teloxide::RequestError) -> bool {
+    match err {
+        teloxide::RequestError::Api(teloxide::ApiError::MessageNotModified) => true,
+        other => other.to_string().to_lowercase().contains("message is not modified"),
+    }
+}
+
+pub(crate) async fn send_single_chunk(
+    bot: &Bot,
+    chat_id: ChatId,
+    msg_id: Option<MessageId>,
+    thread_id: Option<i32>,
+    chunk: &str,
+    is_first: bool,
+) -> Result<MessageId, teloxide::RequestError> {
+    let limiter = global_chat_rate_limiter();
+    let chunk_str = chunk.to_string();
+    limiter.execute_rate_limited(chat_id, || {
+        let c = chunk_str.clone();
+        async move {
+            let html = ParseMode::Html;
+            if let (true, Some(mid)) = (is_first, msg_id) {
+                match bot.edit_message_text(chat_id, mid, c.clone()).parse_mode(html).await {
+                    Ok(ed) => return Ok(ed.id),
+                    Err(e) if is_message_not_modified(&e) => return Ok(mid),
+                    Err(e) => if e.to_string().contains("can't parse entities") {
+                        if let Ok(ed) = bot.edit_message_text(chat_id, mid, c.clone()).await {
+                            return Ok(ed.id);
+                        }
+                    } else {
+                        eprintln!("⚠️ [tuner] edit_message_text fallback: {:?}", e);
+                    },
+                }
+            }
+            let tid = thread_id.map(|t| ThreadId(MessageId(t)));
+            let mut req = bot.send_message(chat_id, c.clone()).parse_mode(html);
+            if let Some(t) = tid {
+                req = req.message_thread_id(t);
+            }
+            match req.await {
+                Ok(m) => Ok(m.id),
+                Err(e) if e.to_string().contains("can't parse entities") => {
+                    let mut r = bot.send_message(chat_id, c);
+                    if let Some(t) = tid {
+                        r = r.message_thread_id(t);
+                    }
+                    r.await.map(|m| m.id)
+                }
+                Err(e) => Err(e),
+            }
+        }
+    }).await
+}
+
+pub(crate) async fn send_chunks_to_telegram(
+    bot: &Bot,
+    chat_id: ChatId,
+    msg_id: Option<MessageId>,
+    thread_id: Option<i32>,
+    chunks: &[String],
+) -> (bool, Option<String>, Option<i32>) {
+    let (mut cur_id, mut ok, mut err, mut sent_id) = (msg_id, true, None, None);
+    for (i, chunk) in chunks.iter().enumerate() {
+        match send_single_chunk(bot, chat_id, cur_id, thread_id, chunk, i == 0).await {
+            Ok(mid) => {
+                if cur_id.is_none() && i == 0 {
+                    cur_id = Some(mid);
+                }
+                sent_id = Some(mid.0);
+            }
+            Err(e) => {
+                eprintln!("❌ [tuner] Stream chunk {}/{} failed: {:?}", i + 1, chunks.len(), e);
+                ok = false;
+                err = Some(e.to_string());
+            }
+        }
+    }
+    (ok, err, sent_id)
+}
 
 /// Manages per-chat transmission intervals to avoid Telegram API rate limits.
 pub struct ChatRateLimiter {

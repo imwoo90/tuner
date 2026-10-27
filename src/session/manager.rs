@@ -225,7 +225,7 @@ impl SessionManager {
                 ex.provider = provider.to_string();
                 ex.model = model.to_string();
                 ex.last_active = Utc::now().to_rfc3339();
-                ex.last_handover_summary = None;
+                ex.last_progress_msg_id = None;
                 ex.clone()
             }
             None => {

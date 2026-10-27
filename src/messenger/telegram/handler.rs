@@ -42,27 +42,14 @@ async fn handle_single_media_message(
     text: String,
     deps: &MediaGroupDeps,
 ) -> Result<(), teloxide::RequestError> {
-    let is_voice_or_video_note = msg.voice().is_some() || msg.video_note().is_some();
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
-    let default_model = deps.config.model.as_deref().unwrap_or("antigravity-default");
     let dest_dir = deps.config.working_dir.join("telegram_files");
-
-    if text.is_empty() && !is_voice_or_video_note {
-        if let Ok(Some(relative_path)) = reply::download_telegram_media(&bot, &msg, &dest_dir).await
-            && let Ok((mut sess, _)) = deps.sessions.resolve_session(&key, &deps.config.provider, default_model).await
-        {
-            sess.pending_attachments.push(relative_path);
-            let _ = deps.sessions.preserve_session_identity(&sess).await;
-        }
-        return Ok(());
-    }
-
     let downloaded = reply::download_telegram_media(&bot, &msg, &dest_dir).await.ok().flatten();
     if text.is_empty() && downloaded.is_none() {
         return Ok(());
     }
     let files: Vec<String> = downloaded.into_iter().collect();
-    let effective_text = if text.is_empty() {
+    let is_voice_or_video_note = msg.voice().is_some() || msg.video_note().is_some();
+    let effective_text = if text.is_empty() && is_voice_or_video_note {
         default_media_prompt(msg.video_note().is_some())
     } else {
         text.as_str()

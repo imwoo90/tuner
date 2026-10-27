@@ -182,12 +182,17 @@ mod tests {
 
         handle_message(bot.clone(), make_msg("/new", 444), cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
 
+        // Log follow-up activity in the newly created session ("mock-session-123") without repeating "OAuth2"
+        log_telegram_message(&cfg.working_dir, "mock-session-123", Some(444), Some("Multi Reset"), "user", Some(5), "Add unit tests for login handler", true, None);
+        log_telegram_message(&cfg.working_dir, "mock-session-123", Some(444), Some("Multi Reset"), "bot", Some(6), "Unit tests added and passing.", true, None);
+
         handle_message(bot, make_msg("/new", 444), cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
 
         let s = mgr.get_active(&key).await.unwrap().unwrap();
         let summary = s.last_handover_summary.expect("Must retain summary across consecutive /new");
         assert!(summary.contains("OAuth2"));
-        assert!(summary.contains("GitHub OAuth2") || summary.contains("CSRF"));
+        assert!(summary.contains("GitHub OAuth2"));
+        assert!(summary.contains("Unit tests added"));
     }
 
     #[tokio::test]
@@ -215,5 +220,112 @@ mod tests {
         let s = mgr.get_active(&key).await.unwrap().unwrap();
         assert_eq!(s.get_session_id("antigravity"), "mock-session-123");
         assert!(s.last_handover_summary.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_auto_handover_on_expired_session_and_model_preservation() {
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _ws) = setup();
+        let key = SessionKey::telegram(123, Some(333));
+        topic_cache.insert(123, 333, "Auto Expiry".to_string());
+        init_active_session(&mgr, &key, &cfg.provider, "expired-sess-333").await;
+        seed_history(&cfg.working_dir, "expired-sess-333", 333, "Auto Expiry");
+
+        // Simulate idle/daily expiration rotating session_id into past_session_ids
+        let mut expired = mgr.get_active(&key).await.unwrap().unwrap();
+        expired.model = "claude-opus-5-5".to_string();
+        expired.clear_provider_session("antigravity");
+        mgr.preserve_session_identity(&expired).await.unwrap();
+
+        let (mut sess, _) = mgr.resolve_session(&key, &cfg.provider, "gemini-3.8-flash").await.unwrap();
+        let active_sid = crate::messenger::telegram::session_init::initialize_session_if_needed(
+            &bot, &make_msg("Resume after expiry", 333), &mgr, &mut sess, &cli, &cfg,
+        ).await.unwrap();
+        assert_eq!(active_sid, "mock-session-123");
+
+        let s_after = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(s_after.model, "claude-opus-5-5");
+        let summary = s_after.last_handover_summary.expect("Auto-expiry must populate handover summary");
+        assert!(summary.contains("OAuth2"));
+
+        // Verify /new also preserves the topic model ("claude-opus-5-5")
+        handle_message(bot, make_msg("/new", 333), cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+        let s_new = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(s_new.model, "claude-opus-5-5");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_new_command_with_inline_prompt_resets_and_preserves_handover() {
+        let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let temp_dir = tempfile::tempdir().unwrap();
+        crate::telegram::test_helpers::helpers::mock_brain_dir(&temp_dir, "mock-session-123");
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env) =
+            crate::telegram::test_helpers::helpers::setup_e2e_env(
+                &temp_dir,
+                "#!/bin/sh\necho '{\"result\":\"ok\",\"is_error\":false}'\n",
+            );
+        let key = SessionKey::telegram(123, Some(222));
+        topic_cache.insert(123, 222, "Inline New".to_string());
+        init_active_session(&mgr, &key, &cfg.provider, "old-sess-222").await;
+        seed_history(&cfg.working_dir, "old-sess-222", 222, "Inline New");
+
+        handle_message(bot, make_msg("/new Implement step 2 now", 222), cfg.clone(), mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+
+        let s = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(s.get_session_id("antigravity"), "mock-session-123");
+        assert_eq!(s.get_past_session_ids("antigravity"), vec!["old-sess-222".to_string()]);
+        assert_eq!(s.topic_name.as_deref(), Some("Inline New"));
+        assert!(s.last_handover_summary.as_deref().unwrap_or("").contains("OAuth2"));
+        let entries = crate::messenger::telegram::handover_helpers::extract_topic_history(&cfg.working_dir, "mock-session-123");
+        assert!(entries.iter().any(|e| e.sender == "user" && e.text == "Implement step 2 now"));
+    }
+
+    #[tokio::test]
+    async fn test_new_command_in_general_dm_performs_handover_and_unit_helpers() {
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _ws) = setup();
+        let key = SessionKey::telegram(123, None);
+        init_active_session(&mgr, &key, &cfg.provider, "dm-sess-1").await;
+        log_telegram_message(&cfg.working_dir, "dm-sess-1", None, None, "user", Some(1), "Build DM workflow", true, None);
+        log_telegram_message(&cfg.working_dir, "dm-sess-1", None, None, "bot", Some(2), "Agreed to use SQLite.", true, None);
+
+        let dm_msg: Message = serde_json::from_str(
+            r#"{"message_id":101,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"/new"}"#,
+        ).unwrap();
+        handle_message(bot, dm_msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache.clone(), bot_info, mgm).await.unwrap();
+        let s = mgr.get_active(&key).await.unwrap().unwrap();
+        assert!(s.last_handover_summary.as_deref().unwrap_or("").contains("Build DM workflow"));
+
+        // Verify parse_new_command_args supports multi-word cached topic names vs inline prompts
+        topic_cache.insert(123, 901, "Auth Module".to_string());
+        let m = make_msg("/new", 555);
+        assert_eq!(
+            crate::messenger::telegram::commands_session::parse_new_command_args(&m, "/new @Auth Module", &topic_cache, Some(555)),
+            (Some(901), None)
+        );
+        assert_eq!(
+            crate::messenger::telegram::commands_session::parse_new_command_args(&m, "/new Refactor auth module", &topic_cache, Some(555)),
+            (Some(555), Some("Refactor auth module"))
+        );
+
+        // Verify strip_new_or_reset_prefix and should_send_fresh_completion_message
+        assert_eq!(crate::messenger::telegram::strip_new_or_reset_prefix(" /new@my_bot Run tests "), "Run tests");
+        assert_eq!(crate::messenger::telegram::strip_new_or_reset_prefix("Normal prompt"), "Normal prompt");
+
+        let mut resp = crate::cli::CliResponse {
+            result: "Done".to_string(),
+            is_error: false,
+            session_id: Some("s1".to_string()),
+            returncode: Some(0),
+            stderr: String::new(),
+        };
+        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(30)));
+        assert!(crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(60)));
+        resp.stderr = "Interrupted by user (/stop)".to_string();
+        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
+        resp.stderr.clear();
+        resp.result.clear();
+        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
+        resp.is_error = true;
+        assert!(crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
     }
 }

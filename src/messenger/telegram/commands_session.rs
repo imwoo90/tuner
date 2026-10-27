@@ -12,68 +12,45 @@ use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands::send_reply;
 
-fn resolve_target_topic(
+pub(crate) fn parse_new_command_args<'a>(
     msg: &Message,
-    args: &str,
+    args: &'a str,
     topic_cache: &super::TopicNameCache,
     default_tid: Option<i64>,
-) -> Result<Option<i64>, String> {
-    let parts: Vec<&str> = args.split_whitespace().collect();
-    if parts.len() > 1 {
-        let name = parts[1];
-        if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, name) {
-            Ok(Some(resolved_tid))
-        } else {
-            Err(name.to_string())
-        }
-    } else {
-        Ok(default_tid)
+) -> (Option<i64>, Option<&'a str>) {
+    let trimmed = args.trim();
+    let raw_cmd = trimmed.split_whitespace().next().unwrap_or("");
+    let rest = trimmed[raw_cmd.len()..].trim();
+    if rest.is_empty() {
+        return (default_tid, None);
     }
+    if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, rest) {
+        return (Some(resolved_tid), None);
+    }
+    (default_tid, Some(rest))
 }
 
-async fn collect_handover_context(
+async fn prepare_topic_reset(
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
-    topic_cache: &super::TopicNameCache,
     chat_id: i64,
     topic_id: Option<i64>,
-) -> Option<super::handover::TopicHandoverContext> {
+) -> String {
     let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
-    let mut old_sid = String::new();
-    let mut topic_name = None;
-    let mut prior_summary = None;
-    let mut past_ids = Vec::new();
+    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
+    let mut preserved_model = default_model.to_string();
 
     if let Ok(Some(existing_sess)) = sessions.get_active(&key).await {
-        old_sid = existing_sess.get_session_id(&config.provider);
-        past_ids = existing_sess.get_past_session_ids(&config.provider);
-        if old_sid.is_empty()
-            && let Some(last_id) = past_ids.last() {
-                old_sid = last_id.clone();
-            }
-        topic_name = existing_sess.topic_name.clone();
-        prior_summary = existing_sess.last_handover_summary.clone();
+        if !existing_sess.model.is_empty() && existing_sess.model != "antigravity-default" {
+            preserved_model = existing_sess.model.clone();
+        }
+        let old_sid = existing_sess.get_session_id(&config.provider);
         if !old_sid.is_empty() {
             cli.sessions.terminate(&old_sid).await;
         }
     }
-
-    topic_id?;
-
-    if topic_name.is_none()
-        && let Some(tid) = topic_id {
-            topic_name = topic_cache.find_by_id(chat_id, tid);
-        }
-
-    super::handover::build_topic_handover(
-        &config.working_dir,
-        &old_sid,
-        topic_id,
-        topic_name,
-        prior_summary.as_deref(),
-        &past_ids,
-    )
+    preserved_model
 }
 
 pub(crate) async fn handle_new_command(
@@ -84,43 +61,35 @@ pub(crate) async fn handle_new_command(
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
     topic_cache: &super::TopicNameCache,
-) -> Result<(), teloxide::RequestError> {
+) -> Result<bool, teloxide::RequestError> {
     let topic_id = crate::telegram::get_topic_id(msg);
-    let target_topic = match resolve_target_topic(msg, args, topic_cache, topic_id) {
-        Ok(tid) => tid,
-        Err(name) => {
-            let _ = send_reply(bot, msg, t!("bot.unknown_topic", name = name)).await;
-            return Ok(());
-        }
-    };
+    let (target_topic, inline_prompt) = parse_new_command_args(msg, args, topic_cache, topic_id);
 
-    let handover_context = collect_handover_context(
-        config, sessions, cli, topic_cache, msg.chat.id.0, target_topic,
+    let preserved_model = prepare_topic_reset(
+        config, sessions, cli, msg.chat.id.0, target_topic,
     ).await;
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, target_topic);
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
-    let Ok(mut sess) = sessions.reset_provider_session(&key, &config.provider, model).await else {
-        return Ok(());
+    let Ok(mut sess) = sessions.reset_provider_session(&key, &config.provider, &preserved_model).await else {
+        return Ok(true);
     };
 
-    let startup_prompt = if let Some(ref handover) = handover_context {
-        sess.last_handover_summary = Some(format!(
-            "Objective: {}\nDecisions: {}\nProgress: {}",
-            handover.topic_objective,
-            handover.agreed_decisions.join("; "),
-            handover.current_progress
-        ));
+    if sess.topic_name.is_none()
+        && let Some(tid) = target_topic
+        && let Some(name) = topic_cache.find_by_id(msg.chat.id.0, tid)
+    {
+        sess.topic_name = Some(name);
         let _ = sessions.preserve_session_identity(&sess).await;
-        Some(handover.handover_prompt.as_str())
-    } else {
-        None
-    };
+    }
+
+    if inline_prompt.is_some() {
+        return Ok(false);
+    }
 
     let _ = crate::telegram::session_init::initialize_session_with_prompt(
-        bot, msg, sessions, &mut sess, cli, config, startup_prompt,
+        bot, msg, sessions, &mut sess, cli, config, None,
     ).await;
-    Ok(())
+    Ok(true)
 }
 
 pub(crate) async fn handle_session_control_commands(
@@ -138,8 +107,7 @@ pub(crate) async fn handle_session_control_commands(
     let topic_id = crate::telegram::get_topic_id(msg);
 
     if cmd == "/new" || cmd == "/reset" {
-        handle_new_command(bot, msg, args, config, sessions, cli, topic_cache).await?;
-        return Ok(true);
+        return handle_new_command(bot, msg, args, config, sessions, cli, topic_cache).await;
     }
     if cmd == "/stop" {
         let interrupted = cli.sessions.interrupt(msg.chat.id.0, topic_id).await;
