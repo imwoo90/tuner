@@ -172,4 +172,62 @@ while True:
         assert!(prompt_log.contains("telegram_files/mock_media_105.pdf"), "prompt_log is: {:?}", prompt_log);
         assert!(prompt_log.contains("Analyze album"), "prompt_log is: {:?}", prompt_log);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_voice_note_immediate_turn_execution() {
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env, temp) = setup_env();
+        let key = SK::telegram(123, None);
+        mock_brain_dir(&temp, "conv-xyz");
+
+        let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
+        let mut updated = sess.clone();
+        updated.set_session_id("antigravity", "conv-xyz");
+        mgr.update_session(&updated).await.unwrap();
+
+        let voice_msg = make_msg(r#"{"message_id":106,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"voice":{"file_id":"voice-1","file_unique_id":"u-voice-1","duration":5,"mime_type":"audio/ogg"}}"#);
+        let res = handle_message(bot, voice_msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await;
+        assert!(res.is_ok());
+
+        let sess_after = mgr.get_active(&key).await.unwrap().unwrap();
+        assert!(sess_after.pending_attachments.is_empty());
+
+        let prompt_log = wait_for_prompt(&temp, "Voice message attached").await;
+        assert!(prompt_log.contains("telegram_files/mock_media_106.ogg"), "prompt_log is: {:?}", prompt_log);
+        assert!(prompt_log.contains("Voice message attached"), "prompt_log is: {:?}", prompt_log);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_pending_attachments_survive_commands_and_bare_model_directive() {
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env, temp) = setup_env();
+        let key = SK::telegram(123, None);
+        mock_brain_dir(&temp, "conv-xyz");
+
+        let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
+        let mut updated = sess.clone();
+        updated.set_session_id("antigravity", "conv-xyz");
+        mgr.update_session(&updated).await.unwrap();
+
+        let doc_msg = make_msg(r#"{"message_id":107,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-7","file_unique_id":"unique-7","file_name":"queued.pdf"}}"#);
+        handle_message(bot.clone(), doc_msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
+
+        let status_msg = make_msg(r#"{"message_id":108,"date":123457,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"/status"}"#);
+        handle_message(bot.clone(), status_msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
+
+        let bare_model_msg = make_msg(r#"{"message_id":109,"date":123458,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"@opus"}"#);
+        handle_message(bot.clone(), bare_model_msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
+
+        let sess_mid = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(sess_mid.pending_attachments, vec!["telegram_files/mock_media_107.pdf".to_string()]);
+
+        let prompt_msg = make_msg(r#"{"message_id":110,"date":123459,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"Summarize queued file"}"#);
+        handle_message(bot, prompt_msg, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+
+        let sess_after = mgr.get_active(&key).await.unwrap().unwrap();
+        assert!(sess_after.pending_attachments.is_empty());
+
+        let prompt_log = wait_for_prompt(&temp, "Summarize queued file").await;
+        assert!(prompt_log.contains("telegram_files/mock_media_107.pdf"), "prompt_log is: {:?}", prompt_log);
+    }
 }

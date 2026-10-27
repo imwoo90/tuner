@@ -16,28 +16,26 @@ This project strictly adheres to the compiler-enforced **Agent-Native** architec
 ---
 
 ## 2. System Architecture & Module Domains
-Tuner is an asynchronous multi-profile daemon built with Rust, Tokio, Teloxide, and Axum. Its root crate index (`src/main.rs`) organizes the codebase into fifteen top-level domains:
+Tuner is an asynchronous multi-profile daemon built with Rust, Tokio, Teloxide, and Axum. Its root crate index (`src/main.rs`) organizes the codebase into fourteen top-level domains:
 
 1. **`src/cli/` (`src/cli/mod.rs`)**:
    - Agent CLI provider abstraction (`AgentProvider`, `CliResponse`, `StreamEvent`) and the Google Antigravity PTY driver (`src/cli/antigravity/mod.rs`: `provider.rs`, `session.rs`, `pty_spawner.rs`, `polling.rs`, `completion.rs`, `log_parser.rs`, `log_helpers.rs`, `events.rs`, `trust.rs`, `error_parser.rs`).
 2. **`src/messenger/` (`src/messenger/mod.rs`)**:
-   - Messaging frontend adapters anchored by the Telegram bot subsystem (`src/messenger/telegram/mod.rs`), including HTML formatting (`formatting/mod.rs`: `helpers.rs`, `splitting.rs`, `table.rs`), streaming progress debouncing (`stream.rs`), idle background turn observation (`async_observer.rs`), session handover (`handover.rs`, `handover_helpers.rs`), inbound/outbound attachments (`attachments.rs`, `attachments_dl.rs`), interactive `ask_question` menus (`ask_process.rs`, `ask_callbacks.rs`, `ask_helpers.rs`, `multi_select.rs`), responsive web file & 3D review viewer v2 (`review.rs`, `review_server.rs`, `review_store.rs`, `review_callback.rs`, `review_viewer.html`), credential vault Web UI (`vault.rs`, `vault_viewer.html`), and slash commands (`commands.rs`, `commands_model.rs`, `commands_session.rs`, `commands_usage.rs`, `commands_remote.rs`, `commands_remote_hub.rs`, `commands_registry.rs`).
+   - Messaging frontend adapters anchored by the Telegram bot subsystem (`src/messenger/telegram/mod.rs`), including authentication & topic caching (`auth.rs`), long-polling runner (`runner.rs`), message ingress & concurrency routing (`handler.rs`), reply context & model directives (`reply.rs`), lazy session initialization (`session_init.rs`), message history logging (`history.rs`), locale switching (`lang.rs`), inbound media & album buffering (`media.rs`, `media_group.rs`), outbound rate limiting (`rate_limiter.rs`), bus transport adapter (`transport.rs`), typing indicator guard (`typing.rs`), self-upgrade workflow (`upgrade.rs`), HTML formatting (`formatting/mod.rs`: `helpers.rs`, `splitting.rs`, `table.rs`), streaming progress debouncing (`stream.rs`), idle background turn observation (`async_observer.rs`), session handover (`handover.rs`, `handover_helpers.rs`), inbound/outbound attachments (`attachments.rs`, `attachments_dl.rs`), interactive `ask_question` menus (`ask_process.rs`, `ask_callbacks.rs`, `ask_helpers.rs`, `multi_select.rs`), responsive web file & 3D review viewer v2 (`review.rs`, `review_server.rs`, `review_store.rs`, `review_callback.rs`, `review_viewer.html`), credential vault Web UI (`vault.rs`, `vault_viewer.html`), inline callbacks & cron menus (`callbacks.rs`, `callbacks_effort.rs`, `cron_selector.rs`, `cron_formatter.rs`), and slash commands (`commands.rs`, `commands_model.rs`, `commands_session.rs`, `commands_usage.rs`, `commands_remote.rs`, `commands_remote_hub.rs`, `commands_registry.rs`).
 3. **`src/bus/` (`src/bus/mod.rs`)**:
-   - Internal message bus (`bus.rs`), typed routing envelopes (`envelope.rs`), domain adapters (`adapters.rs`), per-topic concurrency locks (`lock_pool.rs`), and observer wiring (`observers_wire.rs`).
+   - Internal message bus (`bus.rs`), typed routing envelopes (`envelope.rs`), domain adapters (`adapters.rs`), and per-topic concurrency locks (`lock_pool.rs`).
 4. **`src/session/` (`src/session/mod.rs`)**:
    - Persistent chat/topic session lifecycle (`manager.rs`), session state & handover models (`data.rs`), composite keys (`key.rs`), and inactivity/daily reset freshness checks (`session/mod.rs`).
 5. **`src/workspace/` (`src/workspace/mod.rs`)**:
    - Profile path resolution (`paths.rs`), rule template selection (`rules.rs`), whitelist-based rule synchronization (`sync.rs`, `sync_helpers.rs`, `sync_layout.rs`), and bidirectional Antigravity skill symlink mounting (`skills.rs`, `skills_helpers.rs`).
-6. **`src/webhook/` (`src/webhook/mod.rs`)**:
-   - Axum HTTP ingress server (`server.rs`), constant-time HMAC/Bearer authentication (`auth.rs`), webhook registry (`manager.rs`, `models.rs`), and wake file observer (`observer.rs`).
-7. **`src/cron/` (`src/cron/mod.rs`) & `src/heartbeat/` (`src/heartbeat/mod.rs`)**:
+6. **`src/cron/` (`src/cron/mod.rs`) & `src/heartbeat/` (`src/heartbeat/mod.rs`)**:
    - Timezone-aware periodic job scheduling (`cron/manager.rs`, `cron/scheduler.rs`) and quiet-hour-aware liveness heartbeats (`heartbeat/mod.rs`, `heartbeat/scheduler.rs`).
-8. **`src/cleanup/` (`src/cleanup/mod.rs`)**:
+7. **`src/cleanup/` (`src/cleanup/mod.rs`)**:
    - Retention-based temporary file and process cleanup (`cleanup/observer.rs`).
-9. **`src/security/` (`src/security/mod.rs`)**:
+8. **`src/security/` (`src/security/mod.rs`)**:
    - Path/credential sandboxing (`security/mod.rs`, `security/paths.rs`), per-profile `XSalsa20-Poly1305` encrypted credential vault (`security/vault.rs`), and Zero-Knowledge CLI secret injection & redaction (`security/vault_cli.rs`).
-10. **`src/config.rs`, `src/i18n/` (`src/i18n/mod.rs`), `src/supervisor.rs`, `src/setup.rs`, & `src/upgrade.rs`**:
-    - JSON configuration (`config.rs`), localization (`i18n/mod.rs`, `i18n/loader.rs`), process supervision (`supervisor.rs`), initial setup (`setup.rs`), and GitHub release self-upgrade (`upgrade.rs`).
+9. **`src/config.rs`, `src/i18n/` (`src/i18n/mod.rs`), `src/supervisor.rs`, `src/setup.rs`, & `src/upgrade.rs`**:
+   - JSON configuration (`config.rs`), localization (`i18n/mod.rs`, `i18n/loader.rs`), process supervision (`supervisor.rs`), initial setup (`setup.rs`), and GitHub release self-upgrade (`upgrade.rs`).
 
 ---
 

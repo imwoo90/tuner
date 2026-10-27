@@ -16,24 +16,8 @@ use serde::{Serialize, Deserialize};
 pub enum Origin {
     /// `Cron` (cron) variant.
     Cron,
-    /// `WebhookWake` (webhook wake) variant.
-    WebhookWake,
-    /// `WebhookCron` (webhook cron) variant.
-    WebhookCron,
     /// `Heartbeat` (heartbeat) variant.
     Heartbeat,
-}
-
-impl Origin {
-    /// Return the canonical string identifier for this origin.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Cron => "cron",
-            Self::WebhookWake => "webhook_wake",
-            Self::WebhookCron => "webhook_cron",
-            Self::Heartbeat => "heartbeat",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,8 +49,6 @@ pub struct Envelope {
     pub chat_id: i64,
     /// Topic id.
     pub topic_id: Option<i64>,
-    /// Prompt.
-    pub prompt: String,
     /// Result text.
     pub result_text: String,
     /// Status.
@@ -77,8 +59,6 @@ pub struct Envelope {
     pub delivery: DeliveryMode,
     /// Lock mode.
     pub lock_mode: LockMode,
-    /// Needs injection.
-    pub needs_injection: bool,
     /// Metadata.
     pub metadata: HashMap<String, String>,
     /// Envelope id.
@@ -94,13 +74,11 @@ impl Envelope {
             origin,
             chat_id,
             topic_id: None,
-            prompt: String::new(),
             result_text: String::new(),
             status: String::new(),
             is_error: false,
             delivery: DeliveryMode::Unicast,
             lock_mode: LockMode::None,
-            needs_injection: false,
             metadata: HashMap::new(),
             envelope_id: String::new(),
             transport: "tg".to_string(),

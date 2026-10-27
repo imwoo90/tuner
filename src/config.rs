@@ -56,43 +56,10 @@ pub struct CliConfig {
     pub heartbeat: HeartbeatConfig,
     /// Cleanup.
     pub cleanup: crate::cleanup::observer::CleanupConfig,
-    /// Webhooks.
-    pub webhooks: WebhookConfig,
     /// Language.
     pub language: Option<String>,
     /// Profiles.
     pub profiles: Vec<ProfileConfig>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
-/// Represents `WebhookConfig` (webhook config).
-pub struct WebhookConfig {
-    /// Enabled.
-    pub enabled: bool,
-    /// Host.
-    pub host: String,
-    /// Port.
-    pub port: u16,
-    /// Token.
-    pub token: String,
-    /// Max body bytes.
-    pub max_body_bytes: usize,
-    /// Rate limit per minute.
-    pub rate_limit_per_minute: usize,
-}
-
-impl Default for WebhookConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            host: "127.0.0.1".to_string(),
-            port: 8742,
-            token: String::new(),
-            max_body_bytes: 262144,
-            rate_limit_per_minute: 30,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -147,7 +114,6 @@ impl Default for CliConfig {
             max_session_messages: None,
             heartbeat: HeartbeatConfig::default(),
             cleanup: crate::cleanup::observer::CleanupConfig::default(),
-            webhooks: WebhookConfig::default(),
             language: None,
             profiles: Vec::new(),
         }

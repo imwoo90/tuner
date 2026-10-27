@@ -47,7 +47,6 @@ Tuner는 지속적인 컨텍스트 유지와 엄격한 규칙 집행을 위해 4
 Use these folders for scheduled/external actions:
 
 - `tools/cron_tools/RULES.md` — scheduled cron tasks
-- `tools/webhook_tools/RULES.md` — HTTP webhook endpoints
 - `tools/media_tools/RULES.md` — document, audio, video processing
 - `tools/user_tools/RULES.md` — user-specific custom scripts
 
@@ -55,10 +54,10 @@ Use these folders for scheduled/external actions:
 
 Custom skills live in `skills/`. See `skills/RULES.md` for sync rules and structure.
 
-## Cron and Webhook Setup
+## Cron Setup
 
 - For schedule-based work, check the timezone first (`tools/cron_tools/cron_time.py`).
-- Use cron/webhook tool scripts; do not manually edit registries.
+- Use cron tool scripts; do not manually edit registries.
 - For cron task behavior changes, edit `cron_tasks/<name>/TASK_DESCRIPTION.md`.
 
 ## External API Secrets

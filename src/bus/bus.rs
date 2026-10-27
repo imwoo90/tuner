@@ -2,7 +2,7 @@
 //!
 //! ## Overview
 //! Provides the `MessageBus` implementation for submitting envelopes, acquiring chat locks,
-//! executing prompt injection, and delivering messages to registered transports (such as Telegram).
+//! and delivering messages to registered transports (such as Telegram).
 //! Handles cascading transport fallback and error resilience.
 //!
 //! ## Search Tags
@@ -26,25 +26,10 @@ pub trait Transport: Send + Sync {
     async fn deliver_broadcast(&self, envelope: &Envelope) -> Result<(), String>;
 }
 
-#[async_trait]
-/// Defines the `PromptInjector` (prompt injector) interface.
-pub trait PromptInjector: Send + Sync {
-    /// Inject the given prompt into the active CLI session.
-    async fn inject_prompt(
-        &self,
-        prompt: &str,
-        chat_id: i64,
-        label: &str,
-        topic_id: Option<i64>,
-        transport: &str,
-    ) -> Result<String, String>;
-}
-
 /// Represents `MessageBus` (message bus).
 pub struct MessageBus {
     transports: Mutex<Vec<Arc<dyn Transport>>>,
     lock_pool: Arc<LockPool>,
-    injector: Mutex<Option<Arc<dyn PromptInjector>>>,
 }
 
 #[cfg(test)]
@@ -66,18 +51,12 @@ impl MessageBus {
         Self {
             transports: Mutex::new(Vec::new()),
             lock_pool,
-            injector: Mutex::new(None),
         }
     }
 
     /// Register a transport with the bus.
     pub fn register_transport(&self, transport: Arc<dyn Transport>) {
         self.transports.lock().unwrap_or_else(|e| e.into_inner()).push(transport);
-    }
-
-    /// Set the active prompt injector.
-    pub fn set_injector(&self, injector: Arc<dyn PromptInjector>) {
-        *self.injector.lock().unwrap_or_else(|e| e.into_inner()) = Some(injector);
     }
 
     /// Submit an envelope to the bus for processing and delivery.
@@ -90,41 +69,10 @@ impl MessageBus {
             let key = envelope.lock_key();
             let lock = self.lock_pool.get(key);
             let _guard = lock.lock().await;
-            self.process(envelope).await;
+            self.deliver(envelope).await;
         } else {
-            self.process(envelope).await;
+            self.deliver(envelope).await;
         }
-    }
-
-    async fn process(&self, envelope: &mut Envelope) {
-        let injector = self.injector.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if envelope.needs_injection && !envelope.prompt.is_empty()
-            && let Some(ref inj) = injector {
-                let label = format!("{}:{}", envelope.origin.as_str(), &envelope.envelope_id);
-                match inj.inject_prompt(
-                    &envelope.prompt,
-                    envelope.chat_id,
-                    &label,
-                    envelope.topic_id,
-                    &envelope.transport,
-                ).await {
-                    Ok(response) => {
-                        envelope.result_text = response;
-                    }
-                    Err(e) => {
-                        envelope.is_error = true;
-                        if envelope.result_text.is_empty() {
-                            envelope.result_text = format!(
-                                "Error processing {} result: {}",
-                                envelope.origin.as_str(),
-                                e
-                            );
-                        }
-                    }
-                }
-            }
-
-        self.deliver(envelope).await;
     }
 
     async fn deliver(&self, envelope: &Envelope) {

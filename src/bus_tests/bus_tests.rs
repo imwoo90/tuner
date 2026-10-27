@@ -2,7 +2,7 @@
 #![allow(clippy::type_complexity)]
 use crate::bus::envelope::{Envelope, Origin, LockMode, DeliveryMode};
 use crate::bus::lock_pool::LockPool;
-use crate::bus::bus::{MessageBus, Transport, PromptInjector};
+use crate::bus::bus::{MessageBus, Transport};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -53,47 +53,6 @@ impl Transport for MockTransport {
         }
         self.deliver_broadcast_calls.lock().unwrap().push(envelope.clone());
         Ok(())
-    }
-}
-
-// Mock Injector
-struct MockInjector {
-    response: String,
-    calls: Arc<Mutex<Vec<(String, i64, String, Option<i64>, String)>>>,
-    should_fail: bool,
-}
-
-impl MockInjector {
-    fn new(response: &str) -> Self {
-        Self {
-            response: response.to_string(),
-            calls: Arc::new(Mutex::new(Vec::new())),
-            should_fail: false,
-        }
-    }
-}
-
-#[async_trait]
-impl PromptInjector for MockInjector {
-    async fn inject_prompt(
-        &self,
-        prompt: &str,
-        chat_id: i64,
-        label: &str,
-        topic_id: Option<i64>,
-        transport: &str,
-    ) -> Result<String, String> {
-        if self.should_fail {
-            return Err("CLI crash".to_string());
-        }
-        self.calls.lock().unwrap().push((
-            prompt.to_string(),
-            chat_id,
-            label.to_string(),
-            topic_id,
-            transport.to_string(),
-        ));
-        Ok(self.response.clone())
     }
 }
 
@@ -207,46 +166,6 @@ async fn test_lock_required_acquires_lock() {
 }
 
 #[tokio::test]
-async fn test_injection_updates_result_text() {
-    let bus = MessageBus::new();
-    let transport = Arc::new(MockTransport::new("tg"));
-    bus.register_transport(transport);
-
-    let injector = Arc::new(MockInjector::new("Injected response"));
-    bus.set_injector(injector.clone());
-
-    let mut env = test_envelope(DeliveryMode::Unicast, "tg");
-    env.needs_injection = true;
-    env.prompt = "Injected prompt".to_string();
-    env.lock_mode = LockMode::Required;
-
-    bus.submit(&mut env).await;
-
-    assert_eq!(env.result_text, "Injected response");
-    assert_eq!(injector.calls.lock().unwrap().len(), 1);
-}
-
-#[tokio::test]
-async fn test_injection_failure_sets_error() {
-    let bus = MessageBus::new();
-    let transport = Arc::new(MockTransport::new("tg"));
-    bus.register_transport(transport);
-
-    let mut injector = MockInjector::new("");
-    injector.should_fail = true;
-    bus.set_injector(Arc::new(injector));
-
-    let mut env = test_envelope(DeliveryMode::Unicast, "tg");
-    env.needs_injection = true;
-    env.prompt = "test".to_string();
-
-    bus.submit(&mut env).await;
-
-    assert!(env.is_error);
-    assert!(env.result_text.contains("CLI crash"));
-}
-
-#[tokio::test]
 async fn test_deliver_routes_to_matching_transport() {
     let bus = MessageBus::new();
     let tg = Arc::new(MockTransport::new("tg"));
@@ -282,7 +201,7 @@ async fn test_deliver_fallback_when_transport_missing() {
 }
 
 #[tokio::test]
-async fn test_busy_main_injection_not_dropped() {
+async fn test_busy_main_submission_waits_for_lock() {
     let pool = Arc::new(LockPool::new());
     let bus = Arc::new(MessageBus::with_lock_pool(pool.clone()));
 
@@ -294,7 +213,7 @@ async fn test_busy_main_injection_not_dropped() {
     let completed_clone = completed.clone();
 
     let handle = tokio::spawn(async move {
-        let mut env = Envelope::new(Origin::WebhookWake, 8452932024);
+        let mut env = Envelope::new(Origin::Cron, 8452932024);
         env.lock_mode = LockMode::Required;
         bus_clone.submit(&mut env).await;
         let mut guard = completed_clone.lock().unwrap();

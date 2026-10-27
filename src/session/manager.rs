@@ -32,6 +32,30 @@ pub struct SessionManager {
     pub lock_pool: std::sync::Arc<crate::bus::lock_pool::LockPool>,
 }
 
+fn merge_provider_session(
+    cur_data: &mut crate::session::data::ProviderSessionData,
+    data: &crate::session::data::ProviderSessionData,
+) {
+    let same_session = cur_data.session_id == data.session_id;
+    if !same_session
+        && !cur_data.session_id.is_empty()
+        && !cur_data.past_session_ids.contains(&cur_data.session_id)
+    {
+        cur_data.past_session_ids.push(cur_data.session_id.clone());
+    }
+    cur_data.session_id = data.session_id.clone();
+    for past_id in &data.past_session_ids {
+        if !cur_data.past_session_ids.contains(past_id) {
+            cur_data.past_session_ids.push(past_id.clone());
+        }
+    }
+    cur_data.message_count = if same_session {
+        cur_data.message_count.max(data.message_count)
+    } else {
+        data.message_count
+    };
+}
+
 impl SessionManager {
     /// Creates a new instance.
     pub fn new(
@@ -113,20 +137,29 @@ impl SessionManager {
             resolved_topic_name = resolver(key.chat_id, tid);
         }
 
-        if let Some(existing) = sessions.get_mut(&skey)
-            && self.is_fresh(existing)
-        {
-            let mut to_save = false;
-            if resolved_topic_name.is_some() && existing.topic_name != resolved_topic_name {
+        if let Some(existing) = sessions.get_mut(&skey) {
+            if self.is_fresh(existing) {
+                let mut to_save = false;
+                if resolved_topic_name.is_some() && existing.topic_name != resolved_topic_name {
+                    existing.topic_name = resolved_topic_name;
+                    to_save = true;
+                }
+                let session_id = existing.get_session_id(&existing.provider);
+                let cloned = existing.clone();
+                if to_save {
+                    self.save(&sessions)?;
+                }
+                return Ok((cloned, session_id.is_empty()));
+            }
+            existing.clear_provider_session(provider);
+            existing.last_active = Utc::now().to_rfc3339();
+            existing.last_progress_msg_id = None;
+            if resolved_topic_name.is_some() {
                 existing.topic_name = resolved_topic_name;
-                to_save = true;
             }
-            let session_id = existing.get_session_id(&existing.provider);
             let cloned = existing.clone();
-            if to_save {
-                self.save(&sessions)?;
-            }
-            return Ok((cloned, session_id.is_empty()));
+            self.save(&sessions)?;
+            return Ok((cloned, true));
         }
 
         let mut new_session = SessionData::new(
@@ -160,13 +193,7 @@ impl SessionManager {
         }
         for (prov, data) in &session.provider_sessions {
             let cur_data = current.provider_sessions.entry(prov.clone()).or_default();
-            cur_data.session_id = data.session_id.clone();
-            for past_id in &data.past_session_ids {
-                if !cur_data.past_session_ids.contains(past_id) {
-                    cur_data.past_session_ids.push(past_id.clone());
-                }
-            }
-            cur_data.message_count = cur_data.message_count.max(data.message_count);
+            merge_provider_session(cur_data, data);
         }
         current.last_active = Utc::now().to_rfc3339();
         sessions.insert(skey, current.clone());

@@ -57,6 +57,35 @@ pub(crate) async fn initialize_session_with_prompt(
     boot_fresh_session(bot, msg, sessions, sess, cli, config, startup_prompt).await
 }
 
+async fn handle_boot_success(
+    bot: &Bot,
+    msg: &Message,
+    sessions: &SessionManager,
+    sess: &mut SessionData,
+    provider: &str,
+    mut res: crate::cli::CliResponse,
+    config: &CliConfig,
+) -> Result<String, teloxide::RequestError> {
+    let thread_id = msg.thread_id.map(|t| t.0.0);
+    if res.is_error {
+        let topic = (sess.topic_id, sess.topic_name.as_deref());
+        let _ = super::stream::handle_stream_result(bot, msg.chat.id, None, thread_id, topic, res, config).await;
+        return Ok(String::new());
+    }
+    let Some(new_sid) = res.session_id.clone() else {
+        eprintln!("Initialization oneshot did not return a session_id");
+        return Ok(String::new());
+    };
+    sess.set_session_id(provider, &new_sid);
+    let _ = sessions.preserve_session_identity(sess).await;
+    if res.result.trim().is_empty() {
+        res.result = crate::t!("bot.new_session");
+    }
+    let topic = (sess.topic_id, sess.topic_name.as_deref());
+    let _ = super::stream::handle_stream_result(bot, msg.chat.id, None, thread_id, topic, res, config).await;
+    Ok(new_sid)
+}
+
 async fn handle_boot_response(
     bot: &Bot,
     msg: &Message,
@@ -66,37 +95,14 @@ async fn handle_boot_response(
     send_res: Result<crate::cli::CliResponse, String>,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
-    let thread_id = msg.thread_id.map(|t| t.0.0);
     match send_res {
-        Ok(mut res) => {
-            if let Some(ref new_sid) = res.session_id.clone() {
-                sess.set_session_id(provider, new_sid);
-                let _ = sessions.preserve_session_identity(sess).await;
-
-                if res.result.trim().is_empty() && !res.is_error {
-                    res.result = crate::t!("bot.new_session");
-                }
-                let _ = super::stream::handle_stream_result(
-                    bot,
-                    msg.chat.id,
-                    None,
-                    thread_id,
-                    (sess.topic_id, sess.topic_name.as_deref()),
-                    res,
-                    config,
-                ).await;
-                Ok(new_sid.to_string())
-            } else {
-                eprintln!("Initialization oneshot did not return a session_id");
-                Ok(String::new())
-            }
-        }
+        Ok(res) => handle_boot_success(bot, msg, sessions, sess, provider, res, config).await,
         Err(e) => {
             eprintln!("Initialization oneshot failed: {:?}", e);
-            let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1);
+            let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1, config.model.as_deref());
             let html = super::formatting::markdown_to_telegram_html(&err_msg);
             let chunks = super::formatting::split_html_message(&html, 4000);
-            let _ = super::stream::send_chunks_to_telegram(bot, msg.chat.id, None, thread_id, &chunks).await;
+            let _ = super::stream::send_chunks_to_telegram(bot, msg.chat.id, None, msg.thread_id.map(|t| t.0.0), &chunks).await;
             Ok(String::new())
         }
     }
@@ -145,5 +151,5 @@ async fn boot_fresh_session(
         }
     };
 
-    handle_boot_response(bot, msg, sessions, sess, provider, send_res, config).await
+    handle_boot_response(bot, msg, sessions, sess, provider, send_res, &session_cli.config).await
 }

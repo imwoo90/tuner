@@ -7,4 +7,3 @@ mod envelope_tests;
 mod lock_pool_tests;
 mod adapters_tests;
 mod bus_tests;
-mod observers_wire_tests;

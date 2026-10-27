@@ -26,7 +26,7 @@ Tool scripts require absolute paths (`--file /absolute/path/...`).
 
 - Do not move/delete files unless user requested it.
 - Auto-cleanup removes files older than `cleanup.media_files_days` (see `../config/RULES.md`).
-  Cleanup is non-recursive (top-level date folders are not auto-pruned).
+  Cleanup recursively removes expired files and prunes empty subdirectories.
 
 ## Memory
 

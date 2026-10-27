@@ -2,25 +2,12 @@
 //!
 //! ## Overview
 //! Provides conversion functions to map domain events and results
-//! (Cron, Heartbeat, and Webhook triggers) into unified `Envelope` models.
+//! (Cron and Heartbeat triggers) into unified `Envelope` models.
 //!
 //! ## Search Tags
 //! #adapters
 
-use super::envelope::{Envelope, Origin, LockMode, DeliveryMode};
-
-#[derive(Debug, Clone)]
-/// Represents `WebhookResult` (webhook result).
-pub struct WebhookResult {
-    /// Hook id.
-    pub hook_id: String,
-    /// Hook title.
-    pub hook_title: String,
-    /// Result text.
-    pub result_text: String,
-    /// Status.
-    pub status: String,
-}
+use super::envelope::{Envelope, Origin, DeliveryMode};
 
 /// Executes `from_cron_result` (from cron result).
 pub fn from_cron_result(
@@ -62,27 +49,5 @@ pub fn from_heartbeat(
     if let Some(t) = transport {
         env.transport = t.to_string();
     }
-    env
-}
-
-/// Executes `from_webhook_cron_result` (from webhook cron result).
-pub fn from_webhook_cron_result(result: &WebhookResult) -> Envelope {
-    let mut env = Envelope::new(Origin::WebhookCron, 0);
-    env.result_text = result.result_text.clone();
-    env.status = result.status.clone();
-    env.is_error = result.status.to_lowercase().contains("error");
-    env.delivery = DeliveryMode::Broadcast;
-    env.metadata.insert("hook_title".to_string(), result.hook_title.clone());
-    env.metadata.insert("hook_id".to_string(), result.hook_id.clone());
-    env
-}
-
-/// Executes `from_webhook_wake` (from webhook wake).
-pub fn from_webhook_wake(chat_id: i64, prompt: &str) -> Envelope {
-    let mut env = Envelope::new(Origin::WebhookWake, chat_id);
-    env.prompt = prompt.to_string();
-    env.delivery = DeliveryMode::Unicast;
-    env.lock_mode = LockMode::Required;
-    env.needs_injection = true;
     env
 }

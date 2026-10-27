@@ -2,7 +2,7 @@
 //!
 //! ## Overview
 //! SINGLE SOURCE OF TRUTH for all workspace and configuration paths in tuner.
-//! Resolves canonical directories for profiles, sessions, cron tasks, webhooks, logs, and rule templates.
+//! Resolves canonical directories for profiles, sessions, cron tasks, vaults, logs, and rule templates.
 //!
 //! ## Search Tags
 //! #paths
@@ -77,11 +77,6 @@ impl TunerPaths {
     /// Cron jobs path
     pub fn cron_jobs_path(&self) -> PathBuf {
         self.profile_join("cron_jobs.json")
-    }
-
-    /// Webhooks path
-    pub fn webhooks_path(&self) -> PathBuf {
-        self.profile_join("webhooks.json")
     }
 
     /// Cron tasks directory: `~/.tuner/workspace/cron_tasks`

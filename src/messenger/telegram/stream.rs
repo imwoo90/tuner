@@ -98,7 +98,11 @@ pub(crate) async fn handle_stream_result(
     }
     let raw_text = if resp.is_error {
         let err_msg = if !resp.stderr.is_empty() { &resp.stderr } else { &resp.result };
-        crate::cli::antigravity::error_parser::parse_cli_error(err_msg, resp.returncode.unwrap_or(1))
+        crate::cli::antigravity::error_parser::parse_cli_error(
+            err_msg,
+            resp.returncode.unwrap_or(1),
+            config.model.as_deref(),
+        )
     } else {
         resp.result
     };

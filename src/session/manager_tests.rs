@@ -182,12 +182,46 @@ async fn test_preserve_session_identity_preserves_past_ids_progress_and_clears_e
     assert_eq!(res.language, Some("ko".to_string()));
     assert_eq!(res.last_progress_msg_id, Some(777));
 
+    // Increment message_count via update_session
+    let res_counted = m.update_session(&res).await.unwrap();
+    assert_eq!(res_counted.provider_sessions.get("antigravity").unwrap().message_count, 1);
+
     // Rotate session ID to emptiness (simulating expired session_init clearance)
-    let mut cleared = res.clone();
+    let mut cleared = res_counted.clone();
     cleared.set_session_id("antigravity", "");
     cleared.last_progress_msg_id = None;
     let res2 = m.preserve_session_identity(&cleared).await.unwrap();
     assert_eq!(res2.get_session_id("antigravity"), "");
     assert_eq!(res2.get_past_session_ids("antigravity"), vec!["sess-xyz".to_string()]);
     assert_eq!(res2.last_progress_msg_id, None);
+    assert_eq!(res2.provider_sessions.get("antigravity").unwrap().message_count, 0);
+}
+
+#[tokio::test]
+async fn test_resolve_expired_session_rotates_and_preserves_topic_identity() {
+    let t = NamedTempFile::new().unwrap();
+    let m = create_temp_manager(&t, 30, 4, false, "UTC");
+    let k = SessionKey::telegram(77, Some(12));
+    let (mut s1, _) = m.resolve_session(&k, "antigravity", "gemini-3.8-flash").await.unwrap();
+    s1.set_session_id("antigravity", "expired-sid-1");
+    s1.model = "claude-opus-5-5".to_string();
+    s1.language = Some("ko".to_string());
+    s1.pending_attachments = vec!["telegram_files/att.pdf".to_string()];
+    s1.last_handover_summary = Some("Previous handover".to_string());
+    m.update_session(&s1).await.unwrap();
+
+    // Force session expiration in storage
+    let mut map = m.load().unwrap();
+    let entry = map.get_mut(&k.storage_key()).unwrap();
+    entry.last_active = (Utc::now() - Duration::minutes(60)).to_rfc3339();
+    m.save(&map).unwrap();
+
+    let (s2, is_new) = m.resolve_session(&k, "antigravity", "gemini-3.8-flash").await.unwrap();
+    assert!(is_new);
+    assert_eq!(s2.get_session_id("antigravity"), "");
+    assert_eq!(s2.get_past_session_ids("antigravity"), vec!["expired-sid-1".to_string()]);
+    assert_eq!(s2.model, "claude-opus-5-5");
+    assert_eq!(s2.language, Some("ko".to_string()));
+    assert_eq!(s2.pending_attachments, vec!["telegram_files/att.pdf".to_string()]);
+    assert_eq!(s2.last_handover_summary, Some("Previous handover".to_string()));
 }

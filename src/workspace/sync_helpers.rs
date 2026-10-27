@@ -18,8 +18,8 @@ pub fn is_zone2_py_file(entry: &Path, src: &Path, root_src: &Path) -> bool {
     if let Ok(rel_dir) = src.strip_prefix(root_src) {
         let rel_str = rel_dir.to_string_lossy().replace("\\", "/");
         let zone2_py_dirs = [
+            "workspace/tools",
             "workspace/tools/cron_tools",
-            "workspace/tools/webhook_tools",
             "workspace/tools/media_tools",
             "workspace/skills/memory-system/scripts",
             "workspace/skills/skill-creator/scripts",

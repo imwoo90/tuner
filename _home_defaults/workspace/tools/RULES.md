@@ -12,7 +12,6 @@ This is the navigation index for workspace tools.
 ## Routing
 
 - recurring tasks / schedules -> `cron_tools/RULES.md`
-- incoming HTTP triggers -> `webhook_tools/RULES.md`
 - file/media processing -> `media_tools/RULES.md`
 - custom user scripts -> `user_tools/RULES.md`
 

@@ -8,11 +8,11 @@
 ## 1. Executive Summary & Mental Model
 
 ### The Core Problem
-Modern interactive LLM coding agent runtimes (such as the Google Antigravity CLI `agy`) are built strictly for single-user, synchronous POSIX teletype terminals. Exposing them directly to remote multi-channel daemon interfaces (Telegram, Webhooks, Cron, Telemetry) precipitates severe operating-system hazards:
+Modern interactive LLM coding agent runtimes (such as the Google Antigravity CLI `agy`) are built strictly for single-user, synchronous POSIX teletype terminals. Exposing them directly to remote multi-channel daemon interfaces (Telegram, Cron, Telemetry) precipitates severe operating-system hazards:
 1. **C Runtime Stdio Buffering Deadlocks (`_IOFBF`)**: Standard daemons lacking a PTY fall back to anonymous pipes, causing libc to buffer output in 4KB/8KB blocks, which halts real-time token streaming.
 2. **Terminal Collapse via `isatty(3)` Failures**: TUI engines and rich progress spinners crash or panic on zero-dimension (`0x0`) headless pipes.
 3. **Runaway Process Zombies**: Subprocesses and compiler jobs (`rustc`, `gcc`, `pytest`) spawned by the agent escape standard parent termination signals upon task aborts.
-4. **State Corruption & Concurrency Races**: Uncoordinated multi-turn inputs across group topics, webhooks, and autonomous schedulers corrupt on-disk session state.
+4. **State Corruption & Concurrency Races**: Uncoordinated multi-turn inputs across group topics and autonomous schedulers corrupt on-disk session state.
 
 ### The System Mental Model
 **Tuner** functions as an **Industrial-Grade Asynchronous Agent Gateway & Virtual TTY Multiplexer**. It bridges remote human and external communication transports to agent execution runtimes by virtualizing a POSIX pseudo-terminal (PTY) environment with non-blocking master I/O, strict echo suppression, transcript-driven turn-state synchronization, and kernel-level process group lifecycle enforcement.
@@ -21,7 +21,6 @@ Modern interactive LLM coding agent runtimes (such as the Google Antigravity CLI
 graph TD
     subgraph Transports["Ingress, Egress & Ephemeral Web UI"]
         TG["Telegram Bot Dispatcher (dptree / Long Polling)"]
-        WH["Axum Webhook Server (HMAC-SHA256 / Bearer)"]
         RV["Axum Review Viewer v2 & Vault Web UI (Cloudflare Tunnel)"]
         CronSched["Cron Scheduler (chrono-tz / 5s Tick)"]
         HbSched["Heartbeat Scheduler (30m Inactivity Probe)"]
@@ -29,7 +28,7 @@ graph TD
 
     subgraph CoreDaemon["Tuner Core Daemon Control Plane"]
         Supervisor["Master Supervisor (Fork/Exec Worker, Exit 42 Reload)"]
-        Bus["Central MessageBus & PromptInjector"]
+        Bus["Central MessageBus"]
         LockPool["LockPool (Weakly-Referenced Per-(Chat, Topic) TokioMutex Pool)"]
         SessionMgr["SessionManager (Two-Phase Atomic .tmp + rename)"]
         WorkspaceMgr["Workspace Engine (TunerPaths / Rules / SkillSync)"]
@@ -45,7 +44,6 @@ graph TD
     end
 
     TG --> LockPool
-    WH --> Bus
     RV --> VaultStore
     CronSched --> Bus
     HbSched --> Bus
@@ -65,7 +63,7 @@ graph TD
 
 ## 2. Complete Topographical Census (`src/`)
 
-The Tuner daemon codebase is structured across 15 top-level modules enforced by `build.rs` and `build_linter.rs` (`AGENT_NATIVE.md`):
+The Tuner daemon codebase is structured across 14 top-level modules enforced by `build.rs` and `build_linter.rs` (`AGENT_NATIVE.md`):
 
 ```text
 src/
@@ -77,11 +75,10 @@ src/
 │
 ├── bus/                      # Cross-plane event fabric
 │   ├── mod.rs                # Module index & public re-exports
-│   ├── bus.rs                # MessageBus, Transport trait, PromptInjector trait
+│   ├── bus.rs                # MessageBus & Transport trait
 │   ├── envelope.rs           # Canonical Envelope: Origin variants, DeliveryMode, LockMode
 │   ├── lock_pool.rs          # Weakly-referenced per-(chat_id, topic_id) TokioMutex pool
-│   ├── adapters.rs           # Domain event transformers for cron/heartbeat/webhook outputs
-│   └── observers_wire.rs     # ObserverManager automatic bus wiring
+│   └── adapters.rs           # Domain event transformers for cron and heartbeat outputs
 │
 ├── workspace/                # Workspace governance, sandboxing & skill synchronizers
 │   ├── mod.rs                # Module index & initialization orchestrator
@@ -178,14 +175,6 @@ src/
 │   ├── mod.rs                # Cleanup configuration
 │   └── observer.rs           # Daily 3:00 AM sweep: retention pruning (preserving RULES.md/AGENTS.md)
 │
-├── webhook/                  # Cryptographic HTTP ingress
-│   ├── mod.rs                # Webhook subsystem index
-│   ├── models.rs             # Webhook definition & execution result schemas
-│   ├── manager.rs            # Webhook registry persistence
-│   ├── observer.rs           # File-based wake observer for external webhook triggers
-│   ├── server.rs             # Axum HTTP server hosting /hooks/<id> & /health
-│   └── auth.rs               # subtle::ConstantTimeEq HMAC/Bearer verification & RateLimiter
-│
 ├── security/                 # Ingress, filesystem & Zero-Knowledge Vault defense-in-depth
 │   ├── mod.rs                # Security module index & path/vault re-exports
 │   ├── paths.rs              # Path traversal protection: canonical root containment checks
@@ -221,9 +210,8 @@ src/
 * **Per-Profile Encrypted Credential Vault (`src/security/vault.rs`)**:
   - Encryption: 256-bit symmetric key (`vault/vault.key`, `chmod 0600`) encrypting `vault/vault.enc` via `XSalsa20-Poly1305` (`crypto_box::SalsaBox` with fresh 24-byte `OsRng` nonces).
   - Zero-Knowledge Execution (`tuner --vault exec <site> -- <cmd>`): Injects decrypted credentials (`TUNER_VAULT_SITE`, `TUNER_VAULT_TITLE`, `TUNER_VAULT_URL`, `TUNER_VAULT_USER`, `TUNER_VAULT_PASS`) directly into the child process environment while scrubbing all secret values from `stdout` and `stderr` (`***REDACTED***`), preventing credentials from leaking into the LLM transcript.
-* **Constant-Time Webhook Verification (`src/webhook/auth.rs`)**:
-  - Webhook bearer tokens and HMAC digests (`sha256`, `sha512`, `sha1`) are validated using `subtle::ConstantTimeEq`, eliminating timing side-channel attacks.
-  - Enforces per-minute sliding-window rate limiting (`RateLimiter` backed by `VecDeque<Instant>`) to throttle abusive ingress spikes.
+* **Path Traversal Sandboxing (`src/security/paths.rs`)**:
+  - All outbound file attachments and web review viewer entries are canonicalized and verified against allowed workspace roots, preventing arbitrary host file exfiltration.
 
 ### 3.4 Context-Aware Dynamic Localization (`i18n`)
 Language resolution traverses a 3-tier task-local fallback hierarchy:
@@ -252,7 +240,7 @@ To resolve concurrency contention in multi-topic environments (such as Telegram 
    - Multiple topics within the same supergroup execute concurrently with zero cross-topic lock contention.
 2. **Unified Bus & Interactive Serialization**:
    Because `MessageBus::with_lock_pool(sess.lock_pool.clone())` shares the exact same `LockPool` instance as `SessionManager`:
-   - Autonomous `LockMode::Required` injections (Cron, Heartbeat, Webhook wakeups) and interactive user turns targeting the same `(chat_id, topic_id)` serialize deterministically on the same `TokioMutex`.
+   - Autonomous `LockMode::Required` bus deliveries (Cron, Heartbeat) and interactive user turns targeting the same `(chat_id, topic_id)` serialize deterministically on the same `TokioMutex`.
    - Once all strong `Arc` guards for an idle topic are dropped, `LockPool::get` automatically prunes dead `Weak` entries (`strong_count() == 0`).
 
 ### 4.2 Zero-Queue Handle Decoupling for PTY Writes
@@ -354,7 +342,7 @@ To prevent map mutex contention during terminal input pacing:
 | **Liveness Contract** | $\Delta t_{\text{silence}} < 300\text{s}$ | Inotify sliding activity deadline | False timeouts killing long compilation tasks |
 | **Stream Atomicity** | $\text{Bal}(\text{Chunk}_k) = \text{True}$ | Tokenizer tag stack + entity atomicity | Telegram HTTP 400 Bad Request entity errors |
 | **Zero-Knowledge Vault** | $\text{Plaintext} \notin \text{Transcript}$ | `XSalsa20-Poly1305` + `tuner --vault exec` Redactor | Credential leakage into LLM prompts, logs, or chat history |
-| **Ingress Integrity** | $\text{ConstantTimeEq} \land \text{RateLimiter}$ | `subtle::ConstantTimeEq` + `VecDeque<Instant>` | Timing side-channel attacks and webhook flood spikes |
+| **Path Sandboxing** | $\text{Canonical}(p) \subseteq \text{Roots}$ | `validate_file_path` canonical containment check | Directory traversal and unauthorized host file exfiltration |
 
 ---
 

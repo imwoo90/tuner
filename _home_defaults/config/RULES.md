@@ -7,9 +7,9 @@ Edit only when the user asks for behavior changes.
 
 1. Change only requested keys.
 2. Preserve unrelated values and structure.
-3. Never expose secrets (`telegram_token`, webhook tokens) in chat output.
+3. Never expose secrets (`telegram_token`) in chat output.
 4. Keep valid JSON.
-5. Trigger a restart via `/restart` or `touch ~/.tuner/restart-requested` when changing core runtime settings (`telegram_token`, `webhooks`, `heartbeat`, `cleanup`).
+5. Trigger a restart via `/restart` or `touch ~/.tuner/restart-requested` when changing core runtime settings (`telegram_token`, `heartbeat`, `cleanup`).
 
 ## Important Key Groups
 
@@ -36,13 +36,6 @@ Edit only when the user asks for behavior changes.
 
 If `user_timezone` is empty, runtime falls back to UTC.
 For user-facing schedules, set `user_timezone` explicitly.
-
-### Webhooks
-
-- `webhooks.enabled`: `true`/`false`
-- `webhooks.host`, `webhooks.port`: HTTP bind address and port (default `127.0.0.1:8742`)
-- `webhooks.token`: global fallback Bearer token
-- `webhooks.max_body_bytes`, `webhooks.rate_limit_per_minute`
 
 ### Cleanup
 

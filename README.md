@@ -3,7 +3,7 @@
 [![Rust Compile & Test](https://github.com/imwoo90/tuner/actions/workflows/rust.yml/badge.svg)](https://github.com/imwoo90/tuner/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`tuner` supervises and orchestrates the execution of the Google Antigravity CLI (`agy`), providing real-time Telegram messenger integration, virtual PTY session management, expandable Chain-of-Thought & tool-call streaming, idle background turn wakeup, responsive web file/3D review viewing, per-profile Zero-Knowledge credential vaulting, webhook ingress, and multi-language localized agent sessions.
+`tuner` supervises and orchestrates the execution of the Google Antigravity CLI (`agy`), providing real-time Telegram messenger integration, virtual PTY session management, expandable Chain-of-Thought & tool-call streaming, idle background turn wakeup, responsive web file/3D review viewing, per-profile Zero-Knowledge credential vaulting, and multi-language localized agent sessions.
 
 ---
 
@@ -172,7 +172,6 @@ To publish an official release:
 graph LR
     subgraph Ingress["Transports & Web UI"]
         TG["Telegram Bot"]
-        WH["HMAC Webhook"]
         RV["Review & Vault HTTP"]
         Cron["Cron & Heartbeat"]
     end
@@ -220,7 +219,7 @@ graph LR
 
 ## 🧪 Testing
 
-`tuner` enforces compiler-checked Agent-Native invariants and a comprehensive suite of 365+ Rust unit, integration, and documentation tests:
+`tuner` enforces compiler-checked Agent-Native invariants and a comprehensive suite of 335+ Rust unit, integration, and documentation tests:
 
 ```bash
 # Run compiler linter, unit/integration/doc tests, Clippy, and Rustdoc verification

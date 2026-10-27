@@ -35,14 +35,6 @@
         "output_to_user_days": 30,
         "check_hour": 3
     },
-    "webhooks": {
-        "enabled": false,
-        "host": "127.0.0.1",
-        "port": 8742,
-        "token": "YOUR_WEBHOOK_SECRET",
-        "max_body_bytes": 262144,
-        "rate_limit_per_minute": 30
-    },
     "cli_parameters": {
         "antigravity": []
     }

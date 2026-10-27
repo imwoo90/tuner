@@ -1,7 +1,7 @@
-"""Shared helpers for cron and webhook tool scripts.
+"""Shared helpers for workspace tool scripts.
 
-Consolidates the identical load/save/sanitize patterns that were
-duplicated in ``cron_tools/_shared.py`` and ``webhook_tools/_shared.py``.
+Consolidates JSON collection load/save/sanitize helpers used by
+``cron_tools/_shared.py``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def sanitize_name(raw: str) -> str:
 def load_collection_or_default(path: Path, key: str) -> dict[str, Any]:
     """Load a JSON file or return ``{key: []}`` if missing/corrupt.
 
-    *key* is the top-level list field (e.g. ``"jobs"`` or ``"hooks"``).
+    *key* is the top-level list field (e.g. ``"jobs"``).
     """
     if not path.exists():
         return {key: []}
@@ -41,7 +41,7 @@ def load_collection_or_default(path: Path, key: str) -> dict[str, Any]:
 def load_collection_strict(path: Path, key: str) -> dict[str, Any]:
     """Load a JSON file and raise on malformed structure.
 
-    *key* is the top-level list field (e.g. ``"jobs"`` or ``"hooks"``).
+    *key* is the top-level list field (e.g. ``"jobs"``).
     """
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get(key), list):

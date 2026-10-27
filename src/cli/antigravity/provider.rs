@@ -173,15 +173,22 @@ impl AgentProvider for AntigravityCli {
         };
 
         let final_sid = resume_session.map(str::to_string).or_else(|| {
+            if !status.success() {
+                return None;
+            }
             events::extract_conversation_id(&stdout_str).or_else(|| {
                 events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into())
             })
         });
-        let brain = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
-            .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
-        let result = self.resolve_result_text(&agy_ws, &env, &stdout_str, brain.as_deref());
+        let result = if status.success() {
+            let brain = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
+                .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
+            self.resolve_result_text(&agy_ws, &env, &stdout_str, brain.as_deref())
+        } else {
+            events::parse_antigravity_json(&stdout_str)
+        };
 
-        if resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
+        if status.success() && resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
             && let Some(ref fid) = final_sid {
                 self.ensure_interactive_session(fid, &agy_ws, &env).await?;
             }

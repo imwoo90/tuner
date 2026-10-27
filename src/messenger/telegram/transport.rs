@@ -10,7 +10,6 @@
 use teloxide::prelude::*;
 use crate::bus::bus::Transport;
 use crate::bus::envelope::Envelope;
-use crate::cli::AgentProvider;
 
 /// Represents `TelegramTransport` (telegram transport).
 pub struct TelegramTransport {
@@ -58,60 +57,5 @@ impl Transport for TelegramTransport {
             }
         }
         Ok(())
-    }
-}
-
-/// Represents `TelegramPromptInjector` (telegram prompt injector).
-pub struct TelegramPromptInjector {
-    cli: std::sync::Arc<crate::cli::antigravity::AntigravityCli>,
-    sess: std::sync::Arc<crate::session::manager::SessionManager>,
-    cfg: std::sync::Arc<crate::config::CliConfig>,
-}
-
-impl TelegramPromptInjector {
-    /// Creates a new instance.
-    pub fn new(
-        cli: std::sync::Arc<crate::cli::antigravity::AntigravityCli>,
-        sess: std::sync::Arc<crate::session::manager::SessionManager>,
-        cfg: std::sync::Arc<crate::config::CliConfig>,
-    ) -> Self {
-        Self { cli, sess, cfg }
-    }
-}
-
-#[async_trait::async_trait]
-impl crate::bus::bus::PromptInjector for TelegramPromptInjector {
-    async fn inject_prompt(
-        &self,
-        prompt: &str,
-        chat_id: i64,
-        _label: &str,
-        topic_id: Option<i64>,
-        transport: &str,
-    ) -> Result<String, String> {
-        let key = crate::session::key::SessionKey::for_transport(transport, chat_id, topic_id);
-        let model = self.cfg.model.as_deref().unwrap_or("gemini-3.8-flash");
-        let (mut session, _) = self.sess.resolve_session(&key, &self.cfg.provider, model).await?;
-        let sid = session.get_session_id(&self.cfg.provider);
-        let opt_sid = if sid.is_empty() { None } else { Some(&sid[..]) };
-
-        let mut session_cli = (*self.cli).clone();
-        session_cli.config.chat_id = chat_id;
-        session_cli.config.topic_id = topic_id;
-        session_cli.config.transport = transport.to_string();
-        if !session.model.is_empty() && session.model != "antigravity-default" {
-            session_cli.config.model = Some(session.model.clone());
-        }
-        if session.effort.is_some() {
-            session_cli.config.effort = session.effort.clone();
-        }
-
-        let resp = session_cli.send(prompt, opt_sid, false, self.cfg.working_dir.clone()).await?;
-        if let Some(ref new_sid) = resp.session_id
-            && !new_sid.is_empty() {
-                session.set_session_id(&self.cfg.provider, new_sid);
-            }
-        let _ = self.sess.update_session(&session).await;
-        Ok(resp.result)
     }
 }

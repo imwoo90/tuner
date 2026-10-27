@@ -37,6 +37,10 @@ fn get_media_file_id_and_ext(message: &Message) -> Option<(teloxide::types::File
         return Some((audio.file.id.clone(), "mp3".to_string()));
     } else if let Some(video) = message.video() {
         return Some((video.file.id.clone(), "mp4".to_string()));
+    } else if let Some(vn) = message.video_note() {
+        return Some((vn.file.id.clone(), "mp4".to_string()));
+    } else if let Some(sticker) = message.sticker() {
+        return Some((sticker.file.id.clone(), "webp".to_string()));
     }
     None
 }

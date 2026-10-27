@@ -143,6 +143,9 @@ impl SessionData {
         {
             ps.past_session_ids.push(ps.session_id.clone());
         }
+        if ps.session_id != session_id {
+            ps.message_count = 0;
+        }
         ps.session_id = session_id.to_string();
     }
 
@@ -160,6 +163,7 @@ impl SessionData {
                 ps.past_session_ids.push(ps.session_id.clone());
             }
             ps.session_id = String::new();
+            ps.message_count = 0;
         }
     }
 }

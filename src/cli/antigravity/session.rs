@@ -52,7 +52,7 @@ fn terminate_duplicates(
     tid: Option<i64>,
     holders: &mut HashMap<String, SessionHolder>,
 ) {
-    if let Some(c) = cid {
+    if let Some(c) = cid.filter(|&c| c != 0) {
         holders.retain(|id, h| id == sid || h.chat_id != Some(c) || h.topic_id != tid);
     }
 }

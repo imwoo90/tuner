@@ -74,10 +74,15 @@ impl RulesSelector {
             ws.join("tasks"),
             ws.join("tools").join("agent_tools"),
             ws.join("tools").join("task_tools"),
+            ws.join("tools").join("webhook_tools"),
         ] {
             if legacy_dir.is_dir() && !legacy_dir.is_symlink() {
                 let _ = std::fs::remove_dir_all(legacy_dir);
             }
+        }
+        let legacy_webhooks = self.paths.profile_home().join("webhooks.json");
+        if legacy_webhooks.is_file() {
+            let _ = std::fs::remove_file(&legacy_webhooks);
         }
 
         Ok(total_removed)

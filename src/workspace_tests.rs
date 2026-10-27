@@ -44,7 +44,6 @@ mod tests {
         assert_eq!(paths.workspace(), PathBuf::from("/home/user/.tuner/workspace"));
         assert_eq!(paths.config_path(), PathBuf::from("/home/user/.tuner/config/config.json"));
         assert_eq!(paths.cron_jobs_path(), PathBuf::from("/home/user/.tuner/cron_jobs.json"));
-        assert_eq!(paths.webhooks_path(), PathBuf::from("/home/user/.tuner/webhooks.json"));
     }
 
     #[test]

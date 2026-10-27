@@ -1,11 +1,11 @@
 //! # Session Storage Key Identifier
 //!
 //! ## Overview
-//! Defines the [`SessionKey`] representation. Matches Telegram chat/topic ID mappings or webhook channels
+//! Defines the [`SessionKey`] representation. Matches Telegram chat and forum topic ID mappings
 //! to guarantee strict separation of concurrent workspaces.
 //!
 //! ## Search Tags
-//! #session-keys, #telegram-keys, #webhook-keys, #key-serialization
+//! #session-keys, #telegram-keys, #key-serialization
 
 use std::str::FromStr;
 
@@ -45,15 +45,6 @@ impl SessionKey {
         match self.topic_id {
             None => format!("{}:{}", self.transport, self.chat_id),
             Some(tid) => format!("{}:{}:{}", self.transport, self.chat_id, tid),
-        }
-    }
-
-    /// Executes `for_transport` (for transport).
-    pub fn for_transport(transport: &str, chat_id: i64, topic_id: Option<i64>) -> Self {
-        Self {
-            transport: transport.to_string(),
-            chat_id,
-            topic_id,
         }
     }
 }
@@ -141,14 +132,6 @@ mod tests {
         assert_eq!(k2.transport, "tg");
         assert_eq!(k2.chat_id, 12345);
         assert_eq!(k2.topic_id, Some(99));
-    }
-
-    #[test]
-    fn test_for_transport_factory() {
-        let k = SessionKey::for_transport("discord", 99, Some(101));
-        assert_eq!(k.transport, "discord");
-        assert_eq!(k.chat_id, 99);
-        assert_eq!(k.topic_id, Some(101));
     }
 
     #[test]

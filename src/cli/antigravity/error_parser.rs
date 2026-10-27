@@ -63,18 +63,18 @@ const ERR_UNAVAILABLE: &str = "❌ [tuner] Model service is temporarily overload
 const ERR_NOT_FOUND: &str = "❌ [tuner] Model not found or unsupported.";
 const ERR_AUTH: &str = "❌ [tuner] Model API authentication or permission error.";
 
-const SUGG_RETRY_LATER: &str = "💡 Suggestion: The provider rate limit was reached. Please wait a short while before retrying. If your monthly quota is exhausted, check your API billing/quota settings.";
-const SUGG_QUOTA: &str = "💡 Suggestion: Your model provider quota has been exhausted. Check your API billing settings or switch to a different model with /model.";
-const SUGG_CONTEXT: &str = "💡 Suggestion: The prompt or conversation history exceeds the model's context window. Start a fresh session with /new to reset context.";
-const SUGG_OVERLOADED: &str = "💡 Suggestion: The upstream provider is experiencing high traffic or temporary downtime. Try again in a few moments, or switch models using /model.";
-const SUGG_MODEL_404: &str = "💡 Suggestion: The selected model does not exist or is not available on this endpoint. Use /model to switch to a valid model.";
-const SUGG_AUTH: &str = "💡 Suggestion: Verify your API key in ~/.tuner/.env or check permissions for your account.";
+const SUGG_RETRY_LATER: &str = "💡 Suggestion: Rate limit reached. Please wait a short while before retrying, check 5-hour/weekly quotas with /usage, or switch models with /model (or @flash, @sonnet, @opus, @argon).";
+const SUGG_QUOTA: &str = "💡 Suggestion: Your quota for this model pool has been exhausted. Check 5-hour/weekly reset timers with /usage, or switch models with /model (or @flash, @sonnet, @opus, @argon).";
+const SUGG_CONTEXT: &str = "💡 Suggestion: The prompt or history exceeds the model's context window. Start a fresh session with /new.";
+const SUGG_OVERLOADED: &str = "💡 Suggestion: The provider is experiencing high traffic. Try again shortly, or switch models using /model.";
+const SUGG_MODEL_404: &str = "💡 Suggestion: The selected model does not exist or is unavailable. Use /model to switch to a valid model.";
+const SUGG_AUTH: &str = "💡 Suggestion: Verify your API key in ~/.tuner/.env or check account permissions.";
 
-const MSG_CODE_3: &str = "❌ [tuner] Antigravity model or agent failure (exit code 3).\n💡 Suggestion: The model provider or agent failed to complete the turn. Try again in a moment, or switch models with /model.";
-const MSG_MISSING_KEY: &str = "❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. PPLX_API_KEY=sk-...) to make it globally available.";
-const MSG_TIMEOUT: &str = "❌ [tuner] Antigravity execution timed out.\n💡 Suggestion: The turn took longer than the configured timeout limit. You can retry with a smaller prompt, or extend the execution timeout.";
-const MSG_PERM_DENIED: &str = "❌ [tuner] Permission denied when executing agy.\n💡 Suggestion: Check execute permissions (chmod +x) for the agy binary or workspace path.";
-const MSG_NOT_FOUND: &str = "❌ [tuner] agy CLI is not installed or not in PATH.\n💡 Suggestion: Install agy CLI and verify it is accessible from the system PATH.";
+const MSG_CODE_3: &str = "❌ [tuner] Antigravity model or agent failure (exit code 3).\n💡 Suggestion: The model provider failed to complete the turn. Try again shortly, or switch models with /model.";
+const MSG_MISSING_KEY: &str = "❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. PPLX_API_KEY=sk-...).";
+const MSG_TIMEOUT: &str = "❌ [tuner] Antigravity execution timed out.\n💡 Suggestion: Retry with a smaller prompt, or extend the execution timeout.";
+const MSG_PERM_DENIED: &str = "❌ [tuner] Permission denied when executing agy.\n💡 Suggestion: Check execute permissions (chmod +x) for agy.";
+const MSG_NOT_FOUND: &str = "❌ [tuner] agy CLI is not installed or not in PATH.\n💡 Suggestion: Install agy CLI and verify system PATH.";
 
 fn has_any(text: &str, patterns: &[&str]) -> bool {
     patterns.iter().any(|&p| text.contains(p))
@@ -170,10 +170,11 @@ fn get_error_guidance(kind: AgyErrorKind, payload: &AgyErrorPayload) -> (&'stati
     }
 }
 
-/// Executes `format_agy_error` (format agy error).
-pub fn format_agy_error(payload: &AgyErrorPayload) -> String {
+/// Formats an [`AgyErrorPayload`] with optional active model context.
+pub fn format_agy_error(payload: &AgyErrorPayload, model: Option<&str>) -> String {
     let kind = classify_agy_error(payload);
     let (header, suggestion) = get_error_guidance(kind, payload);
+    let active_model = model.map(str::trim).filter(|m| !m.is_empty() && *m != "antigravity-default");
     let title = if kind == AgyErrorKind::General {
         if let Some(s) = payload.effective_status().filter(|s| !s.is_empty()) {
             format!("❌ [tuner] Antigravity model API error (status: {}).", s.to_uppercase())
@@ -182,6 +183,10 @@ pub fn format_agy_error(payload: &AgyErrorPayload) -> String {
         } else {
             header.to_string()
         }
+    } else if kind == AgyErrorKind::RateLimit
+        && let Some(m) = active_model
+    {
+        format!("❌ [tuner] Model API rate limit or quota exceeded (model: {}).", m)
     } else {
         header.to_string()
     };
@@ -199,10 +204,10 @@ pub fn format_agy_error(payload: &AgyErrorPayload) -> String {
     out
 }
 
-/// Executes `parse_cli_error` (parse cli error).
-pub fn parse_cli_error(stderr: &str, returncode: i32) -> String {
+/// Parses CLI stderr and exit status with optional active model context.
+pub fn parse_cli_error(stderr: &str, returncode: i32, model: Option<&str>) -> String {
     if let Some(payload) = extract_agy_error(stderr) {
-        return format_agy_error(&payload);
+        return format_agy_error(&payload, model);
     }
     let lower = stderr.to_lowercase();
     if returncode == 3 || lower.contains("exit code 3") || lower.contains("exit status: 3") || lower.contains("unix_wait_status(768)") {

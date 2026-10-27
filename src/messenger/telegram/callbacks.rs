@@ -150,8 +150,7 @@ pub(crate) async fn handle_callback_query(
     }
     let lang = if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref m)) = q.message {
         let key = crate::session::key::SessionKey::telegram(m.chat.id.0, crate::telegram::get_topic_id(m));
-        let dm = config.model.as_deref().unwrap_or("antigravity-default");
-        sessions.resolve_session(&key, &config.provider, dm).await.ok().and_then(|(s, _)| s.language)
+        sessions.get_active(&key).await.ok().flatten().and_then(|s| s.language)
     } else { None }.or_else(|| config.language.clone()).unwrap_or_else(|| "en".to_string());
     crate::i18n::TASK_ACTIVE_LANG.scope(lang, handle_callback_query_inner(bot, q, config, sessions, cron, cli, topic_cache)).await
 }

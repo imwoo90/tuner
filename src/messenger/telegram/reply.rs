@@ -168,16 +168,18 @@ pub(crate) async fn resolve_session_model(
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-        let eff = sess.effort.as_ref().or(config.effort.as_ref());
-        if let Some(eff_str) = eff
-            && !eff_str.is_empty() {
-                return format!("{} (effort: {})", sess.model, eff_str);
-            }
-        sess.model
+    let (model, sess_effort) = if let Ok(Some(sess)) = sessions.get_active(&key).await {
+        let m = if sess.model.is_empty() { default_model.to_string() } else { sess.model };
+        (m, sess.effort)
     } else {
-        default_model.to_string()
+        (default_model.to_string(), None)
+    };
+    if let Some(eff_str) = sess_effort.as_deref().or(config.effort.as_deref())
+        && !eff_str.is_empty()
+    {
+        return format!("{} (effort: {})", model, eff_str);
     }
+    model
 }
 
 

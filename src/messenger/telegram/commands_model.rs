@@ -43,13 +43,7 @@ fn group_discovered_models(raw_models: &[String]) -> Vec<(String, Vec<String>)> 
 }
 
 fn normalize_base_model(m: &str) -> &str {
-    match m {
-        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
-        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
-        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => "gemini-3.8-flash",
-        "argon" | "gemini-argon" | "gemini-4-argon" | "pro" | "gemini-3.1-pro" => "gemini-4-argon",
-        other => other,
-    }
+    AntigravityCli::normalize_model_id(m)
 }
 
 fn parse_model_effort_args(args: &str) -> (String, Option<String>) {

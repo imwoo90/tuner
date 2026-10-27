@@ -93,77 +93,43 @@ pub fn parse_limit(text: &str, header: &str) -> Option<QuotaLimit> {
 }
 
 /// Executes `parse_group_block` (parse group block).
-pub fn parse_group_block(text: &str, group_marker: &str) -> Option<ModelQuotaGroup> {
-    let pos = text.find(group_marker)?;
-    let slice = &text[pos..];
-    let mut lines = slice.lines();
-    lines.next();
-
-    let mut block = String::new();
-    for line in lines {
-        if line.contains("MODELS") { break; }
-        block.push_str(line);
-        block.push('\n');
-    }
-
+pub fn parse_group_block(text: &str, marker: &str) -> Option<ModelQuotaGroup> {
+    let slice = &text[text.find(marker)?..];
+    let block: String = slice.lines().skip(1).take_while(|l| !l.contains("MODELS")).collect::<Vec<_>>().join("\n");
     let weekly = parse_limit(&block, "Weekly Limit");
-    let five_hour = parse_limit(&block, "Five Hour Limit")
-        .or_else(|| parse_limit(&block, "5-Hour Limit"))
-        .or_else(|| parse_limit(&block, "5 Hour Limit"));
-
-    if weekly.is_some() || five_hour.is_some() {
-        Some(ModelQuotaGroup { weekly, five_hour })
-    } else {
-        None
-    }
+    let five_hour = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"].iter().find_map(|h| parse_limit(&block, h));
+    (weekly.is_some() || five_hour.is_some()).then_some(ModelQuotaGroup { weekly, five_hour })
 }
 
 /// Executes `parse_quota_report` (parse quota report).
 pub fn parse_quota_report(raw: &str) -> QuotaReport {
-    let stripped = strip_ansi(raw);
-    let account = stripped.lines()
+    let s = strip_ansi(raw);
+    let account = s.lines()
         .find(|l| l.contains("Account:") || l.contains("Account :"))
         .and_then(|l| l.split("Account").nth(1))
-        .map(|s| s.trim_start_matches(':').trim().to_string())
-        .filter(|s| !s.is_empty());
-
-    let gemini = parse_group_block(&stripped, "GEMINI");
-    let claude = parse_group_block(&stripped, "CLAUDE");
-
-    QuotaReport { account, gemini, claude, raw_fallback: stripped }
+        .map(|v| v.trim_start_matches(':').trim().to_string())
+        .filter(|v| !v.is_empty());
+    QuotaReport { account, gemini: parse_group_block(&s, "GEMINI"), claude: parse_group_block(&s, "CLAUDE"), raw_fallback: s }
 }
 
 /// Evaluates whether the Antigravity quota modal has finished loading its model groups.
 pub fn is_quota_modal_ready(text: &str) -> bool {
     let clean = strip_ansi(text);
-    if clean.contains("GEMINI MODELS") && clean.contains("CLAUDE AND GPT MODELS") {
-        let after = clean.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
-        let has_5h = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"]
-            .iter()
-            .any(|p| after.contains(p));
-        return has_5h
-            && (after.contains("Refreshes")
-                || after.contains("Resets")
-                || after.contains("Disabled"));
+    if !clean.contains("GEMINI MODELS") || !clean.contains("CLAUDE AND GPT MODELS") {
+        return false;
     }
-    false
+    let after = clean.split("CLAUDE AND GPT MODELS").nth(1).unwrap_or("");
+    let has_5h = ["Five Hour Limit", "5-Hour Limit", "5 Hour Limit"].iter().any(|p| after.contains(p));
+    has_5h && ["Refreshes", "Resets", "Disabled"].iter().any(|p| after.contains(p))
 }
 
-async fn read_quota_modal_pass(
-    cli: &AntigravityCli,
-    session_id: &str,
-    settle_ms: u64,
-) -> Result<String, String> {
-    let start_len = cli.sessions.get_output_len(session_id).await.unwrap_or(0);
-    cli.sessions.write_to_session(session_id, "/usage\r").await?;
-
-    let mut acc = Vec::new();
-    let start = Instant::now();
-    let mut ready_at: Option<Instant> = None;
-
+async fn read_quota_modal_pass(cli: &AntigravityCli, sid: &str, settle_ms: u64) -> Result<String, String> {
+    let start_len = cli.sessions.get_output_len(sid).await.unwrap_or(0);
+    cli.sessions.write_to_session(sid, "/usage\r").await?;
+    let (mut acc, start, mut ready_at) = (Vec::new(), Instant::now(), None);
     while start.elapsed() < Duration::from_millis(4000) {
         tokio::time::sleep(Duration::from_millis(80)).await;
-        if let Some(bytes) = cli.sessions.get_output_from(session_id, start_len).await {
+        if let Some(bytes) = cli.sessions.get_output_from(sid, start_len).await {
             acc = bytes;
             let raw = String::from_utf8_lossy(&acc);
             if is_quota_modal_ready(&raw) {
@@ -174,30 +140,19 @@ async fn read_quota_modal_pass(
             }
         }
     }
-
-    let _ = cli.sessions.write_to_session(session_id, "\x1b").await;
+    let _ = cli.sessions.write_to_session(sid, "\x1b").await;
     tokio::time::sleep(Duration::from_millis(150)).await;
     Ok(String::from_utf8_lossy(&acc).to_string())
 }
 
-pub(crate) async fn query_quota_from_pty(
-    cli: &AntigravityCli,
-    session_id: &str,
-) -> Result<QuotaReport, String> {
-    cli.ensure_interactive_ready(session_id).await?;
-    let first = read_quota_modal_pass(cli, session_id, 550).await?;
-
-    // Warm-cache `/usage` draws stale cached values first and updates digits in-place via
-    // cursor diff ~300ms later; re-opening after 550ms forces a clean redraw of fresh quota.
+pub(crate) async fn query_quota_from_pty(cli: &AntigravityCli, sid: &str) -> Result<QuotaReport, String> {
+    cli.ensure_interactive_ready(sid).await?;
+    let first = read_quota_modal_pass(cli, sid, 550).await?;
     let text = if !first.contains("Loading quota") && is_quota_modal_ready(&first) {
-        match read_quota_modal_pass(cli, session_id, 0).await {
-            Ok(second) if is_quota_modal_ready(&second) => second,
-            _ => first,
-        }
+        read_quota_modal_pass(cli, sid, 0).await.ok().filter(|s| is_quota_modal_ready(s)).unwrap_or(first)
     } else {
         first
     };
-
     if !text.contains("Models & Quota") && !text.contains("GEMINI MODELS") {
         return Err("Quota modal did not appear or timed out".to_string());
     }
@@ -253,7 +208,7 @@ async fn resolve_session_id(
     config: &CliConfig,
     sessions: &SessionManager,
     cli: &AntigravityCli,
-) -> Option<String> {
+) -> Option<(String, AntigravityCli)> {
     let model = config.model.as_deref().unwrap_or("antigravity-default");
     let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
 
@@ -265,17 +220,28 @@ async fn resolve_session_id(
         }
     };
 
-    match crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
-        Ok(s) if !s.is_empty() => Some(s),
+    let sid = match crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
+        Ok(s) if !s.is_empty() => s,
         Ok(_) => {
             let _ = send_reply(bot, msg, "❌ Could not initialize session for quota check").await;
-            None
+            return None;
         }
         Err(e) => {
             let _ = send_reply(bot, msg, format!("❌ Error initializing session: {}", e)).await;
-            None
+            return None;
         }
+    };
+
+    let mut session_cli = cli.clone();
+    session_cli.config.chat_id = msg.chat.id.0;
+    session_cli.config.topic_id = sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64));
+    if !sess.model.is_empty() && sess.model != "antigravity-default" {
+        session_cli.config.model = Some(sess.model.clone());
     }
+    if sess.effort.is_some() {
+        session_cli.config.effort = sess.effort.clone();
+    }
+    Some((sid, session_cli))
 }
 
 async fn send_reply_html(bot: &Bot, msg: &Message, html: &str) {
@@ -293,14 +259,14 @@ pub(crate) async fn handle_usage_command(
     sessions: &SessionManager,
     cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let Some(sid) = resolve_session_id(bot, msg, config, sessions, cli).await else {
+    let Some((sid, session_cli)) = resolve_session_id(bot, msg, config, sessions, cli).await else {
         return Ok(());
     };
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
 
-    let report = match query_quota_from_pty(cli, &sid).await {
+    let report = match query_quota_from_pty(&session_cli, &sid).await {
         Ok(r) => r,
         Err(e) => {
             drop(_g);

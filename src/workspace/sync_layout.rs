@@ -20,7 +20,6 @@ pub fn create_workspace_directories(paths: &TunerPaths) {
         "tools/user_tools",
         "tools/cron_tools",
         "tools/media_tools",
-        "tools/webhook_tools",
         "output_to_user",
         "skills",
         "skills/archive",

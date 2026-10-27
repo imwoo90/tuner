@@ -28,39 +28,54 @@ async fn handle_media_group_message(
     Ok(())
 }
 
+fn default_media_prompt(is_video_note: bool) -> &'static str {
+    if is_video_note {
+        "[Video note attached. Process or inspect the attached video file (e.g., via `view_file` or `tools/media_tools/process_video.py`) and respond directly to the user's request.]"
+    } else {
+        "[Voice message attached. Listen to or transcribe the attached audio file (e.g., via `view_file` or `tools/media_tools/transcribe_audio.py`) and respond directly to the user's spoken request.]"
+    }
+}
+
 async fn handle_single_media_message(
     bot: Bot,
     msg: Message,
     text: String,
     deps: &MediaGroupDeps,
 ) -> Result<(), teloxide::RequestError> {
-    if text.is_empty() {
-        let dest_dir = deps.config.working_dir.join("telegram_files");
-        if let Ok(Some(relative_path)) = reply::download_telegram_media(&bot, &msg, &dest_dir).await {
-            let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
-            let default_model = deps.config.model.as_deref().unwrap_or("antigravity-default");
-            if let Ok((mut sess, _)) = deps.sessions.resolve_session(&key, &deps.config.provider, default_model).await {
-                sess.pending_attachments.push(relative_path);
-                let _ = deps.sessions.preserve_session_identity(&sess).await;
-            }
+    let is_voice_or_video_note = msg.voice().is_some() || msg.video_note().is_some();
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
+    let default_model = deps.config.model.as_deref().unwrap_or("antigravity-default");
+    let dest_dir = deps.config.working_dir.join("telegram_files");
+
+    if text.is_empty() && !is_voice_or_video_note {
+        if let Ok(Some(relative_path)) = reply::download_telegram_media(&bot, &msg, &dest_dir).await
+            && let Ok((mut sess, _)) = deps.sessions.resolve_session(&key, &deps.config.provider, default_model).await
+        {
+            sess.pending_attachments.push(relative_path);
+            let _ = deps.sessions.preserve_session_identity(&sess).await;
         }
-    } else {
-        let dest_dir = deps.config.working_dir.join("telegram_files");
-        let mut files = Vec::new();
-        if let Ok(Some(relative_path)) = reply::download_telegram_media(&bot, &msg, &dest_dir).await {
-            files.push(relative_path);
-        }
-        process_text_with_files(
-            &bot,
-            &msg,
-            (&text, &files),
-            &deps.config,
-            &deps.sessions,
-            &deps.cli,
-            (&deps.cron_manager, &deps.topic_cache),
-        ).await?;
+        return Ok(());
     }
-    Ok(())
+
+    let downloaded = reply::download_telegram_media(&bot, &msg, &dest_dir).await.ok().flatten();
+    if text.is_empty() && downloaded.is_none() {
+        return Ok(());
+    }
+    let files: Vec<String> = downloaded.into_iter().collect();
+    let effective_text = if text.is_empty() {
+        default_media_prompt(msg.video_note().is_some())
+    } else {
+        text.as_str()
+    };
+    process_text_with_files(
+        &bot,
+        &msg,
+        (effective_text, &files),
+        &deps.config,
+        &deps.sessions,
+        &deps.cli,
+        (&deps.cron_manager, &deps.topic_cache),
+    ).await
 }
 
 async fn handle_pure_text_message(
@@ -69,25 +84,15 @@ async fn handle_pure_text_message(
     text: String,
     deps: &MediaGroupDeps,
 ) -> Result<(), teloxide::RequestError> {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(&msg));
-    let default_model = deps.config.model.as_deref().unwrap_or("antigravity-default");
-    let mut files = Vec::new();
-    if let Ok((mut sess, _)) = deps.sessions.resolve_session(&key, &deps.config.provider, default_model).await
-        && !sess.pending_attachments.is_empty() {
-            files = sess.pending_attachments.clone();
-            sess.pending_attachments.clear();
-            let _ = deps.sessions.preserve_session_identity(&sess).await;
-        }
     process_text_with_files(
         &bot,
         &msg,
-        (&text, &files),
+        (&text, &[]),
         &deps.config,
         &deps.sessions,
         &deps.cli,
         (&deps.cron_manager, &deps.topic_cache),
-    ).await?;
-    Ok(())
+    ).await
 }
 
 async fn route_media_message(
@@ -118,10 +123,9 @@ async fn resolve_active_lang(
     topic_id: Option<i64>,
 ) -> String {
     let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    sessions.resolve_session(&key, &config.provider, default_model).await
-        .map(|(s, _)| s.language)
+    sessions.get_active(&key).await
         .ok().flatten()
+        .and_then(|s| s.language)
         .or_else(|| config.language.clone())
         .unwrap_or_else(|| "en".to_string())
 }
