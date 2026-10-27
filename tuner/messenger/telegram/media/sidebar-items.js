@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["download_telegram_media","get_media_file_id_and_ext","has_media"]};
+window.SIDEBAR_ITEMS = {"fn":["download_telegram_media","get_media_file_id_and_suffix","has_media","resolve_named_suffix","sanitize_filename"]};
