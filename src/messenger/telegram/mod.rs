@@ -271,6 +271,9 @@ pub(crate) fn strip_new_or_reset_prefix(text: &str) -> &str {
 }
 
 async fn drain_session_attachments(
+    bot: &Bot,
+    msg: &Message,
+    config: &CliConfig,
     sess: &mut crate::session::data::SessionData,
     pre_downloaded_files: &[String],
     sessions: &SessionManager,
@@ -282,6 +285,16 @@ async fn drain_session_attachments(
     } else {
         Vec::new()
     };
+    if let Some(replied) = msg.reply_to_message()
+        && reply::has_media(replied)
+    {
+        let dest_dir = config.working_dir.join("telegram_files");
+        if let Ok(Some(replied_file)) = reply::download_telegram_media(bot, replied, &dest_dir).await
+            && !all_files.contains(&replied_file)
+        {
+            all_files.push(replied_file);
+        }
+    }
     for f in pre_downloaded_files {
         if !all_files.contains(f) {
             all_files.push(f.clone());
@@ -344,7 +357,7 @@ pub(crate) async fn process_text_with_files(
         queue_pending_files(msg, files, config, sessions.as_ref()).await;
         return Ok(());
     }
-    let all_files = drain_session_attachments(&mut sess, files, sessions.as_ref()).await;
+    let all_files = drain_session_attachments(bot, msg, config, &mut sess, files, sessions.as_ref()).await;
     let mut prompt = build_reply_prompt(msg, &escaped);
     inject_pre_downloaded_files(&mut prompt, &all_files);
     run_cli_stream(bot, msg, &prompt, &sid, cli, (sessions.as_ref(), sess), config).await

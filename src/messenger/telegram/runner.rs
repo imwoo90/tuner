@@ -45,7 +45,10 @@ fn start_schedulers(
     } else {
         cfg.allowed_user_ids.clone()
     };
-    bus.register_transport(Arc::new(super::transport::TelegramTransport::with_targets(bot, targets)));
+    bus.register_transport(Arc::new(
+        super::transport::TelegramTransport::with_targets(bot, targets)
+            .with_context(cfg.clone(), sess.clone()),
+    ));
     Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli, bus.clone())).start();
     let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
     Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), bus.clone())).start();

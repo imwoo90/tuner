@@ -9,11 +9,16 @@
 //! #async-observer, #transcript-watcher, #background-turn
 
 use teloxide::prelude::*;
+use teloxide::types::MessageId;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::{Arc, Mutex, LazyLock};
+use std::time::{Duration, Instant};
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::antigravity::log_parser::{AntigravityLogParser, ParsedLogDelta};
+use crate::session::data::SessionData;
+use crate::session::key::SessionKey;
 use crate::session::manager::SessionManager;
 use notify::{Watcher, RecursiveMode, EventKind};
 
@@ -58,18 +63,38 @@ pub(crate) fn spawn_session_async_observer(
     });
 }
 
+async fn clear_progress_and_get_topic_name(ctx: &ObserverCtx) -> Option<String> {
+    let key = SessionKey::telegram(ctx.chat_id.0, ctx.thread_id.map(|t| t as i64));
+    if let Ok(Some(mut sess)) = ctx.sessions.get_active(&key).await {
+        if let Some(last_mid) = sess.last_progress_msg_id {
+            let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| ctx.config.telegram_token.clone());
+            super::typing::clear_old_progress_reaction(last_mid, ctx.chat_id, tok);
+            sess.last_progress_msg_id = None;
+            let _ = ctx.sessions.preserve_session_identity(&sess).await;
+        }
+        return sess.topic_name;
+    }
+    None
+}
+
 async fn handle_async_turn_output(
     ctx: &ObserverCtx,
-    msg_id: Option<teloxide::types::MessageId>,
+    prev_progress_id: Option<MessageId>,
     txt: &str,
 ) {
+    let topic_name = clear_progress_and_get_topic_name(ctx).await;
+    if let Some(prev_mid) = prev_progress_id
+        && !txt.trim().is_empty()
+    {
+        let _ = ctx.bot.delete_message(ctx.chat_id, prev_mid).await;
+    }
     let chunks = super::formatting::split_html_message(&super::formatting::markdown_to_telegram_html(txt), 4000);
-    let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, msg_id, ctx.thread_id, &chunks).await;
+    let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, None, ctx.thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(&ctx.bot, ctx.chat_id, ctx.thread_id, txt, &ctx.config).await;
     super::history::log_telegram_message(
         &ctx.config.working_dir,
         &ctx.session_id,
-        (ctx.thread_id.map(|t| t as i64), None),
+        (ctx.thread_id.map(|t| t as i64), topic_name.as_deref()),
         "bot",
         sent_id,
         txt,
@@ -78,7 +103,7 @@ async fn handle_async_turn_output(
 }
 
 fn create_brain_dir_watcher(
-    brain_dir: &std::path::Path,
+    brain_dir: &Path,
     fs_tx: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> Option<notify::RecommendedWatcher> {
     if let Ok(mut w) = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
@@ -96,9 +121,9 @@ fn create_brain_dir_watcher(
 struct ActiveAsyncTurn {
     _guard: tokio::sync::OwnedMutexGuard<()>,
     typing: super::typing::AsyncTypingHandle,
-    last_activity: std::time::Instant,
-    pub_msg_id: Option<teloxide::types::MessageId>,
-    last_edit: std::time::Instant,
+    last_activity: Instant,
+    pub_msg_id: Option<MessageId>,
+    last_edit: Instant,
     last_text: String,
 }
 
@@ -121,7 +146,11 @@ async fn dispatch_terminal_event(
 
     if let Some(ask) = delta.ask_question {
         if let Some(turn) = active_turn { turn.typing.abort(); }
-        let mut sess_data = crate::session::data::SessionData::default();
+        let mut sess_data = SessionData {
+            topic_id,
+            topic_name: clear_progress_and_get_topic_name(ctx).await,
+            ..Default::default()
+        };
         sess_data.set_session_id(&ctx.config.provider, &ctx.session_id);
         let _ = super::ask_process::handle_ask_question_event(
             &ctx.bot, ctx.chat_id, ctx.thread_id, ask, &sess_data, &ctx.config, &ctx.cli,
@@ -143,14 +172,14 @@ async fn ensure_active_turn(
             *active_turn = Some(ActiveAsyncTurn {
                 _guard: guard,
                 typing,
-                last_activity: std::time::Instant::now(),
+                last_activity: Instant::now(),
                 pub_msg_id: None,
-                last_edit: std::time::Instant::now(),
+                last_edit: Instant::now(),
                 last_text: String::new(),
             });
         }
     } else if let Some(turn) = active_turn {
-        turn.last_activity = std::time::Instant::now();
+        turn.last_activity = Instant::now();
     }
 }
 
@@ -174,7 +203,7 @@ async fn update_active_turn_progress(
 
 async fn check_and_dispatch_delta(
     ctx: &ObserverCtx,
-    transcript_path: &std::path::Path,
+    transcript_path: &Path,
     last_size: &mut u64,
     parser: &mut AntigravityLogParser,
     active_turn: &mut Option<ActiveAsyncTurn>,
@@ -202,23 +231,15 @@ async fn check_and_dispatch_delta(
 async fn handle_running_state_check(
     cli: &AntigravityCli,
     session_id: &str,
-    transcript_path: &std::path::Path,
+    transcript_path: &Path,
     was_running: &mut bool,
     last_size: &mut u64,
     parser: &mut AntigravityLogParser,
 ) -> bool {
     let is_running = cli.sessions.is_running(session_id).await;
-    let recent_int = cli.sessions.was_recently_interrupted(session_id, std::time::Duration::from_secs(6)).await;
-    if is_running || recent_int {
+    let recent_int = cli.sessions.was_recently_interrupted(session_id, Duration::from_secs(6)).await;
+    if is_running || recent_int || *was_running {
         *was_running = is_running;
-        cli.sessions.set_async_running(session_id, false).await;
-        *last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(*last_size);
-        *parser = AntigravityLogParser::new();
-        return true;
-    }
-
-    if *was_running {
-        *was_running = false;
         cli.sessions.set_async_running(session_id, false).await;
         *last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(*last_size);
         *parser = AntigravityLogParser::new();
@@ -236,7 +257,7 @@ async fn run_observer_loop(ctx: ObserverCtx) {
     let mut parser = AntigravityLogParser::new();
     let (fs_tx, mut fs_rx) = tokio::sync::mpsc::unbounded_channel();
     let watcher = create_brain_dir_watcher(&bd, fs_tx);
-    let mut tick = tokio::time::interval(tokio::time::Duration::from_secs(4));
+    let mut tick = tokio::time::interval(Duration::from_secs(4));
     let (mut was_running, mut active_turn) = (false, None::<ActiveAsyncTurn>);
 
     loop {
@@ -250,7 +271,7 @@ async fn run_observer_loop(ctx: ObserverCtx) {
             active_turn = None;
             continue;
         }
-        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > std::time::Duration::from_secs(60)) {
+        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > Duration::from_secs(60)) {
             ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
             active_turn = None;
         }

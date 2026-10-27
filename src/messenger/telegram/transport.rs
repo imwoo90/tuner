@@ -7,14 +7,19 @@
 //! ## Search Tags
 //! #transport-adapter, #message-bus, #quiet-hour-queue, #topic-routing
 
+use std::sync::Arc;
 use teloxide::prelude::*;
 use crate::bus::bus::Transport;
 use crate::bus::envelope::Envelope;
+use crate::config::CliConfig;
+use crate::session::manager::SessionManager;
 
 /// Represents `TelegramTransport` (telegram transport).
 pub struct TelegramTransport {
     bot: Bot,
     broadcast_targets: Vec<i64>,
+    config: Option<Arc<CliConfig>>,
+    sessions: Option<Arc<SessionManager>>,
 }
 
 impl TelegramTransport {
@@ -23,6 +28,46 @@ impl TelegramTransport {
         Self {
             bot,
             broadcast_targets,
+            config: None,
+            sessions: None,
+        }
+    }
+
+    /// Attaches workspace configuration and session manager for file review links and topic history logging.
+    pub fn with_context(mut self, config: Arc<CliConfig>, sessions: Arc<SessionManager>) -> Self {
+        self.config = Some(config);
+        self.sessions = Some(sessions);
+        self
+    }
+
+    async fn log_to_topic_history(
+        &self,
+        cfg: &CliConfig,
+        sessions: &SessionManager,
+        envelope: &Envelope,
+        sent_id: Option<i32>,
+        status: (bool, Option<&str>),
+    ) {
+        let key = crate::session::key::SessionKey::telegram(envelope.chat_id, envelope.topic_id);
+        let Ok(Some(sess)) = sessions.get_active(&key).await else {
+            return;
+        };
+        let active_sid = sess.get_session_id(&cfg.provider);
+        let target_sid = if !active_sid.is_empty() {
+            active_sid
+        } else {
+            sess.get_past_session_ids(&cfg.provider).last().cloned().unwrap_or_default()
+        };
+        if !target_sid.is_empty() {
+            super::history::log_telegram_message(
+                &cfg.working_dir,
+                &target_sid,
+                (envelope.topic_id, sess.topic_name.as_deref()),
+                "bot",
+                sent_id,
+                &envelope.result_text,
+                status,
+            );
         }
     }
 }
@@ -41,7 +86,20 @@ impl Transport for TelegramTransport {
         let thread_id = envelope.topic_id.map(|t| t as i32);
         let html_text = crate::telegram::formatting::markdown_to_telegram_html(&envelope.result_text);
         let chunks = crate::telegram::formatting::splitting::split_html_message(&html_text, 4000);
-        crate::telegram::stream::send_chunks_to_telegram(&self.bot, chat_id, None, thread_id, &chunks).await;
+        let (ok, err, sent_id) = crate::telegram::stream::send_chunks_to_telegram(&self.bot, chat_id, None, thread_id, &chunks).await;
+        if let Some(ref cfg) = self.config {
+            super::attachments::send_file_attachments(&self.bot, chat_id, thread_id, &envelope.result_text, cfg).await;
+            if let Some(ref sessions) = self.sessions {
+                let status = if envelope.is_error {
+                    (false, Some(envelope.status.as_str()))
+                } else if cfg!(test) {
+                    (true, None)
+                } else {
+                    (ok, err.as_deref())
+                };
+                self.log_to_topic_history(cfg, sessions, envelope, sent_id, status).await;
+            }
+        }
         Ok(())
     }
 
