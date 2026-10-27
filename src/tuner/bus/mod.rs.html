@@ -2,22 +2,20 @@
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! ## Overview
 <a href=#4 id=4 data-nosnippet>4</a>//! Coordinates asynchronous event routing, chat/topic lock pooling, and transport delivery
-<a href=#5 id=5 data-nosnippet>5</a>//! adapters across background runners, cron jobs, heartbeats, and webhooks.
+<a href=#5 id=5 data-nosnippet>5</a>//! adapters across background runners, cron jobs, and heartbeats.
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Submodules
 <a href=#8 id=8 data-nosnippet>8</a>//! - [`envelope`] (`envelope.rs`): Structs and enums defining the bus message envelope format.
 <a href=#9 id=9 data-nosnippet>9</a>//! - [`adapters`] (`adapters.rs`): Converters mapping domain task results into bus envelopes.
 <a href=#10 id=10 data-nosnippet>10</a>//! - [`lock_pool`] (`lock_pool.rs`): Per-chat and per-topic async mutex pool.
 <a href=#11 id=11 data-nosnippet>11</a>//! - [`bus`] (`bus.rs`): Core `MessageBus` dispatching unicast and broadcast events.
-<a href=#12 id=12 data-nosnippet>12</a>//! - [`observers_wire`] (`observers_wire.rs`): Wiring helpers connecting background observer runtimes to the bus.
-<a href=#13 id=13 data-nosnippet>13</a>//!
-<a href=#14 id=14 data-nosnippet>14</a>//! ## Search Tags
-<a href=#15 id=15 data-nosnippet>15</a>//! #message-bus, #event-routing, #lock-pool, #transport-adapters
-<a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub mod </span>envelope;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>adapters;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub mod </span>lock_pool;
-<a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[allow(clippy::module_inception)]
-<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub mod </span>bus;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub mod </span>observers_wire;
+<a href=#12 id=12 data-nosnippet>12</a>//!
+<a href=#13 id=13 data-nosnippet>13</a>//! ## Search Tags
+<a href=#14 id=14 data-nosnippet>14</a>//! #message-bus, #event-routing, #lock-pool, #transport-adapters
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">pub mod </span>envelope;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub mod </span>adapters;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>lock_pool;
+<a href=#19 id=19 data-nosnippet>19</a><span class="attr">#[allow(clippy::module_inception)]
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">pub mod </span>bus;
 </code></pre></div></section></main></body></html>

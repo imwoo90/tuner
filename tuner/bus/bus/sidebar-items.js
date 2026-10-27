@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["generate_envelope_id","normalize_transport_name"],"struct":["MessageBus"],"trait":["PromptInjector","Transport"]};
+window.SIDEBAR_ITEMS = {"fn":["generate_envelope_id","normalize_transport_name"],"struct":["MessageBus"],"trait":["Transport"]};

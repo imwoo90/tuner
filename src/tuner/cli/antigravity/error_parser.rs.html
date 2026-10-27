@@ -63,18 +63,18 @@
 <a href=#63 id=63 data-nosnippet>63</a><span class="kw">const </span>ERR_NOT_FOUND: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Model not found or unsupported."</span>;
 <a href=#64 id=64 data-nosnippet>64</a><span class="kw">const </span>ERR_AUTH: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Model API authentication or permission error."</span>;
 <a href=#65 id=65 data-nosnippet>65</a>
-<a href=#66 id=66 data-nosnippet>66</a><span class="kw">const </span>SUGG_RETRY_LATER: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The provider rate limit was reached. Please wait a short while before retrying. If your monthly quota is exhausted, check your API billing/quota settings."</span>;
-<a href=#67 id=67 data-nosnippet>67</a><span class="kw">const </span>SUGG_QUOTA: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: Your model provider quota has been exhausted. Check your API billing settings or switch to a different model with /model."</span>;
-<a href=#68 id=68 data-nosnippet>68</a><span class="kw">const </span>SUGG_CONTEXT: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The prompt or conversation history exceeds the model's context window. Start a fresh session with /new to reset context."</span>;
-<a href=#69 id=69 data-nosnippet>69</a><span class="kw">const </span>SUGG_OVERLOADED: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The upstream provider is experiencing high traffic or temporary downtime. Try again in a few moments, or switch models using /model."</span>;
-<a href=#70 id=70 data-nosnippet>70</a><span class="kw">const </span>SUGG_MODEL_404: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The selected model does not exist or is not available on this endpoint. Use /model to switch to a valid model."</span>;
-<a href=#71 id=71 data-nosnippet>71</a><span class="kw">const </span>SUGG_AUTH: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: Verify your API key in ~/.tuner/.env or check permissions for your account."</span>;
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">const </span>SUGG_RETRY_LATER: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: Rate limit reached. Please wait a short while before retrying, check 5-hour/weekly quotas with /usage, or switch models with /model (or @flash, @sonnet, @opus, @argon)."</span>;
+<a href=#67 id=67 data-nosnippet>67</a><span class="kw">const </span>SUGG_QUOTA: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: Your quota for this model pool has been exhausted. Check 5-hour/weekly reset timers with /usage, or switch models with /model (or @flash, @sonnet, @opus, @argon)."</span>;
+<a href=#68 id=68 data-nosnippet>68</a><span class="kw">const </span>SUGG_CONTEXT: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The prompt or history exceeds the model's context window. Start a fresh session with /new."</span>;
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">const </span>SUGG_OVERLOADED: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The provider is experiencing high traffic. Try again shortly, or switch models using /model."</span>;
+<a href=#70 id=70 data-nosnippet>70</a><span class="kw">const </span>SUGG_MODEL_404: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: The selected model does not exist or is unavailable. Use /model to switch to a valid model."</span>;
+<a href=#71 id=71 data-nosnippet>71</a><span class="kw">const </span>SUGG_AUTH: <span class="kw-2">&amp;</span>str = <span class="string">"💡 Suggestion: Verify your API key in ~/.tuner/.env or check account permissions."</span>;
 <a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a><span class="kw">const </span>MSG_CODE_3: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Antigravity model or agent failure (exit code 3).\n💡 Suggestion: The model provider or agent failed to complete the turn. Try again in a moment, or switch models with /model."</span>;
-<a href=#74 id=74 data-nosnippet>74</a><span class="kw">const </span>MSG_MISSING_KEY: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. PPLX_API_KEY=sk-...) to make it globally available."</span>;
-<a href=#75 id=75 data-nosnippet>75</a><span class="kw">const </span>MSG_TIMEOUT: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Antigravity execution timed out.\n💡 Suggestion: The turn took longer than the configured timeout limit. You can retry with a smaller prompt, or extend the execution timeout."</span>;
-<a href=#76 id=76 data-nosnippet>76</a><span class="kw">const </span>MSG_PERM_DENIED: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Permission denied when executing agy.\n💡 Suggestion: Check execute permissions (chmod +x) for the agy binary or workspace path."</span>;
-<a href=#77 id=77 data-nosnippet>77</a><span class="kw">const </span>MSG_NOT_FOUND: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] agy CLI is not installed or not in PATH.\n💡 Suggestion: Install agy CLI and verify it is accessible from the system PATH."</span>;
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">const </span>MSG_CODE_3: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Antigravity model or agent failure (exit code 3).\n💡 Suggestion: The model provider failed to complete the turn. Try again shortly, or switch models with /model."</span>;
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">const </span>MSG_MISSING_KEY: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] API key is missing or not configured.\n💡 Suggestion: Write your API key into ~/.tuner/.env (e.g. PPLX_API_KEY=sk-...)."</span>;
+<a href=#75 id=75 data-nosnippet>75</a><span class="kw">const </span>MSG_TIMEOUT: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Antigravity execution timed out.\n💡 Suggestion: Retry with a smaller prompt, or extend the execution timeout."</span>;
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">const </span>MSG_PERM_DENIED: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] Permission denied when executing agy.\n💡 Suggestion: Check execute permissions (chmod +x) for agy."</span>;
+<a href=#77 id=77 data-nosnippet>77</a><span class="kw">const </span>MSG_NOT_FOUND: <span class="kw-2">&amp;</span>str = <span class="string">"❌ [tuner] agy CLI is not installed or not in PATH.\n💡 Suggestion: Install agy CLI and verify system PATH."</span>;
 <a href=#78 id=78 data-nosnippet>78</a>
 <a href=#79 id=79 data-nosnippet>79</a><span class="kw">fn </span>has_any(text: <span class="kw-2">&amp;</span>str, patterns: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; bool {
 <a href=#80 id=80 data-nosnippet>80</a>    patterns.iter().any(|<span class="kw-2">&amp;</span>p| text.contains(p))
@@ -170,63 +170,68 @@
 <a href=#170 id=170 data-nosnippet>170</a>    }
 <a href=#171 id=171 data-nosnippet>171</a>}
 <a href=#172 id=172 data-nosnippet>172</a>
-<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// Executes `format_agy_error` (format agy error).
-<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">pub fn </span>format_agy_error(payload: <span class="kw-2">&amp;</span>AgyErrorPayload) -&gt; String {
+<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// Formats an [`AgyErrorPayload`] with optional active model context.
+<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">pub fn </span>format_agy_error(payload: <span class="kw-2">&amp;</span>AgyErrorPayload, model: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>kind = classify_agy_error(payload);
 <a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>(header, suggestion) = get_error_guidance(kind, payload);
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>title = <span class="kw">if </span>kind == AgyErrorKind::General {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(s) = payload.effective_status().filter(|s| !s.is_empty()) {
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="macro">format!</span>(<span class="string">"❌ [tuner] Antigravity model API error (status: {})."</span>, s.to_uppercase())
-<a href=#180 id=180 data-nosnippet>180</a>        } <span class="kw">else if let </span><span class="prelude-val">Some</span>(c) = payload.code_as_i64() {
-<a href=#181 id=181 data-nosnippet>181</a>            <span class="macro">format!</span>(<span class="string">"❌ [tuner] Antigravity model API error (code: {})."</span>, c)
-<a href=#182 id=182 data-nosnippet>182</a>        } <span class="kw">else </span>{
-<a href=#183 id=183 data-nosnippet>183</a>            header.to_string()
-<a href=#184 id=184 data-nosnippet>184</a>        }
-<a href=#185 id=185 data-nosnippet>185</a>    } <span class="kw">else </span>{
-<a href=#186 id=186 data-nosnippet>186</a>        header.to_string()
-<a href=#187 id=187 data-nosnippet>187</a>    };
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = <span class="macro">format!</span>(<span class="string">"{}\n{}"</span>, title, suggestion);
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(msg) = payload.effective_message() {
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>trimmed = msg.trim();
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if </span>!trimmed.is_empty() {
-<a href=#193 id=193 data-nosnippet>193</a>            out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\n\nDetails: {}"</span>, trimmed));
-<a href=#194 id=194 data-nosnippet>194</a>        }
-<a href=#195 id=195 data-nosnippet>195</a>    }
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>eid) = payload.error_id {
-<a href=#197 id=197 data-nosnippet>197</a>        out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\nError ID: {}"</span>, eid));
-<a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>    out
-<a href=#200 id=200 data-nosnippet>200</a>}
-<a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a><span class="doccomment">/// Executes `parse_cli_error` (parse cli error).
-<a href=#203 id=203 data-nosnippet>203</a></span><span class="kw">pub fn </span>parse_cli_error(stderr: <span class="kw-2">&amp;</span>str, returncode: i32) -&gt; String {
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(payload) = extract_agy_error(stderr) {
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">return </span>format_agy_error(<span class="kw-2">&amp;</span>payload);
-<a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>lower = stderr.to_lowercase();
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">if </span>returncode == <span class="number">3 </span>|| lower.contains(<span class="string">"exit code 3"</span>) || lower.contains(<span class="string">"exit status: 3"</span>) || lower.contains(<span class="string">"unix_wait_status(768)"</span>) {
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>trimmed = stderr.trim();
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">return if </span>trimmed.is_empty() {
-<a href=#211 id=211 data-nosnippet>211</a>            MSG_CODE_3.to_string()
-<a href=#212 id=212 data-nosnippet>212</a>        } <span class="kw">else </span>{
-<a href=#213 id=213 data-nosnippet>213</a>            <span class="macro">format!</span>(<span class="string">"{}\n\nDetails: {}"</span>, MSG_CODE_3, trimmed)
-<a href=#214 id=214 data-nosnippet>214</a>        };
-<a href=#215 id=215 data-nosnippet>215</a>    }
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">if </span>has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"api key not found"</span>, <span class="string">"api_key not found"</span>, <span class="string">"api key is missing"</span>]) {
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">return </span>MSG_MISSING_KEY.to_string();
-<a href=#218 id=218 data-nosnippet>218</a>    }
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">if </span>lower.starts_with(<span class="string">"command timed out"</span>) || lower.contains(<span class="string">"command timed out after"</span>) {
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">return </span>MSG_TIMEOUT.to_string();
-<a href=#221 id=221 data-nosnippet>221</a>    }
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">if </span>returncode == <span class="number">126
-<a href=#223 id=223 data-nosnippet>223</a>        </span>|| (lower.contains(<span class="string">"permission denied"</span>) &amp;&amp; has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"agy"</span>, <span class="string">"/bin"</span>, <span class="string">"exec"</span>]))
-<a href=#224 id=224 data-nosnippet>224</a>    {
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">return </span>MSG_PERM_DENIED.to_string();
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>active_model = model.map(str::trim).filter(|m| !m.is_empty() &amp;&amp; <span class="kw-2">*</span>m != <span class="string">"antigravity-default"</span>);
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>title = <span class="kw">if </span>kind == AgyErrorKind::General {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(s) = payload.effective_status().filter(|s| !s.is_empty()) {
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="macro">format!</span>(<span class="string">"❌ [tuner] Antigravity model API error (status: {})."</span>, s.to_uppercase())
+<a href=#181 id=181 data-nosnippet>181</a>        } <span class="kw">else if let </span><span class="prelude-val">Some</span>(c) = payload.code_as_i64() {
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="macro">format!</span>(<span class="string">"❌ [tuner] Antigravity model API error (code: {})."</span>, c)
+<a href=#183 id=183 data-nosnippet>183</a>        } <span class="kw">else </span>{
+<a href=#184 id=184 data-nosnippet>184</a>            header.to_string()
+<a href=#185 id=185 data-nosnippet>185</a>        }
+<a href=#186 id=186 data-nosnippet>186</a>    } <span class="kw">else if </span>kind == AgyErrorKind::RateLimit
+<a href=#187 id=187 data-nosnippet>187</a>        &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(m) = active_model
+<a href=#188 id=188 data-nosnippet>188</a>    {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="macro">format!</span>(<span class="string">"❌ [tuner] Model API rate limit or quota exceeded (model: {})."</span>, m)
+<a href=#190 id=190 data-nosnippet>190</a>    } <span class="kw">else </span>{
+<a href=#191 id=191 data-nosnippet>191</a>        header.to_string()
+<a href=#192 id=192 data-nosnippet>192</a>    };
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = <span class="macro">format!</span>(<span class="string">"{}\n{}"</span>, title, suggestion);
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(msg) = payload.effective_message() {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span>trimmed = msg.trim();
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">if </span>!trimmed.is_empty() {
+<a href=#198 id=198 data-nosnippet>198</a>            out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\n\nDetails: {}"</span>, trimmed));
+<a href=#199 id=199 data-nosnippet>199</a>        }
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>eid) = payload.error_id {
+<a href=#202 id=202 data-nosnippet>202</a>        out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\nError ID: {}"</span>, eid));
+<a href=#203 id=203 data-nosnippet>203</a>    }
+<a href=#204 id=204 data-nosnippet>204</a>    out
+<a href=#205 id=205 data-nosnippet>205</a>}
+<a href=#206 id=206 data-nosnippet>206</a>
+<a href=#207 id=207 data-nosnippet>207</a><span class="doccomment">/// Parses CLI stderr and exit status with optional active model context.
+<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">pub fn </span>parse_cli_error(stderr: <span class="kw-2">&amp;</span>str, returncode: i32, model: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; String {
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(payload) = extract_agy_error(stderr) {
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">return </span>format_agy_error(<span class="kw-2">&amp;</span>payload, model);
+<a href=#211 id=211 data-nosnippet>211</a>    }
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>lower = stderr.to_lowercase();
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">if </span>returncode == <span class="number">3 </span>|| lower.contains(<span class="string">"exit code 3"</span>) || lower.contains(<span class="string">"exit status: 3"</span>) || lower.contains(<span class="string">"unix_wait_status(768)"</span>) {
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>trimmed = stderr.trim();
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">return if </span>trimmed.is_empty() {
+<a href=#216 id=216 data-nosnippet>216</a>            MSG_CODE_3.to_string()
+<a href=#217 id=217 data-nosnippet>217</a>        } <span class="kw">else </span>{
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="macro">format!</span>(<span class="string">"{}\n\nDetails: {}"</span>, MSG_CODE_3, trimmed)
+<a href=#219 id=219 data-nosnippet>219</a>        };
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">if </span>has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"api key not found"</span>, <span class="string">"api_key not found"</span>, <span class="string">"api key is missing"</span>]) {
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">return </span>MSG_MISSING_KEY.to_string();
+<a href=#223 id=223 data-nosnippet>223</a>    }
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">if </span>lower.starts_with(<span class="string">"command timed out"</span>) || lower.contains(<span class="string">"command timed out after"</span>) {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">return </span>MSG_TIMEOUT.to_string();
 <a href=#226 id=226 data-nosnippet>226</a>    }
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">if </span>returncode == <span class="number">127 </span>|| has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"command not found"</span>, <span class="string">"agy: not found"</span>]) {
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">return </span>MSG_NOT_FOUND.to_string();
-<a href=#229 id=229 data-nosnippet>229</a>    }
-<a href=#230 id=230 data-nosnippet>230</a>    stderr.to_string()
-<a href=#231 id=231 data-nosnippet>231</a>}
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">if </span>returncode == <span class="number">126
+<a href=#228 id=228 data-nosnippet>228</a>        </span>|| (lower.contains(<span class="string">"permission denied"</span>) &amp;&amp; has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"agy"</span>, <span class="string">"/bin"</span>, <span class="string">"exec"</span>]))
+<a href=#229 id=229 data-nosnippet>229</a>    {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">return </span>MSG_PERM_DENIED.to_string();
+<a href=#231 id=231 data-nosnippet>231</a>    }
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">if </span>returncode == <span class="number">127 </span>|| has_any(<span class="kw-2">&amp;</span>lower, <span class="kw-2">&amp;</span>[<span class="string">"command not found"</span>, <span class="string">"agy: not found"</span>]) {
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">return </span>MSG_NOT_FOUND.to_string();
+<a href=#234 id=234 data-nosnippet>234</a>    }
+<a href=#235 id=235 data-nosnippet>235</a>    stderr.to_string()
+<a href=#236 id=236 data-nosnippet>236</a>}
 </code></pre></div></section></main></body></html>

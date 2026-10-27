@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["auth","manager","models","observer","server"]};

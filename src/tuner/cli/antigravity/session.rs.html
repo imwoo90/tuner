@@ -52,7 +52,7 @@
 <a href=#52 id=52 data-nosnippet>52</a>    tid: <span class="prelude-ty">Option</span>&lt;i64&gt;,
 <a href=#53 id=53 data-nosnippet>53</a>    holders: <span class="kw-2">&amp;mut </span>HashMap&lt;String, SessionHolder&gt;,
 <a href=#54 id=54 data-nosnippet>54</a>) {
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(c) = cid {
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(c) = cid.filter(|<span class="kw-2">&amp;</span>c| c != <span class="number">0</span>) {
 <a href=#56 id=56 data-nosnippet>56</a>        holders.retain(|id, h| id == sid || h.chat_id != <span class="prelude-val">Some</span>(c) || h.topic_id != tid);
 <a href=#57 id=57 data-nosnippet>57</a>    }
 <a href=#58 id=58 data-nosnippet>58</a>}

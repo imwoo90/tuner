@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["from_cron_result","from_heartbeat","from_webhook_cron_result","from_webhook_wake"],"struct":["WebhookResult"]};
+window.SIDEBAR_ITEMS = {"fn":["from_cron_result","from_heartbeat"]};
