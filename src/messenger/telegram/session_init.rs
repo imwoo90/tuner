@@ -124,7 +124,7 @@ async fn handle_boot_success(
     mut res: crate::cli::CliResponse,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
-    let thread_id = msg.thread_id.map(|t| t.0.0);
+    let thread_id = sess.topic_id.map(|t| t as i32).or_else(|| msg.thread_id.map(|t| t.0.0));
     if res.is_error {
         let topic = (sess.topic_id, sess.topic_name.as_deref());
         let _ = super::stream::handle_stream_result(bot, msg.chat.id, None, thread_id, topic, res, config).await;
@@ -163,7 +163,8 @@ async fn handle_boot_response(
             let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1, config.model.as_deref());
             let html = super::formatting::markdown_to_telegram_html(&err_msg);
             let chunks = super::formatting::split_html_message(&html, 4000);
-            let _ = super::stream::send_chunks_to_telegram(bot, msg.chat.id, None, msg.thread_id.map(|t| t.0.0), &chunks).await;
+            let thread_id = sess.topic_id.map(|t| t as i32).or_else(|| msg.thread_id.map(|t| t.0.0));
+            let _ = super::stream::send_chunks_to_telegram(bot, msg.chat.id, None, thread_id, &chunks).await;
             Ok(String::new())
         }
     }

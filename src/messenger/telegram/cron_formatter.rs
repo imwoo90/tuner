@@ -81,6 +81,49 @@ pub(crate) fn format_schedule_display(schedule: &str, timezone: &str) -> String 
     format!("{}{}", natural, next_run_str)
 }
 
+pub(crate) fn format_job_and_buttons(
+    job: &CronJob,
+    number: usize,
+    idx: usize,
+    current_page: usize,
+    default_tz: &str,
+    topic_cache: Option<&TopicNameCache>,
+) -> (String, Vec<teloxide::types::InlineKeyboardButton>) {
+    let status = if job.enabled { t!("bot.cron_active") } else { t!("bot.cron_inactive") };
+    let last_run_val = job.last_run_status.as_deref().unwrap_or("");
+    let last_run = if last_run_val.is_empty() { t!("bot.cron_no_last_run") } else { last_run_val.to_string() };
+    let number_str = number.to_string();
+    let target = format_target_topic(job, topic_cache);
+    let model = job.model.as_deref().unwrap_or("default");
+    let effective_tz = if job.timezone.is_empty() { default_tz } else { &job.timezone };
+    let schedule = format_schedule_display(&job.schedule, effective_tz);
+    let line = t!(
+        "bot.cron_job_line",
+        number = number_str,
+        title = html_escape::encode_safe(&job.title),
+        status = status,
+        schedule = schedule,
+        target = target,
+        model = html_escape::encode_safe(model),
+        last_run = html_escape::encode_safe(&last_run)
+    );
+    let button_text = if job.enabled {
+        t!("bot.cron_deactivate_num", number = number_str)
+    } else {
+        t!("bot.cron_activate_num", number = number_str)
+    };
+    let fp = fingerprint(&job.id);
+    let toggle_btn = teloxide::types::InlineKeyboardButton::callback(
+        button_text,
+        format!("crn:t:{}:{}:{}", current_page, idx, fp),
+    );
+    let run_btn = teloxide::types::InlineKeyboardButton::callback(
+        t!("bot.cron_run_num", number = number_str),
+        format!("crn:run:{}:{}:{}", current_page, idx, fp),
+    );
+    (line, vec![toggle_btn, run_btn])
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

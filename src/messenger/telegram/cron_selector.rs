@@ -15,61 +15,10 @@ use crate::config::CliConfig;
 use crate::cron::manager::{CronJob, CronManager};
 use crate::session::manager::SessionManager;
 use crate::t;
-use super::cron_formatter::{fingerprint, format_schedule_display, format_target_topic};
+use super::cron_formatter::{fingerprint, format_job_and_buttons, format_target_topic};
 use super::TopicNameCache;
 
 const PAGE_SIZE: usize = 4;
-
-fn format_job_and_buttons(
-    job: &CronJob,
-    number: usize,
-    idx: usize,
-    current_page: usize,
-    default_tz: &str,
-    topic_cache: Option<&TopicNameCache>,
-) -> (String, Vec<InlineKeyboardButton>) {
-    let status = if job.enabled {
-        t!("bot.cron_active")
-    } else {
-        t!("bot.cron_inactive")
-    };
-    let last_run_val = job.last_run_status.as_deref().unwrap_or("");
-    let last_run = if last_run_val.is_empty() {
-        t!("bot.cron_no_last_run")
-    } else {
-        last_run_val.to_string()
-    };
-    let number_str = number.to_string();
-    let target = format_target_topic(job, topic_cache);
-    let model = job.model.as_deref().unwrap_or("default");
-    let effective_tz = if job.timezone.is_empty() { default_tz } else { &job.timezone };
-    let schedule = format_schedule_display(&job.schedule, effective_tz);
-    let line = t!(
-        "bot.cron_job_line",
-        number = number_str,
-        title = html_escape::encode_safe(&job.title),
-        status = status,
-        schedule = schedule,
-        target = target,
-        model = html_escape::encode_safe(model),
-        last_run = html_escape::encode_safe(&last_run)
-    );
-    let button_text = if job.enabled {
-        t!("bot.cron_deactivate_num", number = number_str)
-    } else {
-        t!("bot.cron_activate_num", number = number_str)
-    };
-    let fp = fingerprint(&job.id);
-    let toggle_btn = InlineKeyboardButton::callback(
-        button_text,
-        format!("crn:t:{}:{}:{}", current_page, idx, fp),
-    );
-    let run_btn = InlineKeyboardButton::callback(
-        t!("bot.cron_run_num", number = number_str),
-        format!("crn:run:{}:{}:{}", current_page, idx, fp),
-    );
-    (line, vec![toggle_btn, run_btn])
-}
 
 fn build_keyboard(
     current_page: usize,
@@ -187,11 +136,12 @@ async fn handle_toggle_action(
 
 async fn handle_run_now_action(
     bot: &Bot,
+    msg_target: (ChatId, MessageId),
     manager: &Arc<CronManager>,
     parts: &[&str],
     page: usize,
-    caller: (i64, Option<i64>),
-    run_ctx: Option<(&Arc<CliConfig>, &Arc<SessionManager>)>,
+    caller_topic_id: Option<i64>,
+    aux: CronCallbackAux<'_>,
 ) -> Result<Option<String>, String> {
     if parts.len() < 4 { return Ok(None); }
     let slot: usize = parts[2].parse().unwrap_or(0);
@@ -202,14 +152,17 @@ async fn handle_run_now_action(
     }
     let safe_title = html_escape::encode_safe(&job.title).to_string();
     let note = t!("bot.cron_run_started", title = &safe_title);
+    let (topic_cache, run_ctx) = aux;
     if let Some((cfg, sess)) = run_ctx {
         let (bot_c, cfg_c, sess_c, mgr_c) = (bot.clone(), (*cfg).clone(), (*sess).clone(), manager.clone());
-        tokio::spawn(async move {
+        let (tc_c, lang) = (topic_cache.cloned(), crate::i18n::get_language());
+        tokio::spawn(crate::i18n::TASK_ACTIVE_LANG.scope(lang, async move {
             let bus = Arc::new(crate::bus::bus::MessageBus::with_lock_pool(sess_c.lock_pool.clone()));
             let tgts = if !cfg_c.allowed_group_ids.is_empty() { cfg_c.allowed_group_ids.clone() } else { cfg_c.allowed_user_ids.clone() };
-            bus.register_transport(Arc::new(super::transport::TelegramTransport::with_targets(bot_c, tgts).with_context(cfg_c.clone(), sess_c)));
-            let _ = crate::cron::scheduler::CronScheduler::new(cfg_c, mgr_c, bus).execute_job_now(job, caller.0, caller.1).await;
-        });
+            bus.register_transport(Arc::new(super::transport::TelegramTransport::with_targets(bot_c.clone(), tgts).with_context(cfg_c.clone(), sess_c)));
+            let _ = crate::cron::scheduler::CronScheduler::new(cfg_c, mgr_c.clone(), bus).execute_job_now(job, msg_target.0.0, caller_topic_id).await;
+            let _ = update_message(&bot_c, msg_target.0, msg_target.1, &mgr_c, page, Some(&t!("bot.cron_refreshed_note")), tc_c.as_ref()).await;
+        }));
     }
     Ok(Some(note))
 }
@@ -225,7 +178,7 @@ pub(crate) async fn handle_cron_callback(
     caller_topic_id: Option<i64>,
     aux: CronCallbackAux<'_>,
 ) -> Result<(), String> {
-    let (topic_cache, run_ctx) = aux;
+    let (topic_cache, _) = aux;
     let parts: Vec<&str> = data["crn:".len()..].split(':').collect();
     if parts.is_empty() { return Ok(()); }
 
@@ -241,7 +194,7 @@ pub(crate) async fn handle_cron_callback(
             Some(if enabled { t!("bot.cron_all_enabled_note", count = c) } else { t!("bot.cron_all_disabled_note", count = c) })
         }
         "t" => handle_toggle_action(manager, &parts, page, Some(chat_id.0), caller_topic_id, topic_cache).await?,
-        "run" => handle_run_now_action(bot, manager, &parts, page, (chat_id.0, caller_topic_id), run_ctx).await?,
+        "run" => handle_run_now_action(bot, (chat_id, message_id), manager, &parts, page, caller_topic_id, aux).await?,
         _ => return Ok(()),
     };
     update_message(bot, chat_id, message_id, manager, page, note.as_deref(), topic_cache).await

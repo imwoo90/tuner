@@ -151,7 +151,7 @@ pub(crate) async fn handle_commands(
     msg: &Message,
     text: &str,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
     cli: &AntigravityCli,
     aux: (&crate::cron::manager::CronManager, &super::TopicNameCache),
 ) -> Result<bool, teloxide::RequestError> {

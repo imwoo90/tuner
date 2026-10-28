@@ -20,9 +20,10 @@ pub struct BotInfo {
     pub username: Option<String>,
 }
 
+#[derive(Clone)]
 /// Represents `TopicNameCache` (topic name cache).
 pub struct TopicNameCache {
-    names: Mutex<HashMap<(i64, i64), String>>,
+    names: std::sync::Arc<Mutex<HashMap<(i64, i64), String>>>,
 }
 
 impl Default for TopicNameCache {
@@ -35,7 +36,7 @@ impl TopicNameCache {
     /// Creates a new instance.
     pub fn new() -> Self {
         Self {
-            names: Mutex::new(HashMap::new()),
+            names: std::sync::Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

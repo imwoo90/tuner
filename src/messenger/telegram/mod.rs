@@ -176,9 +176,8 @@ pub(crate) async fn run_cli_stream(
         Ok(s) => stream::consume_stream(bot, (msg.chat.id, msg.thread_id.map(|t| t.0.0)), s, sessions, sess, &cc.config, cli).await?,
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
-            let mut r = bot.send_message(msg.chat.id, format!("❌ Error: {}", e));
-            if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
-            let _ = r.await;
+            let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1, cc.config.model.as_deref());
+            let _ = commands::send_reply(bot, msg, err_msg).await;
         }
     }
     Ok(())
@@ -205,9 +204,7 @@ async fn handle_model_override(
         } else {
             mo.to_string()
         };
-        let mut r = bot.send_message(msg.chat.id, format!("Next message will use {}", display));
-        if let Some(t) = msg.thread_id { r = r.message_thread_id(t); }
-        let _ = r.await;
+        let _ = commands::send_reply(bot, msg, format!("🤖 [tuner] Next message will use `{}`.", display)).await;
         return Ok(true);
     }
     Ok(false)

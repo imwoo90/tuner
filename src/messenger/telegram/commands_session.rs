@@ -58,7 +58,7 @@ pub(crate) async fn handle_new_command(
     msg: &Message,
     args: &str,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
     cli: &AntigravityCli,
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
@@ -86,9 +86,18 @@ pub(crate) async fn handle_new_command(
         return Ok(false);
     }
 
-    let _ = crate::telegram::session_init::initialize_session_with_prompt(
+    let sid = crate::telegram::session_init::initialize_session_with_prompt(
         bot, msg, sessions, &mut sess, cli, config, None,
-    ).await;
+    ).await?;
+    if !sid.is_empty() {
+        let mut target_msg = msg.clone();
+        if let Some(tid) = sess.topic_id {
+            target_msg.thread_id = Some(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
+        }
+        crate::telegram::async_observer::spawn_session_async_observer(
+            bot.clone(), &target_msg, sid, cli.clone(), sessions.clone(), config.clone(),
+        );
+    }
     Ok(true)
 }
 
@@ -97,7 +106,7 @@ pub(crate) async fn handle_session_control_commands(
     msg: &Message,
     text: &str,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
     cli: &AntigravityCli,
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {

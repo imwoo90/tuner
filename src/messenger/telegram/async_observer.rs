@@ -63,7 +63,7 @@ pub(crate) fn spawn_session_async_observer(
     });
 }
 
-async fn clear_progress_and_get_topic_name(ctx: &ObserverCtx) -> Option<String> {
+async fn clear_progress_and_get_session(ctx: &ObserverCtx) -> Option<SessionData> {
     let key = SessionKey::telegram(ctx.chat_id.0, ctx.thread_id.map(|t| t as i64));
     if let Ok(Some(mut sess)) = ctx.sessions.get_active(&key).await {
         if let Some(last_mid) = sess.last_progress_msg_id {
@@ -72,7 +72,7 @@ async fn clear_progress_and_get_topic_name(ctx: &ObserverCtx) -> Option<String> 
             sess.last_progress_msg_id = None;
             let _ = ctx.sessions.preserve_session_identity(&sess).await;
         }
-        return sess.topic_name;
+        return Some(sess);
     }
     None
 }
@@ -82,7 +82,8 @@ async fn handle_async_turn_output(
     prev_progress_id: Option<MessageId>,
     txt: &str,
 ) {
-    let topic_name = clear_progress_and_get_topic_name(ctx).await;
+    let sess = clear_progress_and_get_session(ctx).await;
+    let topic_name = sess.as_ref().and_then(|s| s.topic_name.as_deref());
     if let Some(prev_mid) = prev_progress_id
         && !txt.trim().is_empty()
     {
@@ -91,10 +92,13 @@ async fn handle_async_turn_output(
     let chunks = super::formatting::split_html_message(&super::formatting::markdown_to_telegram_html(txt), 4000);
     let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, None, ctx.thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(&ctx.bot, ctx.chat_id, ctx.thread_id, txt, &ctx.config).await;
+    if let Some(ref s) = sess {
+        let _ = ctx.sessions.update_session(s).await;
+    }
     super::history::log_telegram_message(
         &ctx.config.working_dir,
         &ctx.session_id,
-        (ctx.thread_id.map(|t| t as i64), topic_name.as_deref()),
+        (ctx.thread_id.map(|t| t as i64), topic_name),
         "bot",
         sent_id,
         txt,
@@ -145,12 +149,15 @@ async fn dispatch_terminal_event(
     }
 
     if let Some(ask) = delta.ask_question {
+        if let Some(prev_mid) = active_turn.as_ref().and_then(|t| t.pub_msg_id) {
+            let _ = ctx.bot.delete_message(ctx.chat_id, prev_mid).await;
+        }
         if let Some(turn) = active_turn { turn.typing.abort(); }
-        let mut sess_data = SessionData {
+        let mut sess_data = clear_progress_and_get_session(ctx).await.unwrap_or_else(|| SessionData {
+            chat_id: ctx.chat_id.0,
             topic_id,
-            topic_name: clear_progress_and_get_topic_name(ctx).await,
             ..Default::default()
-        };
+        });
         sess_data.set_session_id(&ctx.config.provider, &ctx.session_id);
         let _ = super::ask_process::handle_ask_question_event(
             &ctx.bot, ctx.chat_id, ctx.thread_id, ask, &sess_data, &ctx.config, &ctx.cli,
@@ -183,24 +190,6 @@ async fn ensure_active_turn(
     }
 }
 
-async fn update_active_turn_progress(
-    ctx: &ObserverCtx,
-    progress_text: &str,
-    active_turn: &mut Option<ActiveAsyncTurn>,
-) {
-    if let Some(turn) = active_turn {
-        let _ = super::stream::handle_text_delta(
-            &ctx.bot,
-            ctx.chat_id,
-            ctx.thread_id,
-            progress_text,
-            &mut turn.last_text,
-            &mut turn.pub_msg_id,
-            &mut turn.last_edit,
-        ).await;
-    }
-}
-
 async fn check_and_dispatch_delta(
     ctx: &ObserverCtx,
     transcript_path: &Path,
@@ -209,22 +198,22 @@ async fn check_and_dispatch_delta(
     active_turn: &mut Option<ActiveAsyncTurn>,
 ) {
     let Ok(meta) = std::fs::metadata(transcript_path) else { return; };
-    let curr_size = meta.len();
-    if curr_size <= *last_size { return; }
+    if meta.len() <= *last_size { return; }
 
     let delta = parser.parse_log_delta_structured(transcript_path, Some(*last_size));
     *last_size = delta.new_size;
     *parser = AntigravityLogParser::new();
-
     if !delta.has_activity { return; }
 
     ensure_active_turn(ctx, active_turn).await;
-
     if delta.final_content.is_some() || delta.ask_question.is_some() {
         ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
         dispatch_terminal_event(ctx, delta, active_turn).await;
-    } else if let Some(ref progress_text) = delta.formatted {
-        update_active_turn_progress(ctx, progress_text, active_turn).await;
+    } else if let (Some(progress_text), Some(turn)) = (delta.formatted.as_deref(), active_turn.as_mut()) {
+        let _ = super::stream::handle_text_delta(
+            &ctx.bot, ctx.chat_id, ctx.thread_id, progress_text,
+            &mut turn.last_text, &mut turn.pub_msg_id, &mut turn.last_edit,
+        ).await;
     }
 }
 
