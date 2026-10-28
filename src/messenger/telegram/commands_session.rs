@@ -12,22 +12,23 @@ use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands::send_reply;
 
-pub(crate) fn parse_new_command_args<'a>(
+pub(crate) fn resolve_target_topic(
     msg: &Message,
-    args: &'a str,
+    args: &str,
     topic_cache: &super::TopicNameCache,
     default_tid: Option<i64>,
-) -> (Option<i64>, Option<&'a str>) {
+) -> Result<Option<i64>, String> {
     let trimmed = args.trim();
     let raw_cmd = trimmed.split_whitespace().next().unwrap_or("");
     let rest = trimmed[raw_cmd.len()..].trim();
     if rest.is_empty() {
-        return (default_tid, None);
+        return Ok(default_tid);
     }
     if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, rest) {
-        return (Some(resolved_tid), None);
+        Ok(Some(resolved_tid))
+    } else {
+        Err(rest.to_string())
     }
-    (default_tid, Some(rest))
 }
 
 async fn prepare_topic_reset(
@@ -63,7 +64,13 @@ pub(crate) async fn handle_new_command(
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
     let topic_id = crate::telegram::get_topic_id(msg);
-    let (target_topic, inline_prompt) = parse_new_command_args(msg, args, topic_cache, topic_id);
+    let target_topic = match resolve_target_topic(msg, args, topic_cache, topic_id) {
+        Ok(tid) => tid,
+        Err(name) => {
+            let _ = send_reply(bot, msg, t!("bot.unknown_topic", name = name)).await;
+            return Ok(true);
+        }
+    };
 
     let preserved_model = prepare_topic_reset(
         config, sessions, cli, msg.chat.id.0, target_topic,
@@ -80,10 +87,6 @@ pub(crate) async fn handle_new_command(
     {
         sess.topic_name = Some(name);
         let _ = sessions.preserve_session_identity(&sess).await;
-    }
-
-    if inline_prompt.is_some() {
-        return Ok(false);
     }
 
     let sid = crate::telegram::session_init::initialize_session_with_prompt(

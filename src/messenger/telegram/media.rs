@@ -169,8 +169,6 @@ pub(crate) async fn queue_pending_files(
             }
         }
         let _ = sessions.preserve_session_identity(&sess).await;
-        let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-        super::typing::set_emoji_reaction(msg.id.0, msg.chat.id, tok, "👍");
     }
 }
 

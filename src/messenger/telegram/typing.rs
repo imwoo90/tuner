@@ -110,7 +110,7 @@ pub(crate) fn clear_old_progress_reaction(last_mid: i32, chat_id: ChatId, tok: S
     });
 }
 
-pub(crate) fn set_emoji_reaction(msg_id_val: i32, chat_id: ChatId, tok: String, emoji: &'static str) {
+pub(crate) fn set_progress_reaction(msg_id_val: i32, chat_id: ChatId, tok: String) {
     tokio::spawn(async move {
         let client = reqwest::Client::new();
         let url = format!("https://api.telegram.org/bot{}/setMessageReaction", tok);
@@ -120,16 +120,12 @@ pub(crate) fn set_emoji_reaction(msg_id_val: i32, chat_id: ChatId, tok: String, 
             "reaction": [
                 {
                     "type": "emoji",
-                    "emoji": emoji
+                    "emoji": "⏳"
                 }
             ]
         });
         let _ = client.post(&url).json(&body).send().await;
     });
-}
-
-pub(crate) fn set_progress_reaction(msg_id_val: i32, chat_id: ChatId, tok: String) {
-    set_emoji_reaction(msg_id_val, chat_id, tok, "⏳");
 }
 
 /// Background loop handle for periodic ChatAction::Typing during async turns.

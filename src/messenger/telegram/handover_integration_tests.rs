@@ -254,30 +254,17 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::await_holding_lock)]
-    async fn test_new_command_with_inline_prompt_resets_and_preserves_handover() {
-        let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-        let temp_dir = tempfile::tempdir().unwrap();
-        crate::telegram::test_helpers::helpers::mock_brain_dir(&temp_dir, "mock-session-123");
-        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env) =
-            crate::telegram::test_helpers::helpers::setup_e2e_env(
-                &temp_dir,
-                "#!/bin/sh\necho '{\"result\":\"ok\",\"is_error\":false}'\n",
-            );
+    async fn test_new_command_with_unknown_topic_does_not_reset_session() {
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _ws) = setup();
         let key = SessionKey::telegram(123, Some(222));
-        topic_cache.insert(123, 222, "Inline New".to_string());
+        topic_cache.insert(123, 222, "Valid Topic".to_string());
         init_active_session(&mgr, &key, &cfg.provider, "old-sess-222").await;
-        seed_history(&cfg.working_dir, "old-sess-222", 222, "Inline New");
 
-        handle_message(bot, make_msg("/new Implement step 2 now", 222), cfg.clone(), mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+        handle_message(bot, make_msg("/new @UnknownTopicName", 222), cfg.clone(), mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
 
         let s = mgr.get_active(&key).await.unwrap().unwrap();
-        assert_eq!(s.get_session_id("antigravity"), "mock-session-123");
-        assert_eq!(s.get_past_session_ids("antigravity"), vec!["old-sess-222".to_string()]);
-        assert_eq!(s.topic_name.as_deref(), Some("Inline New"));
-        assert!(s.last_handover_summary.as_deref().unwrap_or("").contains("OAuth2"));
-        let entries = crate::messenger::telegram::handover_helpers::extract_topic_history(&cfg.working_dir, "mock-session-123");
-        assert!(entries.iter().any(|e| e.sender == "user" && e.text == "Implement step 2 now"));
+        assert_eq!(s.get_session_id("antigravity"), "old-sess-222");
+        assert!(s.get_past_session_ids("antigravity").is_empty());
     }
 
     #[tokio::test]
@@ -295,37 +282,16 @@ mod tests {
         let s = mgr.get_active(&key).await.unwrap().unwrap();
         assert!(s.last_handover_summary.as_deref().unwrap_or("").contains("Build DM workflow"));
 
-        // Verify parse_new_command_args supports multi-word cached topic names vs inline prompts
+        // Verify resolve_target_topic supports multi-word cached topic names and rejects unknown topic names
         topic_cache.insert(123, 901, "Auth Module".to_string());
         let m = make_msg("/new", 555);
         assert_eq!(
-            crate::messenger::telegram::commands_session::parse_new_command_args(&m, "/new @Auth Module", &topic_cache, Some(555)),
-            (Some(901), None)
+            crate::messenger::telegram::commands_session::resolve_target_topic(&m, "/new @Auth Module", &topic_cache, Some(555)),
+            Ok(Some(901))
         );
         assert_eq!(
-            crate::messenger::telegram::commands_session::parse_new_command_args(&m, "/new Refactor auth module", &topic_cache, Some(555)),
-            (Some(555), Some("Refactor auth module"))
+            crate::messenger::telegram::commands_session::resolve_target_topic(&m, "/new NonExistentTopic", &topic_cache, Some(555)),
+            Err("NonExistentTopic".to_string())
         );
-
-        // Verify strip_new_or_reset_prefix and should_send_fresh_completion_message
-        assert_eq!(crate::messenger::telegram::strip_new_or_reset_prefix(" /new@my_bot Run tests "), "Run tests");
-        assert_eq!(crate::messenger::telegram::strip_new_or_reset_prefix("Normal prompt"), "Normal prompt");
-
-        let mut resp = crate::cli::CliResponse {
-            result: "Done".to_string(),
-            is_error: false,
-            session_id: Some("s1".to_string()),
-            returncode: Some(0),
-            stderr: String::new(),
-        };
-        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(30)));
-        assert!(crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(60)));
-        resp.stderr = "Interrupted by user (/stop)".to_string();
-        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
-        resp.stderr.clear();
-        resp.result.clear();
-        assert!(!crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
-        resp.is_error = true;
-        assert!(crate::messenger::telegram::stream::should_send_fresh_completion_message(&resp, std::time::Duration::from_secs(90)));
     }
 }

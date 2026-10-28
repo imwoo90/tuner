@@ -53,23 +53,6 @@ async fn resolve_auto_handover(
     Some(handover.handover_prompt)
 }
 
-pub(crate) fn has_alive_session(
-    sess: &SessionData,
-    cli: &AntigravityCli,
-    provider: &str,
-) -> bool {
-    let sid = sess.get_session_id(provider);
-    !sid.is_empty() && (sid.starts_with("mock-") || cli.is_session_alive(&sid))
-}
-
-pub(crate) fn combine_handover_and_prompt(handover: &str, user_prompt: &str) -> String {
-    let header = handover.split("\n---\n").next().unwrap_or(handover);
-    format!(
-        "{}\n---\nApply the restored topic context above and directly respond to the user's message below without a separate session greeting:\n\n{}",
-        header, user_prompt
-    )
-}
-
 pub(crate) async fn initialize_session_with_prompt(
     bot: &Bot,
     msg: &Message,
@@ -77,7 +60,7 @@ pub(crate) async fn initialize_session_with_prompt(
     sess: &mut SessionData,
     cli: &AntigravityCli,
     config: &CliConfig,
-    startup_prompt: Option<(&str, &str)>,
+    startup_prompt: Option<&str>,
 ) -> Result<String, teloxide::RequestError> {
     let provider = &config.provider;
     let session_id = sess.get_session_id(provider);
@@ -90,18 +73,12 @@ pub(crate) async fn initialize_session_with_prompt(
         let _ = sessions.preserve_session_identity(sess).await;
     }
 
-    let auto_handover = resolve_auto_handover(sess, config, sessions).await;
-    let user_log_text = startup_prompt.map(|(u, _)| u);
-    let raw_prompt = startup_prompt.map(|(_, p)| p);
-    let combined;
-    let effective_prompt = match (raw_prompt, auto_handover.as_deref()) {
-        (Some(user_p), Some(ho)) => {
-            combined = combine_handover_and_prompt(ho, user_p);
-            Some(combined.as_str())
-        }
-        (Some(user_p), None) => Some(user_p),
-        (None, ho) => ho,
+    let auto_handover = if startup_prompt.is_none() {
+        resolve_auto_handover(sess, config, sessions).await
+    } else {
+        None
     };
+    let effective_prompt = startup_prompt.or(auto_handover.as_deref());
 
     if cfg!(test) {
         let mock_sid = "mock-session-123".to_string();
@@ -112,7 +89,7 @@ pub(crate) async fn initialize_session_with_prompt(
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-    boot_fresh_session(bot, msg, sessions, sess, cli, (user_log_text, effective_prompt)).await
+    boot_fresh_session(bot, msg, sessions, sess, cli, effective_prompt).await
 }
 
 async fn handle_boot_success(
@@ -120,7 +97,6 @@ async fn handle_boot_success(
     msg: &Message,
     sessions: &SessionManager,
     sess: &mut SessionData,
-    user_log_text: Option<&str>,
     mut res: crate::cli::CliResponse,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
@@ -140,9 +116,6 @@ async fn handle_boot_success(
         res.result = crate::t!("bot.new_session");
     }
     let topic = (sess.topic_id, sess.topic_name.as_deref());
-    if let Some(user_txt) = user_log_text.filter(|s| !s.is_empty()) {
-        super::history::log_telegram_message(&config.working_dir, &new_sid, topic, "user", Some(msg.id.0), user_txt, (true, None));
-    }
     let _ = super::stream::handle_stream_result(bot, msg.chat.id, None, thread_id, topic, res, config).await;
     Ok(new_sid)
 }
@@ -152,12 +125,11 @@ async fn handle_boot_response(
     msg: &Message,
     sessions: &SessionManager,
     sess: &mut SessionData,
-    user_log_text: Option<&str>,
     send_res: Result<crate::cli::CliResponse, String>,
     config: &CliConfig,
 ) -> Result<String, teloxide::RequestError> {
     match send_res {
-        Ok(res) => handle_boot_success(bot, msg, sessions, sess, user_log_text, res, config).await,
+        Ok(res) => handle_boot_success(bot, msg, sessions, sess, res, config).await,
         Err(e) => {
             eprintln!("Initialization oneshot failed: {:?}", e);
             let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1, config.model.as_deref());
@@ -176,9 +148,8 @@ async fn boot_fresh_session(
     sessions: &SessionManager,
     sess: &mut SessionData,
     cli: &AntigravityCli,
-    prompts: (Option<&str>, Option<&str>),
+    startup_prompt: Option<&str>,
 ) -> Result<String, teloxide::RequestError> {
-    let (user_log_text, startup_prompt) = prompts;
     let default_prompt = crate::t!("bot.session_init_prompt");
     let initial_prompt = startup_prompt.unwrap_or(&default_prompt);
     let ws = cli.agy_workspace();
@@ -212,5 +183,5 @@ async fn boot_fresh_session(
         }
     };
 
-    handle_boot_response(bot, msg, sessions, sess, user_log_text, send_res, &session_cli.config).await
+    handle_boot_response(bot, msg, sessions, sess, send_res, &session_cli.config).await
 }

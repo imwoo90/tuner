@@ -260,12 +260,6 @@ while True:
         let fwd_prompt = crate::messenger::telegram::reply::build_reply_prompt(&fwd_msg, "Check this log");
         assert!(fwd_prompt.contains("[Forwarded message from Alice (@alice_dev)]"), "fwd_prompt is: {:?}", fwd_prompt);
 
-        let combined_ho = crate::messenger::telegram::session_init::combine_handover_and_prompt(
-            "[TOPIC CONTEXT HANDOVER]\n### 1. Topic Objective\nFix clock\n---\nINSTRUCTIONS",
-            "Run clock test",
-        );
-        assert!(combined_ho.contains("Fix clock") && combined_ho.contains("Run clock test") && !combined_ho.contains("INSTRUCTIONS"));
-
         assert_eq!(crate::messenger::telegram::media::sanitize_filename("../../Makefile"), "Makefile");
         assert_eq!(crate::messenger::telegram::media::sanitize_filename("my bom (v2).csv"), "my_bom_v2_.csv");
 

@@ -11,56 +11,41 @@ use teloxide::prelude::*;
 use crate::config::CliConfig;
 use std::path::PathBuf;
 
-/// Scans text for `file://` URLs, Markdown links/embeds, and inline code backticks,
-/// returning unique existing file paths inside `allowed_roots`.
+/// Scans text for `file://` URLs and Markdown links/image embeds with absolute paths,
+/// validates that they are files within allowed roots, and returns a list of unique safe file paths.
 pub fn extract_file_paths(text: &str, allowed_roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut push = |p: PathBuf| {
-        if p.is_file() && crate::security::paths::is_path_safe(&p, allowed_roots)
-            && seen.insert(std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone()))
-        {
-            paths.push(p);
+    let mut seen_canonical = std::collections::HashSet::new();
+    let mut push_if_valid = |path: PathBuf| {
+        if path.is_file() && crate::security::paths::is_path_safe(&path, allowed_roots) {
+            let canon = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            if seen_canonical.insert(canon) {
+                paths.push(path);
+            }
         }
     };
+
     if let Ok(re) = regex::Regex::new(r#"file://[^\s\)\]`"'>]+"#) {
         for cap in re.captures_iter(text) {
             let raw = cap[0].trim_end_matches(&['.', ',', ';', '"', '\'', '>', ')', '`', ']'][..]);
-            if let Ok(u) = url::Url::parse(raw) && let Ok(p) = u.to_file_path() {
-                push(p);
+            if let Ok(parsed_url) = url::Url::parse(raw)
+                && let Ok(path) = parsed_url.to_file_path()
+            {
+                push_if_valid(path);
             }
         }
     }
-    if let Ok(re) = regex::Regex::new(r"!?\[[^\]]*\]\((/[^)]+)\)") {
-        for cap in re.captures_iter(text) {
-            let raw = cap[1].split('#').next().unwrap_or("").trim();
-            if raw.starts_with('/') && !raw.starts_with("//") {
-                push(PathBuf::from(raw));
-            }
-        }
-    }
-    if let Ok(re) = regex::Regex::new(r"`([^`\r\n]+)`") {
-        for cap in re.captures_iter(text) {
-            if let Some(p) = resolve_backtick_path(&cap[1], allowed_roots.first()) {
-                push(p);
-            }
-        }
-    }
-    paths
-}
 
-fn resolve_backtick_path(raw: &str, ws_root: Option<&PathBuf>) -> Option<PathBuf> {
-    let cand = raw.split('#').next().unwrap_or("").trim();
-    if cand.is_empty() || cand.contains(char::is_whitespace) || cand.starts_with("//") || cand.contains("://") {
-        return None;
+    if let Ok(md_re) = regex::Regex::new(r"!?\[[^\]]*\]\((/[^)]+)\)") {
+        for cap in md_re.captures_iter(text) {
+            let raw_target = cap[1].split('#').next().unwrap_or("").trim();
+            if raw_target.starts_with('/') && !raw_target.starts_with("//") {
+                push_if_valid(PathBuf::from(raw_target));
+            }
+        }
     }
-    if cand.starts_with('/') {
-        Some(PathBuf::from(cand))
-    } else if cand.contains('/') || cand.contains('.') {
-        ws_root.map(|r| r.join(cand))
-    } else {
-        None
-    }
+
+    paths
 }
 
 fn is_blacklisted_file(path: &std::path::Path) -> bool {
@@ -194,28 +179,12 @@ mod tests {
         assert_eq!(paths_punct.len(), 1);
         assert_eq!(paths_punct[0], file1);
 
-        // Test inline code backtick and bracket cleanup
-        let text_code = format!("Inline `file://{}` and [file://{}]", file1.to_string_lossy(), file1.to_string_lossy());
+        // Test inline code backtick and bracket cleanup for explicit file:// URLs,
+        // while ignoring bare backtick filenames/relative paths without file://
+        let text_code = format!("Inline `file://{}` and [file://{}] and `test_file_1.rs`", file1.to_string_lossy(), file1.to_string_lossy());
         let paths_code = extract_file_paths(&text_code, &allowed_roots);
         assert_eq!(paths_code.len(), 1);
         assert_eq!(paths_code[0], file1);
-    }
-
-    #[test]
-    fn test_extract_file_paths_backticks() {
-        let dir = tempdir().unwrap();
-        let file1 = dir.path().join("test_file_1.rs");
-        std::fs::write(&file1, "content").unwrap();
-        let allowed_roots = vec![dir.path().to_path_buf()];
-        let sub_dir = dir.path().join("docs");
-        std::fs::create_dir_all(&sub_dir).unwrap();
-        let file2 = sub_dir.join("summary.md");
-        std::fs::write(&file2, "# Summary").unwrap();
-        let text_backtick = format!("Generated `{}` and `docs/summary.md#L1` (plus command `cargo test`)", file1.to_string_lossy());
-        let paths_bt = extract_file_paths(&text_backtick, &allowed_roots);
-        assert_eq!(paths_bt.len(), 2);
-        assert!(paths_bt.contains(&file1));
-        assert!(paths_bt.contains(&file2));
     }
 
     #[test]

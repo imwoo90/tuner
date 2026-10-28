@@ -63,34 +63,20 @@ pub(crate) fn spawn_session_async_observer(
     });
 }
 
-async fn clear_progress_and_get_session(ctx: &ObserverCtx) -> Option<SessionData> {
+async fn get_active_session(ctx: &ObserverCtx) -> Option<SessionData> {
     let key = SessionKey::telegram(ctx.chat_id.0, ctx.thread_id.map(|t| t as i64));
-    if let Ok(Some(mut sess)) = ctx.sessions.get_active(&key).await {
-        if let Some(last_mid) = sess.last_progress_msg_id {
-            let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| ctx.config.telegram_token.clone());
-            super::typing::clear_old_progress_reaction(last_mid, ctx.chat_id, tok);
-            sess.last_progress_msg_id = None;
-            let _ = ctx.sessions.preserve_session_identity(&sess).await;
-        }
-        return Some(sess);
-    }
-    None
+    ctx.sessions.get_active(&key).await.ok().flatten()
 }
 
 async fn handle_async_turn_output(
     ctx: &ObserverCtx,
-    prev_progress_id: Option<MessageId>,
+    msg_id: Option<MessageId>,
     txt: &str,
 ) {
-    let sess = clear_progress_and_get_session(ctx).await;
+    let sess = get_active_session(ctx).await;
     let topic_name = sess.as_ref().and_then(|s| s.topic_name.as_deref());
-    if let Some(prev_mid) = prev_progress_id
-        && !txt.trim().is_empty()
-    {
-        let _ = ctx.bot.delete_message(ctx.chat_id, prev_mid).await;
-    }
     let chunks = super::formatting::split_html_message(&super::formatting::markdown_to_telegram_html(txt), 4000);
-    let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, None, ctx.thread_id, &chunks).await;
+    let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, msg_id, ctx.thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(&ctx.bot, ctx.chat_id, ctx.thread_id, txt, &ctx.config).await;
     if let Some(ref s) = sess {
         let _ = ctx.sessions.update_session(s).await;
@@ -149,11 +135,8 @@ async fn dispatch_terminal_event(
     }
 
     if let Some(ask) = delta.ask_question {
-        if let Some(prev_mid) = active_turn.as_ref().and_then(|t| t.pub_msg_id) {
-            let _ = ctx.bot.delete_message(ctx.chat_id, prev_mid).await;
-        }
         if let Some(turn) = active_turn { turn.typing.abort(); }
-        let mut sess_data = clear_progress_and_get_session(ctx).await.unwrap_or_else(|| SessionData {
+        let mut sess_data = get_active_session(ctx).await.unwrap_or_else(|| SessionData {
             chat_id: ctx.chat_id.0,
             topic_id,
             ..Default::default()
