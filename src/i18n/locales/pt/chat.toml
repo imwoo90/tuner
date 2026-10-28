@@ -68,3 +68,6 @@ stop_all_success = "🤖 [tuner] Forcefully terminated all active processes."
 stop_interrupted = "⏹️ [tuner] Tarefa atual interrompida neste tópico (ESC)."
 stop_none = "🤖 [tuner] Nenhuma tarefa ativa em execução neste tópico."
 unknown_topic = "⚠️ [tuner] Unknown topic name: {name}"
+
+cron_run_num = "⚡ Run #{number}"
+cron_run_started = "⚡ Triggered '{title}' to run immediately in the background."

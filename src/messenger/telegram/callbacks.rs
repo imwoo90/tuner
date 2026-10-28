@@ -119,7 +119,9 @@ async fn handle_callback_query_inner(
             if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
             } else if d.starts_with("crn:") {
                 let tid = crate::telegram::get_topic_id(msg);
-                let _ = crate::telegram::cron_selector::handle_cron_callback(&bot, msg.chat.id, msg.id, d, &cron, tid, Some(&topic_cache)).await;
+                let _ = crate::telegram::cron_selector::handle_cron_callback(
+                    &bot, msg.chat.id, msg.id, d, &cron, tid, (Some(&topic_cache), Some((&config, &sessions))),
+                ).await;
             } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
             } else if d.starts_with("rem:") {
                 super::commands_remote::handle_remote_callback(&bot, msg, d, &config).await;

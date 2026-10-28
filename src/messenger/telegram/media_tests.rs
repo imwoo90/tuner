@@ -249,13 +249,38 @@ while True:
         std::fs::write(tg_dir.join("media_123_90_schematic_v2.pdf"), "cached-pdf").unwrap();
 
         let reply_msg = make_msg(r#"{"message_id":111,"date":123460,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"Inspect this schematic","reply_to_message":{"message_id":90,"date":123400,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-90","file_unique_id":"u-90","file_name":"schematic_v2.pdf"}}}"#);
-        handle_message(bot.clone(), reply_msg, cfg.clone(), mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+        handle_message(bot.clone(), reply_msg, cfg.clone(), mgr.clone(), cli, cron_mgr.clone(), topic_cache, bot_info, mgm).await.unwrap();
 
         let prompt_log = wait_for_prompt(&temp, "Inspect this schematic").await;
         assert!(prompt_log.contains("telegram_files/media_123_90_schematic_v2.pdf"), "prompt_log is: {:?}", prompt_log);
+        assert!(prompt_log.contains("[Attached document: schematic_v2.pdf]"), "prompt_log is: {:?}", prompt_log);
+
+        let fwd_msg = make_msg(r#"{"message_id":112,"date":123470,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"forward_origin":{"type":"user","date":123400,"sender_user":{"id":555,"is_bot":false,"first_name":"Alice","username":"alice_dev"}},"text":"Check this log"}"#);
+        let fwd_prompt = crate::messenger::telegram::reply::build_reply_prompt(&fwd_msg, "Check this log");
+        assert!(fwd_prompt.contains("[Forwarded message from Alice (@alice_dev)]"), "fwd_prompt is: {:?}", fwd_prompt);
+
+        let combined_ho = crate::messenger::telegram::session_init::combine_handover_and_prompt(
+            "[TOPIC CONTEXT HANDOVER]\n### 1. Topic Objective\nFix clock\n---\nINSTRUCTIONS",
+            "Run clock test",
+        );
+        assert!(combined_ho.contains("Fix clock") && combined_ho.contains("Run clock test") && !combined_ho.contains("INSTRUCTIONS"));
 
         assert_eq!(crate::messenger::telegram::media::sanitize_filename("../../Makefile"), "Makefile");
         assert_eq!(crate::messenger::telegram::media::sanitize_filename("my bom (v2).csv"), "my_bom_v2_.csv");
+
+        // Verify cron page includes both toggle and run-now buttons
+        let test_job = crate::cron::manager::CronJob::new(
+            "test-job".to_string(),
+            "Test Job".to_string(),
+            "0 9 * * *".to_string(),
+            "test-job".to_string(),
+            "Run".to_string(),
+            123,
+            None,
+        );
+        cron_mgr.save(&[test_job]).unwrap();
+        let (_, markup) = crate::messenger::telegram::cron_selector::build_cron_page(&cron_mgr, 0, None, None).await.unwrap();
+        assert_eq!(markup.inline_keyboard[0].len(), 2);
 
         // Verify TelegramTransport::deliver with_context logs cron output into topic history
         use crate::bus::bus::Transport;

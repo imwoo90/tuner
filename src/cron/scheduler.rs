@@ -64,20 +64,10 @@ impl CronScheduler {
             println!("🤖 [tuner] CronScheduler started");
             loop {
                 check_interval.tick().await;
-                let _ = scheduler.tick(&mut last_mtime, &mut next_run_times, &mut loaded_jobs_configs).await;
+                let _ = scheduler.reload_if_changed(&mut last_mtime, &mut next_run_times, &mut loaded_jobs_configs).await;
+                let _ = scheduler.run_due_jobs(&mut next_run_times).await;
             }
         });
-    }
-
-    async fn tick(
-        &self,
-        last_mtime: &mut Option<SystemTime>,
-        next_run_times: &mut HashMap<String, DateTime<Utc>>,
-        loaded_jobs_configs: &mut HashMap<String, (String, String)>,
-    ) -> Result<(), String> {
-        let _ = self.reload_if_changed(last_mtime, next_run_times, loaded_jobs_configs).await;
-        let _ = self.run_due_jobs(next_run_times).await;
-        Ok(())
     }
 
     async fn reload_if_changed(
@@ -115,15 +105,12 @@ impl CronScheduler {
 
     async fn run_due_jobs(&self, next_run_times: &mut HashMap<String, DateTime<Utc>>) -> Result<(), String> {
         let now = Utc::now();
-        let mut jobs_to_run = Vec::new();
-        for (job_id, next_run) in next_run_times.iter() {
-            if now >= *next_run { jobs_to_run.push(job_id.clone()); }
-        }
-        for job_id in jobs_to_run {
+        let due_ids: Vec<String> = next_run_times.iter().filter(|(_, nr)| now >= **nr).map(|(id, _)| id.clone()).collect();
+        for job_id in due_ids {
             if let Ok(Some(job)) = self.manager.get_job(&job_id).await {
-                let self_clone = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.bus.clone()));
-                let job_for_task = job.clone();
-                tokio::spawn(async move { let _ = self_clone.execute_job(job_for_task).await; });
+                let s = Arc::new(Self::new(self.config.clone(), self.manager.clone(), self.bus.clone()));
+                let j = job.clone();
+                tokio::spawn(async move { let _ = s.execute_job(j).await; });
                 if let Ok(next_run) = self.calculate_next_run(&job) {
                     next_run_times.insert(job_id, next_run);
                 } else {
@@ -134,20 +121,15 @@ impl CronScheduler {
         Ok(())
     }
 
-    fn check_quiet_hours(&self, job: &CronJob) -> bool {
-        self.check_quiet_hours_at(job, Utc::now())
-    }
-
     /// Executes `check_quiet_hours_at` (check quiet hours at).
     pub fn check_quiet_hours_at(&self, job: &CronJob, now: DateTime<Utc>) -> bool {
-        if let (Some(qs), Some(qe)) = (job.quiet_start, job.quiet_end) {
-            let tz_str = self.effective_timezone(job);
-            if let Ok(tz) = tz_str.parse::<Tz>() {
-                let now_local = now.with_timezone(&tz);
-                let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap_or_default();
-                let end = NaiveTime::from_hms_opt(qe % 24, 0, 0).unwrap_or_default();
-                return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
-            }
+        if let (Some(qs), Some(qe)) = (job.quiet_start, job.quiet_end)
+            && let Ok(tz) = self.effective_timezone(job).parse::<Tz>()
+        {
+            let now_local = now.with_timezone(&tz);
+            let start = NaiveTime::from_hms_opt(qs % 24, 0, 0).unwrap_or_default();
+            let end = NaiveTime::from_hms_opt(qe % 24, 0, 0).unwrap_or_default();
+            return crate::heartbeat::quiet::is_within_quiet_hours(&now_local, start, end);
         }
         false
     }
@@ -196,10 +178,29 @@ impl CronScheduler {
     }
 
     async fn execute_job(&self, job: CronJob) -> Result<(), String> {
-        if self.check_quiet_hours(&job) {
+        if self.check_quiet_hours_at(&job, Utc::now()) {
             println!("🤖 [tuner] Cron job {} skipped due to quiet hours", job.title);
             return Ok(());
         }
+        self.run_job_core(job).await
+    }
+
+    /// Executes a cron job immediately on manual user request, bypassing quiet hours and silent mode.
+    pub async fn execute_job_now(
+        &self,
+        mut job: CronJob,
+        caller_chat_id: i64,
+        caller_topic_id: Option<i64>,
+    ) -> Result<(), String> {
+        if job.chat_id == 0 {
+            job.chat_id = caller_chat_id;
+            job.topic_id = caller_topic_id;
+        }
+        job.silent_on_success = false;
+        self.run_job_core(job).await
+    }
+
+    async fn run_job_core(&self, job: CronJob) -> Result<(), String> {
         println!("🤖 [tuner] Cron job executing: {}", job.title);
         let ctr = self.config.working_dir.join("cron_tasks");
         let workspace = ctr.join(&job.task_folder);

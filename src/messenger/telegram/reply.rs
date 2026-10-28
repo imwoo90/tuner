@@ -7,9 +7,10 @@
 //! ## Search Tags
 //! #prompt-builder, #reply-history, #media-downloader, #mention-filter
 
-use teloxide::types::Message;
+use teloxide::types::{ChatId, Message, MessageId, ThreadId};
 use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
+use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
 
 /// Executes `get_topic_id` (get topic id).
 pub fn get_topic_id(msg: &Message) -> Option<i64> {
@@ -41,16 +42,46 @@ pub(crate) fn strip_mention(text: &str, bot_username: Option<&str>) -> String {
 
 
 
+pub(crate) fn format_forward_header(msg: &Message) -> Option<String> {
+    if let Some(user) = msg.forward_from_user() {
+        let label = match user.username.as_deref() {
+            Some(u) if !u.is_empty() => format!("{} (@{})", user.full_name(), u),
+            _ => user.full_name(),
+        };
+        return Some(format!("[Forwarded message from {}]", label));
+    }
+    if let Some(chat) = msg.forward_from_chat() {
+        let title = chat.title().unwrap_or("Channel/Chat");
+        return Some(format!("[Forwarded message from {}]", title));
+    }
+    if let Some(name) = msg.forward_from_sender_name() {
+        return Some(format!("[Forwarded message from {}]", name));
+    }
+    if msg.forward_date().is_some() {
+        return Some("[Forwarded message]".to_string());
+    }
+    None
+}
+
+fn describe_replied_message(replied: &Message) -> Option<String> {
+    let text = replied.text().or(replied.caption()).map(str::trim).filter(|s| !s.is_empty());
+    let body = text.map(str::to_string).or_else(|| super::media::describe_media_attachment(replied))?;
+    match format_forward_header(replied) {
+        Some(fwd) => Some(format!("{}\n{}", fwd, body)),
+        None => Some(body),
+    }
+}
+
 pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
-    let cited = if let Some(replied) = message.reply_to_message() {
-        replied.text().or(replied.caption()).map(|s| s.trim())
+    let effective_user_text = if let Some(fwd) = format_forward_header(message) {
+        format!("{}\n{}", fwd, user_text)
     } else {
-        None
+        user_text.to_string()
     };
 
+    let cited = message.reply_to_message().and_then(describe_replied_message);
     match cited {
-        None => user_text.to_string(),
-        Some("") => user_text.to_string(),
+        None => effective_user_text,
         Some(text) => {
             let quoted = text
                 .lines()
@@ -59,7 +90,7 @@ pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
                 .join("\n");
             format!(
                 "The user is replying to this quoted message:\n{}\n\nThe user's message:\n{}",
-                quoted, user_text
+                quoted, effective_user_text
             )
         }
     }
@@ -148,7 +179,7 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<Strin
 
 
 pub(crate) async fn load_sessions_cache(
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &SessionManager,
     cache: &crate::telegram::TopicNameCache,
 ) {
     if let Ok(all) = sessions.list_all().await {
@@ -163,10 +194,10 @@ pub(crate) async fn load_sessions_cache(
 pub(crate) async fn resolve_session_model(
     msg: &Message,
     config: &crate::config::CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &SessionManager,
 ) -> String {
-    let topic_id = crate::telegram::get_topic_id(msg);
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    let topic_id = get_topic_id(msg);
+    let key = SessionKey::telegram(msg.chat.id.0, topic_id);
     let default_model = config.model.as_deref().unwrap_or("antigravity-default");
     let (model, sess_effort) = if let Ok(Some(sess)) = sessions.get_active(&key).await {
         let m = if sess.model.is_empty() { default_model.to_string() } else { sess.model };
@@ -182,15 +213,13 @@ pub(crate) async fn resolve_session_model(
     model
 }
 
-
-
-fn find_last_active_session(sess_list: &[crate::session::data::SessionData]) -> Option<crate::session::data::SessionData> {
+fn find_last_active_session(sess_list: &[SessionData]) -> Option<SessionData> {
     sess_list.iter().filter(|s| s.transport == "tg").max_by_key(|s| s.last_active.clone()).cloned()
 }
 
 pub(crate) async fn send_startup_notification(
     bot: teloxide::Bot,
-    sessions: std::sync::Arc<crate::session::manager::SessionManager>,
+    sessions: std::sync::Arc<SessionManager>,
 ) {
     println!("🤖 [tuner] send_startup_notification task started");
     match sessions.list_all().await {
@@ -200,10 +229,10 @@ pub(crate) async fn send_startup_notification(
                 let active_lang = sess.language.clone().unwrap_or_else(crate::i18n::get_language);
                 crate::i18n::TASK_ACTIVE_LANG.scope(active_lang, async move {
                     let startup_msg = crate::t!("bot.startup_complete");
-                    let chat_id = teloxide::types::ChatId(sess.chat_id);
+                    let chat_id = ChatId(sess.chat_id);
                     let mut req = bot.send_message(chat_id, startup_msg.clone());
                     if let Some(tid) = sess.topic_id {
-                        req = req.message_thread_id(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
+                        req = req.message_thread_id(ThreadId(MessageId(tid as i32)));
                     }
                     match req.await {
                         Ok(_) => println!("🤖 [tuner] Startup notification sent successfully to chat_id: {}", sess.chat_id),

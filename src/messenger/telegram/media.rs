@@ -20,6 +20,24 @@ pub(crate) fn has_media(message: &Message) -> bool {
         || message.sticker().is_some()
 }
 
+pub(crate) fn describe_media_attachment(msg: &Message) -> Option<String> {
+    if let Some(doc) = msg.document() {
+        Some(format!("[Attached document: {}]", doc.file_name.as_deref().unwrap_or("file")))
+    } else if msg.photo().is_some() {
+        Some("[Attached photo]".to_string())
+    } else if msg.voice().is_some() {
+        Some("[Attached voice note]".to_string())
+    } else if let Some(aud) = msg.audio() {
+        Some(format!("[Attached audio: {}]", aud.file_name.as_deref().unwrap_or("audio")))
+    } else if let Some(vid) = msg.video() {
+        Some(format!("[Attached video: {}]", vid.file_name.as_deref().unwrap_or("video")))
+    } else if msg.video_note().is_some() {
+        Some("[Attached video note]".to_string())
+    } else {
+        None
+    }
+}
+
 pub(crate) fn sanitize_filename(raw: &str) -> String {
     let base = std::path::Path::new(raw)
         .file_name()
@@ -112,5 +130,95 @@ pub(crate) async fn download_telegram_media(
     bot.download_file(&file.path, &mut dest_file).await.map_err(|e| e.to_string())?;
 
     Ok(Some(format!("telegram_files/{}", filename)))
+}
+
+pub(crate) fn inject_pre_downloaded_files(prompt: &mut String, files: &[String]) {
+    if !files.is_empty() {
+        let mut media_hint = String::new();
+        if files.len() == 1 {
+            media_hint = format!(
+                "[SYSTEM HINT] The user attached a file. You can read/view it by calling `view_file` at path: `{}`\n\n",
+                files[0]
+            );
+        } else {
+            media_hint.push_str("[SYSTEM HINT] The user attached multiple files. You can view them at:\n");
+            for f in files {
+                media_hint.push_str(&format!("- `{}`\n", f));
+            }
+            media_hint.push('\n');
+        }
+        *prompt = format!("{}{}", media_hint, prompt);
+    }
+}
+
+pub(crate) async fn queue_pending_files(
+    msg: &Message,
+    files: &[String],
+    config: &crate::config::CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+) {
+    if files.is_empty() {
+        return;
+    }
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, super::get_topic_id(msg));
+    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
+    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
+        for f in files {
+            if !sess.pending_attachments.contains(f) {
+                sess.pending_attachments.push(f.clone());
+            }
+        }
+        let _ = sessions.preserve_session_identity(&sess).await;
+        let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+        super::typing::set_emoji_reaction(msg.id.0, msg.chat.id, tok, "👍");
+    }
+}
+
+pub(crate) async fn drain_session_attachments(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    config: &crate::config::CliConfig,
+    sess: &mut crate::session::data::SessionData,
+    pre_downloaded_files: &[String],
+    sessions: &crate::session::manager::SessionManager,
+) -> Vec<String> {
+    let mut all_files = if !sess.pending_attachments.is_empty() {
+        let drained = std::mem::take(&mut sess.pending_attachments);
+        let _ = sessions.preserve_session_identity(sess).await;
+        drained
+    } else {
+        Vec::new()
+    };
+    if let Some(replied) = msg.reply_to_message()
+        && has_media(replied)
+    {
+        let dest_dir = config.working_dir.join("telegram_files");
+        if let Ok(Some(replied_file)) = download_telegram_media(bot, replied, &dest_dir).await
+            && !all_files.contains(&replied_file)
+        {
+            all_files.push(replied_file);
+        }
+    }
+    for f in pre_downloaded_files {
+        if !all_files.contains(f) {
+            all_files.push(f.clone());
+        }
+    }
+    all_files
+}
+
+pub(crate) async fn build_prompt_with_attachments(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    escaped_text: &str,
+    files: &[String],
+    config: &crate::config::CliConfig,
+    sess: &mut crate::session::data::SessionData,
+    sessions: &crate::session::manager::SessionManager,
+) -> String {
+    let all_files = drain_session_attachments(bot, msg, config, sess, files, sessions).await;
+    let mut prompt = super::build_reply_prompt(msg, escaped_text);
+    inject_pre_downloaded_files(&mut prompt, &all_files);
+    prompt
 }
 

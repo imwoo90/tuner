@@ -72,7 +72,7 @@ fn test_load_toml_valid() {
 #[test]
 fn test_store_english() {
     let store = TranslationStore::new("en");
-    assert_eq!(store.en_chat.len(), 63);
+    assert_eq!(store.en_chat.len(), 65);
 }
 
 #[test]
@@ -260,7 +260,6 @@ fn test_placeholder_match() {
 
 #[test]
 fn test_german_loads_without_error() {
-    init("de");
     let store = TranslationStore::new("de");
     assert_eq!(store.language, "de");
     assert!(store.primary_chat.as_ref().is_some_and(|m| !m.is_empty()));

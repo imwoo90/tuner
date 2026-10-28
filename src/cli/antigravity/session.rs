@@ -90,6 +90,11 @@ impl SessionManager {
         if running { runs.insert(sid.to_string()); } else { runs.remove(sid); }
     }
 
+    /// Checks whether a background asynchronous turn is currently active for `sid`.
+    pub async fn is_async_running(&self, sid: &str) -> bool {
+        self.async_runs.lock().await.contains(sid)
+    }
+
     /// Executes `is_ask_active` (is ask active).
     pub async fn is_ask_active(&self, session_id: &str) -> bool {
         self.active_asks.lock().await.contains_key(session_id)

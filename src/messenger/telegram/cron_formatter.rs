@@ -11,6 +11,14 @@ use crate::cron::manager::CronJob;
 use crate::t;
 use super::TopicNameCache;
 
+pub(crate) fn fingerprint(job_id: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    job_id.hash(&mut hasher);
+    format!("{:08x}", hasher.finish())
+}
+
 pub(crate) fn format_target_topic(job: &CronJob, topic_cache: Option<&TopicNameCache>) -> String {
     if job.chat_id == 0 {
         return t!("bot.cron_target_unset");

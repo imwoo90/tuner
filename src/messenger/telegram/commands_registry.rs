@@ -98,3 +98,32 @@ pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::Request
     let _ = bot.set_my_commands(cmds).scope(teloxide::types::BotCommandScope::AllGroupChats).await;
     Ok(())
 }
+
+pub(crate) async fn handle_help_command(
+    bot: &Bot,
+    msg: &Message,
+) -> Result<(), teloxide::RequestError> {
+    let help_text = "\
+🤖 <b>[tuner] Command Reference:</b>
+
+• /status - System diagnostics & session info
+• /stop - Cancel active task in this topic (ESC)
+• /abort - Hard kill all running worker processes
+• /new (/reset) - Start a fresh conversation
+• /model - Switch active AI model
+• /effort - Set reasoning effort (low, medium, high)
+• /lang - Change interface language
+• /memory - View persistent MAINMEMORY.md
+• /cron - Manage scheduled cron tasks
+• /usage - View model quota and remaining limits
+• /remote - Manage remote development services
+• /vault - Manage per-profile site login credentials
+• /upgrade - Check for updates and self-upgrade
+• /restart - Request clean service restart";
+    let mut req = bot.send_message(msg.chat.id, help_text).parse_mode(teloxide::types::ParseMode::Html);
+    if let Some(tid) = msg.thread_id {
+        req = req.message_thread_id(tid);
+    }
+    let _ = req.await;
+    Ok(())
+}

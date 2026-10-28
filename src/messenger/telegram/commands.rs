@@ -14,7 +14,7 @@ use crate::t;
 use super::commands_model::{handle_model_command, handle_effort_command};
 use super::commands_session::handle_session_control_commands;
 #[allow(unused_imports)]
-pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command};
+pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command, handle_help_command};
 
 pub(crate) async fn send_reply(
     bot: &Bot,
@@ -41,33 +41,42 @@ pub(crate) async fn send_reply(
     res
 }
 
-async fn handle_help_command(
-    bot: &Bot,
+async fn append_topic_status(
+    report: &mut String,
     msg: &Message,
-) -> Result<(), teloxide::RequestError> {
-    let help_text = "\
-🤖 <b>[tuner] Command Reference:</b>
-
-• /status - System diagnostics & session info
-• /stop - Cancel active task in this topic (ESC)
-• /abort - Hard kill all running worker processes
-• /new (/reset) - Start a fresh conversation
-• /model - Switch active AI model
-• /effort - Set reasoning effort (low, medium, high)
-• /lang - Change interface language
-• /memory - View persistent MAINMEMORY.md
-• /cron - Manage scheduled cron tasks
-• /usage - View model quota and remaining limits
-• /remote - Manage remote development services
-• /vault - Manage per-profile site login credentials
-• /upgrade - Check for updates and self-upgrade
-• /restart - Request clean service restart";
-    let mut req = bot.send_message(msg.chat.id, help_text).parse_mode(teloxide::types::ParseMode::Html);
-    if let Some(tid) = msg.thread_id {
-        req = req.message_thread_id(tid);
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+) {
+    let topic_id = crate::telegram::get_topic_id(msg);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    if let Ok(Some(s)) = sessions.get_active(&key).await {
+        if let Some(tid) = topic_id {
+            let t_label = match s.topic_name.as_deref() {
+                Some(name) if !name.is_empty() => format!("#{} ({})", tid, name),
+                _ => format!("#{}", tid),
+            };
+            report.push_str(&format!("\n- Topic: {}", t_label));
+        }
+        let sid = s.get_session_id(&config.provider);
+        if !sid.is_empty() {
+            let short_sid = &sid[..sid.len().min(8)];
+            let turns = s.provider_sessions.get(&config.provider).map(|p| p.message_count).unwrap_or(0);
+            let state_str = if cli.sessions.is_running(&sid).await {
+                "⚡ running"
+            } else if cli.sessions.is_async_running(&sid).await {
+                "⏳ async task"
+            } else {
+                "idle"
+            };
+            report.push_str(&format!("\n- Topic Session: `{}` ({} turns, {})", short_sid, turns, state_str));
+        }
+        if !s.pending_attachments.is_empty() {
+            report.push_str(&format!("\n📎 Pending Attachments: {}", s.pending_attachments.len()));
+        }
+    } else if let Some(tid) = topic_id {
+        report.push_str(&format!("\n- Topic: #{}", tid));
     }
-    let _ = req.await;
-    Ok(())
 }
 
 async fn handle_info_commands(
@@ -101,12 +110,7 @@ async fn handle_info_commands(
             provider = config.provider,
             model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await
         );
-        let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-        if let Ok(Some(s)) = sessions.get_active(&key).await
-            && !s.pending_attachments.is_empty()
-        {
-            report.push_str(&format!("\n📎 Pending Attachments: {}", s.pending_attachments.len()));
-        }
+        append_topic_status(&mut report, msg, config, sessions, cli).await;
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
