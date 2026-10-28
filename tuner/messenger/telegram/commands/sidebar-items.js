@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_commands","handle_cron_command","handle_help_command","handle_info_commands","handle_memory_command","handle_pref_commands","send_reply","send_static_memory_fallback","try_query_live_memory"]};
+window.SIDEBAR_ITEMS = {"fn":["append_topic_status","handle_commands","handle_cron_command","handle_info_commands","handle_memory_command","handle_pref_commands","send_reply","send_static_memory_fallback","try_query_live_memory"]};

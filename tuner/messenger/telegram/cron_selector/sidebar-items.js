@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"fn":["apply_toggle","build_cron_page","build_keyboard","fingerprint","format_job_and_button","handle_cron_callback","handle_toggle_action","update_message"]};
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"fn":["apply_toggle","build_cron_page","build_keyboard","format_job_and_buttons","handle_cron_callback","handle_run_now_action","handle_toggle_action","update_message"],"type":["CronCallbackAux"]};

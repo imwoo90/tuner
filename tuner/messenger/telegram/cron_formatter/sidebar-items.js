@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["format_schedule_display","format_target_topic","parse_schedule_natural"]};
+window.SIDEBAR_ITEMS = {"fn":["fingerprint","format_schedule_display","format_target_topic","parse_schedule_natural"]};
