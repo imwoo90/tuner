@@ -169,57 +169,55 @@
 <a href=#169 id=169 data-nosnippet>169</a>            }
 <a href=#170 id=170 data-nosnippet>170</a>        }
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let _ </span>= sessions.preserve_session_identity(<span class="kw-2">&amp;</span>sess).<span class="kw">await</span>;
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">super</span>::typing::set_emoji_reaction(msg.id.<span class="number">0</span>, msg.chat.id, tok, <span class="string">"👍"</span>);
-<a href=#174 id=174 data-nosnippet>174</a>    }
-<a href=#175 id=175 data-nosnippet>175</a>}
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>drain_session_attachments(
-<a href=#178 id=178 data-nosnippet>178</a>    bot: <span class="kw-2">&amp;</span>teloxide::Bot,
-<a href=#179 id=179 data-nosnippet>179</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#180 id=180 data-nosnippet>180</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::config::CliConfig,
-<a href=#181 id=181 data-nosnippet>181</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
-<a href=#182 id=182 data-nosnippet>182</a>    pre_downloaded_files: <span class="kw-2">&amp;</span>[String],
-<a href=#183 id=183 data-nosnippet>183</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#184 id=184 data-nosnippet>184</a>) -&gt; Vec&lt;String&gt; {
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span><span class="kw-2">mut </span>all_files = <span class="kw">if </span>!sess.pending_attachments.is_empty() {
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">let </span>drained = std::mem::take(<span class="kw-2">&amp;mut </span>sess.pending_attachments);
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let _ </span>= sessions.preserve_session_identity(sess).<span class="kw">await</span>;
-<a href=#188 id=188 data-nosnippet>188</a>        drained
-<a href=#189 id=189 data-nosnippet>189</a>    } <span class="kw">else </span>{
-<a href=#190 id=190 data-nosnippet>190</a>        Vec::new()
-<a href=#191 id=191 data-nosnippet>191</a>    };
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(replied) = msg.reply_to_message()
-<a href=#193 id=193 data-nosnippet>193</a>        &amp;&amp; has_media(replied)
-<a href=#194 id=194 data-nosnippet>194</a>    {
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span>dest_dir = config.working_dir.join(<span class="string">"telegram_files"</span>);
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(replied_file)) = download_telegram_media(bot, replied, <span class="kw-2">&amp;</span>dest_dir).<span class="kw">await
-<a href=#197 id=197 data-nosnippet>197</a>            </span>&amp;&amp; !all_files.contains(<span class="kw-2">&amp;</span>replied_file)
-<a href=#198 id=198 data-nosnippet>198</a>        {
-<a href=#199 id=199 data-nosnippet>199</a>            all_files.push(replied_file);
-<a href=#200 id=200 data-nosnippet>200</a>        }
-<a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">for </span>f <span class="kw">in </span>pre_downloaded_files {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">if </span>!all_files.contains(f) {
-<a href=#204 id=204 data-nosnippet>204</a>            all_files.push(f.clone());
-<a href=#205 id=205 data-nosnippet>205</a>        }
-<a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>    all_files
-<a href=#208 id=208 data-nosnippet>208</a>}
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>build_prompt_with_attachments(
-<a href=#211 id=211 data-nosnippet>211</a>    bot: <span class="kw-2">&amp;</span>teloxide::Bot,
-<a href=#212 id=212 data-nosnippet>212</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#213 id=213 data-nosnippet>213</a>    escaped_text: <span class="kw-2">&amp;</span>str,
-<a href=#214 id=214 data-nosnippet>214</a>    files: <span class="kw-2">&amp;</span>[String],
-<a href=#215 id=215 data-nosnippet>215</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::config::CliConfig,
-<a href=#216 id=216 data-nosnippet>216</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
-<a href=#217 id=217 data-nosnippet>217</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#218 id=218 data-nosnippet>218</a>) -&gt; String {
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>all_files = drain_session_attachments(bot, msg, config, sess, files, sessions).<span class="kw">await</span>;
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span><span class="kw-2">mut </span>prompt = <span class="kw">super</span>::build_reply_prompt(msg, escaped_text);
-<a href=#221 id=221 data-nosnippet>221</a>    inject_pre_downloaded_files(<span class="kw-2">&amp;mut </span>prompt, <span class="kw-2">&amp;</span>all_files);
-<a href=#222 id=222 data-nosnippet>222</a>    prompt
-<a href=#223 id=223 data-nosnippet>223</a>}
-<a href=#224 id=224 data-nosnippet>224</a>
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>}
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>drain_session_attachments(
+<a href=#176 id=176 data-nosnippet>176</a>    bot: <span class="kw-2">&amp;</span>teloxide::Bot,
+<a href=#177 id=177 data-nosnippet>177</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#178 id=178 data-nosnippet>178</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::config::CliConfig,
+<a href=#179 id=179 data-nosnippet>179</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
+<a href=#180 id=180 data-nosnippet>180</a>    pre_downloaded_files: <span class="kw-2">&amp;</span>[String],
+<a href=#181 id=181 data-nosnippet>181</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
+<a href=#182 id=182 data-nosnippet>182</a>) -&gt; Vec&lt;String&gt; {
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span><span class="kw-2">mut </span>all_files = <span class="kw">if </span>!sess.pending_attachments.is_empty() {
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">let </span>drained = std::mem::take(<span class="kw-2">&amp;mut </span>sess.pending_attachments);
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let _ </span>= sessions.preserve_session_identity(sess).<span class="kw">await</span>;
+<a href=#186 id=186 data-nosnippet>186</a>        drained
+<a href=#187 id=187 data-nosnippet>187</a>    } <span class="kw">else </span>{
+<a href=#188 id=188 data-nosnippet>188</a>        Vec::new()
+<a href=#189 id=189 data-nosnippet>189</a>    };
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(replied) = msg.reply_to_message()
+<a href=#191 id=191 data-nosnippet>191</a>        &amp;&amp; has_media(replied)
+<a href=#192 id=192 data-nosnippet>192</a>    {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>dest_dir = config.working_dir.join(<span class="string">"telegram_files"</span>);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(replied_file)) = download_telegram_media(bot, replied, <span class="kw-2">&amp;</span>dest_dir).<span class="kw">await
+<a href=#195 id=195 data-nosnippet>195</a>            </span>&amp;&amp; !all_files.contains(<span class="kw-2">&amp;</span>replied_file)
+<a href=#196 id=196 data-nosnippet>196</a>        {
+<a href=#197 id=197 data-nosnippet>197</a>            all_files.push(replied_file);
+<a href=#198 id=198 data-nosnippet>198</a>        }
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">for </span>f <span class="kw">in </span>pre_downloaded_files {
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">if </span>!all_files.contains(f) {
+<a href=#202 id=202 data-nosnippet>202</a>            all_files.push(f.clone());
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#205 id=205 data-nosnippet>205</a>    all_files
+<a href=#206 id=206 data-nosnippet>206</a>}
+<a href=#207 id=207 data-nosnippet>207</a>
+<a href=#208 id=208 data-nosnippet>208</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>build_prompt_with_attachments(
+<a href=#209 id=209 data-nosnippet>209</a>    bot: <span class="kw-2">&amp;</span>teloxide::Bot,
+<a href=#210 id=210 data-nosnippet>210</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#211 id=211 data-nosnippet>211</a>    escaped_text: <span class="kw-2">&amp;</span>str,
+<a href=#212 id=212 data-nosnippet>212</a>    files: <span class="kw-2">&amp;</span>[String],
+<a href=#213 id=213 data-nosnippet>213</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::config::CliConfig,
+<a href=#214 id=214 data-nosnippet>214</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
+<a href=#215 id=215 data-nosnippet>215</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
+<a href=#216 id=216 data-nosnippet>216</a>) -&gt; String {
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">let </span>all_files = drain_session_attachments(bot, msg, config, sess, files, sessions).<span class="kw">await</span>;
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span><span class="kw-2">mut </span>prompt = <span class="kw">super</span>::build_reply_prompt(msg, escaped_text);
+<a href=#219 id=219 data-nosnippet>219</a>    inject_pre_downloaded_files(<span class="kw-2">&amp;mut </span>prompt, <span class="kw-2">&amp;</span>all_files);
+<a href=#220 id=220 data-nosnippet>220</a>    prompt
+<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#222 id=222 data-nosnippet>222</a>
 </code></pre></div></section></main></body></html>

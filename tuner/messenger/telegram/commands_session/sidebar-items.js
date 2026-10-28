@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_new_command","handle_session_control_commands","parse_new_command_args","prepare_topic_reset"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_new_command","handle_session_control_commands","prepare_topic_reset","resolve_target_topic"]};

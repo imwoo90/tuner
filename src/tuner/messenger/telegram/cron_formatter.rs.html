@@ -81,25 +81,68 @@
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="macro">format!</span>(<span class="string">"{}{}"</span>, natural, next_run_str)
 <a href=#82 id=82 data-nosnippet>82</a>}
 <a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a><span class="attr">#[cfg(test)]
-<a href=#85 id=85 data-nosnippet>85</a>#[allow(clippy::unwrap_used, clippy::expect_used)]
-<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">mod </span>tests {
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#88 id=88 data-nosnippet>88</a>
-<a href=#89 id=89 data-nosnippet>89</a>    <span class="attr">#[test]
-<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">fn </span>test_parse_schedule_natural_common_patterns() {
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"0 3 * * *"</span>).contains(<span class="string">"03:00"</span>));
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"*/15 * * * *"</span>).contains(<span class="string">"15"</span>));
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"0 */2 * * *"</span>).contains(<span class="string">"2"</span>));
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="macro">assert_eq!</span>(parse_schedule_natural(<span class="string">"custom * *"</span>), <span class="string">"&lt;code&gt;custom * *&lt;/code&gt;"</span>);
-<a href=#95 id=95 data-nosnippet>95</a>    }
-<a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="attr">#[test]
-<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="kw">fn </span>test_format_schedule_display_includes_next_run() {
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>display = format_schedule_display(<span class="string">"0 3 * * *"</span>, <span class="string">"Asia/Seoul"</span>);
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"03:00"</span>));
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"Next:"</span>) || display.contains(<span class="string">"다음:"</span>));
-<a href=#102 id=102 data-nosnippet>102</a>    }
-<a href=#103 id=103 data-nosnippet>103</a>}
-<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>format_job_and_buttons(
+<a href=#85 id=85 data-nosnippet>85</a>    job: <span class="kw-2">&amp;</span>CronJob,
+<a href=#86 id=86 data-nosnippet>86</a>    number: usize,
+<a href=#87 id=87 data-nosnippet>87</a>    idx: usize,
+<a href=#88 id=88 data-nosnippet>88</a>    current_page: usize,
+<a href=#89 id=89 data-nosnippet>89</a>    default_tz: <span class="kw-2">&amp;</span>str,
+<a href=#90 id=90 data-nosnippet>90</a>    topic_cache: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>TopicNameCache&gt;,
+<a href=#91 id=91 data-nosnippet>91</a>) -&gt; (String, Vec&lt;teloxide::types::InlineKeyboardButton&gt;) {
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let </span>status = <span class="kw">if </span>job.enabled { <span class="macro">t!</span>(<span class="string">"bot.cron_active"</span>) } <span class="kw">else </span>{ <span class="macro">t!</span>(<span class="string">"bot.cron_inactive"</span>) };
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">let </span>last_run_val = job.last_run_status.as_deref().unwrap_or(<span class="string">""</span>);
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">let </span>last_run = <span class="kw">if </span>last_run_val.is_empty() { <span class="macro">t!</span>(<span class="string">"bot.cron_no_last_run"</span>) } <span class="kw">else </span>{ last_run_val.to_string() };
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let </span>number_str = number.to_string();
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span>target = format_target_topic(job, topic_cache);
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">let </span>model = job.model.as_deref().unwrap_or(<span class="string">"default"</span>);
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>effective_tz = <span class="kw">if </span>job.timezone.is_empty() { default_tz } <span class="kw">else </span>{ <span class="kw-2">&amp;</span>job.timezone };
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>schedule = format_schedule_display(<span class="kw-2">&amp;</span>job.schedule, effective_tz);
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>line = <span class="macro">t!</span>(
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="string">"bot.cron_job_line"</span>,
+<a href=#102 id=102 data-nosnippet>102</a>        number = number_str,
+<a href=#103 id=103 data-nosnippet>103</a>        title = html_escape::encode_safe(<span class="kw-2">&amp;</span>job.title),
+<a href=#104 id=104 data-nosnippet>104</a>        status = status,
+<a href=#105 id=105 data-nosnippet>105</a>        schedule = schedule,
+<a href=#106 id=106 data-nosnippet>106</a>        target = target,
+<a href=#107 id=107 data-nosnippet>107</a>        model = html_escape::encode_safe(model),
+<a href=#108 id=108 data-nosnippet>108</a>        last_run = html_escape::encode_safe(<span class="kw-2">&amp;</span>last_run)
+<a href=#109 id=109 data-nosnippet>109</a>    );
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span>button_text = <span class="kw">if </span>job.enabled {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="macro">t!</span>(<span class="string">"bot.cron_deactivate_num"</span>, number = number_str)
+<a href=#112 id=112 data-nosnippet>112</a>    } <span class="kw">else </span>{
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="macro">t!</span>(<span class="string">"bot.cron_activate_num"</span>, number = number_str)
+<a href=#114 id=114 data-nosnippet>114</a>    };
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>fp = fingerprint(<span class="kw-2">&amp;</span>job.id);
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">let </span>toggle_btn = teloxide::types::InlineKeyboardButton::callback(
+<a href=#117 id=117 data-nosnippet>117</a>        button_text,
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="macro">format!</span>(<span class="string">"crn:t:{}:{}:{}"</span>, current_page, idx, fp),
+<a href=#119 id=119 data-nosnippet>119</a>    );
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>run_btn = teloxide::types::InlineKeyboardButton::callback(
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="macro">t!</span>(<span class="string">"bot.cron_run_num"</span>, number = number_str),
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">format!</span>(<span class="string">"crn:run:{}:{}:{}"</span>, current_page, idx, fp),
+<a href=#123 id=123 data-nosnippet>123</a>    );
+<a href=#124 id=124 data-nosnippet>124</a>    (line, <span class="macro">vec!</span>[toggle_btn, run_btn])
+<a href=#125 id=125 data-nosnippet>125</a>}
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a><span class="attr">#[cfg(test)]
+<a href=#128 id=128 data-nosnippet>128</a>#[allow(clippy::unwrap_used, clippy::expect_used)]
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">mod </span>tests {
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="attr">#[test]
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">fn </span>test_parse_schedule_natural_common_patterns() {
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"0 3 * * *"</span>).contains(<span class="string">"03:00"</span>));
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"*/15 * * * *"</span>).contains(<span class="string">"15"</span>));
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">assert!</span>(parse_schedule_natural(<span class="string">"0 */2 * * *"</span>).contains(<span class="string">"2"</span>));
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert_eq!</span>(parse_schedule_natural(<span class="string">"custom * *"</span>), <span class="string">"&lt;code&gt;custom * *&lt;/code&gt;"</span>);
+<a href=#138 id=138 data-nosnippet>138</a>    }
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="attr">#[test]
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">fn </span>test_format_schedule_display_includes_next_run() {
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>display = format_schedule_display(<span class="string">"0 3 * * *"</span>, <span class="string">"Asia/Seoul"</span>);
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"03:00"</span>));
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="macro">assert!</span>(display.contains(<span class="string">"Next:"</span>) || display.contains(<span class="string">"다음:"</span>));
+<a href=#145 id=145 data-nosnippet>145</a>    }
+<a href=#146 id=146 data-nosnippet>146</a>}
+<a href=#147 id=147 data-nosnippet>147</a>
 </code></pre></div></section></main></body></html>

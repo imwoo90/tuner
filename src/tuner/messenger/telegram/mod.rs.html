@@ -176,168 +176,112 @@
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="prelude-val">Ok</span>(s) =&gt; stream::consume_stream(bot, (msg.chat.id, msg.thread_id.map(|t| t.<span class="number">0.0</span>)), s, sessions, sess, <span class="kw-2">&amp;</span>cc.config, cli).<span class="kw">await</span><span class="question-mark">?</span>,
 <a href=#177 id=177 data-nosnippet>177</a>        <span class="prelude-val">Err</span>(e) =&gt; {
 <a href=#178 id=178 data-nosnippet>178</a>            <span class="macro">eprintln!</span>(<span class="string">"CLI ERROR: {:?}"</span>, e);
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span><span class="kw-2">mut </span>r = bot.send_message(msg.chat.id, <span class="macro">format!</span>(<span class="string">"❌ Error: {}"</span>, e));
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = msg.thread_id { r = r.message_thread_id(t); }
-<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">let _ </span>= r.<span class="kw">await</span>;
-<a href=#182 id=182 data-nosnippet>182</a>        }
-<a href=#183 id=183 data-nosnippet>183</a>    }
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="prelude-val">Ok</span>(())
-<a href=#185 id=185 data-nosnippet>185</a>}
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a><span class="kw">async fn </span>handle_model_override(
-<a href=#188 id=188 data-nosnippet>188</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#189 id=189 data-nosnippet>189</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#190 id=190 data-nosnippet>190</a>    model_and_effort: (<span class="kw-2">&amp;</span>str, <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;),
-<a href=#191 id=191 data-nosnippet>191</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
-<a href=#192 id=192 data-nosnippet>192</a>    sessions: <span class="kw-2">&amp;</span>SessionManager,
-<a href=#193 id=193 data-nosnippet>193</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#194 id=194 data-nosnippet>194</a>    empty: bool,
-<a href=#195 id=195 data-nosnippet>195</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>(mo, eff) = model_and_effort;
-<a href=#197 id=197 data-nosnippet>197</a>    sess.model = mo.to_string();
-<a href=#198 id=198 data-nosnippet>198</a>    sess.effort = eff.map(|s| s.to_string());
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">let _ </span>= sessions.preserve_session_identity(sess).<span class="kw">await</span>;
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span>sid = sess.get_session_id(<span class="kw-2">&amp;</span>sess.provider);
-<a href=#201 id=201 data-nosnippet>201</a>    commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>sess.model, sess.effort.as_deref()).<span class="kw">await</span>;
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">if </span>empty {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">let </span>display = <span class="kw">if let </span><span class="prelude-val">Some</span>(e) = eff {
-<a href=#204 id=204 data-nosnippet>204</a>            <span class="macro">format!</span>(<span class="string">"{} (effort: {})"</span>, mo, e)
-<a href=#205 id=205 data-nosnippet>205</a>        } <span class="kw">else </span>{
-<a href=#206 id=206 data-nosnippet>206</a>            mo.to_string()
-<a href=#207 id=207 data-nosnippet>207</a>        };
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = bot.send_message(msg.chat.id, <span class="macro">format!</span>(<span class="string">"Next message will use {}"</span>, display));
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = msg.thread_id { r = r.message_thread_id(t); }
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let _ </span>= r.<span class="kw">await</span>;
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#212 id=212 data-nosnippet>212</a>    }
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#214 id=214 data-nosnippet>214</a>}
-<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span>err_msg = <span class="kw">crate</span>::cli::antigravity::error_parser::parse_cli_error(<span class="kw-2">&amp;</span>e, <span class="number">1</span>, cc.config.model.as_deref());
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">let _ </span>= commands::send_reply(bot, msg, err_msg).<span class="kw">await</span>;
+<a href=#181 id=181 data-nosnippet>181</a>        }
+<a href=#182 id=182 data-nosnippet>182</a>    }
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="prelude-val">Ok</span>(())
+<a href=#184 id=184 data-nosnippet>184</a>}
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a><span class="kw">async fn </span>handle_model_override(
+<a href=#187 id=187 data-nosnippet>187</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#188 id=188 data-nosnippet>188</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#189 id=189 data-nosnippet>189</a>    model_and_effort: (<span class="kw-2">&amp;</span>str, <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;),
+<a href=#190 id=190 data-nosnippet>190</a>    sess: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::session::data::SessionData,
+<a href=#191 id=191 data-nosnippet>191</a>    sessions: <span class="kw-2">&amp;</span>SessionManager,
+<a href=#192 id=192 data-nosnippet>192</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#193 id=193 data-nosnippet>193</a>    empty: bool,
+<a href=#194 id=194 data-nosnippet>194</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>(mo, eff) = model_and_effort;
+<a href=#196 id=196 data-nosnippet>196</a>    sess.model = mo.to_string();
+<a href=#197 id=197 data-nosnippet>197</a>    sess.effort = eff.map(|s| s.to_string());
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let _ </span>= sessions.preserve_session_identity(sess).<span class="kw">await</span>;
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">let </span>sid = sess.get_session_id(<span class="kw-2">&amp;</span>sess.provider);
+<a href=#200 id=200 data-nosnippet>200</a>    commands_model::apply_model_to_active_pty(cli, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>sess.model, sess.effort.as_deref()).<span class="kw">await</span>;
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if </span>empty {
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>display = <span class="kw">if let </span><span class="prelude-val">Some</span>(e) = eff {
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="macro">format!</span>(<span class="string">"{} (effort: {})"</span>, mo, e)
+<a href=#204 id=204 data-nosnippet>204</a>        } <span class="kw">else </span>{
+<a href=#205 id=205 data-nosnippet>205</a>            mo.to_string()
+<a href=#206 id=206 data-nosnippet>206</a>        };
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">let _ </span>= commands::send_reply(bot, msg, <span class="macro">format!</span>(<span class="string">"🤖 [tuner] Next message will use `{}`."</span>, display)).<span class="kw">await</span>;
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#209 id=209 data-nosnippet>209</a>    }
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#211 id=211 data-nosnippet>211</a>}
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="kw">use </span>media::{build_prompt_with_attachments, queue_pending_files};
 <a href=#216 id=216 data-nosnippet>216</a>
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a><span class="kw">use </span>media::{build_prompt_with_attachments, queue_pending_files};
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>strip_new_or_reset_prefix(text: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>trimmed = text.trim();
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(raw_cmd) = trimmed.split_whitespace().next() <span class="kw">else </span>{
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">return </span>text;
-<a href=#224 id=224 data-nosnippet>224</a>    };
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>cmd = raw_cmd.split(<span class="string">'@'</span>).next().unwrap_or(raw_cmd);
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if </span>cmd == <span class="string">"/new" </span>|| cmd == <span class="string">"/reset" </span>{
-<a href=#227 id=227 data-nosnippet>227</a>        trimmed[raw_cmd.len()..].trim()
-<a href=#228 id=228 data-nosnippet>228</a>    } <span class="kw">else </span>{
-<a href=#229 id=229 data-nosnippet>229</a>        text
-<a href=#230 id=230 data-nosnippet>230</a>    }
-<a href=#231 id=231 data-nosnippet>231</a>}
-<a href=#232 id=232 data-nosnippet>232</a>
-<a href=#233 id=233 data-nosnippet>233</a><span class="kw">async fn </span>resolve_message_session&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#234 id=234 data-nosnippet>234</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#235 id=235 data-nosnippet>235</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#236 id=236 data-nosnippet>236</a>    text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
-<a href=#237 id=237 data-nosnippet>237</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#238 id=238 data-nosnippet>238</a>    sessions: <span class="kw-2">&amp;</span>SessionManager,
-<a href=#239 id=239 data-nosnippet>239</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#240 id=240 data-nosnippet>240</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;(<span class="kw">crate</span>::session::data::SessionData, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt;, teloxide::RequestError&gt; {
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">let </span>(m_over, eff_over, current_text) = parse_model_directive(text);
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(msg.chat.id.<span class="number">0</span>, get_topic_id(msg));
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">let </span><span class="kw-2">mut </span>m = config.model.clone().unwrap_or_else(|| <span class="string">"antigravity-default"</span>.to_string());
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>mo) = m_over { m = mo.clone(); }
-<a href=#245 id=245 data-nosnippet>245</a>
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>sess, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, <span class="kw-2">&amp;</span>m).<span class="kw">await else </span>{
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#248 id=248 data-nosnippet>248</a>    };
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>mo) = m_over
-<a href=#250 id=250 data-nosnippet>250</a>        &amp;&amp; handle_model_override(bot, msg, (mo, eff_over.as_deref()), <span class="kw-2">&amp;mut </span>sess, sessions, cli, current_text.is_empty()).<span class="kw">await</span><span class="question-mark">? </span>{
-<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#252 id=252 data-nosnippet>252</a>        }
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((sess, current_text)))
-<a href=#254 id=254 data-nosnippet>254</a>}
-<a href=#255 id=255 data-nosnippet>255</a>
-<a href=#256 id=256 data-nosnippet>256</a><span class="kw">async fn </span>boot_first_turn(
-<a href=#257 id=257 data-nosnippet>257</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#258 id=258 data-nosnippet>258</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#259 id=259 data-nosnippet>259</a>    payload: (<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[String]),
-<a href=#260 id=260 data-nosnippet>260</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#261 id=261 data-nosnippet>261</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;SessionManager&gt;,
-<a href=#262 id=262 data-nosnippet>262</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#263 id=263 data-nosnippet>263</a>    sess: <span class="kw-2">&amp;mut </span>SessionData,
-<a href=#264 id=264 data-nosnippet>264</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>(text, escaped, files) = payload;
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">let </span>all_files = media::drain_session_attachments(bot, msg, config, sess, files, sessions).<span class="kw">await</span>;
-<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">let </span><span class="kw-2">mut </span>prompt = build_reply_prompt(msg, escaped);
-<a href=#268 id=268 data-nosnippet>268</a>    media::inject_pre_downloaded_files(<span class="kw-2">&amp;mut </span>prompt, <span class="kw-2">&amp;</span>all_files);
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">let </span>sid = session_init::initialize_session_with_prompt(bot, msg, sessions, sess, cli, config, <span class="prelude-val">Some</span>((text, <span class="kw-2">&amp;</span>prompt))).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">if </span>!sid.is_empty() {
-<a href=#271 id=271 data-nosnippet>271</a>        async_observer::spawn_session_async_observer(bot.clone(), msg, sid, cli.clone(), sessions.clone(), config.clone());
-<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let _ </span>= sessions.update_session(sess).<span class="kw">await</span>;
-<a href=#273 id=273 data-nosnippet>273</a>    } <span class="kw">else </span>{
-<a href=#274 id=274 data-nosnippet>274</a>        queue_pending_files(msg, <span class="kw-2">&amp;</span>all_files, config, sessions.as_ref()).<span class="kw">await</span>;
-<a href=#275 id=275 data-nosnippet>275</a>    }
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="prelude-val">Ok</span>(())
-<a href=#277 id=277 data-nosnippet>277</a>}
-<a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a><span class="kw">async fn </span>run_existing_session_turn(
-<a href=#280 id=280 data-nosnippet>280</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#281 id=281 data-nosnippet>281</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#282 id=282 data-nosnippet>282</a>    texts: (<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str),
-<a href=#283 id=283 data-nosnippet>283</a>    files: <span class="kw-2">&amp;</span>[String],
-<a href=#284 id=284 data-nosnippet>284</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#285 id=285 data-nosnippet>285</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#286 id=286 data-nosnippet>286</a>    (sessions, <span class="kw-2">mut </span>sess): (<span class="kw-2">&amp;</span>std::sync::Arc&lt;SessionManager&gt;, SessionData),
-<a href=#287 id=287 data-nosnippet>287</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span>(text, escaped) = texts;
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span>sid = session_init::initialize_session_if_needed(bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">if </span>sid.is_empty() {
-<a href=#291 id=291 data-nosnippet>291</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#293 id=293 data-nosnippet>293</a>    }
-<a href=#294 id=294 data-nosnippet>294</a>    async_observer::spawn_session_async_observer(bot.clone(), msg, sid.clone(), cli.clone(), sessions.clone(), config.clone());
-<a href=#295 id=295 data-nosnippet>295</a>    history::log_telegram_message(<span class="kw-2">&amp;</span>config.working_dir, <span class="kw-2">&amp;</span>sid, (sess.topic_id, sess.topic_name.as_deref()), <span class="string">"user"</span>, <span class="prelude-val">Some</span>(msg.id.<span class="number">0</span>), text, (<span class="bool-val">true</span>, <span class="prelude-val">None</span>));
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">if </span>ask_helpers::feed_active_session_if_running(bot, msg, <span class="kw-2">&amp;</span>sid, escaped, cli, (sessions, sess.clone()), config).<span class="kw">await</span><span class="question-mark">? </span>{
-<a href=#297 id=297 data-nosnippet>297</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#299 id=299 data-nosnippet>299</a>    }
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">let </span>prompt = build_prompt_with_attachments(bot, msg, escaped, files, config, <span class="kw-2">&amp;mut </span>sess, sessions).<span class="kw">await</span>;
-<a href=#301 id=301 data-nosnippet>301</a>    run_cli_stream(bot, msg, <span class="kw-2">&amp;</span>prompt, <span class="kw-2">&amp;</span>sid, cli, (sessions, sess), config).<span class="kw">await
-<a href=#302 id=302 data-nosnippet>302</a></span>}
-<a href=#303 id=303 data-nosnippet>303</a>
-<a href=#304 id=304 data-nosnippet>304</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>process_text_with_files(
-<a href=#305 id=305 data-nosnippet>305</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#306 id=306 data-nosnippet>306</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#307 id=307 data-nosnippet>307</a>    payload: (<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[String]),
-<a href=#308 id=308 data-nosnippet>308</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#309 id=309 data-nosnippet>309</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;SessionManager&gt;,
-<a href=#310 id=310 data-nosnippet>310</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#311 id=311 data-nosnippet>311</a>    aux: (<span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager, <span class="kw-2">&amp;</span>TopicNameCache),
-<a href=#312 id=312 data-nosnippet>312</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>(raw_text, files) = payload;
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">if </span>raw_text.trim().is_empty() || commands::handle_commands(bot, msg, raw_text, config, sessions, cli, aux).<span class="kw">await</span><span class="question-mark">? </span>{
-<a href=#315 id=315 data-nosnippet>315</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#317 id=317 data-nosnippet>317</a>    }
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span>text = strip_new_or_reset_prefix(raw_text);
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions, cli).<span class="kw">await</span><span class="question-mark">? </span><span class="kw">else </span>{
-<a href=#320 id=320 data-nosnippet>320</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#322 id=322 data-nosnippet>322</a>    };
-<a href=#323 id=323 data-nosnippet>323</a>    <span class="kw">let </span>escaped = commands_registry::escape_non_workflow_slash(current_text);
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">if </span>!<span class="macro">cfg!</span>(test) &amp;&amp; !session_init::has_alive_session(<span class="kw-2">&amp;</span>sess, cli, <span class="kw-2">&amp;</span>config.provider) {
-<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">return </span>boot_first_turn(bot, msg, (text, <span class="kw-2">&amp;</span>escaped, files), config, sessions, cli, <span class="kw-2">&amp;mut </span>sess).<span class="kw">await</span>;
-<a href=#326 id=326 data-nosnippet>326</a>    }
-<a href=#327 id=327 data-nosnippet>327</a>    run_existing_session_turn(bot, msg, (text, <span class="kw-2">&amp;</span>escaped), files, config, cli, (sessions, sess)).<span class="kw">await
-<a href=#328 id=328 data-nosnippet>328</a></span>}
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a><span class="kw">pub mod </span>callbacks_effort;
-<a href=#331 id=331 data-nosnippet>331</a><span class="kw">pub mod </span>media;
-<a href=#332 id=332 data-nosnippet>332</a><span class="kw">pub mod </span>commands_model;
-<a href=#333 id=333 data-nosnippet>333</a><span class="kw">pub mod </span>commands_registry;
-<a href=#334 id=334 data-nosnippet>334</a><span class="kw">pub mod </span>auth;
-<a href=#335 id=335 data-nosnippet>335</a><span class="kw">pub mod </span>handler;
-<a href=#336 id=336 data-nosnippet>336</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>handler::handle_message;
-<a href=#337 id=337 data-nosnippet>337</a><span class="attr">#[cfg(test)]
-<a href=#338 id=338 data-nosnippet>338</a>#[allow(clippy::unwrap_used, clippy::expect_used)]
-<a href=#339 id=339 data-nosnippet>339</a></span><span class="doccomment">/// Test module/item.
-<a href=#340 id=340 data-nosnippet>340</a></span><span class="kw">pub mod </span>lock_bypass_tests;
-<a href=#341 id=341 data-nosnippet>341</a>
-<a href=#342 id=342 data-nosnippet>342</a><span class="kw">pub use </span>runner::run_bot;
+<a href=#217 id=217 data-nosnippet>217</a><span class="kw">async fn </span>resolve_message_session&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#218 id=218 data-nosnippet>218</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#219 id=219 data-nosnippet>219</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#220 id=220 data-nosnippet>220</a>    text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#221 id=221 data-nosnippet>221</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#222 id=222 data-nosnippet>222</a>    sessions: <span class="kw-2">&amp;</span>SessionManager,
+<a href=#223 id=223 data-nosnippet>223</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#224 id=224 data-nosnippet>224</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;(<span class="kw">crate</span>::session::data::SessionData, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt;, teloxide::RequestError&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>(m_over, eff_over, current_text) = parse_model_directive(text);
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(msg.chat.id.<span class="number">0</span>, get_topic_id(msg));
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span><span class="kw-2">mut </span>m = config.model.clone().unwrap_or_else(|| <span class="string">"antigravity-default"</span>.to_string());
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>mo) = m_over { m = mo.clone(); }
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>sess, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, <span class="kw-2">&amp;</span>m).<span class="kw">await else </span>{
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#232 id=232 data-nosnippet>232</a>    };
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>mo) = m_over
+<a href=#234 id=234 data-nosnippet>234</a>        &amp;&amp; handle_model_override(bot, msg, (mo, eff_over.as_deref()), <span class="kw-2">&amp;mut </span>sess, sessions, cli, current_text.is_empty()).<span class="kw">await</span><span class="question-mark">? </span>{
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#236 id=236 data-nosnippet>236</a>        }
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((sess, current_text)))
+<a href=#238 id=238 data-nosnippet>238</a>}
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>process_text_with_files(
+<a href=#241 id=241 data-nosnippet>241</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#242 id=242 data-nosnippet>242</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#243 id=243 data-nosnippet>243</a>    payload: (<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[String]),
+<a href=#244 id=244 data-nosnippet>244</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#245 id=245 data-nosnippet>245</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;SessionManager&gt;,
+<a href=#246 id=246 data-nosnippet>246</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#247 id=247 data-nosnippet>247</a>    aux: (<span class="kw-2">&amp;</span><span class="kw">crate</span>::cron::manager::CronManager, <span class="kw-2">&amp;</span>TopicNameCache),
+<a href=#248 id=248 data-nosnippet>248</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">let </span>(text, files) = payload;
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">if </span>text.trim().is_empty() || commands::handle_commands(bot, msg, text, config, sessions, cli, aux).<span class="kw">await</span><span class="question-mark">? </span>{
+<a href=#251 id=251 data-nosnippet>251</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#253 id=253 data-nosnippet>253</a>    }
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>sess, current_text)) = resolve_message_session(bot, msg, text, config, sessions, cli).<span class="kw">await</span><span class="question-mark">? </span><span class="kw">else </span>{
+<a href=#255 id=255 data-nosnippet>255</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#257 id=257 data-nosnippet>257</a>    };
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">let </span>escaped = commands_registry::escape_non_workflow_slash(current_text);
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">let </span>sid = session_init::initialize_session_if_needed(bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">if </span>sid.is_empty() {
+<a href=#261 id=261 data-nosnippet>261</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>    async_observer::spawn_session_async_observer(bot.clone(), msg, sid.clone(), cli.clone(), sessions.clone(), config.clone());
+<a href=#265 id=265 data-nosnippet>265</a>    history::log_telegram_message(<span class="kw-2">&amp;</span>config.working_dir, <span class="kw-2">&amp;</span>sid, (sess.topic_id, sess.topic_name.as_deref()), <span class="string">"user"</span>, <span class="prelude-val">Some</span>(msg.id.<span class="number">0</span>), text, (<span class="bool-val">true</span>, <span class="prelude-val">None</span>));
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">if </span>ask_helpers::feed_active_session_if_running(bot, msg, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>escaped, cli, (sessions, sess.clone()), config).<span class="kw">await</span><span class="question-mark">? </span>{
+<a href=#267 id=267 data-nosnippet>267</a>        queue_pending_files(msg, files, config, sessions).<span class="kw">await</span>;
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#269 id=269 data-nosnippet>269</a>    }
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let </span>prompt = build_prompt_with_attachments(bot, msg, <span class="kw-2">&amp;</span>escaped, files, config, <span class="kw-2">&amp;mut </span>sess, sessions).<span class="kw">await</span>;
+<a href=#271 id=271 data-nosnippet>271</a>    run_cli_stream(bot, msg, <span class="kw-2">&amp;</span>prompt, <span class="kw-2">&amp;</span>sid, cli, (sessions, sess), config).<span class="kw">await
+<a href=#272 id=272 data-nosnippet>272</a></span>}
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a><span class="kw">pub mod </span>callbacks_effort;
+<a href=#275 id=275 data-nosnippet>275</a><span class="kw">pub mod </span>media;
+<a href=#276 id=276 data-nosnippet>276</a><span class="kw">pub mod </span>commands_model;
+<a href=#277 id=277 data-nosnippet>277</a><span class="kw">pub mod </span>commands_registry;
+<a href=#278 id=278 data-nosnippet>278</a><span class="kw">pub mod </span>auth;
+<a href=#279 id=279 data-nosnippet>279</a><span class="kw">pub mod </span>handler;
+<a href=#280 id=280 data-nosnippet>280</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>handler::handle_message;
+<a href=#281 id=281 data-nosnippet>281</a><span class="attr">#[cfg(test)]
+<a href=#282 id=282 data-nosnippet>282</a>#[allow(clippy::unwrap_used, clippy::expect_used)]
+<a href=#283 id=283 data-nosnippet>283</a></span><span class="doccomment">/// Test module/item.
+<a href=#284 id=284 data-nosnippet>284</a></span><span class="kw">pub mod </span>lock_bypass_tests;
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a><span class="kw">pub use </span>runner::run_bot;
 </code></pre></div></section></main></body></html>

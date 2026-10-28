@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["clear_old_progress_reaction","set_emoji_reaction","set_progress_reaction"],"struct":["AsyncTypingHandle","TelegramTypingGuard"]};
+window.SIDEBAR_ITEMS = {"fn":["clear_old_progress_reaction","set_progress_reaction"],"struct":["AsyncTypingHandle","TelegramTypingGuard"]};

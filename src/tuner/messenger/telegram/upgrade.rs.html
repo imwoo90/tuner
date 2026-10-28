@@ -50,53 +50,54 @@
 <a href=#50 id=50 data-nosnippet>50</a>    markup: <span class="prelude-ty">Option</span>&lt;teloxide::types::InlineKeyboardMarkup&gt;,
 <a href=#51 id=51 data-nosnippet>51</a>) {
 <a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">let </span>limiter = <span class="kw">super</span>::rate_limiter::global_chat_rate_limiter();
-<a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">let </span>text_str = text.into();
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">let </span>html_str = <span class="kw">super</span>::formatting::markdown_to_telegram_html(<span class="kw-2">&amp;</span>text.into());
 <a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">let </span>res = limiter.execute_rate_limited(chat_id, || {
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span>t = text_str.clone();
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span>t = html_str.clone();
 <a href=#56 id=56 data-nosnippet>56</a>        <span class="kw">let </span>m = markup.clone();
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">async move </span>{
-<a href=#58 id=58 data-nosnippet>58</a>            <span class="kw">let </span><span class="kw-2">mut </span>req = bot.edit_message_text(chat_id, mid, t);
-<a href=#59 id=59 data-nosnippet>59</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(m_inner) = m {
-<a href=#60 id=60 data-nosnippet>60</a>                req = req.reply_markup(m_inner);
-<a href=#61 id=61 data-nosnippet>61</a>            }
-<a href=#62 id=62 data-nosnippet>62</a>            req.<span class="kw">await
-<a href=#63 id=63 data-nosnippet>63</a>        </span>}
-<a href=#64 id=64 data-nosnippet>64</a>    }).<span class="kw">await</span>;
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = res {
-<a href=#66 id=66 data-nosnippet>66</a>        <span class="macro">eprintln!</span>(<span class="string">"❌ [tuner] Failed to edit upgrade message: {:?}"</span>, e);
-<a href=#67 id=67 data-nosnippet>67</a>    }
-<a href=#68 id=68 data-nosnippet>68</a>}
-<a href=#69 id=69 data-nosnippet>69</a>
-<a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_upgrade_command(
-<a href=#71 id=71 data-nosnippet>71</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#72 id=72 data-nosnippet>72</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#73 id=73 data-nosnippet>73</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">let </span>processing_msg = send_reply(bot, msg, <span class="macro">crate::t!</span>(<span class="string">"bot.processing"</span>)).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#75 id=75 data-nosnippet>75</a>
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">match </span><span class="kw">crate</span>::upgrade::get_latest_release().<span class="kw">await </span>{
-<a href=#77 id=77 data-nosnippet>77</a>        <span class="prelude-val">Ok</span>(release) =&gt; {
-<a href=#78 id=78 data-nosnippet>78</a>            <span class="kw">let </span>current = <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>);
-<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">let </span>latest = release.tag_name.trim_start_matches(<span class="string">'v'</span>);
-<a href=#80 id=80 data-nosnippet>80</a>            <span class="kw">if </span><span class="kw">crate</span>::upgrade::is_newer_version(current, latest) {
-<a href=#81 id=81 data-nosnippet>81</a>                <span class="kw">if </span>release.assets.iter().any(|a| a.name.ends_with(<span class="string">".tar.gz"</span>)) {
-<a href=#82 id=82 data-nosnippet>82</a>                    <span class="kw">let </span>has_body = release.body.as_ref().map(|b| !b.is_empty()).unwrap_or(<span class="bool-val">false</span>);
-<a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw">let </span>markup = build_upgrade_keyboard(<span class="kw-2">&amp;</span>release.tag_name, latest, has_body);
-<a href=#84 id=84 data-nosnippet>84</a>                    <span class="kw">let </span>header = <span class="macro">crate::t!</span>(<span class="string">"upgrade.available_header"</span>);
-<a href=#85 id=85 data-nosnippet>85</a>                    <span class="kw">let </span>body = <span class="macro">crate::t!</span>(<span class="string">"upgrade.available_body"</span>, current = current, latest = latest);
-<a href=#86 id=86 data-nosnippet>86</a>                    edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"{}\n\n{}"</span>, header, body), <span class="prelude-val">Some</span>(markup)).<span class="kw">await</span>;
-<a href=#87 id=87 data-nosnippet>87</a>                } <span class="kw">else </span>{
-<a href=#88 id=88 data-nosnippet>88</a>                    edit_reply(bot, msg.chat.id, processing_msg.id, <span class="string">"Could not find a valid release asset for Linux."</span>, <span class="prelude-val">None</span>).<span class="kw">await</span>;
-<a href=#89 id=89 data-nosnippet>89</a>                }
-<a href=#90 id=90 data-nosnippet>90</a>            } <span class="kw">else </span>{
-<a href=#91 id=91 data-nosnippet>91</a>                <span class="kw">let </span>header = <span class="macro">crate::t!</span>(<span class="string">"upgrade.up_to_date_header"</span>);
-<a href=#92 id=92 data-nosnippet>92</a>                <span class="kw">let </span>body = <span class="macro">crate::t!</span>(<span class="string">"upgrade.up_to_date_body"</span>, current = current, latest = latest);
-<a href=#93 id=93 data-nosnippet>93</a>                edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"{}\n\n{}"</span>, header, body), <span class="prelude-val">None</span>).<span class="kw">await</span>;
-<a href=#94 id=94 data-nosnippet>94</a>            }
-<a href=#95 id=95 data-nosnippet>95</a>        }
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#97 id=97 data-nosnippet>97</a>            edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"Failed to check for updates: {}"</span>, e), <span class="prelude-val">None</span>).<span class="kw">await</span>;
-<a href=#98 id=98 data-nosnippet>98</a>        }
-<a href=#99 id=99 data-nosnippet>99</a>    }
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="prelude-val">Ok</span>(())
-<a href=#101 id=101 data-nosnippet>101</a>}
+<a href=#58 id=58 data-nosnippet>58</a>            <span class="kw">let </span><span class="kw-2">mut </span>req = bot.edit_message_text(chat_id, mid, t)
+<a href=#59 id=59 data-nosnippet>59</a>                .parse_mode(teloxide::types::ParseMode::Html);
+<a href=#60 id=60 data-nosnippet>60</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(m_inner) = m {
+<a href=#61 id=61 data-nosnippet>61</a>                req = req.reply_markup(m_inner);
+<a href=#62 id=62 data-nosnippet>62</a>            }
+<a href=#63 id=63 data-nosnippet>63</a>            req.<span class="kw">await
+<a href=#64 id=64 data-nosnippet>64</a>        </span>}
+<a href=#65 id=65 data-nosnippet>65</a>    }).<span class="kw">await</span>;
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = res {
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="macro">eprintln!</span>(<span class="string">"❌ [tuner] Failed to edit upgrade message: {:?}"</span>, e);
+<a href=#68 id=68 data-nosnippet>68</a>    }
+<a href=#69 id=69 data-nosnippet>69</a>}
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_upgrade_command(
+<a href=#72 id=72 data-nosnippet>72</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#73 id=73 data-nosnippet>73</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#74 id=74 data-nosnippet>74</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">let </span>processing_msg = send_reply(bot, msg, <span class="macro">crate::t!</span>(<span class="string">"bot.processing"</span>)).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#76 id=76 data-nosnippet>76</a>
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">match </span><span class="kw">crate</span>::upgrade::get_latest_release().<span class="kw">await </span>{
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="prelude-val">Ok</span>(release) =&gt; {
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">let </span>current = <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>);
+<a href=#80 id=80 data-nosnippet>80</a>            <span class="kw">let </span>latest = release.tag_name.trim_start_matches(<span class="string">'v'</span>);
+<a href=#81 id=81 data-nosnippet>81</a>            <span class="kw">if </span><span class="kw">crate</span>::upgrade::is_newer_version(current, latest) {
+<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw">if </span>release.assets.iter().any(|a| a.name.ends_with(<span class="string">".tar.gz"</span>)) {
+<a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw">let </span>has_body = release.body.as_ref().map(|b| !b.is_empty()).unwrap_or(<span class="bool-val">false</span>);
+<a href=#84 id=84 data-nosnippet>84</a>                    <span class="kw">let </span>markup = build_upgrade_keyboard(<span class="kw-2">&amp;</span>release.tag_name, latest, has_body);
+<a href=#85 id=85 data-nosnippet>85</a>                    <span class="kw">let </span>header = <span class="macro">crate::t!</span>(<span class="string">"upgrade.available_header"</span>);
+<a href=#86 id=86 data-nosnippet>86</a>                    <span class="kw">let </span>body = <span class="macro">crate::t!</span>(<span class="string">"upgrade.available_body"</span>, current = current, latest = latest);
+<a href=#87 id=87 data-nosnippet>87</a>                    edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"{}\n\n{}"</span>, header, body), <span class="prelude-val">Some</span>(markup)).<span class="kw">await</span>;
+<a href=#88 id=88 data-nosnippet>88</a>                } <span class="kw">else </span>{
+<a href=#89 id=89 data-nosnippet>89</a>                    edit_reply(bot, msg.chat.id, processing_msg.id, <span class="string">"Could not find a valid release asset for Linux."</span>, <span class="prelude-val">None</span>).<span class="kw">await</span>;
+<a href=#90 id=90 data-nosnippet>90</a>                }
+<a href=#91 id=91 data-nosnippet>91</a>            } <span class="kw">else </span>{
+<a href=#92 id=92 data-nosnippet>92</a>                <span class="kw">let </span>header = <span class="macro">crate::t!</span>(<span class="string">"upgrade.up_to_date_header"</span>);
+<a href=#93 id=93 data-nosnippet>93</a>                <span class="kw">let </span>body = <span class="macro">crate::t!</span>(<span class="string">"upgrade.up_to_date_body"</span>, current = current, latest = latest);
+<a href=#94 id=94 data-nosnippet>94</a>                edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"{}\n\n{}"</span>, header, body), <span class="prelude-val">None</span>).<span class="kw">await</span>;
+<a href=#95 id=95 data-nosnippet>95</a>            }
+<a href=#96 id=96 data-nosnippet>96</a>        }
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#98 id=98 data-nosnippet>98</a>            edit_reply(bot, msg.chat.id, processing_msg.id, <span class="macro">format!</span>(<span class="string">"Failed to check for updates: {}"</span>, e), <span class="prelude-val">None</span>).<span class="kw">await</span>;
+<a href=#99 id=99 data-nosnippet>99</a>        }
+<a href=#100 id=100 data-nosnippet>100</a>    }
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="prelude-val">Ok</span>(())
+<a href=#102 id=102 data-nosnippet>102</a>}
 </code></pre></div></section></main></body></html>
