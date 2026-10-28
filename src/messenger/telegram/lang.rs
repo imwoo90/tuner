@@ -57,11 +57,7 @@ pub(crate) async fn handle_lang_command(
         let _ = sessions.preserve_session_identity(&sess).await;
         
         let confirm = crate::i18n::t_for_lang(target_lang, "bot.language_switch_success", &[("language", target_lang)]);
-        let mut req = bot.send_message(msg.chat.id, confirm);
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
-        }
-        if let Err(e) = req.await {
+        if let Err(e) = super::commands::send_reply(bot, msg, confirm).await {
             eprintln!("❌ [tuner] Failed to send language switch success message: {:?}", e);
         }
     }

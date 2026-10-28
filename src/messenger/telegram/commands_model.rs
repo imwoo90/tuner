@@ -216,28 +216,25 @@ pub(crate) async fn handle_effort_command(
     };
     
     if args.is_empty() {
-        let current_effort = sess.effort.as_deref().unwrap_or("default");
-        let markup = build_effort_keyboard();
-        let text = format!("Current reasoning effort is `{}`. Select a new reasoning effort level:", current_effort);
-        let mut req = bot.send_message(msg.chat.id, text);
+        let cur = sess.effort.as_deref().unwrap_or("default");
+        let text = super::formatting::markdown_to_telegram_html(&format!(
+            "Current reasoning effort is `{cur}`. Select a new reasoning effort level:"
+        ));
+        let mut req = bot.send_message(msg.chat.id, text).parse_mode(teloxide::types::ParseMode::Html);
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }
-        if let Err(e) = req.reply_markup(markup).await {
-            eprintln!("❌ [tuner] Failed to send effort select keyboard: {:?}", e);
-        }
+        let _ = req.reply_markup(build_effort_keyboard()).await;
     } else {
         let level = args.trim().to_lowercase();
-        if level == "high" || level == "medium" || level == "low" {
+        if matches!(level.as_str(), "high" | "medium" | "low") {
             sess.effort = Some(level.clone());
             let _ = sessions.preserve_session_identity(&sess).await;
             let sid = sess.get_session_id(&sess.provider);
             apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
-            let status_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", level);
-            let _ = send_reply(bot, msg, status_msg).await;
+            let _ = send_reply(bot, msg, format!("🤖 [tuner] Session reasoning effort switched to `{level}`.")).await;
         } else {
-            let status_msg = "❌ Invalid effort level. Supported levels: `high`, `medium`, `low`.";
-            let _ = send_reply(bot, msg, status_msg).await;
+            let _ = send_reply(bot, msg, "❌ Invalid effort level. Supported levels: `high`, `medium`, `low`.").await;
         }
     }
     Ok(())

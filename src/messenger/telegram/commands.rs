@@ -22,21 +22,22 @@ pub(crate) async fn send_reply(
     text: impl Into<String>,
 ) -> Result<Message, teloxide::RequestError> {
     let limiter = super::rate_limiter::global_chat_rate_limiter();
-    let text_str = text.into();
+    let raw_str = text.into();
+    let html_str = super::formatting::markdown_to_telegram_html(&raw_str);
     let res = limiter.execute_rate_limited(msg.chat.id, || {
-        let mut req = bot.send_message(msg.chat.id, text_str.clone());
+        let mut req = bot.send_message(msg.chat.id, html_str.clone())
+            .parse_mode(teloxide::types::ParseMode::Html);
         if let Some(tid) = msg.thread_id {
             req = req.message_thread_id(tid);
         }
         async move { req.await }
     }).await;
-    if let Err(ref e) = res {
-        eprintln!(
-            "❌ [tuner] Failed to send reply (chat: {}, thread: {:?}): {:?}",
-            msg.chat.id,
-            msg.thread_id.map(|t| t.0.0),
-            e
-        );
+    if res.is_err() {
+        let mut fallback = bot.send_message(msg.chat.id, raw_str);
+        if let Some(tid) = msg.thread_id {
+            fallback = fallback.message_thread_id(tid);
+        }
+        return fallback.await;
     }
     res
 }

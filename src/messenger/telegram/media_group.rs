@@ -32,6 +32,8 @@ pub struct MediaGroupDeps {
     pub cron_manager: Arc<CronManager>,
     /// Forum topic name cache.
     pub topic_cache: Arc<TopicNameCache>,
+    /// Bot username for stripping mentions in group captions.
+    pub bot_username: Option<String>,
 }
 
 /// Represents `MediaGroupManager` (media group manager).
@@ -135,12 +137,12 @@ pub(crate) async fn process_media_group(
     let mut sorted_messages = messages;
     sorted_messages.sort_by_key(|m| m.id.0);
 
-    // Find the caption text (first non-empty text/caption in the group)
+    // Find the caption text (first non-empty text/caption in the group) and normalize mentions/commands
     let mut caption = String::new();
     for msg in &sorted_messages {
-        let txt = msg.text().or(msg.caption()).unwrap_or("").trim().to_string();
+        let txt = msg.text().or(msg.caption()).unwrap_or("").trim();
         if !txt.is_empty() && caption.is_empty() {
-            caption = txt;
+            caption = super::handler::normalize_command_text(txt, deps.bot_username.as_deref());
         }
     }
 
@@ -156,8 +158,13 @@ pub(crate) async fn process_media_group(
         }
     }
 
-    // Use the first message of the group as the main triggering message context
-    if let Some(trigger_msg) = sorted_messages.first() {
+    // Prefer the message carrying a reply quote or caption as the triggering context
+    let trigger_msg = sorted_messages
+        .iter()
+        .find(|m| m.reply_to_message().is_some())
+        .or_else(|| sorted_messages.iter().find(|m| !m.text().or(m.caption()).unwrap_or("").trim().is_empty()))
+        .or_else(|| sorted_messages.first());
+    if let Some(trigger_msg) = trigger_msg {
         crate::telegram::process_text_with_files(
             &bot,
             trigger_msg,

@@ -162,7 +162,7 @@ while True:
         mgr.update_session(&updated).await.unwrap();
 
         let msg1 = make_msg(r#"{"message_id":104,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-1","file_unique_id":"unique-1","file_name":"file1.pdf"},"media_group_id":"group-999"}"#);
-        let msg2 = make_msg(r#"{"message_id":105,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-2","file_unique_id":"unique-2","file_name":"file2.pdf"},"media_group_id":"group-999","caption":"Analyze album"}"#);
+        let msg2 = make_msg(r#"{"message_id":105,"date":123456,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"document":{"file_id":"file-2","file_unique_id":"unique-2","file_name":"file2.pdf"},"media_group_id":"group-999","caption":"@mock_bot Analyze album","reply_to_message":{"message_id":99,"date":123400,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I"},"text":"Original album spec"}}"#);
 
         handle_message(bot.clone(), msg1, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
         handle_message(bot, msg2, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
@@ -170,7 +170,8 @@ while True:
         let prompt_log = wait_for_prompt(&temp, "Analyze album").await;
         assert!(prompt_log.contains("telegram_files/mock_media_104_file1.pdf"), "prompt_log is: {:?}", prompt_log);
         assert!(prompt_log.contains("telegram_files/mock_media_105_file2.pdf"), "prompt_log is: {:?}", prompt_log);
-        assert!(prompt_log.contains("Analyze album"), "prompt_log is: {:?}", prompt_log);
+        assert!(prompt_log.contains("Analyze album") && !prompt_log.contains("@mock_bot"), "prompt_log is: {:?}", prompt_log);
+        assert!(prompt_log.contains("Original album spec"), "prompt_log is: {:?}", prompt_log);
     }
 
     #[tokio::test(flavor = "multi_thread")]

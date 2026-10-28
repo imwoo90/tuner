@@ -117,7 +117,7 @@ async fn resolve_active_lang(
         .unwrap_or_else(|| "en".to_string())
 }
 
-fn normalize_command_text(raw_text: &str, bot_username: Option<&str>) -> String {
+pub(crate) fn normalize_command_text(raw_text: &str, bot_username: Option<&str>) -> String {
     reply::strip_mention(raw_text, bot_username)
         .replace("/teamwork_preview", "/teamwork-preview")
         .replace("/grill_me", "/grill-me")
@@ -169,6 +169,7 @@ pub(crate) async fn handle_message(
         cli,
         cron_manager,
         topic_cache,
+        bot_username: bot_info.username.clone(),
     };
 
     if super::commands_registry::is_lock_free_command(&text) {

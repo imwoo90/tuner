@@ -70,6 +70,7 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: Release v${{ steps.get_version.outputs.version }}
+          generate_release_notes: true
           draft: false
           prerelease: false
           files: |

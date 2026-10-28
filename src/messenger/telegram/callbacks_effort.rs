@@ -40,7 +40,9 @@ async fn render_effort_keyboard(
     }
     keyboard.push(row);
     let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
-    let _ = bot.edit_message_text(msg.chat.id, msg.id, format!("Select reasoning effort level for `{}`:", base))
+    let prompt_html = super::formatting::markdown_to_telegram_html(&format!("Select reasoning effort level for `{}`:", base));
+    let _ = bot.edit_message_text(msg.chat.id, msg.id, prompt_html)
+        .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(markup)
         .await;
     Ok(())
@@ -72,7 +74,10 @@ pub async fn handle_model_base_callback(
             let _ = sessions.preserve_session_identity(&s).await;
             let sid = s.get_session_id(&s.provider);
             crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
-            let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = base)).await;
+            let html = super::formatting::markdown_to_telegram_html(&crate::t!("bot.model_switch_success", model = base));
+            let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
+                .parse_mode(teloxide::types::ParseMode::Html)
+                .await;
         }
     } else {
         let _ = render_effort_keyboard(bot, msg, base, &efforts).await;
@@ -98,7 +103,10 @@ pub async fn handle_model_effort_callback(
         let sid = s.get_session_id(&s.provider);
         crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
         let display = format!("{} (effort: {})", base, effort);
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("bot.model_switch_success", model = display)).await;
+        let html = super::formatting::markdown_to_telegram_html(&crate::t!("bot.model_switch_success", model = display));
+        let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await;
     }
 }
 
@@ -118,7 +126,9 @@ pub async fn handle_standalone_effort_callback(
         let _ = sessions.preserve_session_identity(&s).await;
         let sid = s.get_session_id(&s.provider);
         crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &sid, &s.model, s.effort.as_deref()).await;
-        let display_msg = format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort);
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, display_msg).await;
+        let display_msg = super::formatting::markdown_to_telegram_html(&format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort));
+        let _ = bot.edit_message_text(msg.chat.id, msg.id, display_msg)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await;
     }
 }

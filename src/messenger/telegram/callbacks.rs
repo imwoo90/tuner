@@ -39,7 +39,10 @@ async fn handle_lang_callback(
         s.language = Some(target_lang.to_string());
         let _ = sessions.preserve_session_identity(&s).await;
         let confirm = crate::i18n::t_for_lang(target_lang, "bot.language_switch_success", &[("language", target_lang)]);
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, confirm).await;
+        let html = super::formatting::markdown_to_telegram_html(&confirm);
+        let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
+            .parse_mode(teloxide::types::ParseMode::Html)
+            .await;
     }
 }
 
@@ -170,9 +173,12 @@ async fn handle_upgrade_changelog(bot: &Bot, msg: &Message, tag: &str) -> Result
     };
     if text.is_empty() { text = crate::t!("upgrade_handler.no_changelog", version = ver); }
     let header = crate::t!("upgrade_handler.changelog_header", version = ver);
-    let mut req = bot.send_message(msg.chat.id, format!("{}\n\n{}", header, text));
-    if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-    let _ = req.await;
+    let html = super::formatting::markdown_to_telegram_html(&format!("{}\n\n{}", header, text));
+    for chunk in super::formatting::split_html_message(&html, 4000) {
+        let mut req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
+        if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
+        let _ = req.await;
+    }
     Ok(())
 }
 

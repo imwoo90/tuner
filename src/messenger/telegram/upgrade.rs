@@ -50,12 +50,13 @@ async fn edit_reply(
     markup: Option<teloxide::types::InlineKeyboardMarkup>,
 ) {
     let limiter = super::rate_limiter::global_chat_rate_limiter();
-    let text_str = text.into();
+    let html_str = super::formatting::markdown_to_telegram_html(&text.into());
     let res = limiter.execute_rate_limited(chat_id, || {
-        let t = text_str.clone();
+        let t = html_str.clone();
         let m = markup.clone();
         async move {
-            let mut req = bot.edit_message_text(chat_id, mid, t);
+            let mut req = bot.edit_message_text(chat_id, mid, t)
+                .parse_mode(teloxide::types::ParseMode::Html);
             if let Some(m_inner) = m {
                 req = req.reply_markup(m_inner);
             }
