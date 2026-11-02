@@ -37,6 +37,32 @@ fn test_parse_antigravity_json_extracts_response_field() {
 }
 
 #[test]
+fn test_extract_finished_reason_and_early_termination_formatting() {
+    let normal = r#"{"conversation_id":"abc-123","status":"SUCCESS","response":"Complete answer"}"#;
+    assert_eq!(events::extract_finished_reason(normal), None);
+    assert_eq!(events::parse_antigravity_json(normal), "Complete answer");
+
+    let timeout_json = r#"{"conversation_id":"abc-123","response":"Partial text","finished_reason":"print_timeout"}"#;
+    assert_eq!(events::extract_finished_reason(timeout_json), Some("print_timeout".to_string()));
+    assert_eq!(
+        events::parse_antigravity_json(timeout_json),
+        "Partial text\n\n⚠️ [Turn ended early: print_timeout]"
+    );
+
+    let interrupted_empty = r#"{"conversation_id":"abc-123","response":"","finished_reason":"interrupted"}"#;
+    assert_eq!(events::extract_finished_reason(interrupted_empty), Some("interrupted".to_string()));
+    assert_eq!(events::parse_antigravity_json(interrupted_empty), "⚠️ Turn ended early: interrupted");
+}
+
+#[test]
+fn test_verified_agy_version_embedded_at_compile_time() {
+    let verified = env!("TUNER_VERIFIED_AGY_VERSION");
+    assert!(!verified.is_empty());
+    assert_ne!(verified, "unknown");
+    assert!(verified.starts_with("1.4."));
+}
+
+#[test]
 fn test_build_command_includes_output_format_json() {
     let _guard = crate::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let config = CliConfig {

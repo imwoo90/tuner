@@ -22,8 +22,10 @@ jobs:
         id: get_version
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n 1 | awk -F '"' '{print $2}')
+          AGY_VERSION=$(grep '^verified_version =' Cargo.toml | head -n 1 | awk -F '"' '{print $2}')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Detected version: $VERSION"
+          echo "agy_version=$AGY_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION (verified agy: $AGY_VERSION)"
 
       - name: Check if Tag Exists
         id: check_tag
@@ -69,7 +71,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
-          name: Release v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }} (agy v${{ steps.get_version.outputs.agy_version }})
+          body: |
+            **Verified Antigravity CLI (`agy`) Version**: `v${{ steps.get_version.outputs.agy_version }}`
           generate_release_notes: true
           draft: false
           prerelease: false

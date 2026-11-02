@@ -288,3 +288,25 @@ fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
     assert_eq!(text, "All done!");
 }
 
+#[test]
+fn test_completion_rejects_interrupted_thinking_only_step() {
+    use super::completion::is_completion_entry;
+    let interrupted = serde_json::json!({
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "status": "DONE",
+        "thinking": "Long reasoning before stream idle timeout..."
+    }).to_string();
+    assert!(!is_completion_entry(&interrupted));
+
+    let completed = serde_json::json!({
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "status": "DONE",
+        "thinking": "Reasoning",
+        "content": "Final reply"
+    }).to_string();
+    assert!(is_completion_entry(&completed));
+}
+
+

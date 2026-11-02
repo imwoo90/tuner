@@ -17,11 +17,18 @@ pub fn parse_antigravity_json(raw: &str) -> String {
     match serde_json::from_str::<serde_json::Value>(trimmed) {
         Ok(parsed) => match parsed {
             serde_json::Value::Object(obj) => {
+                let reason = obj.get("finished_reason").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
                 for key in &["content", "result", "text", "message", "response"] {
                     if let Some(val) = obj.get(*key).and_then(|v| v.as_str())
                         && !val.is_empty() {
-                            return val.to_string();
+                            return match reason {
+                                Some(r) => format!("{val}\n\n⚠️ [Turn ended early: {r}]"),
+                                None => val.to_string(),
+                            };
                         }
+                }
+                if let Some(r) = reason {
+                    return format!("⚠️ Turn ended early: {r}");
                 }
                 serde_json::Value::Object(obj).to_string()
             }
@@ -160,7 +167,7 @@ pub fn read_transcript_answer(
         }
         if let Ok(entry) = serde_json::from_str::<serde_json::Value>(stripped)
             && let Some(obj) = entry.as_object() {
-                if obj.get("type").and_then(|v| v.as_str()) == Some("USER_INPUT") {
+                if matches!(obj.get("type").and_then(|v| v.as_str()), Some("USER_INPUT" | "SYSTEM_MESSAGE")) {
                     answer = None;
                 } else if obj.get("source").and_then(|v| v.as_str()) == Some("MODEL")
                     && obj.get("type").and_then(|v| v.as_str()) == Some("PLANNER_RESPONSE")
@@ -220,6 +227,26 @@ pub fn extract_conversation_id(stdout: &str) -> Option<String> {
                     }
     }
     None
+}
+
+/// Extracts `finished_reason` (`print_timeout`, `interrupted`, `error`) from `agy` JSON output.
+pub fn extract_finished_reason(stdout: &str) -> Option<String> {
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('{')
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed)
+                && let Some(reason) = val.get("finished_reason").and_then(|s| s.as_str())
+                    && !reason.is_empty() {
+                        return Some(reason.to_string());
+                    }
+    }
+    None
+}
+
+/// Returns the live installed `agy --version` paired with the compile-time verified baseline.
+pub fn agy_version_summary() -> Option<String> {
+    let out = std::process::Command::new("agy").arg("--version").output().ok()?;
+    Some(format!("{}, verified: {}", String::from_utf8_lossy(&out.stdout).trim(), env!("TUNER_VERIFIED_AGY_VERSION")))
 }
 
 

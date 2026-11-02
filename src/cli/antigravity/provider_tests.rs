@@ -158,6 +158,31 @@ async fn test_send_falls_back_to_stdout_without_transcript() {
 }
 
 #[tokio::test]
+async fn test_send_marks_error_when_json_has_finished_reason() {
+    let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let temp_dir = tempfile::tempdir().unwrap();
+    write_mock_script(
+        temp_dir.path(),
+        "#!/bin/sh\necho '{\"conversation_id\":\"cid-timeout-1\",\"response\":\"half answer\",\"finished_reason\":\"print_timeout\"}'\n",
+    );
+    let _env = EnvGuard::new(&temp_dir);
+
+    let config = CliConfig {
+        provider: "antigravity".to_string(),
+        working_dir: temp_dir.path().to_path_buf(),
+        ..Default::default()
+    };
+    let cli = AntigravityCli::new(config);
+    let workspace = temp_dir.path().to_path_buf();
+    let resp = cli.send("hi", None, false, workspace).await.unwrap();
+
+    assert!(resp.is_error);
+    assert_eq!(resp.returncode, Some(1));
+    assert_eq!(resp.session_id.as_deref(), Some("cid-timeout-1"));
+    assert_eq!(resp.result, "half answer\n\n⚠️ [Turn ended early: print_timeout]");
+}
+
+#[tokio::test]
 async fn test_send_automatically_trusts_workspace() {
     let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let temp_dir = tempfile::tempdir().unwrap();

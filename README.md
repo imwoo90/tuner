@@ -7,6 +7,18 @@
 
 ---
 
+## 🔗 Release & Antigravity CLI (`agy`) Compatibility Matrix
+
+Each `tuner` release is paired with its verified Antigravity CLI (`agy`) version in [`Cargo.toml`](Cargo.toml) (`[package.metadata.antigravity].verified_version`), embedded into `tuner --version` and Telegram `/status`, and tagged in GitHub Releases:
+
+| `tuner` Release | Verified `agy` Version | Key Compatibility Highlights |
+|---|---|---|
+| **`v0.1.60`** | **`1.4.12`** | `finished_reason` (`print_timeout` / `interrupted` / `error`) JSON early-termination detection (`1.4.11+`), 70% reduced PTY streaming I/O & 100MB post-startup memory reclaim (`1.4.10+`), compile-time `TUNER_VERIFIED_AGY_VERSION` pairing |
+| `v0.1.54` – `v0.1.59` | `1.4.7` – `1.4.9` | 4-layer stream completion guards, `agy-vault` companion daemon (`MaxConversations: 500 -> 0`), responsive Web File Viewer v2, Zero-Knowledge `/vault` |
+| `v0.1.40` – `v0.1.53` | `1.4.2` – `1.4.6` | PTY cold-start status bar detection (`? for shortcuts`), dynamic model & effort discovery (`gemini-4-argon`, `claude-opus-5-5`) |
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Step 1: Verify Antigravity CLI (`agy`)

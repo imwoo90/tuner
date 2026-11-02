@@ -94,4 +94,5 @@ When running long-running operations or commands (e.g., builds, tests, or large 
 
 ### Native Sub-agents
 Spawning sub-agents must be done using the native `define_subagent` and `invoke_subagent` tools.
-Only create or interact with sub-agents when the user explicitly asks for it.
+- Do not spawn sub-agents for simple questions or lightweight tasks unless the user explicitly asks for it.
+- For heavy, multi-step autonomous factory/pipeline skills (`eda-factory`, `cad-factory`, `docu-pipeline`) or zero-context audits, **always delegate execution to a sub-agent (`invoke_subagent`) and end your turn immediately**, keeping the main session responsive as the Supervisor to communicate with the user and verify final deliverables.

@@ -226,11 +226,11 @@ async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
         return Ok(Some(()));
     }
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("tuner {}\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"));
+        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
         return Ok(Some(()));
     }
     if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
-        println!("tuner {}", env!("CARGO_PKG_VERSION"));
+        println!("tuner {} (verified agy: {})", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
         return Ok(Some(()));
     }
     if args.contains(&"--upgrade".to_string()) {

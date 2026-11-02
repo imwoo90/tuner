@@ -243,7 +243,7 @@ async fn run_observer_loop(ctx: ObserverCtx) {
             active_turn = None;
             continue;
         }
-        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > Duration::from_secs(60)) {
+        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > Duration::from_secs(300)) {
             ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
             active_turn = None;
         }

@@ -28,9 +28,13 @@ pub(crate) fn is_completion_entry(line: &str) -> bool {
             }
             _ => false,
         };
+        let has_thinking = entry.get("thinking").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
+        let has_content = entry.get("content").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
+        let is_thinking_only = has_thinking && !has_content && tool_calls_empty;
         source == Some("MODEL")
             && etype == Some("PLANNER_RESPONSE")
             && status == Some("DONE")
+            && !is_thinking_only
             && (tool_calls_empty || has_interactive_tool)
     } else {
         false

@@ -94,23 +94,14 @@ async fn handle_info_commands(
         return Ok(true);
     }
     if trimmed == "/status" || trimmed == "/diagnose" {
-        let agy_status = std::process::Command::new("agy").arg("--version").output()
-            .map(|o| t!("bot.diagnose_installed", version = String::from_utf8_lossy(&o.stdout).trim()))
-            .unwrap_or_else(|_| t!("bot.diagnose_not_found"));
+        let agy_status = crate::cli::antigravity::events::agy_version_summary()
+            .map(|v| t!("bot.diagnose_installed", version = v))
+            .unwrap_or_else(|| t!("bot.diagnose_not_found"));
         let session_count = cli.sessions.active_count().await;
-        let token_present = if std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty() {
-            t!("bot.diagnose_token_set")
-        } else {
-            t!("bot.diagnose_token_missing")
-        };
-        let mut report = t!(
-            "bot.status",
-            agy_status = agy_status,
-            token_present = token_present,
-            session_count = session_count,
-            provider = config.provider,
-            model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await
-        );
+        let has_tok = std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty();
+        let token_present = if has_tok { t!("bot.diagnose_token_set") } else { t!("bot.diagnose_token_missing") };
+        let model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
+        let mut report = t!("bot.status", agy_status = agy_status, token_present = token_present, session_count = session_count, provider = config.provider, model = model);
         append_topic_status(&mut report, msg, config, sessions, cli).await;
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);

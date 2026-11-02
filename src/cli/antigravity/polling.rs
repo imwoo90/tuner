@@ -176,14 +176,14 @@ pub(crate) async fn wait_for_log_completion(
     transcript_path: Option<PathBuf>,
     mut current_size: u64,
 ) -> Result<(), String> {
-    let inactivity_timeout = tokio::time::Duration::from_secs(300);
-    let max_total_timeout = tokio::time::Duration::from_secs(3600);
-    let start = std::time::Instant::now();
-    let mut last_activity = std::time::Instant::now();
+    use std::time::{Duration, Instant};
+    let (inactivity_timeout, max_total_timeout) = (Duration::from_secs(300), Duration::from_secs(3600));
+    let (start, mut last_activity) = (Instant::now(), Instant::now());
+    let mut last_pty_len = sessions.get_output_len(session_id).await.unwrap_or(0);
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let _watcher = setup_path_watcher(transcript_path.as_ref(), tx);
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
 
     let mut rx_closed = false;
     while last_activity.elapsed() < inactivity_timeout && start.elapsed() < max_total_timeout {
@@ -192,19 +192,17 @@ pub(crate) async fn wait_for_log_completion(
         if let Some(()) = super::completion::check_completion_step(sessions, session_id, transcript_path.as_ref(), &mut current_size).await? {
             return Ok(());
         }
-        if current_size > prev_size {
-            last_activity = std::time::Instant::now();
+        let cur_pty_len = sessions.get_output_len(session_id).await.unwrap_or(last_pty_len);
+        if current_size > prev_size || cur_pty_len > last_pty_len {
+            last_pty_len = cur_pty_len;
+            last_activity = Instant::now();
         }
         tokio::select! {
             _ = sessions.interrupt_notify.notified() => {
                 check_interruption(sessions, session_id).await?;
             }
             res = rx.recv(), if !rx_closed => {
-                if res.is_none() {
-                    rx_closed = true;
-                } else {
-                    last_activity = std::time::Instant::now();
-                }
+                if res.is_none() { rx_closed = true; } else { last_activity = Instant::now(); }
             }
             _ = interval.tick() => {}
         }

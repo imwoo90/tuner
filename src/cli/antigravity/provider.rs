@@ -172,34 +172,26 @@ impl AgentProvider for AntigravityCli {
             self.run_oneshot(&args, &env, &agy_ws).await?
         };
 
+        let early = events::extract_finished_reason(&stdout_str).is_some();
+        let ok = status.success() && !early;
         let final_sid = resume_session.map(str::to_string).or_else(|| {
-            if !status.success() {
-                return None;
-            }
             events::extract_conversation_id(&stdout_str).or_else(|| {
-                events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into())
+                ok.then(|| events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into()))?
             })
         });
-        let result = if status.success() {
-            let brain = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
+        let result = if ok {
+            let b = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
                 .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
-            self.resolve_result_text(&agy_ws, &env, &stdout_str, brain.as_deref())
+            self.resolve_result_text(&agy_ws, &env, &stdout_str, b.as_deref())
         } else {
             events::parse_antigravity_json(&stdout_str)
         };
-
-        if status.success() && resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
+        if ok && resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
             && let Some(ref fid) = final_sid {
                 self.ensure_interactive_session(fid, &agy_ws, &env).await?;
             }
-
-        Ok(CliResponse {
-            session_id: final_sid,
-            result,
-            is_error: !status.success(),
-            returncode: super::completion::exit_status_code(&status),
-            stderr: stderr_str,
-        })
+        let returncode = if early && status.success() { Some(1) } else { super::completion::exit_status_code(&status) };
+        Ok(CliResponse { session_id: final_sid, result, is_error: !ok, returncode, stderr: stderr_str })
     }
 
     async fn send_streaming<'a>(
