@@ -21,6 +21,17 @@ pub(crate) fn is_message_not_modified(err: &teloxide::RequestError) -> bool {
     }
 }
 
+pub(crate) fn retry_backoff_secs(err: &teloxide::RequestError, attempts: usize) -> Option<u64> {
+    if attempts >= 2 {
+        return None;
+    }
+    match err {
+        teloxide::RequestError::RetryAfter(sec) => Some(sec.seconds().max(1) as u64),
+        teloxide::RequestError::Network(_) => Some((attempts as u64 + 1) * 2),
+        _ => None,
+    }
+}
+
 pub(crate) async fn send_single_chunk(
     bot: &Bot,
     chat_id: ChatId,
@@ -39,6 +50,7 @@ pub(crate) async fn send_single_chunk(
                 match bot.edit_message_text(chat_id, mid, c.clone()).parse_mode(html).await {
                     Ok(ed) => return Ok(ed.id),
                     Err(e) if is_message_not_modified(&e) => return Ok(mid),
+                    Err(e) if retry_backoff_secs(&e, 0).is_some() => return Err(e),
                     Err(e) => if e.to_string().contains("can't parse entities") {
                         if let Ok(ed) = bot.edit_message_text(chat_id, mid, c.clone()).await {
                             return Ok(ed.id);
@@ -151,16 +163,15 @@ impl ChatRateLimiter {
             *last_sent = Instant::now();
 
             match res {
-                Err(teloxide::RequestError::RetryAfter(sec)) if attempts < 2 => {
+                Err(ref err) if retry_backoff_secs(err, attempts).is_some() => {
+                    let wait_secs = retry_backoff_secs(err, attempts).unwrap_or(2);
                     attempts += 1;
-                    let wait_secs = sec.seconds().max(1) as u64;
                     eprintln!(
-                        "⚠️ [tuner] Rate limit RetryAfter({}s) encountered for chat {}, backing off (attempt {}/2)...",
-                        wait_secs, chat_id, attempts
+                        "⚠️ [tuner] Telegram transient error ({}) for chat {}, backing off {}s (attempt {}/2)...",
+                        err, chat_id, wait_secs, attempts
                     );
                     tokio::time::sleep(Duration::from_secs(wait_secs)).await;
                     *last_sent = Instant::now();
-                    continue;
                 }
                 other => return other,
             }
@@ -172,6 +183,7 @@ impl ChatRateLimiter {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[tokio::test]
     async fn test_rate_limiter_spacing_same_chat() {
@@ -198,5 +210,29 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(elapsed < Duration::from_millis(90), "Different chats should run concurrently without waiting, got {:?}", elapsed);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_retries_transient_error() {
+        let limiter = ChatRateLimiter::new(Duration::from_millis(10));
+        let chat = ChatId(333);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_ref = calls.clone();
+
+        let res = limiter.execute_rate_limited(chat, || {
+            let c = calls_ref.clone();
+            async move {
+                let cur = c.fetch_add(1, Ordering::SeqCst);
+                if cur == 0 {
+                    Err(teloxide::RequestError::RetryAfter(teloxide::types::Seconds::from_seconds(1)))
+                } else {
+                    Ok("recovered")
+                }
+            }
+        }).await;
+
+        assert_eq!(res.unwrap(), "recovered");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(retry_backoff_secs(&teloxide::RequestError::Api(teloxide::ApiError::MessageNotModified), 0), None);
     }
 }

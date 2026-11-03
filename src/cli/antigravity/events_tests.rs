@@ -290,14 +290,16 @@ fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
 
 #[test]
 fn test_completion_rejects_interrupted_thinking_only_step() {
-    use super::completion::is_completion_entry;
+    use super::completion::{has_trailing_thinking_only, is_completion_entry, is_thinking_only_entry};
     let interrupted = serde_json::json!({
         "source": "MODEL",
         "type": "PLANNER_RESPONSE",
         "status": "DONE",
+        "content": "\n",
         "thinking": "Long reasoning before stream idle timeout..."
     }).to_string();
     assert!(!is_completion_entry(&interrupted));
+    assert!(is_thinking_only_entry(&interrupted));
 
     let completed = serde_json::json!({
         "source": "MODEL",
@@ -307,6 +309,63 @@ fn test_completion_rejects_interrupted_thinking_only_step() {
         "content": "Final reply"
     }).to_string();
     assert!(is_completion_entry(&completed));
+    assert!(!is_thinking_only_entry(&completed));
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let tp = temp_dir.path().join("transcript_full.jsonl");
+    std::fs::write(&tp, format!("{}\n", interrupted)).unwrap();
+    assert!(has_trailing_thinking_only(&tp, 0));
+
+    let err_line = serde_json::json!({
+        "source": "SYSTEM",
+        "type": "ERROR_MESSAGE",
+        "status": "DONE",
+        "content": "Error: The stream was interrupted."
+    }).to_string();
+    std::fs::write(&tp, format!("{}\n{}\n", interrupted, err_line)).unwrap();
+    assert!(!has_trailing_thinking_only(&tp, 0));
+}
+
+#[test]
+fn test_read_transcript_answer_handles_system_recovery_and_thinking_fallback() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path();
+    let cwd = root.join("ws");
+    std::fs::create_dir_all(&cwd).unwrap();
+
+    let mut env = HashMap::new();
+    env.insert("HOME".to_string(), root.to_string_lossy().to_string());
+    let state_root = agy_state_root(Some(&env));
+    map_cwd(&state_root, &cwd, "conv-rec");
+
+    write_transcript(
+        &state_root,
+        "conv-rec",
+        vec![
+            serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "question"}),
+            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Synthesized thought fallback"}),
+            serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "[SYSTEM RECOVERY] Please output content"}),
+        ],
+    );
+    assert_eq!(
+        read_transcript_answer(&cwd, Some(&env), None),
+        Some("Synthesized thought fallback".to_string())
+    );
+
+    write_transcript(
+        &state_root,
+        "conv-rec",
+        vec![
+            serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "question"}),
+            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Synthesized thought fallback"}),
+            serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "[SYSTEM RECOVERY] Please output content"}),
+            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "Recovered full Korean answer"}),
+        ],
+    );
+    assert_eq!(
+        read_transcript_answer(&cwd, Some(&env), None),
+        Some("Recovered full Korean answer".to_string())
+    );
 }
 
 

@@ -9,6 +9,74 @@
 
 use std::path::PathBuf;
 
+pub(crate) const THINKING_ONLY_RECOVERY_PROMPT: &str =
+    "[SYSTEM RECOVERY] Your previous step ended with thinking only and empty response content. Please immediately output the full response content to the user's last message in the user's language.\r";
+
+pub(crate) fn is_thinking_only_entry(line: &str) -> bool {
+    if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+        let source = entry.get("source").and_then(|s| s.as_str());
+        let etype = entry.get("type").and_then(|s| s.as_str());
+        let status = entry.get("status").and_then(|s| s.as_str());
+        let tool_calls_empty = match entry.get("tool_calls") {
+            None => true,
+            Some(serde_json::Value::Array(arr)) => arr.is_empty(),
+            _ => false,
+        };
+        let has_thinking = entry.get("thinking").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
+        let has_content = entry.get("content").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
+        source == Some("MODEL")
+            && etype == Some("PLANNER_RESPONSE")
+            && status == Some("DONE")
+            && tool_calls_empty
+            && has_thinking
+            && !has_content
+    } else {
+        false
+    }
+}
+
+pub(crate) fn has_trailing_thinking_only(path: &std::path::Path, start_pos: u64) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(meta) = std::fs::metadata(path) else { return false };
+    if meta.len() <= start_pos {
+        return false;
+    }
+    let Ok(mut file) = std::fs::File::open(path) else { return false };
+    if file.seek(SeekFrom::Start(start_pos)).is_err() {
+        return false;
+    }
+    let mut buf = Vec::new();
+    if file.read_to_end(&mut buf).is_err() {
+        return false;
+    }
+    let text = String::from_utf8_lossy(&buf);
+    text.lines().rev().find(|l| !l.trim().is_empty()).is_some_and(is_thinking_only_entry)
+}
+
+pub(crate) async fn handle_thinking_only_stall(
+    sessions: &super::session::SessionManager,
+    session_id: &str,
+    path: Option<&PathBuf>,
+    turn_start_size: &mut u64,
+    current_size: u64,
+    auto_retried: &mut bool,
+) -> Result<bool, String> {
+    let Some(p) = path else { return Ok(false) };
+    if !has_trailing_thinking_only(p, *turn_start_size) {
+        return Ok(false);
+    }
+    if *auto_retried {
+        return Ok(true);
+    }
+    *auto_retried = true;
+    *turn_start_size = current_size;
+    if let Some(h) = sessions.holders.lock().await.get_mut(session_id) {
+        h.turn_start_offset = h.output.lock().await.len();
+    }
+    sessions.write_to_session(session_id, THINKING_ONLY_RECOVERY_PROMPT).await?;
+    Ok(false)
+}
+
 pub(crate) fn is_completion_entry(line: &str) -> bool {
     if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
         let source = entry.get("source").and_then(|s| s.as_str());

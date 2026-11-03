@@ -121,5 +121,59 @@ mod tests {
         assert!(!t2.contains("Step 1 thought"), "Previous delta thinking must not accumulate");
         assert!(!t2.contains("echo step1"), "Previous delta tool calls must not accumulate");
     }
+
+    #[tokio::test]
+    async fn test_wait_for_log_completion_auto_recovers_thinking_only_turn() {
+        use crate::cli::antigravity::{events::read_transcript_answer, polling::wait_for_log_completion, session::SessionManager};
+        use std::collections::HashMap;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let tp = dir.path().join("transcript_full.jsonl");
+        std::fs::write(&tp, "").unwrap();
+
+        let script = dir.path().join("mock_agy.sh");
+        let code = format!(
+            r#"#!/bin/sh
+printf '%s\n' "? for shortcuts  ctrl+p commands"
+while IFS= read -r line; do
+  case "$line" in
+    *"[SYSTEM RECOVERY]"*)
+      printf '%s\n' '{{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"[SYSTEM RECOVERY]"}}' >> "{tp}"
+      printf '%s\n' '{{"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","thinking":" short","content":"Recovered Korean response"}}' >> "{tp}"
+      ;;
+    *)
+      printf '%s\n' '{{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"user question"}}' >> "{tp}"
+      printf '%s\n' '{{"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","thinking":"Deep reasoning without content","content":"\n"}}' >> "{tp}"
+      ;;
+  esac
+done
+"#,
+            tp = tp.display()
+        );
+        std::fs::write(&script, code).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let mgr = SessionManager::new();
+        let env = HashMap::new();
+        mgr.ensure_session("sid-think-1", dir.path(), &script.to_string_lossy(), &[], &env).await.unwrap();
+        mgr.write_to_session("sid-think-1", "first question\r").await.unwrap();
+
+        let start = std::time::Instant::now();
+        let res = wait_for_log_completion(&mgr, "sid-think-1", Some(tp.clone()), 0).await;
+        assert!(res.is_ok(), "Expected Ok(()), got: {:?}", res);
+        assert!(start.elapsed().as_secs() < 10, "Should recover in ~3.5s, not 300s");
+
+        let logs_dir = dir.path().join(".system_generated/logs");
+        std::fs::create_dir_all(&logs_dir).unwrap();
+        std::fs::copy(&tp, logs_dir.join("transcript_full.jsonl")).unwrap();
+        assert_eq!(
+            read_transcript_answer(dir.path(), None, Some(dir.path())),
+            Some("Recovered Korean response".to_string())
+        );
+        mgr.terminate("sid-think-1").await;
+    }
 }
 

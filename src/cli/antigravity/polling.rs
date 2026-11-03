@@ -172,45 +172,36 @@ async fn check_interruption(sessions: &super::session::SessionManager, session_i
 
 pub(crate) async fn wait_for_log_completion(
     sessions: &super::session::SessionManager,
-    session_id: &str,
-    transcript_path: Option<PathBuf>,
-    mut current_size: u64,
+    sid: &str,
+    tp: Option<PathBuf>,
+    mut sz: u64,
 ) -> Result<(), String> {
     use std::time::{Duration, Instant};
-    let (inactivity_timeout, max_total_timeout) = (Duration::from_secs(300), Duration::from_secs(3600));
-    let (start, mut last_activity) = (Instant::now(), Instant::now());
-    let mut last_pty_len = sessions.get_output_len(session_id).await.unwrap_or(0);
-
+    let (inact, max_t, start, mut last_act) = (Duration::from_secs(300), Duration::from_secs(3600), Instant::now(), Instant::now());
+    let mut last_pty = sessions.get_output_len(sid).await.unwrap_or(0);
+    let (mut t0, mut retried, mut closed) = (sz, false, false);
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    let _watcher = setup_path_watcher(transcript_path.as_ref(), tx);
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let _w = setup_path_watcher(tp.as_ref(), tx);
+    let mut tick = tokio::time::interval(Duration::from_millis(500));
 
-    let mut rx_closed = false;
-    while last_activity.elapsed() < inactivity_timeout && start.elapsed() < max_total_timeout {
-        check_interruption(sessions, session_id).await?;
-        let prev_size = current_size;
-        if let Some(()) = super::completion::check_completion_step(sessions, session_id, transcript_path.as_ref(), &mut current_size).await? {
-            return Ok(());
-        }
-        let cur_pty_len = sessions.get_output_len(session_id).await.unwrap_or(last_pty_len);
-        if current_size > prev_size || cur_pty_len > last_pty_len {
-            last_pty_len = cur_pty_len;
-            last_activity = Instant::now();
+    while last_act.elapsed() < inact && start.elapsed() < max_t {
+        check_interruption(sessions, sid).await?;
+        let prev = sz;
+        if super::completion::check_completion_step(sessions, sid, tp.as_ref(), &mut sz).await?.is_some() { return Ok(()); }
+        let pty = sessions.get_output_len(sid).await.unwrap_or(last_pty);
+        if sz > prev || pty > last_pty {
+            (last_pty, last_act) = (pty, Instant::now());
+        } else if last_act.elapsed() >= Duration::from_secs(3) {
+            let r0 = retried;
+            if super::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), &mut t0, sz, &mut retried).await? { return Ok(()); }
+            if !r0 && retried { last_act = Instant::now(); }
         }
         tokio::select! {
-            _ = sessions.interrupt_notify.notified() => {
-                check_interruption(sessions, session_id).await?;
-            }
-            res = rx.recv(), if !rx_closed => {
-                if res.is_none() { rx_closed = true; } else { last_activity = Instant::now(); }
-            }
-            _ = interval.tick() => {}
+            _ = sessions.interrupt_notify.notified() => check_interruption(sessions, sid).await?,
+            r = rx.recv(), if !closed => if r.is_none() { closed = true; } else { last_act = Instant::now(); },
+            _ = tick.tick() => {}
         }
     }
-    if start.elapsed() >= max_total_timeout {
-        Err("Exceeded maximum execution duration of 3600s".to_string())
-    } else {
-        Err("Timed out waiting for completion (inactivity)".to_string())
-    }
+    Err(if start.elapsed() >= max_t { "Exceeded maximum execution duration of 3600s".into() } else { "Timed out waiting for completion (inactivity)".into() })
 }
 
