@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_completion_step","check_log_completion_in_file","exit_status_code","extract_pty_turn_error","is_completion_entry"]};
+window.SIDEBAR_ITEMS = {"constant":["THINKING_ONLY_RECOVERY_PROMPT"],"fn":["check_completion_step","check_log_completion_in_file","exit_status_code","extract_pty_turn_error","handle_thinking_only_stall","has_trailing_thinking_only","is_completion_entry","is_thinking_only_entry"]};
