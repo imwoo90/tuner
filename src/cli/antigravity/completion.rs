@@ -23,13 +23,13 @@ pub(crate) fn is_thinking_only_entry(line: &str) -> bool {
             _ => false,
         };
         let has_thinking = entry.get("thinking").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
-        let has_content = entry.get("content").and_then(|s| s.as_str()).is_some_and(|s| !s.trim().is_empty());
+        let has_whitespace_content = entry.get("content").and_then(|s| s.as_str()).is_some_and(|s| !s.is_empty() && s.trim().is_empty());
         source == Some("MODEL")
             && etype == Some("PLANNER_RESPONSE")
             && status == Some("DONE")
             && tool_calls_empty
             && has_thinking
-            && !has_content
+            && has_whitespace_content
     } else {
         false
     }
@@ -66,7 +66,7 @@ pub(crate) async fn handle_thinking_only_stall(
         return Ok(false);
     }
     if *auto_retried {
-        return Ok(true);
+        return Err("Antigravity turn ended with thinking only (empty response content) after recovery retry".to_string());
     }
     *auto_retried = true;
     *turn_start_size = current_size;
@@ -74,7 +74,7 @@ pub(crate) async fn handle_thinking_only_stall(
         h.turn_start_offset = h.output.lock().await.len();
     }
     sessions.write_to_session(session_id, THINKING_ONLY_RECOVERY_PROMPT).await?;
-    Ok(false)
+    Ok(true)
 }
 
 pub(crate) fn is_completion_entry(line: &str) -> bool {

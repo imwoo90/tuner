@@ -289,17 +289,28 @@ fn test_log_parser_suppresses_tool_completions_and_preserves_activity() {
 }
 
 #[test]
-fn test_completion_rejects_interrupted_thinking_only_step() {
+fn test_completion_rejects_interrupted_and_recovers_whitespace_thinking_only_step() {
     use super::completion::{has_trailing_thinking_only, is_completion_entry, is_thinking_only_entry};
+    // 1. Stream-interrupted step (Go omitempty omits "content"): must NOT complete AND must NOT trigger recovery injection
     let interrupted = serde_json::json!({
         "source": "MODEL",
         "type": "PLANNER_RESPONSE",
         "status": "DONE",
-        "content": "\n",
         "thinking": "Long reasoning before stream idle timeout..."
     }).to_string();
     assert!(!is_completion_entry(&interrupted));
-    assert!(is_thinking_only_entry(&interrupted));
+    assert!(!is_thinking_only_entry(&interrupted));
+
+    // 2. Normal HTTP 200 whitespace-content turn ("content": "\n"): must NOT complete, MUST trigger recovery injection
+    let whitespace_turn = serde_json::json!({
+        "source": "MODEL",
+        "type": "PLANNER_RESPONSE",
+        "status": "DONE",
+        "content": "\n",
+        "thinking": "Long reasoning with empty newline content..."
+    }).to_string();
+    assert!(!is_completion_entry(&whitespace_turn));
+    assert!(is_thinking_only_entry(&whitespace_turn));
 
     let completed = serde_json::json!({
         "source": "MODEL",
@@ -313,7 +324,7 @@ fn test_completion_rejects_interrupted_thinking_only_step() {
 
     let temp_dir = tempfile::tempdir().unwrap();
     let tp = temp_dir.path().join("transcript_full.jsonl");
-    std::fs::write(&tp, format!("{}\n", interrupted)).unwrap();
+    std::fs::write(&tp, format!("{}\n", whitespace_turn)).unwrap();
     assert!(has_trailing_thinking_only(&tp, 0));
 
     let err_line = serde_json::json!({
@@ -322,12 +333,12 @@ fn test_completion_rejects_interrupted_thinking_only_step() {
         "status": "DONE",
         "content": "Error: The stream was interrupted."
     }).to_string();
-    std::fs::write(&tp, format!("{}\n{}\n", interrupted, err_line)).unwrap();
+    std::fs::write(&tp, format!("{}\n{}\n", whitespace_turn, err_line)).unwrap();
     assert!(!has_trailing_thinking_only(&tp, 0));
 }
 
 #[test]
-fn test_read_transcript_answer_handles_system_recovery_and_thinking_fallback() {
+fn test_read_transcript_answer_never_leaks_thinking_and_extracts_recovered_answer() {
     let temp_dir = tempfile::tempdir().unwrap();
     let root = temp_dir.path();
     let cwd = root.join("ws");
@@ -343,21 +354,17 @@ fn test_read_transcript_answer_handles_system_recovery_and_thinking_fallback() {
         "conv-rec",
         vec![
             serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "question"}),
-            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Synthesized thought fallback"}),
-            serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "[SYSTEM RECOVERY] Please output content"}),
+            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Internal English thought summary"}),
         ],
     );
-    assert_eq!(
-        read_transcript_answer(&cwd, Some(&env), None),
-        Some("Synthesized thought fallback".to_string())
-    );
+    assert_eq!(read_transcript_answer(&cwd, Some(&env), None), None);
 
     write_transcript(
         &state_root,
         "conv-rec",
         vec![
             serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "question"}),
-            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Synthesized thought fallback"}),
+            serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "\n", "thinking": "Internal English thought summary"}),
             serde_json::json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "content": "[SYSTEM RECOVERY] Please output content"}),
             serde_json::json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "content": "Recovered full Korean answer"}),
         ],

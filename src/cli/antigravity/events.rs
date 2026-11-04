@@ -146,28 +146,17 @@ pub fn resolve_brain_dir(
 fn update_answer_from_entry(
     obj: &serde_json::Map<String, serde_json::Value>,
     answer: &mut Option<String>,
-    fallback_thinking: &mut Option<String>,
 ) {
     if matches!(obj.get("type").and_then(|v| v.as_str()), Some("USER_INPUT" | "SYSTEM_MESSAGE")) {
-        if obj.get("content").and_then(|v| v.as_str()).is_none_or(|c| !c.contains("[SYSTEM RECOVERY]")) {
-            *answer = None;
-            *fallback_thinking = None;
-        }
+        *answer = None;
     } else if obj.get("source").and_then(|v| v.as_str()) == Some("MODEL")
         && obj.get("type").and_then(|v| v.as_str()) == Some("PLANNER_RESPONSE")
         && obj.get("status").and_then(|v| v.as_str()) == Some("DONE")
+        && let Some(c) = obj.get("content").and_then(|v| v.as_str()).map(str::trim)
+        && !c.is_empty()
+        && !is_placeholder_content(c)
     {
-        if let Some(c) = obj.get("content").and_then(|v| v.as_str()).map(str::trim)
-            && !c.is_empty() && !is_placeholder_content(c)
-        {
-            *answer = Some(c.to_string());
-        }
-        if answer.is_none()
-            && let Some(t) = obj.get("thinking").and_then(|v| v.as_str()).map(str::trim)
-            && !t.is_empty()
-        {
-            *fallback_thinking = Some(t.to_string());
-        }
+        *answer = Some(c.to_string());
     }
 }
 
@@ -183,13 +172,13 @@ pub fn read_transcript_answer(
     };
     let tp = resolved_dir.join(".system_generated/logs/transcript_full.jsonl");
     let raw = String::from_utf8_lossy(&std::fs::read(tp).ok()?).into_owned();
-    let (mut answer, mut fallback_thinking) = (None, None);
+    let mut answer = None;
     for line in raw.lines().map(str::trim).filter(|l| !l.is_empty()) {
         if let Ok(serde_json::Value::Object(obj)) = serde_json::from_str(line) {
-            update_answer_from_entry(&obj, &mut answer, &mut fallback_thinking);
+            update_answer_from_entry(&obj, &mut answer);
         }
     }
-    answer.or(fallback_thinking)
+    answer
 }
 
 /// Executes `is_placeholder_content` (is placeholder content).

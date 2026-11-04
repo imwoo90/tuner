@@ -191,10 +191,10 @@ pub(crate) async fn wait_for_log_completion(
         let pty = sessions.get_output_len(sid).await.unwrap_or(last_pty);
         if sz > prev || pty > last_pty {
             (last_pty, last_act) = (pty, Instant::now());
-        } else if last_act.elapsed() >= Duration::from_secs(3) {
-            let r0 = retried;
-            if super::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), &mut t0, sz, &mut retried).await? { return Ok(()); }
-            if !r0 && retried { last_act = Instant::now(); }
+        } else if last_act.elapsed() >= Duration::from_secs(3)
+            && super::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), &mut t0, sz, &mut retried).await?
+        {
+            last_act = Instant::now();
         }
         tokio::select! {
             _ = sessions.interrupt_notify.notified() => check_interruption(sessions, sid).await?,
