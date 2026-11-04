@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CheckStatus"],"fn":["check_tier1_agy","check_tier1_companions","collect_doctor_checks","find_agy_bin","find_cloudflared_bin","print_doctor_report","push_tier1","which_bin"],"struct":["DoctorCheck","DoctorReport"]};

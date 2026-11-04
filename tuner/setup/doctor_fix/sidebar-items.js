@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["can_run_privileged_apt","ensure_user_pip","fix_home_ownership_if_root","install_agy_vault","install_cloudflared","install_os_packages_if_needed","install_python_and_cdp_if_needed","install_python_packages","is_dir_writable","run_doctor_cli","set_executable"]};
