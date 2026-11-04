@@ -131,12 +131,7 @@ pub async fn get_vault_url(
 
 fn find_cloudflared_bin() -> Option<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let bin_candidates = [
-        PathBuf::from(&home).join(".tuner/bin/cloudflared"),
-        PathBuf::from("/usr/local/bin/cloudflared"),
-        PathBuf::from("/usr/bin/cloudflared"),
-    ];
-    bin_candidates.into_iter().find(|p| p.is_file())
+    crate::setup::doctor::find_cloudflared_bin(&home)
 }
 
 fn parse_tunnel_url(line: &str) -> Option<String> {

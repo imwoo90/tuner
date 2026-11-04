@@ -139,3 +139,50 @@ fn test_load_from_file_strips_template_placeholder_ids() {
     assert!(config.profiles[0].allowed_user_ids.is_empty());
     assert!(config.profiles[0].allowed_group_ids.is_empty());
 }
+
+#[test]
+fn test_find_cloudflared_bin_and_doctor_report_counts() {
+    use crate::setup::doctor::{CheckStatus, DoctorCheck, DoctorReport, find_cloudflared_bin};
+    let dir = tempfile::tempdir().unwrap();
+    let home_str = dir.path().to_string_lossy().to_string();
+    let tuner_bin_dir = dir.path().join(".tuner/bin");
+    std::fs::create_dir_all(&tuner_bin_dir).unwrap();
+    let fake_cf = tuner_bin_dir.join("cloudflared");
+    std::fs::write(&fake_cf, "#!/bin/sh\n").unwrap();
+
+    assert_eq!(find_cloudflared_bin(&home_str), Some(fake_cf));
+
+    let report = DoctorReport {
+        checks: vec![
+            DoctorCheck {
+                tier: "Tier 1",
+                name: "cloudflared",
+                status: CheckStatus::Ok,
+                detail: "ok".to_string(),
+                hint: String::new(),
+            },
+            DoctorCheck {
+                tier: "Tier 2",
+                name: "node",
+                status: CheckStatus::Warn,
+                detail: "warn".to_string(),
+                hint: "install node".to_string(),
+            },
+            DoctorCheck {
+                tier: "Tier 3",
+                name: "playwright",
+                status: CheckStatus::Missing,
+                detail: "missing".to_string(),
+                hint: "run --fix".to_string(),
+            },
+        ],
+    };
+    assert_eq!(report.warn_count(), 1);
+    assert_eq!(report.missing_count(), 1);
+
+    assert!(crate::validate_remaining_args(&["tuner".to_string()]).is_ok());
+    assert!(crate::validate_remaining_args(&["tuner".to_string(), "--worker".to_string(), "default".to_string()]).is_ok());
+    assert!(crate::validate_remaining_args(&["tuner".to_string(), "--setup".to_string()]).is_ok());
+    assert!(crate::validate_remaining_args(&["tuner".to_string(), "--bogus".to_string()]).is_err());
+    assert!(crate::validate_remaining_args(&["tuner".to_string(), "status".to_string()]).is_err());
+}

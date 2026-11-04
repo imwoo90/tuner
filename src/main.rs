@@ -17,7 +17,7 @@
 //! - [`bus`] (`bus/mod.rs`): Internal message bus, routing envelopes, and topic lock pool.
 //! - [`i18n`] (`i18n/mod.rs`): TOML localization catalog loader and lookup macros.
 //! - [`supervisor`] (`supervisor.rs`): Child process restart supervisor with backoff.
-//! - [`setup`] (`setup.rs`): Interactive setup wizard, `.env` loader, and systemd installer.
+//! - [`setup`] (`setup/mod.rs`): Interactive setup wizard, `.env` loader, systemd installer, and system dependency doctor.
 //! - [`upgrade`] (`upgrade.rs`): GitHub release self-upgrade downloader and atomic binary swapper.
 //!
 //! ## Search Tags
@@ -133,6 +133,8 @@ fn run_setup_wizard(paths: &workspace::paths::TunerPaths) -> Result<(), String> 
     if install_sys.to_lowercase().starts_with('y') {
         setup::install_systemd_service(&config)?;
     }
+
+    let _ = setup::doctor_fix::run_doctor_cli(&["--doctor".to_string(), "--fix".to_string()]);
     
     println!("🎉 Setup complete! Please start the tuner bot and send a message (e.g. /start) to register as owner.");
     println!("📌 Note: If you invite the bot to a group chat/supergroup, you MUST promote it to Administrator (specifically enabling message reading) to bypass Telegram's default Privacy Mode.");
@@ -221,12 +223,16 @@ async fn run_master_mode(config: config::CliConfig, paths: &workspace::paths::Tu
 
 
 async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
+    if args.contains(&"--doctor".to_string()) {
+        setup::doctor_fix::run_doctor_cli(args)?;
+        return Ok(Some(()));
+    }
     if args.contains(&"--vault".to_string()) {
         security::vault_cli::run_vault_cli(args)?;
         return Ok(Some(()));
     }
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
+        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --doctor [--fix]   Check (and optionally install) required tools & dependencies\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
         return Ok(Some(()));
     }
     if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
@@ -237,7 +243,24 @@ async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
         upgrade::run_cli_upgrade().await?;
         return Ok(Some(()));
     }
+    validate_remaining_args(args)?;
     Ok(None)
+}
+
+pub(crate) fn validate_remaining_args(args: &[String]) -> Result<(), String> {
+    if args.len() <= 1 {
+        return Ok(());
+    }
+    const DAEMON_FLAGS: &[&str] = &["--worker", "--setup", "--install-systemd", "--supervisor"];
+    for arg in args.iter().skip(1) {
+        if arg.starts_with('-') && !DAEMON_FLAGS.contains(&arg.as_str()) {
+            return Err(format!("Unknown option: '{arg}'. Run 'tuner --help' for usage."));
+        }
+    }
+    if !args.iter().skip(1).any(|a| DAEMON_FLAGS.contains(&a.as_str())) {
+        return Err(format!("Unknown argument: '{}'. Run 'tuner --help' for usage.", args[1]));
+    }
+    Ok(())
 }
 
 async fn handle_daemon_mode(args: &[String], config: &config::CliConfig) -> Result<Option<()>, String> {

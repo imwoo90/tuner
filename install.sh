@@ -65,8 +65,25 @@ if [ "${TUNER_INSTALL_AGY_VAULT:-auto}" != "0" ] && { [ -d "$HOME/.gemini/antigr
     fi
 fi
 
+# 7. Auto-install cloudflared for /vault and /review Web UI tunnels
+if [ ! -f "$INSTALL_DIR/cloudflared" ]; then
+    echo "🌐 Installing cloudflared tunnel binary..."
+    CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    if curl -fsSL -o "$INSTALL_DIR/cloudflared" "$CF_URL"; then
+        chmod +x "$INSTALL_DIR/cloudflared"
+        echo "✅ cloudflared installed to $INSTALL_DIR/cloudflared"
+    else
+        echo "⚠️ Warning: Could not download cloudflared; run '$INSTALL_DIR/tuner --doctor --fix' later."
+    fi
+fi
+
+# 8. Run system dependency doctor (--fix)
+echo "🩺 Running tuner --doctor --fix to verify and install runtime dependencies..."
+"$INSTALL_DIR/tuner" --doctor --fix || true
+
 # Cleanup temp files
 rm -rf "$TMP_DIR"
 
 echo "✅ tuner installed successfully to $INSTALL_DIR/tuner"
 echo "💡 To configure tuner, please run: $INSTALL_DIR/tuner --setup"
+echo "💡 To check/repair dependencies anytime, run: $INSTALL_DIR/tuner --doctor --fix"

@@ -1,10 +1,21 @@
-//! # Wizard and Service Installer Module
+//! # Wizard, Service Installer, and System Doctor Module
 //!
 //! ## Overview
-//! Operates the wizard setup CLI prompt. Installs systemd user services.
+//! Operates the setup wizard CLI prompt, loads `.env` files, installs `systemd` user services,
+//! manages the `agy-vault` companion daemon, and provides the `tuner --doctor` dependency
+//! checker and auto-installer.
+//!
+//! ## Submodules
+//! - [`doctor`] (`doctor.rs`): Multi-tier dependency diagnostics (`agy`, `agy-vault`, `cloudflared`, `_home_defaults`) and report formatting.
+//! - [`doctor_tiers`] (`doctor_tiers.rs`): Tier 2 OS/media utility checks and Tier 3 Python/Playwright CDP headless browser checks.
+//! - [`doctor_fix`] (`doctor_fix.rs`): Automated user-space binary downloads (`cloudflared`, `agy-vault`), Python/Playwright CDP setup, and OS package installation.
 //!
 //! ## Search Tags
-//! #wizard-installer, #systemd-setup, #env-loader
+//! #wizard-installer, #systemd-setup, #env-loader, #system-doctor
+
+pub mod doctor;
+pub mod doctor_fix;
+pub mod doctor_tiers;
 
 use crate::config::CliConfig;
 use std::path::Path;
@@ -28,41 +39,58 @@ pub fn load_env_file(path: &Path) -> Result<(), String> {
         if let Some(pos) = line_to_parse.find('=') {
             let key = line_to_parse[..pos].trim();
             let mut val = line_to_parse[pos + 1..].trim().to_string();
-            if ((val.starts_with('"') && val.ends_with('"')) || (val.starts_with('\'') && val.ends_with('\'')))
-                && val.len() >= 2 {
-                    val = val[1..val.len() - 1].to_string();
-                }
+            if ((val.starts_with('"') && val.ends_with('"'))
+                || (val.starts_with('\'') && val.ends_with('\'')))
+                && val.len() >= 2
+            {
+                val = val[1..val.len() - 1].to_string();
+            }
             if !key.is_empty() && std::env::var(key).is_err() {
-                unsafe { std::env::set_var(key, val); }
+                unsafe {
+                    std::env::set_var(key, val);
+                }
             }
         }
     }
     Ok(())
 }
 
-/// Executes `install_systemd_service` (install systemd service).
-pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let project_root = current_exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-    let path_env = std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
-
-    let token_line = if let Ok(tok) = std::env::var("TELEGRAM_TOKEN") {
+fn resolve_token_env_line(config: &CliConfig) -> String {
+    if let Ok(tok) = std::env::var("TELEGRAM_TOKEN") {
         format!("Environment=\"TELEGRAM_TOKEN={}\"\n", tok)
     } else if !config.telegram_token.is_empty() && config.telegram_token != "YOUR_BOT_TOKEN_HERE" {
         format!("Environment=\"TELEGRAM_TOKEN={}\"\n", config.telegram_token)
     } else {
         String::new()
-    };
+    }
+}
+
+/// Executes `install_systemd_service` (install systemd service).
+pub fn install_systemd_service(config: &CliConfig) -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let project_root = current_exe
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+    let path_env =
+        std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
+    let token_line = resolve_token_env_line(config);
 
     let unit_content = format!(
         "[Unit]\nDescription=Tuner Bot\nAfter=network.target\n\n[Service]\nType=simple\n\
          WorkingDirectory={}\nExecStart={}\n{}Environment=\"HOME={}\"\nEnvironment=\"PATH={}\"\n\
          Restart=always\nRestartSec=10\nOOMPolicy=continue\n\n\
          [Install]\nWantedBy=default.target\n",
-        project_root.to_string_lossy(), current_exe.to_string_lossy(), token_line, home, path_env
+        project_root.to_string_lossy(),
+        current_exe.to_string_lossy(),
+        token_line,
+        home,
+        path_env
     );
     let systemd_dir = std::path::PathBuf::from(&home).join(".config/systemd/user");
     std::fs::create_dir_all(&systemd_dir).map_err(|e| e.to_string())?;
@@ -97,7 +125,10 @@ fn install_agy_vault_systemd_if_present(home: &str, systemd_dir: &Path) {
     }
     let vault_service = systemd_dir.join("agy-vault.service");
     if vault_service.exists() {
-        println!("🗄️ [tuner] Existing companion service preserved at {:?}", vault_service);
+        println!(
+            "🗄️ [tuner] Existing companion service preserved at {:?}",
+            vault_service
+        );
         return;
     }
     let unit = format!(
@@ -108,7 +139,10 @@ fn install_agy_vault_systemd_if_present(home: &str, systemd_dir: &Path) {
         vault_bin.to_string_lossy()
     );
     if std::fs::write(&vault_service, unit).is_ok() {
-        println!("🗄️ [tuner] Companion service installed to {:?}", vault_service);
+        println!(
+            "🗄️ [tuner] Companion service installed to {:?}",
+            vault_service
+        );
     }
 }
 
@@ -179,9 +213,15 @@ pub fn override_profile_config(
     profile_name: &str,
     paths: &crate::workspace::paths::TunerPaths,
 ) -> Result<(), String> {
-    let profile_cfg = config.profiles.iter().find(|p| p.name == profile_name)
+    let profile_cfg = config
+        .profiles
+        .iter()
+        .find(|p| p.name == profile_name)
         .ok_or_else(|| format!("Profile '{}' not found in config.json", profile_name))?;
-    if !profile_cfg.telegram_token.is_empty() && profile_cfg.telegram_token != "YOUR_BOT_TOKEN_HERE" && !profile_cfg.telegram_token.starts_with("YOUR_") {
+    if !profile_cfg.telegram_token.is_empty()
+        && profile_cfg.telegram_token != "YOUR_BOT_TOKEN_HERE"
+        && !profile_cfg.telegram_token.starts_with("YOUR_")
+    {
         config.telegram_token = profile_cfg.telegram_token.clone();
     } else if profile_name != "default" {
         config.telegram_token = String::new();
@@ -189,10 +229,15 @@ pub fn override_profile_config(
     if !profile_cfg.allowed_user_ids.is_empty() && profile_cfg.allowed_user_ids != vec![123456789] {
         config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
     }
-    if !profile_cfg.allowed_group_ids.is_empty() && profile_cfg.allowed_group_ids != vec![-1001234567890] {
+    if !profile_cfg.allowed_group_ids.is_empty()
+        && profile_cfg.allowed_group_ids != vec![-1001234567890]
+    {
         config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
     }
-    config.working_dir = profile_cfg.working_dir.clone().unwrap_or_else(|| paths.workspace());
+    config.working_dir = profile_cfg
+        .working_dir
+        .clone()
+        .unwrap_or_else(|| paths.workspace());
     if let Some(ref m) = profile_cfg.model {
         config.model = Some(m.clone());
     }
