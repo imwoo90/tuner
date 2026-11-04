@@ -122,6 +122,14 @@ mod tests {
         let suggestion = parse_cli_error(stderr, 1, None);
         assert!(suggestion.contains("execution timed out"));
         assert!(suggestion.contains("smaller prompt"));
+
+        let agy_150_stderr = "[agy] print timeout after 300s\n";
+        let suggestion_150 = parse_cli_error(agy_150_stderr, 1, None);
+        assert!(suggestion_150.contains("execution timed out"));
+
+        let agy_1412_stderr = "[agy] idle timeout after 300s\n";
+        let suggestion_1412 = parse_cli_error(agy_1412_stderr, 1, None);
+        assert!(suggestion_1412.contains("execution timed out"));
     }
 
     #[test]

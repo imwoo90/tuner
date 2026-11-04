@@ -179,30 +179,27 @@ pub fn format_agy_error(payload: &AgyErrorPayload, model: Option<&str>) -> Strin
         if let Some(s) = payload.effective_status().filter(|s| !s.is_empty()) {
             format!("❌ [tuner] Antigravity model API error (status: {}).", s.to_uppercase())
         } else if let Some(c) = payload.code_as_i64() {
-            format!("❌ [tuner] Antigravity model API error (code: {}).", c)
+            format!("❌ [tuner] Antigravity model API error (code: {c}).")
         } else {
             header.to_string()
         }
-    } else if kind == AgyErrorKind::RateLimit
-        && let Some(m) = active_model
-    {
-        format!("❌ [tuner] Model API rate limit or quota exceeded (model: {}).", m)
+    } else if kind == AgyErrorKind::RateLimit && let Some(m) = active_model {
+        format!("{ERR_RATE_LIMIT_PREFIX}{m}).")
     } else {
         header.to_string()
     };
 
-    let mut out = format!("{}\n{}", title, suggestion);
-    if let Some(msg) = payload.effective_message() {
-        let trimmed = msg.trim();
-        if !trimmed.is_empty() {
-            out.push_str(&format!("\n\nDetails: {}", trimmed));
-        }
+    let mut out = format!("{title}\n{suggestion}");
+    if let Some(msg) = payload.effective_message().map(str::trim).filter(|m| !m.is_empty()) {
+        out.push_str(&format!("\n\nDetails: {msg}"));
     }
     if let Some(ref eid) = payload.error_id {
-        out.push_str(&format!("\nError ID: {}", eid));
+        out.push_str(&format!("\nError ID: {eid}"));
     }
     out
 }
+
+const ERR_RATE_LIMIT_PREFIX: &str = "❌ [tuner] Model API rate limit or quota exceeded (model: ";
 
 /// Parses CLI stderr and exit status with optional active model context.
 pub fn parse_cli_error(stderr: &str, returncode: i32, model: Option<&str>) -> String {
@@ -210,23 +207,17 @@ pub fn parse_cli_error(stderr: &str, returncode: i32, model: Option<&str>) -> St
         return format_agy_error(&payload, model);
     }
     let lower = stderr.to_lowercase();
-    if returncode == 3 || lower.contains("exit code 3") || lower.contains("exit status: 3") || lower.contains("unix_wait_status(768)") {
-        let trimmed = stderr.trim();
-        return if trimmed.is_empty() {
-            MSG_CODE_3.to_string()
-        } else {
-            format!("{}\n\nDetails: {}", MSG_CODE_3, trimmed)
-        };
+    if returncode == 3 || has_any(&lower, &["exit code 3", "exit status: 3", "unix_wait_status(768)"]) {
+        let t = stderr.trim();
+        return if t.is_empty() { MSG_CODE_3.to_string() } else { format!("{MSG_CODE_3}\n\nDetails: {t}") };
     }
     if has_any(&lower, &["api key not found", "api_key not found", "api key is missing"]) {
         return MSG_MISSING_KEY.to_string();
     }
-    if lower.starts_with("command timed out") || lower.contains("command timed out after") {
+    if lower.starts_with("command timed out") || has_any(&lower, &["command timed out after", "[agy] print timeout after", "[agy] idle timeout after"]) {
         return MSG_TIMEOUT.to_string();
     }
-    if returncode == 126
-        || (lower.contains("permission denied") && has_any(&lower, &["agy", "/bin", "exec"]))
-    {
+    if returncode == 126 || (lower.contains("permission denied") && has_any(&lower, &["agy", "/bin", "exec"])) {
         return MSG_PERM_DENIED.to_string();
     }
     if returncode == 127 || has_any(&lower, &["command not found", "agy: not found"]) {

@@ -59,7 +59,8 @@ fn test_verified_agy_version_embedded_at_compile_time() {
     let verified = env!("TUNER_VERIFIED_AGY_VERSION");
     assert!(!verified.is_empty());
     assert_ne!(verified, "unknown");
-    assert!(verified.starts_with("1.4."));
+    assert!(verified.starts_with("1."));
+    assert_eq!(verified, "1.5.0");
 }
 
 #[test]
