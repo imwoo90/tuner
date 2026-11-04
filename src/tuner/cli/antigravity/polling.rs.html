@@ -191,10 +191,10 @@
 <a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(last_pty);
 <a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if </span>sz &gt; prev || pty &gt; last_pty {
 <a href=#193 id=193 data-nosnippet>193</a>            (last_pty, last_act) = (pty, Instant::now());
-<a href=#194 id=194 data-nosnippet>194</a>        } <span class="kw">else if </span>last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>) {
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">let </span>r0 = retried;
-<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">if </span><span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">? </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
-<a href=#197 id=197 data-nosnippet>197</a>            <span class="kw">if </span>!r0 &amp;&amp; retried { last_act = Instant::now(); }
+<a href=#194 id=194 data-nosnippet>194</a>        } <span class="kw">else if </span>last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>)
+<a href=#195 id=195 data-nosnippet>195</a>            &amp;&amp; <span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">?
+<a href=#196 id=196 data-nosnippet>196</a>        </span>{
+<a href=#197 id=197 data-nosnippet>197</a>            last_act = Instant::now();
 <a href=#198 id=198 data-nosnippet>198</a>        }
 <a href=#199 id=199 data-nosnippet>199</a>        <span class="macro">tokio::select!</span> {
 <a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">_ </span>= sessions.interrupt_notify.notified() =&gt; check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>,
