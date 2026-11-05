@@ -121,10 +121,16 @@ fn test_resolve_profile_info() {
 
 #[test]
 fn test_parse_antigravity_url_from_osc8_and_v1() {
-    use super::commands_remote_hub::parse_antigravity_url_from_text;
+    use super::commands_remote_hub::{parse_antigravity_url_from_text, parse_installation_uuid_url};
     let osc8_output = "\x1b[4D\x1b[34;4m\x1b]8;id=jk7ecf9d45d234dd9f;https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v1\x07https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v1\x1b[m\x1b]8;;\x07\n";
     assert_eq!(
         parse_antigravity_url_from_text(osc8_output).as_deref(),
         Some("https://antigravity.google.com/r/bea85d55-be64-4bb8-8ddd-2a8d4c627725-v2")
+    );
+
+    let pbtxt = "migrate_convos_into_projects: MIGRATION_STATUS_STARTED\ninstallation_uuid: \"63122adc-9e50-4b81-a42d-fa1bbdf4a1e8\"\n";
+    assert_eq!(
+        parse_installation_uuid_url(pbtxt).as_deref(),
+        Some("https://antigravity.google.com/r/63122adc-9e50-4b81-a42d-fa1bbdf4a1e8-v2")
     );
 }
