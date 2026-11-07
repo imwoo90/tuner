@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ESCAPED_PIPE_SENTINEL"],"fn":["convert_tables","format_attribute_cell","format_data_row","format_table","is_separator_row","normalize_sub_bullet","parse_table_row","split_cell_br","strip_bold_markers","strip_leading_bullet"]};
+window.SIDEBAR_ITEMS = {"constant":["ESCAPED_PIPE_SENTINEL"],"fn":["convert_tables","format_attribute_cell","format_data_row","format_table","is_separator_row","normalize_sub_bullet","parse_table_row","split_cell_br","strip_bold_markers","strip_leading_bullet","wrap_cards_collapsible"]};
