@@ -166,7 +166,8 @@ pub(crate) async fn run_cli_stream(
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let mut cc = cli.clone();
     cc.config.chat_id = msg.chat.id.0;
-    cc.config.topic_id = msg.thread_id.map(|t| t.0.0 as i64);
+    cc.config.topic_id = sess.topic_id.or_else(|| get_topic_id(msg));
+    if !sess.provider.is_empty() { cc.config.provider = sess.provider.clone(); }
     if !sess.model.is_empty() { cc.config.model = Some(sess.model.clone()); }
     if let Some(ref effort) = sess.effort
         && !effort.is_empty() {
@@ -193,16 +194,16 @@ async fn handle_model_override(
     empty: bool,
 ) -> Result<bool, teloxide::RequestError> {
     let (mo, eff) = model_and_effort;
-    sess.model = mo.to_string();
+    let canonical_mo = commands_model::normalize_model_for_provider(&sess.provider, mo);
+    sess.model = canonical_mo.clone();
     sess.effort = eff.map(|s| s.to_string());
     let _ = sessions.preserve_session_identity(sess).await;
-    let sid = sess.get_session_id(&sess.provider);
-    commands_model::apply_model_to_active_pty(cli, &sid, &sess.model, sess.effort.as_deref()).await;
+    commands_model::apply_model_to_active_pty(cli, sess).await;
     if empty {
         let display = if let Some(e) = eff {
-            format!("{} (effort: {})", mo, e)
+            format!("{} (effort: {})", canonical_mo, e)
         } else {
-            mo.to_string()
+            canonical_mo
         };
         let _ = commands::send_reply(bot, msg, format!("🤖 [tuner] Next message will use `{}`.", display)).await;
         return Ok(true);

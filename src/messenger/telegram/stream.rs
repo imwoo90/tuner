@@ -25,7 +25,7 @@ pub(crate) async fn handle_stream_result(
     config: &CliConfig,
 ) -> Result<Option<String>, teloxide::RequestError> {
     let last_sid = resp.session_id.clone();
-    if resp.stderr == "Interrupted by user (/stop)" {
+    if resp.stderr == "Interrupted by user (/stop)" || (!resp.is_error && resp.result.trim().is_empty()) {
         return Ok(last_sid);
     }
     let raw_text = if resp.is_error {
@@ -172,7 +172,10 @@ pub(crate) async fn consume_stream(
         }
 
     if state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
-        if let Some(sid) = state.last_sid { updated.set_session_id(&config.provider, &sid); }
+        if let Some(sid) = state.last_sid {
+            let prov = if !updated.provider.is_empty() { updated.provider.clone() } else { config.provider.clone() };
+            updated.set_session_id(&prov, &sid);
+        }
         let _ = sessions.update_session(&updated).await;
     }
     Ok(())

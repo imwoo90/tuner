@@ -71,9 +71,33 @@ mod tests {
             assert!(!cmd.description.is_empty() && cmd.description.len() <= 256);
         }
         let names: Vec<_> = commands.iter().map(|c| c.command.as_str()).collect();
-        for n in &["new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork_preview", "boost"] {
+        for n in &["new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork", "boost"] {
             assert!(names.contains(n));
         }
+        assert!(!names.contains(&"teamwork_preview"));
         assert!(!names.contains(&"diagnose"));
+
+        let claude_cmds = crate::telegram::commands_registry::get_bot_commands_for_provider("claude");
+        let claude_names: Vec<_> = claude_cmds.iter().map(|c| c.command.as_str()).collect();
+        for n in &["review", "security_review", "verify", "debug", "simplify", "deep_research", "code_review", "goal", "init"] {
+            assert!(claude_names.contains(n));
+        }
+        assert!(!claude_names.contains(&"grill_me"));
+
+        let codex_cmds = crate::telegram::commands_registry::get_bot_commands_for_provider("codex");
+        let codex_names: Vec<_> = codex_cmds.iter().map(|c| c.command.as_str()).collect();
+        for n in &["review", "init"] {
+            assert!(codex_names.contains(n));
+        }
+        assert!(!codex_names.contains(&"teamwork"));
+
+        let merged = crate::telegram::commands_registry::merge_claude_bot_commands(vec![
+            ("batch".to_string(), "Parallel batch worktrees".to_string()),
+            ("new".to_string(), "Duplicate common cmd".to_string()),
+        ]);
+        let merged_names: Vec<_> = merged.iter().map(|c| c.command.as_str()).collect();
+        assert!(merged_names.contains(&"batch"));
+        assert!(merged_names.contains(&"review"));
+        assert_eq!(merged_names.iter().filter(|&&c| c == "new").count(), 1);
     }
 }

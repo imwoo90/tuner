@@ -18,7 +18,7 @@ use super::ask_callbacks::{
 use super::multi_select::handle_ask_multi_callback;
 use super::callbacks_effort::{
     handle_model_base_callback, handle_model_effort_callback,
-    handle_standalone_effort_callback
+    handle_standalone_effort_callback, handle_provider_callback
 };
 
 async fn handle_lang_callback(
@@ -54,6 +54,10 @@ async fn handle_options_and_upgrade_callbacks(
     config: &CliConfig,
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
+    if let Some(p) = d.strip_prefix("provider:") {
+        handle_provider_callback(bot, msg, p, sessions, config).await;
+        return Ok(true);
+    }
     if let Some(m) = d.strip_prefix("model_base:") {
         handle_model_base_callback(bot, msg, m, sessions, config, cli).await;
         return Ok(true);
@@ -119,6 +123,9 @@ async fn handle_callback_query_inner(
 ) -> Result<(), teloxide::RequestError> {
     if let Some(ref d) = q.data {
         if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref msg)) = q.message {
+            if !d.starts_with("provider:") {
+                super::commands_registry::sync_chat_commands_for_topic(&bot, msg, &sessions, &config).await;
+            }
             if handle_options_and_upgrade_callbacks(&bot, msg, d, &sessions, &config, &cli).await? {
             } else if d.starts_with("crn:") {
                 let tid = crate::telegram::get_topic_id(msg);

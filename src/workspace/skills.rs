@@ -10,7 +10,8 @@
 use crate::workspace::paths::TunerPaths;
 use crate::workspace::skills_helpers::{
     clean_broken_links, clean_cross_profile_skill_links, clean_invalid_workspace_skill_links,
-    create_dir_link, is_skill_sync_enabled, sync_profile_agent_skills,
+    create_dir_link, is_skill_sync_enabled, sync_claude_workspace_bridges,
+    sync_profile_agent_skills,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -33,6 +34,7 @@ pub fn sync_skills(paths: &TunerPaths) -> Result<(), String> {
     let discovered = discover_skills(&paths.skills_dir());
     sync_profile_agent_skills(&paths.agents_skills_dir(), &discovered)
         .map_err(|e| format!("Failed to sync profile agent skills: {}", e))?;
+    sync_claude_workspace_bridges(&paths.workspace());
 
     Ok(())
 }
@@ -184,5 +186,33 @@ pub fn has_valid_skill_frontmatter(skill_dir: &Path) -> bool {
     match (name_val, desc_val) {
         (Some(n), Some(d)) => !n.trim().is_empty() && !d.trim().is_empty(),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sync_claude_workspace_bridges_creates_symlinks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path();
+        std::fs::write(ws.join("AGENTS.md"), "# Constitution").unwrap();
+        std::fs::create_dir_all(ws.join(".agents/rules")).unwrap();
+        std::fs::write(ws.join(".agents/rules/mainmemory.md"), "# Memory").unwrap();
+        std::fs::create_dir_all(ws.join(".agents/skills/demo")).unwrap();
+
+        sync_claude_workspace_bridges(ws);
+
+        assert!(ws.join("CLAUDE.md").is_symlink());
+        assert_eq!(std::fs::read_to_string(ws.join("CLAUDE.md")).unwrap(), "# Constitution");
+        assert!(ws.join(".claude/rules").is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(ws.join(".claude/rules/mainmemory.md")).unwrap(),
+            "# Memory"
+        );
+        assert!(ws.join(".claude/skills").is_symlink());
+        assert!(ws.join(".claude/skills/demo").is_dir());
     }
 }

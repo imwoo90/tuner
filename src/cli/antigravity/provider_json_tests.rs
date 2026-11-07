@@ -60,7 +60,7 @@ fn test_verified_agy_version_embedded_at_compile_time() {
     assert!(!verified.is_empty());
     assert_ne!(verified, "unknown");
     assert!(verified.starts_with("1."));
-    assert_eq!(verified, "1.5.1");
+    assert_eq!(verified, "1.5.3");
 }
 
 #[test]

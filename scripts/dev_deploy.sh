@@ -42,7 +42,12 @@ if [ -d "$DEFAULTS_DIR" ]; then
 fi
 
 echo "🔄 Restarting container tuner worker..."
-docker exec "$CONTAINER_NAME" pkill -9 -f tuner || true
+docker exec "$CONTAINER_NAME" pkill -9 -f 'bin/tuner' || true
+if [ -f "$HOME/.tuner-dev/gemini_bridge.py" ]; then
+    docker cp "$HOME/.tuner-dev/gemini_bridge.py" "$CONTAINER_NAME:/tmp/gemini_bridge.py"
+    docker exec "$CONTAINER_NAME" pkill -9 -f 'gemini_bridge.py' || true
+    docker exec -d "$CONTAINER_NAME" bash -c 'set -a; source "$HOME/.tuner/.env" 2>/dev/null || true; set +a; exec python3 /tmp/gemini_bridge.py --port 18765 > /tmp/gemini_bridge_daemon.log 2>&1'
+fi
 docker exec -d "$CONTAINER_NAME" bash -c 'while true; do "$HOME/.tuner/bin/tuner" --worker default >> "$HOME/.tuner/tuner.log" 2>&1; sleep 1; done'
 
 echo "✅ Dev deploy complete! Container $CONTAINER_NAME is running updated binary & assets."

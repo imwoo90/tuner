@@ -148,6 +148,7 @@ pub(crate) async fn process_skip(
         }
 
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
+            super::ask_process::submit_peer_ask_answers_if_needed(msg.chat.id.0, &sess, config, &state.answers).await;
             let txt = format!("{}\n\n(Selected: **User Skipped**)", msg.text().unwrap_or(""));
             let html = super::formatting::markdown_to_telegram_html(&txt);
             let _ = bot.edit_message_text(msg.chat.id, msg.id, html)

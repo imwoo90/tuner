@@ -11,6 +11,40 @@ use super::doctor::{CheckStatus, DoctorCheck, which_bin};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Inspects Tier 1 optional/multi-provider CLI engines (`claude` and `codex`).
+pub fn check_tier1_provider_clis(checks: &mut Vec<DoctorCheck>) {
+    for (bin, label, prov) in [
+        ("claude", "claude (Claude Code CLI)", "claude"),
+        ("codex", "codex (OpenAI Codex CLI)", "codex"),
+    ] {
+        match which_bin(bin) {
+            Some(path) => {
+                let ver = Command::new(&path)
+                    .arg("--version")
+                    .output()
+                    .ok()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "installed".to_string());
+                checks.push(DoctorCheck {
+                    tier: "Tier 1: Core Runtime",
+                    name: label,
+                    status: CheckStatus::Ok,
+                    detail: format!("{} (path: {})", ver, path.display()),
+                    hint: String::new(),
+                });
+            }
+            None => checks.push(DoctorCheck {
+                tier: "Tier 1: Core Runtime",
+                name: label,
+                status: CheckStatus::Warn,
+                detail: format!("Not found in PATH or ~/.local/bin/{}", bin),
+                hint: format!("Install `{}` CLI if using the '{}' provider.", bin, prov),
+            }),
+        }
+    }
+}
+
 /// Inspects Tier 2 OS and media utilities (`curl`, `git`, `screen`, `pgrep`, `ffmpeg`, `node`).
 pub fn check_tier2_os_tools(checks: &mut Vec<DoctorCheck>) {
     let required_bins = [

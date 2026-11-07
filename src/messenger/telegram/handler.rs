@@ -118,9 +118,20 @@ async fn resolve_active_lang(
 }
 
 pub(crate) fn normalize_command_text(raw_text: &str, bot_username: Option<&str>) -> String {
-    reply::strip_mention(raw_text, bot_username)
-        .replace("/teamwork_preview", "/teamwork-preview")
+    let stripped = reply::strip_mention(raw_text, bot_username);
+    let cleaned = if stripped.trim_start().starts_with('/') {
+        let (cmd, args) = super::commands_registry::split_slash_command(&stripped);
+        if args.is_empty() { cmd.to_string() } else { format!("{} {}", cmd, args) }
+    } else {
+        stripped
+    };
+    cleaned
+        .replace("/teamwork_preview", "/teamwork")
+        .replace("/teamwork-preview", "/teamwork")
         .replace("/grill_me", "/grill-me")
+        .replace("/security_review", "/security-review")
+        .replace("/deep_research", "/deep-research")
+        .replace("/code_review", "/code-review")
 }
 
 async fn dispatch_lock_free(
@@ -163,6 +174,9 @@ pub(crate) async fn handle_message(
 
     let raw_text = msg.text().or(msg.caption()).unwrap_or("");
     let text = normalize_command_text(raw_text, bot_info.username.as_deref());
+    if !text.starts_with("/provider") {
+        super::commands_registry::sync_chat_commands_for_topic(&bot, &msg, &sessions, &config).await;
+    }
     let deps = MediaGroupDeps {
         config,
         sessions: sessions.clone(),

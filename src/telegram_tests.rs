@@ -140,4 +140,32 @@ mod tests {
         let msg2 = make_message_json(777, 100, "@opus Hello again");
         let _ = handle_message(bot, msg2, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
     }
+
+    #[tokio::test]
+    async fn test_provider_command_switching_e2e() {
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let temp_dir = tempfile::tempdir().unwrap();
+        mock_brain_dir(&temp_dir, "mock-session-123");
+        let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm, _env) = setup_e2e_env(&temp_dir, "#!/bin/sh\necho '{\"result\":\"ok\",\"is_error\":false}'\n");
+        let chat_id = 666;
+        let key = SessionKey::telegram(chat_id, None);
+
+        let msg_claude = make_message_json(chat_id, 100, "/provider claude");
+        let _ = handle_message(bot.clone(), msg_claude, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await;
+        let sess_claude = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(sess_claude.provider, "claude");
+        assert_eq!(sess_claude.model, "claude-fable-5");
+
+        let msg_codex = make_message_json(chat_id, 100, "/provider codex");
+        let _ = handle_message(bot.clone(), msg_codex, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await;
+        let sess_codex = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(sess_codex.provider, "codex");
+        assert_eq!(sess_codex.model, "gpt-6-astra");
+
+        let msg_agy = make_message_json(chat_id, 100, "/provider agy");
+        let _ = handle_message(bot, msg_agy, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await;
+        let sess_agy = mgr.get_active(&key).await.unwrap().unwrap();
+        assert_eq!(sess_agy.provider, "antigravity");
+        assert_eq!(sess_agy.model, "gemini-3.8-flash");
+    }
 }

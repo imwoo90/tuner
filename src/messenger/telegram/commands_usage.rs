@@ -219,7 +219,10 @@ async fn resolve_session_id(
             return None;
         }
     };
-
+    if matches!(sess.provider.as_str(), "claude" | "codex") {
+        let _ = send_reply(bot, msg, format!("ℹ️ [tuner] `/usage` is only supported on `antigravity` (active: `{}`).", sess.provider)).await;
+        return None;
+    }
     let sid = match crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
         Ok(s) if !s.is_empty() => s,
         Ok(_) => {
@@ -231,25 +234,14 @@ async fn resolve_session_id(
             return None;
         }
     };
-
-    let mut session_cli = cli.clone();
-    session_cli.config.chat_id = msg.chat.id.0;
-    session_cli.config.topic_id = sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64));
+    let mut s_cli = cli.clone();
+    s_cli.config.chat_id = msg.chat.id.0;
+    s_cli.config.topic_id = sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64));
     if !sess.model.is_empty() && sess.model != "antigravity-default" {
-        session_cli.config.model = Some(sess.model.clone());
+        s_cli.config.model = Some(sess.model.clone());
     }
-    if sess.effort.is_some() {
-        session_cli.config.effort = sess.effort.clone();
-    }
-    Some((sid, session_cli))
-}
-
-async fn send_reply_html(bot: &Bot, msg: &Message, html: &str) {
-    let mut req = bot.send_message(msg.chat.id, html).parse_mode(teloxide::types::ParseMode::Html);
-    if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-    if req.await.is_err() {
-        let _ = send_reply(bot, msg, html).await;
-    }
+    if sess.effort.is_some() { s_cli.config.effort = sess.effort.clone(); }
+    Some((sid, s_cli))
 }
 
 pub(crate) async fn handle_usage_command(
@@ -262,10 +254,8 @@ pub(crate) async fn handle_usage_command(
     let Some((sid, session_cli)) = resolve_session_id(bot, msg, config, sessions, cli).await else {
         return Ok(());
     };
-
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-
     let report = match query_quota_from_pty(&session_cli, &sid).await {
         Ok(r) => r,
         Err(e) => {
@@ -275,7 +265,9 @@ pub(crate) async fn handle_usage_command(
         }
     };
     drop(_g);
-
-    send_reply_html(bot, msg, &render_quota_message(&report)).await;
+    let html = render_quota_message(&report);
+    let mut req = bot.send_message(msg.chat.id, &html).parse_mode(teloxide::types::ParseMode::Html);
+    if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
+    if req.await.is_err() { let _ = send_reply(bot, msg, html).await; }
     Ok(())
 }

@@ -12,7 +12,8 @@ use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands_model::{handle_model_command, handle_effort_command};
-use super::commands_session::handle_session_control_commands;
+use super::commands_session::{handle_session_control_commands, handle_memory_command};
+use super::callbacks_effort::handle_provider_command;
 #[allow(unused_imports)]
 pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command, handle_help_command};
 
@@ -59,11 +60,15 @@ async fn append_topic_status(
             };
             report.push_str(&format!("\n- Topic: {}", t_label));
         }
-        let sid = s.get_session_id(&config.provider);
+        let active_prov = if !s.provider.is_empty() { &s.provider } else { &config.provider };
+        let sid = s.get_session_id(active_prov);
         if !sid.is_empty() {
             let short_sid = &sid[..sid.len().min(8)];
-            let turns = s.provider_sessions.get(&config.provider).map(|p| p.message_count).unwrap_or(0);
-            let state_str = if cli.sessions.is_running(&sid).await {
+            let turns = s.provider_sessions.get(active_prov).map(|p| p.message_count).unwrap_or(0);
+            let is_turn_running = cli.sessions.is_running(&sid).await
+                || crate::cli::claude::is_running(msg.chat.id.0, topic_id, Some(&sid)).await
+                || crate::cli::codex::is_running(msg.chat.id.0, topic_id, Some(&sid)).await;
+            let state_str = if is_turn_running {
                 "⚡ running"
             } else if cli.sessions.is_async_running(&sid).await {
                 "⏳ async task"
@@ -80,6 +85,16 @@ async fn append_topic_status(
     }
 }
 
+async fn resolve_topic_provider(
+    msg: &Message,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+) -> String {
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    sessions.get_active(&key).await.ok().flatten()
+        .map(|s| s.provider).filter(|p| !p.is_empty()).unwrap_or_else(|| config.provider.clone())
+}
+
 async fn handle_info_commands(
     bot: &Bot,
     msg: &Message,
@@ -88,25 +103,31 @@ async fn handle_info_commands(
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
-    let trimmed = text.trim();
-    if trimmed == "/help" || trimmed == "/start" {
-        let _ = handle_help_command(bot, msg).await;
+    let (cmd, args) = super::commands_registry::split_slash_command(text);
+    if !args.is_empty() {
+        return Ok(false);
+    }
+    if cmd == "/help" || cmd == "/start" {
+        let prov = resolve_topic_provider(msg, config, sessions).await;
+        let _ = super::commands_registry::handle_help_command_for_provider(bot, msg, &prov).await;
         return Ok(true);
     }
-    if trimmed == "/status" || trimmed == "/diagnose" {
+    if cmd == "/status" || cmd == "/diagnose" {
         let agy_status = crate::cli::antigravity::events::agy_version_summary()
             .map(|v| t!("bot.diagnose_installed", version = v))
             .unwrap_or_else(|| t!("bot.diagnose_not_found"));
-        let session_count = cli.sessions.active_count().await;
+        let session_count = cli.sessions.active_count().await
+            + crate::cli::claude::active_count().await + crate::cli::codex::active_count().await;
         let has_tok = std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty();
         let token_present = if has_tok { t!("bot.diagnose_token_set") } else { t!("bot.diagnose_token_missing") };
+        let active_provider = resolve_topic_provider(msg, config, sessions).await;
         let model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
-        let mut report = t!("bot.status", agy_status = agy_status, token_present = token_present, session_count = session_count, provider = config.provider, model = model);
+        let mut report = t!("bot.status", agy_status = agy_status, token_present = token_present, session_count = session_count, provider = active_provider, model = model);
         append_topic_status(&mut report, msg, config, sessions, cli).await;
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
-    if trimmed == "/restart" {
+    if cmd == "/restart" {
         let _ = send_reply(bot, msg, t!("bot.restart")).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         std::process::exit(42);
@@ -122,19 +143,26 @@ async fn handle_pref_commands(
     sessions: &crate::session::manager::SessionManager,
     cli: &AntigravityCli,
 ) -> bool {
-    if let Some(args) = text.strip_prefix("/model") {
-        let _ = handle_model_command(bot, msg, args.trim(), config, sessions, cli).await;
-        return true;
+    let (cmd, args) = super::commands_registry::split_slash_command(text);
+    match cmd {
+        "/provider" => {
+            let _ = handle_provider_command(bot, msg, args, config, sessions).await;
+            true
+        }
+        "/model" => {
+            let _ = handle_model_command(bot, msg, args, config, sessions, cli).await;
+            true
+        }
+        "/effort" => {
+            let _ = handle_effort_command(bot, msg, args, config, sessions, cli).await;
+            true
+        }
+        "/lang" => {
+            let _ = crate::telegram::lang::handle_lang_command(bot, msg, args, config, sessions).await;
+            true
+        }
+        _ => false,
     }
-    if let Some(args) = text.strip_prefix("/effort") {
-        let _ = handle_effort_command(bot, msg, args.trim(), config, sessions, cli).await;
-        return true;
-    }
-    if let Some(args) = text.strip_prefix("/lang") {
-        let _ = crate::telegram::lang::handle_lang_command(bot, msg, args.trim(), config, sessions).await;
-        return true;
-    }
-    false
 }
 
 pub(crate) async fn handle_commands(
@@ -151,33 +179,34 @@ pub(crate) async fn handle_commands(
         return Ok(true);
     }
     let trimmed = text.trim();
-    if trimmed == "/usage" {
+    let (cmd, args) = super::commands_registry::split_slash_command(trimmed);
+    if cmd == "/usage" && args.is_empty() {
         super::commands_usage::handle_usage_command(bot, msg, config, sessions, cli).await?;
         return Ok(true);
     }
-    if trimmed == "/remote" || trimmed.starts_with("/remote ") {
+    if cmd == "/remote" && args.is_empty() {
         super::commands_remote::handle_remote_command(bot, msg, config).await?;
         return Ok(true);
     }
-    if trimmed == "/vault" || trimmed.starts_with("/vault ") || trimmed.starts_with("/vault@") {
+    if cmd == "/vault" && args.is_empty() {
         super::vault::handle_vault_command(bot, msg, config).await?;
         return Ok(true);
     }
-    if trimmed.starts_with("/new") || trimmed.starts_with("/reset") || trimmed == "/stop" || trimmed == "/stop_all" || trimmed == "/abort" {
+    if matches!(cmd, "/new" | "/reset") || (matches!(cmd, "/stop" | "/stop_all" | "/abort") && args.is_empty()) {
         return handle_session_control_commands(bot, msg, trimmed, config, sessions, cli, topic_cache).await;
     }
     if handle_pref_commands(bot, msg, trimmed, config, sessions, cli).await {
         return Ok(true);
     }
-    if trimmed == "/memory" || trimmed.starts_with("/memory@") {
+    if cmd == "/memory" && args.is_empty() {
         let _ = handle_memory_command(bot, msg, config, sessions, cli).await;
         return Ok(true);
     }
-    if trimmed == "/cron" {
+    if cmd == "/cron" && args.is_empty() {
         let _ = handle_cron_command(bot, msg, cron_manager, topic_cache).await;
         return Ok(true);
     }
-    if trimmed == "/upgrade" {
+    if cmd == "/upgrade" && args.is_empty() {
         let _ = super::upgrade::handle_upgrade_command(bot, msg).await;
         return Ok(true);
     }
@@ -196,52 +225,5 @@ async fn handle_cron_command(
         let _ = req.reply_markup(markup).await;
     }
     Ok(())
-}
-
-async fn try_query_live_memory(
-    bot: &Bot,
-    msg: &Message,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-) -> bool {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, model).await
-        && let Ok(sid) = super::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await
-        && !sid.is_empty() && !sid.starts_with("mock-")
-    {
-        let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
-        let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
-        return true;
-    }
-    false
-}
-
-async fn send_static_memory_fallback(bot: &Bot, msg: &Message, config: &CliConfig) -> Result<(), teloxide::RequestError> {
-    let p1 = config.working_dir.join(".agents/rules/mainmemory.md");
-    let path = if p1.is_file() { p1 } else { config.working_dir.join("memory_system/MAINMEMORY.md") };
-    let raw = std::fs::read_to_string(path).unwrap_or_else(|_| t!("bot.memory_empty"));
-    let content = raw.strip_prefix("---").and_then(|s| s.find("---").map(|i| s[i + 3..].trim_start())).unwrap_or(&raw);
-    let html = crate::telegram::formatting::markdown_to_telegram_html(content);
-    for chunk in crate::telegram::formatting::split_html_message(&html, 4000) {
-        let mut req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-        let _ = req.await;
-    }
-    Ok(())
-}
-
-async fn handle_memory_command(
-    bot: &Bot,
-    msg: &Message,
-    config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
-    cli: &AntigravityCli,
-) -> Result<(), teloxide::RequestError> {
-    if try_query_live_memory(bot, msg, config, sessions, cli).await {
-        return Ok(());
-    }
-    send_static_memory_fallback(bot, msg, config).await
 }
 

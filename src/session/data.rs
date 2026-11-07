@@ -166,4 +166,52 @@ impl SessionData {
             ps.message_count = 0;
         }
     }
+
+    /// Normalizes a provider alias (`agy`, `antigravity`, `claude`, `codex`) into its canonical provider name.
+    pub fn canonical_provider(raw: &str) -> Option<&'static str> {
+        match raw.trim().to_lowercase().as_str() {
+            "antigravity" | "agy" => Some("antigravity"),
+            "claude" | "claude-code" => Some("claude"),
+            "codex" | "openai" => Some("codex"),
+            _ => None,
+        }
+    }
+
+    fn is_model_compatible(model: &str, provider: &str) -> bool {
+        match provider {
+            "claude" => crate::cli::claude::CLAUDE_MODELS.contains(&model),
+            "codex" => crate::cli::codex::CODEX_MODELS.contains(&model),
+            _ => {
+                !crate::cli::claude::CLAUDE_MODELS.contains(&model)
+                    && !crate::cli::codex::CODEX_MODELS.contains(&model)
+                    && !model.starts_with("gpt-6")
+                    && !model.starts_with("gpt-5")
+            }
+        }
+    }
+
+    /// Switches `self.provider` to `target_provider`, updates `self.model` if incompatible, and returns a status summary.
+    pub fn apply_provider_switch(&mut self, target_provider: &str) -> String {
+        self.provider = target_provider.to_string();
+        if !Self::is_model_compatible(&self.model, target_provider) {
+            self.model = match target_provider {
+                "claude" => crate::cli::claude::DEFAULT_CLAUDE_MODEL.to_string(),
+                "codex" => crate::cli::codex::DEFAULT_CODEX_MODEL.to_string(),
+                _ => "gemini-3.8-flash".to_string(),
+            };
+        }
+        let existing_sid = self.get_session_id(target_provider);
+        if !existing_sid.is_empty() {
+            let short = &existing_sid[..existing_sid.len().min(8)];
+            format!(
+                "🤖 [tuner] Provider switched to `{}` (model: `{}`).\nResuming existing session `{}`.",
+                target_provider, self.model, short
+            )
+        } else {
+            format!(
+                "🤖 [tuner] Provider switched to `{}` (model: `{}`).\nA fresh session will start on your next message.",
+                target_provider, self.model
+            )
+        }
+    }
 }

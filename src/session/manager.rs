@@ -129,13 +129,7 @@ impl SessionManager {
         let _guard = self.lock.lock().await;
         let mut sessions = self.load()?;
         let skey = key.storage_key();
-
-        let mut resolved_topic_name = None;
-        if let Some(ref resolver) = self.resolver
-            && let Some(tid) = key.topic_id
-        {
-            resolved_topic_name = resolver(key.chat_id, tid);
-        }
+        let resolved_topic_name = self.resolver.as_ref().zip(key.topic_id).and_then(|(r, tid)| r(key.chat_id, tid));
 
         if let Some(existing) = sessions.get_mut(&skey) {
             if self.is_fresh(existing) {
@@ -144,31 +138,22 @@ impl SessionManager {
                     existing.topic_name = resolved_topic_name;
                     to_save = true;
                 }
-                let session_id = existing.get_session_id(&existing.provider);
+                let sid = existing.get_session_id(&existing.provider);
                 let cloned = existing.clone();
-                if to_save {
-                    self.save(&sessions)?;
-                }
-                return Ok((cloned, session_id.is_empty()));
+                if to_save { self.save(&sessions)?; }
+                return Ok((cloned, sid.is_empty()));
             }
-            existing.clear_provider_session(provider);
+            let active_prov = if existing.provider.is_empty() { provider.to_string() } else { existing.provider.clone() };
+            existing.clear_provider_session(&active_prov);
             existing.last_active = Utc::now().to_rfc3339();
             existing.last_progress_msg_id = None;
-            if resolved_topic_name.is_some() {
-                existing.topic_name = resolved_topic_name;
-            }
+            if resolved_topic_name.is_some() { existing.topic_name = resolved_topic_name; }
             let cloned = existing.clone();
             self.save(&sessions)?;
             return Ok((cloned, true));
         }
 
-        let mut new_session = SessionData::new(
-            key.chat_id,
-            key.transport.clone(),
-            key.topic_id,
-            provider.to_string(),
-            model.to_string(),
-        );
+        let mut new_session = SessionData::new(key.chat_id, key.transport.clone(), key.topic_id, provider.to_string(), model.to_string());
         new_session.topic_name = resolved_topic_name;
         sessions.insert(skey, new_session.clone());
         self.save(&sessions)?;

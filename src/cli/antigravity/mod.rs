@@ -92,6 +92,9 @@ impl AntigravityCli {
             return false;
         }
         let env = self.build_env();
+        if matches!(self.config.provider.as_str(), "claude" | "codex") {
+            return crate::cli::common::is_peer_session_alive(&self.config.provider, session_id, &env);
+        }
         let root = events::agy_state_root(Some(&env));
         let conv_db = root.join("conversations").join(format!("{}.db", session_id));
         let transcript = root.join("brain").join(session_id).join(".system_generated").join("logs").join("transcript_full.jsonl");
@@ -100,7 +103,12 @@ impl AntigravityCli {
 
     /// Executes `discover_models` (discover models).
     pub async fn discover_models(&self) -> Vec<String> {
-        discovery::discover_models("agy").await
+        let env = self.build_env();
+        match self.config.provider.as_str() {
+            "claude" => crate::cli::claude::discover_models_live(&env).await,
+            "codex" => crate::cli::codex::discover_models_live(&env).await,
+            _ => discovery::discover_models("agy").await,
+        }
     }
 
     pub(crate) fn normalize_model_id(raw: &str) -> &str {
@@ -121,7 +129,14 @@ impl AntigravityCli {
         };
         let mut base = raw_m;
         let mut suffix_eff = None;
-        for (suf, eff_val) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
+        for (suf, eff_val) in [
+            ("-minimal", "low"),
+            ("-medium", "medium"),
+            ("-xhigh", "high"),
+            ("-high", "high"),
+            ("-low", "low"),
+            ("-max", "high"),
+        ] {
             if let Some(stripped) = raw_m.strip_suffix(suf) {
                 base = stripped;
                 suffix_eff = Some(eff_val.to_string());
@@ -132,7 +147,11 @@ impl AntigravityCli {
         let mut eff = effort
             .map(str::trim)
             .filter(|&e| !e.is_empty())
-            .map(str::to_string)
+            .map(|e| match e {
+                "minimal" => "low".to_string(),
+                "xhigh" | "max" => "high".to_string(),
+                other => other.to_string(),
+            })
             .or(suffix_eff);
         if eff.is_none()
             && (canonical.contains("claude-")
@@ -153,53 +172,39 @@ impl AntigravityCli {
         resume_session: Option<&str>,
         continue_session: bool,
     ) -> Vec<String> {
-        let mut cmd = vec!["agy".to_string()];
-        cmd.push("--add-dir".to_string());
-        cmd.push(self.agy_workspace().to_string_lossy().to_string());
-
+        match self.config.provider.as_str() {
+            "claude" => return crate::cli::claude::build_command(self, prompt, resume_session, continue_session),
+            "codex" => return crate::cli::codex::build_command(self, prompt, resume_session, continue_session),
+            _ => {}
+        }
+        let mut cmd = vec![
+            "agy".to_string(),
+            "--add-dir".to_string(),
+            self.agy_workspace().to_string_lossy().to_string(),
+        ];
         let (m, eff) = Self::resolve_cli_model_effort(self.config.model.as_deref(), self.config.effort.as_deref());
-        if let Some(model) = m {
-            cmd.push("--model".to_string());
-            cmd.push(model);
-        }
-        if let Some(effort) = eff {
-            cmd.push("--effort".to_string());
-            cmd.push(effort);
-        }
-
-        if let Some(session_id) = resume_session {
-            cmd.push("--conversation".to_string());
-            cmd.push(session_id.to_string());
+        if let Some(model) = m { cmd.extend(["--model".to_string(), model]); }
+        if let Some(effort) = eff { cmd.extend(["--effort".to_string(), effort]); }
+        if let Some(sid) = resume_session {
+            cmd.extend(["--conversation".to_string(), sid.to_string()]);
         } else if continue_session {
             cmd.push("--continue".to_string());
         }
-
         if self.config.permission_mode == "bypassPermissions" {
             cmd.push("--dangerously-skip-permissions".to_string());
         }
-
         if let Some(params) = self.config.cli_parameters.get("antigravity") {
-            for param in params {
-                cmd.push(param.clone());
-            }
+            cmd.extend(params.iter().cloned());
         }
-
-        let has_print_timeout = cmd.iter().any(|arg| arg == "--print-timeout" || arg.starts_with("--print-timeout="));
-        if !has_print_timeout
-            && let Ok(timeout_val) = std::env::var("TUNER_PRINT_TIMEOUT") {
-                cmd.push("--print-timeout".to_string());
-                cmd.push(timeout_val);
-            }
-
+        if !cmd.iter().any(|a| a == "--print-timeout" || a.starts_with("--print-timeout="))
+            && let Ok(val) = std::env::var("TUNER_PRINT_TIMEOUT")
+        {
+            cmd.extend(["--print-timeout".to_string(), val]);
+        }
         if !cmd.contains(&"--output-format".to_string()) {
-            cmd.push("--output-format".to_string());
-            cmd.push("json".to_string());
+            cmd.extend(["--output-format".to_string(), "json".to_string()]);
         }
-
-        let final_prompt = self.format_prompt(prompt);
-        cmd.push("--print".to_string());
-        cmd.push(final_prompt);
-
+        cmd.extend(["--print".to_string(), self.format_prompt(prompt)]);
         cmd
     }
 

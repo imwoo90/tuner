@@ -1,250 +1,117 @@
-# tuner
+# ⚡ tuner
 
 [![Rust Compile & Test](https://github.com/imwoo90/tuner/actions/workflows/rust.yml/badge.svg)](https://github.com/imwoo90/tuner/actions)
+[![Releases](https://img.shields.io/github/v/release/imwoo90/tuner?label=release&color=brightgreen)](https://github.com/imwoo90/tuner/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`tuner` supervises and orchestrates the execution of the Google Antigravity CLI (`agy`), providing real-time Telegram messenger integration, virtual PTY session management, expandable Chain-of-Thought & tool-call streaming, idle background turn wakeup, responsive web file/3D review viewing, per-profile Zero-Knowledge credential vaulting, and multi-language localized agent sessions.
+**Put your local AI coding CLIs (`Antigravity` · `Claude Code` · `OpenAI Codex`) in your pocket via Telegram.**
 
----
+`tuner` is a single-binary, pure-Rust agent orchestrator that turns your workstation or home server into a persistent 24/7 engineering studio accessible from your phone or desktop. Instead of paying extra per-token API bills on stateless cloud wrappers, `tuner` drives your **existing authenticated CLI subscriptions** directly against your local Git repositories, toolchains, and hardware.
 
-## 🔗 Release & Antigravity CLI (`agy`) Compatibility Matrix
-
-Each `tuner` release is paired with its verified Antigravity CLI (`agy`) version in [`Cargo.toml`](Cargo.toml) (`[package.metadata.antigravity].verified_version`), embedded into `tuner --version` and Telegram `/status`, and tagged in GitHub Releases:
-
-| `tuner` Release | Verified `agy` Version | Key Compatibility Highlights |
-|---|---|---|
-| **`v0.1.65` – `v0.1.67`** | **`1.5.1`** | Verified against `agy 1.5.1` (`agy remote-control serve` fixed `installation_uuid` daemon + `/remote-control off` graceful teardown in `/remote` preventing duplicate `Offline` instances; 3-stage adaptive collapsible `<blockquote expandable>` accordion card formatting for Telegram Markdown tables + double-backtick inline code extraction; RFC 8259 `\u003c`/`\u003e` JSON escaping in `/review` Web Viewer) |
-| `v0.1.63` – `v0.1.64` | `1.5.0` | Verified against `agy 1.5.0` (`[agy] print timeout after` stderr detection, `tuner --doctor [--fix]` 3-tier dependency diagnostics, strict CLI argument guard preventing accidental daemon startup, `agy acp` vs PTY+`transcript_full.jsonl` Supervisor validation) |
-| `v0.1.62` | `1.4.12` | Auto-recovery from whitespace-only (`"content": "\n"`) `thinking` turns without interfering with `agy` stream-interruption retries (`content: None`), strict separation of CoT `thinking` from final `content`, Telegram API transient `Network` (`TimedOut`) retry |
-| `v0.1.60` – `v0.1.61` | `1.4.12` | `finished_reason` (`print_timeout` / `interrupted` / `error`) JSON early-termination detection (`1.4.11+`), 70% reduced PTY streaming I/O & 100MB post-startup memory reclaim (`1.4.10+`), compile-time `TUNER_VERIFIED_AGY_VERSION` pairing |
-| `v0.1.54` – `v0.1.59` | `1.4.7` – `1.4.9` | 4-layer stream completion guards, `agy-vault` companion daemon (`MaxConversations: 500 -> 0`), responsive Web File Viewer v2, Zero-Knowledge `/vault` |
-| `v0.1.40` – `v0.1.53` | `1.4.2` – `1.4.6` | PTY cold-start status bar detection (`? for shortcuts`), dynamic model & effort discovery (`gemini-4-argon`, `claude-opus-5-5`) |
-
----
-
-## 🚀 Quick Start Guide
-
-### Step 1: Verify Antigravity CLI (`agy`)
-Ensure the Antigravity CLI (`agy`) is installed and authenticated on your machine:
-```bash
-agy --version
+```mermaid
+graph LR
+    TG["📱 Telegram (Phone / Desktop)"] <-->|"Live CoT · Inline Buttons · Web Viewer"| T["⚡ tuner (Pure Rust Daemon)"]
+    T <-->|"Virtual PTY + JSONL"| AGY["🚀 Google Antigravity (agy)"]
+    T <-->|"Warm stream-json"| CL["🧠 Claude Code (claude)"]
+    T <-->|"Warm JSON-RPC 2.0"| CX["⚙️ OpenAI Codex (codex)"]
 ```
 
-### Step 2: Run One-Line Installer
-Install the latest `tuner` release binary and required assets to `~/.tuner/bin/`:
+---
+
+## ✨ Why `tuner`?
+
+- 🔄 **3 Engines, 1 Workspace (`/provider`)**
+  Switch seamlessly between **Google Antigravity (`agy`)**, **Claude Code (`claude`)**, and **OpenAI Codex (`codex`)** per Telegram forum topic—or prefix a single message with `@opus`, `@sonnet`, `@astra`, `@sol`, or `@argon`. `tuner` automatically bridges your `AGENTS.md`, rules, and skills across all three CLIs.
+- ⚡ **`0ms` Warm-Process Pool & Soft `/stop`**
+  Every active topic keeps its own warm CLI process in memory (`0ms` cold-start from turn 2 onward, auto-reclaimed after 24h idle). Hitting `/stop` sends a soft turn interrupt (`ESC` / `control_request: interrupt` / `turn/interrupt`) without killing your warm session.
+- 💭 **Real-Time Expandable Reasoning & Interactive Buttons**
+  Watch `💭 Thinking Process` and `🛠️ Tool Calls` stream live inside collapsible Telegram `<blockquote expandable>` blocks. When an agent asks a multiple-choice question (`ask_question` / `AskUserQuestion` / `request_user_input`), answer it directly by tapping Telegram inline buttons.
+- 🔍 **Mobile-Ready Web File & 3D Viewer (`/review`)**
+  Whenever an agent references or generates files (`file://`), `tuner` attaches a one-tap **`🔍 Open File Viewer`** button backed by an ephemeral Cloudflare Quick Tunnel—supporting code diffs, Markdown, PDFs, image galleries, ZIP archives, and interactive **3D CAD (`.step` / `.stl` / `.glb`)** previews.
+- 🔐 **Zero-Knowledge Credential Vault (`/vault`)**
+  Store site logins per profile in an encrypted vault (`XSalsa20-Poly1305`). Agents run authenticated tools via `tuner --vault exec <site> -- <cmd>` while `tuner` automatically redacts secrets (`***REDACTED***`) from stdout/stderr so plaintext credentials never enter the LLM context.
+- ⏰ **Autonomous Cron & Background Task Wakeup (`/cron`)**
+  Schedule recurring agent workflows or let long-running builds/subagents finish asynchronously and wake the session automatically when done.
+
+---
+
+## 🚀 Quick Start (60 Seconds)
+
+### 1. Install at least one supported Agent CLI
+Authenticate any (or all) of the supported agent CLIs on your Linux machine:
+- **Google Antigravity**: `agy` (verified with `v1.5.3`)
+- **Anthropic Claude Code**: `claude` (verified with `v2.1.197`)
+- **OpenAI Codex**: `codex` (verified with `v0.167.0`)
+
+### 2. Install `tuner`
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bash
 ```
 
-### Step 3: Run Interactive Setup & Service Registration
-Launch the setup wizard to configure your Telegram bot token, allowed user IDs, and register the `systemd` daemon:
+### 3. Connect Telegram & Launch Service
+1. Message [@BotFather](https://t.me/BotFather) on Telegram (`/newbot`) to get your **Bot Token**.
+2. Message [@userinfobot](https://t.me/userinfobot) to get your numeric **Telegram User ID**.
+3. Run the interactive setup wizard (configures your profile and registers the `systemd` daemon):
 ```bash
 ~/.tuner/bin/tuner --setup
 ```
 
+> 💡 **Using Forum Topics (Recommended)**: Create a Telegram Group, enable **Topics**, invite your bot, and promote it to **Administrator** (`Manage Topics` + message reading). Each forum topic becomes an independent, persistent agent session!
+
 ---
 
-## 📲 Telegram Bot Setup Guide
+## 🎮 Telegram Command Cheat Sheet
 
-Connecting Tuner to Telegram takes 3 simple steps:
+### Core Session & Engine Controls
+| Command | What it does |
+|---|---|
+| `/provider` | Switch the current topic's CLI engine (`antigravity` · `claude` · `codex`) and update the `/` menu. |
+| `/model` | Live-query the active CLI and switch models via inline buttons (or type `@opus`, `@sonnet`, `@astra`, `@argon`). |
+| `/effort` | Adjust reasoning effort (`minimal` · `low` · `medium` · `high` · `xhigh` · `max`). |
+| `/stop` | Soft-interrupt the current turn while keeping the warm CLI process alive. |
+| `/new` \| `/reset` | Archive a handover summary of the current conversation and start a fresh session. |
+| `/compact` | Compact conversation history to free up the context window. |
+| `/status` · `/usage` | Inspect active provider/model/PID state, pending attachments, and remaining model quotas. |
 
-1. **Get Bot Token**:
-   - Open Telegram and message [@BotFather](https://t.me/BotFather).
-   - Create a bot (`/newbot`) and copy the **HTTP API Token**.
-2. **Get Your Telegram User ID**:
-   - Message [@userinfobot](https://t.me/userinfobot) to get your numerical Telegram User ID.
-3. **Run Setup Wizard**:
-   - Run `~/.tuner/bin/tuner --setup` and enter your Bot Token & User ID.
+### Workspace, Security & Remote Tools
+| Command | What it does |
+|---|---|
+| `/vault` | Open the encrypted per-profile Credential Vault Web UI via an ephemeral Quick Tunnel. |
+| `/remote` | Manage remote development access (`Antigravity` Web IDE tunnel, `Tailscale`, `SSH`). |
+| `/cron` | Inspect, toggle, or immediately trigger scheduled background tasks (`⚡ Run Now`). |
+| `/memory` · `/lang` | View durable workspace memory (`MAINMEMORY.md`) or switch session language. |
+| `/upgrade` · `/restart` | Self-upgrade from [GitHub Releases](https://github.com/imwoo90/tuner/releases) or cleanly restart the daemon. |
 
-> 💡 **Group / Supergroup Setup**:
-> If adding the bot to a group chat or forum topic thread, invite the bot and **promote it to Administrator** (enabling message reading) to bypass Telegram's default Privacy Mode.
+### Native CLI Workflow Commands (Auto-switched per `/provider`)
+| Active Provider | Available Workflow Slash Commands |
+|---|---|
+| **Antigravity (`agy`)** | `/plan` · `/grill_me` · `/goal` · `/teamwork` · `/boost` · `/learn` · `/browser` · `/schedule` |
+| **Claude Code (`claude`)** | `/review` · `/security_review` · `/verify` · `/debug` · `/simplify` · `/deep_research` · `/code_review` · `/goal` · `/init` |
+| **OpenAI Codex (`codex`)** | `/review` · `/init` |
+
+---
+
+## 🏛️ Architecture & Documentation
+
+- 📖 **[ARCHITECTURE.md](ARCHITECTURE.md)** — Deep-dive specification covering the 2-Tier Master-Worker supervision tree, Virtual PTY + `transcript_full.jsonl` invariant polling, `ClaudeSessionPool` (`stream-json`), `CodexSessionPool` (`app-server --stdio` JSON-RPC 2.0), deadlock-free `LockPool`, and `XSalsa20-Poly1305` Shadow Plane security.
+- 📦 **[GitHub Releases](https://github.com/imwoo90/tuner/releases)** — Full version history, CLI compatibility notes, and prebuilt Linux binaries.
 
 <details>
-<summary><b>⚙️ Manual Configuration Schema (`~/.tuner/profiles/default/config/config.json`)</b></summary>
+<summary><b>🛠️ Local Development & Testing (Click to expand)</b></summary>
 
-```json
-{
-  "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
-  "allowed_user_ids": [123456789],
-  "allowed_group_ids": [-100123456789],
-  "provider": "antigravity",
-  "model": "gemini-3.8-flash",
-  "effort": "high",
-  "language": "ko",
-  "user_timezone": "Asia/Seoul"
-}
+```bash
+# Run compiler architecture linter, unit/integration tests, Clippy, and Rustdoc checks
+cargo check
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+
+# Deploy local changes to the isolated Docker sandbox (tuner-sandbox)
+./scripts/dev_deploy.sh --restart
 ```
 </details>
 
 ---
 
-## 🤖 Telegram Slash Commands
-
-| Command | Description |
-|---|---|
-| `/help` | Show available bot commands and usage overview. |
-| `/new` \| `/reset` | Archive current topic context (`last_handover_summary`) and start a fresh session. |
-| `/status` | Generate bot health reports, `agy` CLI installation info, and active session model. |
-| `/usage` | Query active model quotas, remaining percentages, and 5-hour/weekly refresh timers. |
-| `/model` | Toggle the active LLM model for the current topic via an inline selector. |
-| `/effort` | Select the reasoning effort level (`high`, `medium`, `low`) for the current LLM model. |
-| `/lang` | Select the active session language (English, Korean, etc.) via an inline keyboard. |
-| `/vault` | Launch the per-profile encrypted Credential Vault Web UI via Cloudflare Quick Tunnel. |
-| `/remote` | Inspect and manage remote development services (Cloudflare Quick Tunnel, Web Hub) via an interactive dashboard. |
-| `/cron` | Manage and inspect scheduled background cron tasks. |
-| `/memory` | Output the current content of the workspace `mainmemory.md` / `MAINMEMORY.md` file. |
-| `/upgrade` | Check GitHub Releases and perform an atomic in-place executable upgrade. |
-| `/stop` | Gracefully cancel active agent CLI processes running in the current chat topic. |
-| `/abort` | Forcefully terminate all running CLI sessions across topics. |
-| `/restart` | Request a clean restart of the `tuner` bot daemon process. |
-| `/plan` | Prompt the agent to generate a structured execution plan before running. |
-| `/grill_me` | Launch an interactive interview to align requirements and refine plans. |
-| `/goal` | Launch a long-running, thorough task until the goal is achieved. |
-| `/learn` | Capture behavioral corrections or feedback and persist them to agent rules/memory. |
-| `/compact` | Condense conversation history to free up the context window. |
-| `/boost` | Launch deep reasoning and multi-perspective verification for complex tasks. |
-
----
-
-## ✨ Key Capabilities
-
-1. **Expandable Chain-of-Thought & Tool Streaming**:
-   - Streams `💭 Thinking Process:` and `🛠️ Tool Calls:` in real time inside collapsible Telegram `<blockquote expandable>` blocks by tailing `transcript_full.jsonl` via `inotify`, keeping reasoning and active tool invocations visible until the next step arrives.
-2. **Responsive Web File & 3D Review Viewer v2**:
-   - Automatically extracts `file://` links and generated artifacts into a unified `🔍 Open File Viewer` button backed by an ephemeral Cloudflare Quick Tunnel, supporting desktop tree / mobile bottom-sheet navigation, 3D STEP/STL/GLTF rendering, multi-image gallery grids, ZIP archive inspection, row-synchronized syntax-highlighted code, Markdown, PDF, and inline `.html` `<iframe>` previews.
-3. **Zero-Knowledge Per-Profile Credential Vault (`/vault` & `tuner --vault`)**:
-   - Stores site credentials encrypted at rest (`XSalsa20-Poly1305`, `0600` permissions in `vault/vault.enc` and `vault/vault.key`) isolated per profile. Agents execute commands via `tuner --vault exec <site> -- <cmd>` with environment variable injection (`TUNER_VAULT_SITE`, `TUNER_VAULT_TITLE`, `TUNER_VAULT_URL`, `TUNER_VAULT_USER`, `TUNER_VAULT_PASS`) and automatic stdout/stderr secret redaction (`***REDACTED***`) so plaintext secrets never enter the LLM context.
-4. **Autonomous Background Task Wakeup & Session Handover**:
-   - Detects asynchronous background command completions (`spawn_session_async_observer`) and pushes follow-up agent responses directly to the originating Telegram topic. Preserves cross-session continuity across `/new` resets via structured handover summaries.
-
----
-
-## 🤝 Development & Contribution Guide
-
-To maintain stability between production environments and active development, we follow an isolated containerized workflow with separate Telegram bot tokens.
-
-### 🏗️ Architecture Layout
-- **Production Environment**: Runs official GitHub Releases on the Host PC/server (supervised via `systemd` with `OOMPolicy=continue` and `tuner` master daemon).
-- **Development Environment**: Runs inside an isolated Docker container (`tuner-sandbox`) linked to a separate Telegram Dev Bot Token, sharing host `agy` authentication and state seamlessly.
-
-### 🛠️ Setting Up Local Development
-
-1. **Verify Host Prerequisites**:
-   Ensure `agy` CLI is installed and authenticated on your host machine:
-   ```bash
-   agy --version
-   ```
-
-2. **Start the Sandbox Container**:
-   Launch the development sandbox container via Docker Compose (automatically maps your user ID, `$HOME`, `agy` credentials, and `~/.tuner-dev` workspace):
-   ```bash
-   docker compose up -d
-   ```
-
-3. **Configure Development Bot Token**:
-   Set your dedicated Telegram Dev Bot Token and allowed user ID in `~/.tuner-dev/profiles/default/config/config.json`:
-   ```json
-   {
-     "telegram_token": "YOUR_DEV_TELEGRAM_BOT_TOKEN",
-     "allowed_user_ids": [123456789],
-     "language": "ko",
-     "model": "gemini-3.8-flash",
-     "effort": "high"
-   }
-   ```
-
-### 🔄 Real-Time Build & Deploy Workflow
-To test changes to source code (`src/`) or assets (`_home_defaults/`) in real-time:
-
-```bash
-# Run the automated dev deployment script
-bash scripts/dev_deploy.sh
-```
-
-The `dev_deploy.sh` script automatically:
-1. Compiles the latest release binary (`cargo build --release`).
-2. Syncs the binary & `_home_defaults` asset folder to `tuner-sandbox`.
-3. Auto-restarts the container worker daemon (`tuner --worker default`).
-
-### 🚀 Maintainer Release Workflow
-*(For repository maintainers only)*
-To publish an official release:
-1. Update version numbers in `Cargo.toml` and run `cargo check` to update `Cargo.lock`.
-2. Commit with release notes: `git commit -m "chore(release): bump version to 0.1.x"`
-3. Push `main` to both `main` and `release` branches:
-   ```bash
-   git push origin main && git push origin main:release
-   ```
-   GitHub Actions will automatically verify the build, generate tag `v0.1.x`, and publish binaries to GitHub Releases.
-
----
-
-## 🏛️ System Architecture & Invariants
-
-`tuner` is built as an **Industrial-Grade Asynchronous Agent Gateway & Virtual TTY Multiplexer**. It resolves the fundamental operating-system challenges of bridging interactive CLI agent binaries (`agy`) to asynchronous remote communication channels.
-
-```mermaid
-graph LR
-    subgraph Ingress["Transports & Web UI"]
-        TG["Telegram Bot"]
-        RV["Review & Vault HTTP"]
-        Cron["Cron & Heartbeat"]
-    end
-
-    subgraph Core["Control Plane"]
-        Super["Supervisor (Master)"]
-        Bus["MessageBus"]
-        Lock["Shared Weak LockPool"]
-        Store["Atomic SessionStore"]
-    end
-
-    subgraph Runtime["Agent Runtime"]
-        PTY["Virtual PTY (50x100)"]
-        Poller["Log Poller (inotify)"]
-        Parser["Incremental JSONL"]
-    end
-
-    Ingress --> Lock
-    Lock --> Store
-    Lock --> PTY
-    PTY --> Poller
-    Poller --> Parser
-    Parser --> Ingress
-```
-
-### 🛡️ Core Architectural Pillars & Invariants
-
-1. **Virtual PTY Runtime (`openpty`, `50x100`, `setsid`, `ioctl(0, TIOCSCTTY, 0)`)**:
-   - Eliminates C stdio block-buffering deadlocks (`_IOFBF`) and `isatty(3)` layout panics.
-   - Sets child session and controlling terminal leadership (`setsid` + `TIOCSCTTY`) with `-pgid SIGKILL` and master-close `SIGHUP` cascade for zero-leak process reclamation.
-2. **Shared Weak LockPool Synchronization (`LockPool`)**:
-   - Forum topics execute concurrently with $O(1)$ parallelism via weakly-referenced per-`(chat_id, Option<topic_id>)` `TokioMutex` locks shared across `SessionManager` and `MessageBus`, pruning idle locks automatically once all strong guards drop.
-   - Single-Lock Discipline guarantees provable mathematical deadlock freedom ($P(\text{Deadlock}) = 0$).
-3. **Dual-Path Streaming & Invariant Polling**:
-   - Streaming is decoupled from PTY stdout and tails on-disk structured logs (`transcript_full.jsonl`) via `inotify` + adaptive interval ticks.
-   - Log cursor advances strictly to complete newline (`\n`) horizons, guaranteeing zero byte cleavage and zero dropped tool calls.
-4. **Resilient Liveness Contract (Sliding Inactivity Window)**:
-   - Replaces crude wall-clock timeouts with a 300s inactivity contract, honoring deep reasoning and long-running compilations without premature termination.
-5. **Two-Phase Crash-Proof Persistence**:
-   - Sibling temporary writes (`path.with_extension("tmp")`) + `rename(2)` guarantee atomic state persistence immune to cross-device `EXDEV` errors.
-
-📖 **For the full architectural specification, mathematical proofs, shadow plane security, and second-order failure mode analyses, see [ARCHITECTURE.md](ARCHITECTURE.md).**
-
----
-
-## 🧪 Testing
-
-`tuner` enforces compiler-checked Agent-Native invariants and a comprehensive suite of 335+ Rust unit, integration, and documentation tests:
-
-```bash
-# Run compiler linter, unit/integration/doc tests, Clippy, and Rustdoc verification
-cargo check
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
-```
-
----
-
 ## 📄 License
-This project is licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE).

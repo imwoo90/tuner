@@ -131,12 +131,45 @@ Press Esc or q to exit
         assert!(is_workflow_slash_command("/learn record correction"));
         assert!(is_workflow_slash_command("/grill_me"));
         assert!(is_workflow_slash_command("/grill-me"));
+        assert!(is_workflow_slash_command("/teamwork"));
         assert!(is_workflow_slash_command("/teamwork_preview"));
         assert!(is_workflow_slash_command("/teamwork-preview"));
         assert!(is_workflow_slash_command("/browser check docs"));
         assert!(is_workflow_slash_command("/boost solve puzzle"));
         assert!(is_workflow_slash_command("/schedule every 10m"));
         assert!(is_workflow_slash_command("/compact"));
+        assert!(is_workflow_slash_command("/review PR #12"));
+        assert!(is_workflow_slash_command("/security_review"));
+        assert!(is_workflow_slash_command("/security-review"));
+        assert!(is_workflow_slash_command("/verify"));
+        assert!(is_workflow_slash_command("/debug"));
+        assert!(is_workflow_slash_command("/simplify"));
+        assert!(is_workflow_slash_command("/deep_research"));
+        assert!(is_workflow_slash_command("/deep-research"));
+        assert!(is_workflow_slash_command("/code_review"));
+        assert!(is_workflow_slash_command("/code-review"));
+        assert!(is_workflow_slash_command("/init"));
+
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text("/teamwork_preview task", None),
+            "/teamwork task"
+        );
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text("/teamwork-preview task", None),
+            "/teamwork task"
+        );
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text("/security_review diff", None),
+            "/security-review diff"
+        );
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text("/deep_research topic", None),
+            "/deep-research topic"
+        );
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text("/code_review file", None),
+            "/code-review file"
+        );
 
         assert!(!is_workflow_slash_command("/etc/nginx/nginx.conf"));
         assert!(!is_workflow_slash_command("/usage"));

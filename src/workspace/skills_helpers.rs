@@ -174,3 +174,23 @@ pub fn sync_profile_agent_skills(
     }
     Ok(())
 }
+
+/// Synchronizes Claude Code Tier-0 workspace bridges (`CLAUDE.md`, `.claude/rules`, `.claude/skills`)
+/// to point to `<workspace>/AGENTS.md`, `<workspace>/.agents/rules`, and `<workspace>/.agents/skills`.
+pub fn sync_claude_workspace_bridges(workspace_dir: &Path) {
+    let agents_md = workspace_dir.join("AGENTS.md");
+    if agents_md.is_file() {
+        let claude_md = workspace_dir.join("CLAUDE.md");
+        let _ = ensure_link(&claude_md, &agents_md);
+    }
+    let agents_dir = workspace_dir.join(".agents");
+    let claude_dir = workspace_dir.join(".claude");
+    for sub in ["rules", "skills"] {
+        let target = agents_dir.join(sub);
+        if target.is_dir() {
+            let _ = std::fs::create_dir_all(&claude_dir);
+            let link = claude_dir.join(sub);
+            let _ = ensure_link(&link, &target);
+        }
+    }
+}

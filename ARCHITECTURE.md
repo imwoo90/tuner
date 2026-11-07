@@ -15,7 +15,11 @@ Modern interactive LLM coding agent runtimes (such as the Google Antigravity CLI
 4. **State Corruption & Concurrency Races**: Uncoordinated multi-turn inputs across group topics and autonomous schedulers corrupt on-disk session state.
 
 ### The System Mental Model
-**Tuner** functions as an **Industrial-Grade Asynchronous Agent Gateway & Virtual TTY Multiplexer**. It bridges remote human and external communication transports to agent execution runtimes by virtualizing a POSIX pseudo-terminal (PTY) environment with non-blocking master I/O, strict echo suppression, transcript-driven turn-state synchronization, and kernel-level process group lifecycle enforcement.
+**Tuner** functions as an **Industrial-Grade Asynchronous Multi-Provider Agent Gateway & Virtual TTY / JSON-RPC Multiplexer**. It bridges remote human and external communication transports to three distinct agent execution runtimes (**Google Antigravity `agy`**, **Anthropic Claude Code `claude`**, and **OpenAI Codex `codex`**) via per-topic persistent warm process pools:
+1. **Google Antigravity (`agy`)**: Virtualizes a POSIX pseudo-terminal (`openpty`, `50x100`, `setsid`, `TIOCSCTTY`) with non-blocking master I/O, strict echo suppression, and `inotify`-driven `transcript_full.jsonl` delta streaming.
+2. **Anthropic Claude Code (`claude`)**: Maintains per-topic persistent bidirectional `stream-json` worker processes (`ClaudeSessionPool`: `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio`) with `0ms` turn-2+ warm reuse, live model/command discovery (`control_request: initialize` / `set_model`), interactive `AskUserQuestion` button bridges, and soft turn interrupts (`control_request: interrupt`).
+3. **OpenAI Codex (`codex`)**: Maintains per-topic persistent JSON-RPC 2.0 `app-server` processes (`CodexSessionPool`: `codex app-server --stdio` with `Stdio::null()` stderr deadlock immunity) supporting `thread/start`, `thread/resume`, `turn/start`, `turn/interrupt`, and interactive `item/tool/requestUserInput` callbacks.
+All three runtimes share a unified **24-hour (`86,400s`, `WARM_SESSION_TTL`) idle process reclamation contract** (`WarmActivityTracker`) and kernel-level process group lifecycle enforcement (`setsid` + `-pgid SIGKILL`).
 
 ```mermaid
 graph TD
@@ -31,15 +35,14 @@ graph TD
         Bus["Central MessageBus"]
         LockPool["LockPool (Weakly-Referenced Per-(Chat, Topic) TokioMutex Pool)"]
         SessionMgr["SessionManager (Two-Phase Atomic .tmp + rename)"]
-        WorkspaceMgr["Workspace Engine (TunerPaths / Rules / SkillSync)"]
+        WorkspaceMgr["Workspace Engine (TunerPaths / Rules / SkillSync + Claude Bridges)"]
         VaultStore["Zero-Knowledge Vault (XSalsa20-Poly1305 + Redactor)"]
     end
 
-    subgraph AgentRuntime["Agent Execution Subsystem (cli/)"]
-        PTY["PTY Spawner (openpty, 50x100, setsid, TIOCSCTTY)"]
-        Holder["SessionHolder (Drop Guard: -pgid SIGKILL + master close SIGHUP)"]
-        Poller["Log Poller (inotify + 500ms/5s Fallback)"]
-        Parser["AntigravityLogParser (Incremental JSONL Delta Ingestion)"]
+    subgraph AgentRuntime["Symmetric 1:1:1 Warm Agent Execution Subsystem (cli/)"]
+        PTY["Antigravity PTY Engine (openpty + inotify transcript_full.jsonl)"]
+        ClaudePool["ClaudeSessionPool (Persistent bidirectional stream-json)"]
+        CodexPool["CodexSessionPool (Persistent app-server --stdio JSON-RPC 2.0)"]
         AsyncObs["SessionAsyncObserver (Background Task Wakeup)"]
     end
 
@@ -50,12 +53,15 @@ graph TD
     Bus --> LockPool
     LockPool --> SessionMgr
     LockPool --> PTY
+    LockPool --> ClaudePool
+    LockPool --> CodexPool
     WorkspaceMgr --> PTY
+    WorkspaceMgr --> ClaudePool
+    WorkspaceMgr --> CodexPool
     VaultStore --> PTY
-    PTY --> Holder
-    Holder --> Poller
-    Poller --> Parser
-    Parser --> TG
+    PTY --> TG
+    ClaudePool --> TG
+    CodexPool --> TG
     AsyncObs --> TG
 ```
 
@@ -96,20 +102,30 @@ src/
 │   ├── data.rs               # SessionData, ProviderSessionData, past_session_ids & handover summaries
 │   └── key.rs                # Immutable composite SessionKey (transport, chat_id, topic_id)
 │
-├── cli/                      # Agent substrate abstractions & CLI driver
+├── cli/                      # Multi-provider agent substrate abstractions & CLI drivers
 │   ├── mod.rs                # AgentProvider trait, CliResponse, StreamEvent models
-│   └── antigravity/          # Google Antigravity (agy) implementation
-│       ├── mod.rs            # Driver index, AntigravityCli struct & path probing
-│       ├── provider.rs       # Provider implementation, env configuration, oneshot & PTY runs
-│       ├── pty_spawner.rs    # openpty (50x100), non-blocking AsyncFd, setsid, TIOCSCTTY, SessionHolder
-│       ├── session.rs        # In-memory PTY child registry, AskState interactive question cache
-│       ├── polling.rs        # notify inotify watcher + adaptive ticker monitoring transcript_full.jsonl
-│       ├── completion.rs     # Step completion state machine & background task detection
-│       ├── log_parser.rs     # Incremental JSONL parser generating TextDelta & AskQuestion
-│       ├── log_helpers.rs    # Atomic line-boundary reading & JSON tool-call formatting
-│       ├── events.rs         # Transcript JSONL schema deserializers
-│       ├── error_parser.rs   # CLI exit codes & stderr failure diagnostic mapping
-│       └── trust.rs          # Auto-trust workspace injection into ~/.gemini/antigravity-cli/
+│   ├── common.rs             # Shared warm-session TTL tracker, live CLI JSON prober, model parser
+│   ├── peer.rs               # Peer session disk liveness, workspace auto-trust, AskQuestion & command parsers
+│   ├── antigravity/          # Google Antigravity (agy) PTY + transcript_full.jsonl driver
+│   │   ├── mod.rs            # Driver index, AntigravityCli struct & multi-provider dispatch
+│   │   ├── provider.rs       # Provider implementation, env configuration, oneshot & PTY runs
+│   │   ├── pty_spawner.rs    # openpty (50x100), non-blocking AsyncFd, setsid, TIOCSCTTY, SessionHolder
+│   │   ├── session.rs        # In-memory PTY child registry, AskState interactive question cache
+│   │   ├── polling.rs        # notify inotify watcher + adaptive ticker monitoring transcript_full.jsonl
+│   │   ├── completion.rs     # Step completion state machine & background task detection
+│   │   ├── log_parser.rs     # Incremental JSONL parser generating TextDelta & AskQuestion
+│   │   ├── log_helpers.rs    # Atomic line-boundary reading & JSON tool-call formatting
+│   │   ├── events.rs         # Transcript JSONL schema deserializers
+│   │   ├── error_parser.rs   # CLI exit codes & stderr failure diagnostic mapping
+│   │   └── trust.rs          # Auto-trust workspace injection into ~/.gemini/antigravity-cli/
+│   ├── claude/               # Anthropic Claude Code (claude) persistent stream-json driver
+│   │   ├── mod.rs            # Model/command discovery, workflow prompt rewriting, pool entry points
+│   │   ├── session.rs        # ClaudeSessionPool: warm bidirectional stream-json process lifecycle
+│   │   └── runner.rs         # Turn streaming, soft control_request interrupt & AskUserQuestion bridge
+│   └── codex/                # OpenAI Codex (codex) persistent app-server JSON-RPC 2.0 driver
+│       ├── mod.rs            # Model discovery (model/list), workflow rewriting, pool entry points
+│       ├── session.rs        # CodexSessionPool: warm app-server --stdio JSON-RPC 2.0 lifecycle
+│       └── runner.rs         # Thread/turn streaming, turn/interrupt drain & requestUserInput bridge
 │
 ├── messenger/                # Messaging frontend adapters
 │   ├── mod.rs                # Messenger module index
@@ -199,9 +215,10 @@ src/
   - `.agents/rules/mainmemory.md`: Durable factual archive synchronized from `memory_system/MAINMEMORY.md`.
 * **Retention-Safe Cleanup (`CleanupObserver`)**: Automated retention sweeps inside `telegram_files/` and `output_to_user/` explicitly preserve `RULES.md` and `AGENTS.md` documentation files while reclaiming expired media artifacts.
 
-### 3.2 Bidirectional Skill Synchronization (`SkillSyncer`)
+### 3.2 Bidirectional Skill & Cross-Provider Rule Synchronization (`SkillSyncer`)
 * **YAML Frontmatter Enforcement**: Skills inside `<workspace>/skills/` are scanned; only directories containing a valid `SKILL.md` with opening/closing `---` frontmatter, `name:`, and `description:` are mounted.
-* **Antigravity Native Discovery**: `SkillSyncer` bidirectionally synchronizes `<workspace>/skills/` and `<workspace>/.agents/skills/` so custom skills are natively discovered by the `agy` runtime without cross-profile contamination.
+* **Antigravity & Codex Native Discovery**: `SkillSyncer` bidirectionally synchronizes `<workspace>/skills/` and `<workspace>/.agents/skills/` so custom skills are natively discovered by `agy` and `codex` without cross-profile contamination.
+* **Claude Code Workspace Bridges (`sync_claude_workspace_bridges`)**: Automatically maintains native symlinks (`CLAUDE.md -> AGENTS.md`, `.claude/rules -> ../.agents/rules`, and `.claude/skills -> ../.agents/skills`) so `claude` inherits the exact same Tier-0 rules, durable memory (`mainmemory.md`), operational constraints (`constraints.md`), and domain skills.
 * **Substrate-Aware Link Builder**:
   - *Unix Host*: Standard POSIX symlinks.
   - *Windows Host*: NTFS directory junctions (`mklink /J`).

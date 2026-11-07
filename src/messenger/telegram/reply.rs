@@ -119,33 +119,29 @@ fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
 }
 
 fn normalize_model_alias(name: &str) -> (String, Option<String>) {
-    match name.to_lowercase().as_str() {
-        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => ("claude-opus-5-5".to_string(), Some("high".to_string())),
-        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => ("claude-sonnet-5-5".to_string(), Some("high".to_string())),
-        "argon" | "pro" | "gemini-argon" | "gemini-4-argon" | "gemini-3.1-pro" => ("gemini-4-argon".to_string(), Some("high".to_string())),
-        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => ("gemini-3.8-flash".to_string(), Some("high".to_string())),
-        _ => (name.to_string(), None),
-    }
+    let m = match name.to_lowercase().as_str() {
+        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
+        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
+        "fable" | "claude-fable" => "claude-fable-5",
+        "haiku" | "claude-haiku" => "claude-haiku-4-5",
+        "astra" => "gpt-6-astra",
+        "sol" => "gpt-6.1-sol",
+        "terra" => "gpt-6.1-terra",
+        "luna" => "gpt-6-luna",
+        "argon" | "pro" | "gemini-argon" | "gemini-4-argon" | "gemini-3.1-pro" => "gemini-4-argon",
+        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => "gemini-3.8-flash",
+        _ => return (name.to_string(), None),
+    };
+    (m.to_string(), Some("high".to_string()))
 }
 
 fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> {
-    if !t.starts_with('@') { return None; }
-    let dir = t.split_whitespace().next().unwrap_or("");
-    let m = &dir[1..];
-    if ["opus", "sonnet", "argon", "pro", "flash", "gemini"].contains(&m) {
-        let (canonical, default_eff) = normalize_model_alias(m);
-        return Some((Some(canonical), default_eff, t[dir.len()..].trim()));
+    let dir = t.strip_prefix('@')?.split_whitespace().next().unwrap_or("");
+    if ["opus", "sonnet", "fable", "haiku", "astra", "sol", "terra", "luna", "argon", "pro", "flash", "gemini"].contains(&dir) {
+        let (canonical, default_eff) = normalize_model_alias(dir);
+        return Some((Some(canonical), default_eff, t[dir.len() + 1..].trim()));
     }
     None
-}
-
-fn split_legacy_model_effort(m: &str) -> (String, Option<String>) {
-    for (suffix, eff) in [("-high", "high"), ("-medium", "medium"), ("-low", "low")] {
-        if let Some(prefix) = m.strip_suffix(suffix) {
-            return (prefix.to_string(), Some(eff.to_string()));
-        }
-    }
-    (m.to_string(), None)
 }
 
 pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<String>, &str) {
@@ -154,22 +150,21 @@ pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<Strin
         let rest = r.trim();
         let parts: Vec<&str> = rest.split_whitespace().collect();
         if !parts.is_empty() {
-            let (mut model_name, suffix_eff) = split_legacy_model_effort(parts[0]);
-            let mut effort = suffix_eff;
+            let (base, suffix_eff) = crate::cli::common::strip_effort_suffix(parts[0]);
+            let mut effort = suffix_eff.map(str::to_string);
             let mut consumed_tokens = 1;
             if parts.len() >= 3 && parts[1] == "--effort" {
                 effort = Some(parts[2].to_string());
                 consumed_tokens = 3;
-            } else if parts.len() >= 2 && matches!(parts[1], "high" | "medium" | "low") {
+            } else if parts.len() >= 2 && super::commands_model::is_valid_effort_level(parts[1]) {
                 effort = Some(parts[1].to_string());
                 consumed_tokens = 2;
             }
-            let (canonical, default_eff) = normalize_model_alias(&model_name);
-            model_name = canonical;
+            let (canonical, default_eff) = normalize_model_alias(base);
             if effort.is_none() {
                 effort = default_eff;
             }
-            return (Some(model_name), effort, get_remaining_prompt(rest, consumed_tokens));
+            return (Some(canonical), effort, get_remaining_prompt(rest, consumed_tokens));
         }
     } else if let Some(res) = parse_at_shortcut(t) {
         return res;

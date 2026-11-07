@@ -30,7 +30,8 @@ async fn resolve_auto_handover(
     config: &CliConfig,
     sessions: &SessionManager,
 ) -> Option<String> {
-    let past_ids = sess.get_past_session_ids(&config.provider);
+    let provider = if !sess.provider.is_empty() { &sess.provider } else { &config.provider };
+    let past_ids = sess.get_past_session_ids(provider);
     if past_ids.is_empty() && sess.last_handover_summary.is_none() {
         return None;
     }
@@ -62,14 +63,16 @@ pub(crate) async fn initialize_session_with_prompt(
     config: &CliConfig,
     startup_prompt: Option<&str>,
 ) -> Result<String, teloxide::RequestError> {
-    let provider = &config.provider;
-    let session_id = sess.get_session_id(provider);
+    let provider = if !sess.provider.is_empty() { sess.provider.clone() } else { config.provider.clone() };
+    let session_id = sess.get_session_id(&provider);
     if !session_id.is_empty() {
-        if session_id.starts_with("mock-") || cli.is_session_alive(&session_id) {
+        let mut check_cli = cli.clone();
+        check_cli.config.provider = provider.clone();
+        if session_id.starts_with("mock-") || check_cli.is_session_alive(&session_id) {
             return Ok(session_id);
         }
         eprintln!("⚠️ [tuner] Session {} for topic {:?} is expired. Resetting...", session_id, sess.topic_name);
-        sess.set_session_id(provider, "");
+        sess.set_session_id(&provider, "");
         let _ = sessions.preserve_session_identity(sess).await;
     }
 
@@ -82,7 +85,7 @@ pub(crate) async fn initialize_session_with_prompt(
 
     if cfg!(test) {
         let mock_sid = "mock-session-123".to_string();
-        sess.set_session_id(provider, &mock_sid);
+        sess.set_session_id(&provider, &mock_sid);
         let _ = sessions.preserve_session_identity(sess).await;
         return Ok(mock_sid);
     }
@@ -110,7 +113,8 @@ async fn handle_boot_success(
         eprintln!("Initialization oneshot did not return a session_id");
         return Ok(String::new());
     };
-    sess.set_session_id(&config.provider, &new_sid);
+    let provider = if !sess.provider.is_empty() { sess.provider.clone() } else { config.provider.clone() };
+    sess.set_session_id(&provider, &new_sid);
     let _ = sessions.preserve_session_identity(sess).await;
     if res.result.trim().is_empty() {
         res.result = crate::t!("bot.new_session");
@@ -156,10 +160,13 @@ async fn boot_fresh_session(
     let mut session_cli = cli.clone();
     let (chat_id, topic_id) = (
         msg.chat.id.0,
-        sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64)),
+        sess.topic_id.or_else(|| super::get_topic_id(msg)),
     );
     session_cli.config.chat_id = chat_id;
     session_cli.config.topic_id = topic_id;
+    if !sess.provider.is_empty() {
+        session_cli.config.provider = sess.provider.clone();
+    }
     if !sess.model.is_empty() && sess.model != "antigravity-default" {
         session_cli.config.model = Some(sess.model.clone());
     }

@@ -9,7 +9,9 @@
 //! ## Search Tags
 //! #system-doctor, #dependency-checks, #cloudflared-check, #cdp-browser-check
 
-use super::doctor_tiers::{check_tier2_os_tools, check_tier3_cdp, check_tier3_python};
+use super::doctor_tiers::{
+    check_tier1_provider_clis, check_tier2_os_tools, check_tier3_cdp, check_tier3_python,
+};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -236,6 +238,7 @@ pub fn collect_doctor_checks() -> DoctorReport {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let mut checks = Vec::new();
     check_tier1_agy(&home, &mut checks);
+    check_tier1_provider_clis(&mut checks);
     check_tier1_companions(&home, &mut checks);
     check_tier2_os_tools(&mut checks);
     if let Some(py_path) = check_tier3_python(&mut checks) {

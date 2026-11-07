@@ -61,53 +61,47 @@ impl AntigravityCli {
 
     /// Executes `ensure_interactive_ready` (ensure interactive ready).
     pub async fn ensure_interactive_ready(&self, session_id: &str) -> Result<(), String> {
-        if session_id.starts_with("mock-") {
-            return Ok(());
-        }
+        if session_id.starts_with("mock-") { return Ok(()); }
         let env = self.build_env();
-        let agy_ws = self.agy_workspace();
-        self.ensure_interactive_session(session_id, &agy_ws, &env).await?;
-        self.init_pty_if_needed(session_id).await?;
-        Ok(())
+        self.ensure_interactive_session(session_id, &self.agy_workspace(), &env).await?;
+        self.init_pty_if_needed(session_id).await
     }
 
     async fn run_in_pty_session(
         &self,
-        session_id: &str,
+        sid: &str,
         prompt: &str,
         env: &HashMap<String, String>,
         agy_ws: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
         let sessions = self.sessions.clone();
-        let sid_str = session_id.to_string();
-        sessions.set_running(&sid_str, true).await;
+        sessions.set_running(sid, true).await;
 
         let res = async {
-            if !self.sessions.is_active(session_id).await && !session_id.starts_with("mock-") && !self.is_session_alive(session_id) {
-                return Err(format!("Session {} is expired or not found in Antigravity storage", session_id));
+            if !self.sessions.is_active(sid).await && !sid.starts_with("mock-") && !self.is_session_alive(sid) {
+                return Err(format!("Session {} is expired or not found in Antigravity storage", sid));
             }
-            self.ensure_interactive_session(session_id, agy_ws, env).await?;
-            self.init_pty_if_needed(session_id).await?;
-            let p = events::agy_state_root(Some(env)).join("brain").join(session_id)
+            self.ensure_interactive_session(sid, agy_ws, env).await?;
+            self.init_pty_if_needed(sid).await?;
+            let p = events::agy_state_root(Some(env)).join("brain").join(sid)
                 .join(".system_generated/logs/transcript_full.jsonl");
             let sz = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-            if let Some(h) = self.sessions.holders.lock().await.get_mut(session_id) {
+            if let Some(h) = self.sessions.holders.lock().await.get_mut(sid) {
                 h.turn_start_offset = h.output.lock().await.len();
             }
-            self.sessions.write_to_session(session_id, &format!("{}\r", prompt)).await?;
-            super::polling::wait_for_log_completion(&self.sessions, session_id, Some(p), sz).await?;
+            self.sessions.write_to_session(sid, &format!("{}\r", prompt)).await?;
+            super::polling::wait_for_log_completion(&self.sessions, sid, Some(p), sz).await?;
             use std::os::unix::process::ExitStatusExt;
             Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))
         }.await;
 
-        sessions.set_running(&sid_str, false).await;
+        sessions.set_running(sid, false).await;
         if let Err(ref e) = res
-            && e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:") {
-                sessions.terminate(&sid_str).await;
-            }
-        if !sessions.is_active(&sid_str).await {
-            sessions.set_ask_active(&sid_str, false).await;
+            && e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:")
+        {
+            sessions.terminate(sid).await;
         }
+        if !sessions.is_active(sid).await { sessions.set_ask_active(sid, false).await; }
         res
     }
 
@@ -118,18 +112,12 @@ impl AntigravityCli {
         workspace: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
         let mut cmd = Command::new("agy");
-        cmd.args(&cmd_args[1..])
-            .current_dir(workspace)
-            .envs(env)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        cmd.args(&cmd_args[1..]).current_dir(workspace).envs(env)
+            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         #[cfg(unix)]
         cmd.process_group(0);
 
         let child = cmd.spawn().map_err(|e| format!("Failed to spawn agy command: {}", e))?;
-        #[cfg(unix)]
         let child_pid = child.id();
         let (duration, display_secs) = Self::resolve_oneshot_timeout(cmd_args);
 
@@ -137,61 +125,52 @@ impl AntigravityCli {
             Ok(Ok(o)) => Ok((String::from_utf8_lossy(&o.stdout).into(), String::from_utf8_lossy(&o.stderr).into(), o.status)),
             Ok(Err(e)) => Err(format!("Failed to wait for agy: {}", e)),
             Err(_) => {
-                #[cfg(unix)]
-                if let Some(pid) = child_pid {
-                    let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(-(pid as i32)), nix::sys::signal::Signal::SIGKILL);
-                }
+                if let Some(pid) = child_pid { crate::cli::common::kill_process_group(pid); }
                 let label = if display_secs == 0 { duration.as_secs() } else { display_secs };
                 Err(format!("Command timed out after {} seconds", label))
             }
         }
     }
 
-    fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, brain: Option<&Path>) -> String {
-        events::read_transcript_answer(ws, Some(env), brain).unwrap_or_else(|| events::parse_antigravity_json(stdout))
+    fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, final_sid: Option<&str>, ok: bool) -> String {
+        if !ok { return events::parse_antigravity_json(stdout); }
+        let b = final_sid.map(|s| events::agy_state_root(Some(env)).join("brain").join(s))
+            .or_else(|| events::resolve_brain_dir(ws, Some(env)));
+        events::read_transcript_answer(ws, Some(env), b.as_deref()).unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
 }
 
 #[async_trait]
 impl AgentProvider for AntigravityCli {
-    async fn send(
-        &self,
-        prompt: &str,
-        resume_session: Option<&str>,
-        continue_session: bool,
-        ws: PathBuf,
-    ) -> Result<CliResponse, String> {
+    async fn send(&self, prompt: &str, resume_session: Option<&str>, continue_session: bool, ws: PathBuf) -> Result<CliResponse, String> {
+        match self.config.provider.as_str() {
+            "claude" => return crate::cli::claude::send(self, prompt, resume_session, continue_session, ws).await,
+            "codex" => return crate::cli::codex::send(self, prompt, resume_session, continue_session, ws).await,
+            _ => {}
+        }
         let env = self.build_env();
         let agy_ws = if ws.as_os_str().is_empty() || ws == self.config.working_dir { self.agy_workspace() } else { ws };
         super::trust::trust_workspace_in_settings(&agy_ws, None);
-
-        let (stdout_str, stderr_str, status) = if let Some(sid) = resume_session {
+        let (out, err, status) = if let Some(sid) = resume_session {
             self.run_in_pty_session(sid, prompt, &env, &agy_ws).await?
         } else {
-            let args = self.build_command(prompt, resume_session, continue_session);
-            self.run_oneshot(&args, &env, &agy_ws).await?
+            self.run_oneshot(&self.build_command(prompt, resume_session, continue_session), &env, &agy_ws).await?
         };
-
-        let early = events::extract_finished_reason(&stdout_str).is_some();
+        let early = events::extract_finished_reason(&out).is_some();
         let ok = status.success() && !early;
         let final_sid = resume_session.map(str::to_string).or_else(|| {
-            events::extract_conversation_id(&stdout_str).or_else(|| {
+            events::extract_conversation_id(&out).or_else(|| {
                 ok.then(|| events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into()))?
             })
         });
-        let result = if ok {
-            let b = final_sid.as_ref().map(|s| events::agy_state_root(Some(&env)).join("brain").join(s))
-                .or_else(|| events::resolve_brain_dir(&agy_ws, Some(&env)));
-            self.resolve_result_text(&agy_ws, &env, &stdout_str, b.as_deref())
-        } else {
-            events::parse_antigravity_json(&stdout_str)
-        };
+        let result = self.resolve_result_text(&agy_ws, &env, &out, final_sid.as_deref(), ok);
         if ok && resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
-            && let Some(ref fid) = final_sid {
-                self.ensure_interactive_session(fid, &agy_ws, &env).await?;
-            }
+            && let Some(ref fid) = final_sid
+        {
+            self.ensure_interactive_session(fid, &agy_ws, &env).await?;
+        }
         let returncode = if early && status.success() { Some(1) } else { super::completion::exit_status_code(&status) };
-        Ok(CliResponse { session_id: final_sid, result, is_error: !ok, returncode, stderr: stderr_str })
+        Ok(CliResponse { session_id: final_sid, result, is_error: !ok, returncode, stderr: err })
     }
 
     async fn send_streaming<'a>(
@@ -201,6 +180,11 @@ impl AgentProvider for AntigravityCli {
         continue_session: bool,
         workspace: PathBuf,
     ) -> Result<BoxStream<'a, StreamEvent>, String> {
+        match self.config.provider.as_str() {
+            "claude" => return crate::cli::claude::send_streaming(self, prompt, resume_session, continue_session, workspace).await,
+            "codex" => return crate::cli::codex::send_streaming(self, prompt, resume_session, continue_session, workspace).await,
+            _ => {}
+        }
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let self_arc = std::sync::Arc::new(self.clone());
         let prompt_str = prompt.to_string();

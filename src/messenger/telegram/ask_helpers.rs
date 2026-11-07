@@ -154,6 +154,7 @@ async fn advance_ask_state(
         let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
         update_question_ui(bot, chat_id, mid, &nq, markup).await;
     } else {
+        super::ask_process::submit_peer_ask_answers_if_needed(chat_id.0, &sess, config, &state.answers).await;
         cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
         let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
@@ -175,14 +176,10 @@ async fn handle_ask_input(
 ) -> Result<String, teloxide::RequestError> {
     let (cli, mut state) = cli_and_state;
     let mid = state.msg_id;
-    let (ip, is_write_in) = determine_and_send_input(session_id, current_text, cli, &state).await;
-    
+    let (ip, _) = determine_and_send_input(session_id, current_text, cli, &state).await;
+
     if state.current_index < state.answers.len() {
-        if is_write_in {
-            state.answers[state.current_index] = current_text.to_string();
-        } else {
-            state.answers[state.current_index] = String::new();
-        }
+        state.answers[state.current_index] = current_text.to_string();
     }
 
     if let Some(q) = state.questions.get(state.current_index) {
@@ -206,7 +203,13 @@ pub(crate) async fn feed_active_session_if_running(
     sess_ctx: (&Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<bool, teloxide::RequestError> {
-    let is_active = cli.sessions.is_active(session_id).await;
+    let prov = if !sess_ctx.1.provider.is_empty() { sess_ctx.1.provider.as_str() } else { config.provider.as_str() };
+    let peer_alive = match prov {
+        "claude" => crate::cli::claude::active_pid(msg.chat.id.0, sess_ctx.1.topic_id).await.is_some(),
+        "codex" => crate::cli::codex::active_pid(msg.chat.id.0, sess_ctx.1.topic_id).await.is_some(),
+        _ => false,
+    };
+    let is_active = cli.sessions.is_active(session_id).await || peer_alive;
     let is_running = cli.sessions.is_running(session_id).await;
     let is_ask = cli.sessions.is_ask_active(session_id).await;
 

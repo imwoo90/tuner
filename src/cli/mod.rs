@@ -1,15 +1,24 @@
 //! # Command Line Agent Providers (index.md)
 //!
 //! ## Overview
-//! Wraps and controls executing agent CLI executables (`agy`).
+//! Orchestrates the 1:1:1 peer multi-provider CLI engines (`antigravity`, `claude`, `codex`)
+//! and shared formatting/process utilities (`common`).
 //!
 //! ## Submodules
-//! - [`antigravity`] (`antigravity/mod.rs`): Spawns PTYs, monitors transcripts, and manages active CLI sessions.
+//! - [`antigravity`] (`antigravity/mod.rs`): Google Antigravity (`agy`) PTY + JSONL transcript driver.
+//! - [`claude`] (`claude/mod.rs`): Anthropic Claude Code (`claude`) persistent warm `stream-json` driver.
+//! - [`codex`] (`codex/mod.rs`): OpenAI Codex (`codex app-server --stdio`) persistent warm JSON-RPC driver.
+//! - [`common`] (`common.rs`): Shared effort suffix parsing, collapsible stream preview formatting, and process group helpers.
+//! - [`peer`] (`peer.rs`): Peer session existence checks, workspace auto-trust, command discovery, and ask-question parsers.
 //!
 //! ## Search Tags
-//! #cli-provider, #agent-executor, #pty-terminal
+//! #cli-provider, #agent-executor, #multi-provider, #warm-process
 
 pub mod antigravity;
+pub mod claude;
+pub mod codex;
+pub mod common;
+pub mod peer;
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;

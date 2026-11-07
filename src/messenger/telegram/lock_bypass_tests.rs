@@ -25,10 +25,28 @@ mod tests {
         assert!(is_lock_free_command("/stop"));
         assert!(is_lock_free_command("/stop_all"));
         assert!(is_lock_free_command("/abort"));
+        assert!(is_lock_free_command("/status@Wimbis_bot"));
+        assert!(is_lock_free_command("/status@dev_woobis_bot"));
+        assert!(is_lock_free_command("/stop@dev_woobis_bot"));
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text(
+                "/status@Wimbis_bot",
+                Some("dev_woobis_bot")
+            ),
+            "/status"
+        );
+        assert_eq!(
+            crate::messenger::telegram::handler::normalize_command_text(
+                "/code_review@Wimbis_bot src/",
+                Some("dev_woobis_bot")
+            ),
+            "/code-review src/"
+        );
 
         // Commands that mutate session state and MUST acquire topic lock
         assert!(!is_lock_free_command("/new"));
         assert!(!is_lock_free_command("/reset"));
+        assert!(!is_lock_free_command("/provider"));
         assert!(!is_lock_free_command("/model"));
         assert!(!is_lock_free_command("/effort"));
         assert!(!is_lock_free_command("/lang"));
