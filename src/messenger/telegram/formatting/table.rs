@@ -95,15 +95,23 @@ fn format_attribute_cell(hdr: &str, cell: &str) -> Option<String> {
         return Some(lines.join("\n"));
     }
 
-    if norm[0].starts_with("• ") {
-        let indented: Vec<String> = norm.into_iter().map(|l| format!("  {}", l)).collect();
+    let any_bullet_or_long = norm
+        .iter()
+        .any(|l| l.starts_with("• ") || l.chars().count() > 45);
+    if any_bullet_or_long {
+        let indented: Vec<String> = norm
+            .into_iter()
+            .map(|l| {
+                if l.starts_with("• ") {
+                    format!("  {}", l)
+                } else {
+                    format!("  • {}", l)
+                }
+            })
+            .collect();
         Some(format!("• **{}**:\n{}", hdr, indented.join("\n")))
     } else {
-        let mut out = format!("• **{}**: {}", hdr, norm[0]);
-        for sub in norm.iter().skip(1) {
-            out.push_str(&format!("\n  {}", sub));
-        }
-        Some(out)
+        Some(format!("• **{}**: {}", hdr, norm.join(" · ")))
     }
 }
 
@@ -131,6 +139,48 @@ fn format_data_row(headers: &[String], row: &[String], n_cols: usize) -> Option<
     }
 
     (!card_lines.is_empty()).then(|| card_lines.join("\n"))
+}
+
+fn wrap_cards_collapsible(cards: Vec<String>) -> String {
+    let line_counts: Vec<usize> = cards.iter().map(|c| c.split('\n').count()).collect();
+    let total_lines: usize = line_counts.iter().sum();
+    let max_card_lines: usize = line_counts.iter().copied().max().unwrap_or(0);
+
+    // Small tables (<= 6 total lines and no card >= 4 lines) stay flat without folding.
+    if total_lines <= 6 && max_card_lines < 4 {
+        return cards.join("\n\n");
+    }
+
+    // Regime 2: Detailed multi-line cards (any card has >= 4 lines).
+    // Wrap each row card as its own accordion block (<blockquote expandable> when >= 4 lines,
+    // or matching <blockquote> when < 4 lines) so all row titles + key specs remain scannable.
+    if max_card_lines >= 4 {
+        let quoted_cards: Vec<String> = cards
+            .into_iter()
+            .zip(line_counts)
+            .map(|(card, lcnt)| {
+                let prefix = if lcnt >= 4 { ">! " } else { "> " };
+                card.split('\n')
+                    .map(|l| format!("{}{}", prefix, l))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect();
+        return quoted_cards.join("\n\x00QB\x00\n");
+    }
+
+    // Regime 3: Compact multi-row table (all cards <= 3 lines, but total_lines > 6).
+    // Wrap the entire table in a single <blockquote expandable> block.
+    let mut all_lines = Vec::new();
+    for (i, card) in cards.iter().enumerate() {
+        if i > 0 {
+            all_lines.push(">!".to_string());
+        }
+        for line in card.split('\n') {
+            all_lines.push(format!(">! {}", line));
+        }
+    }
+    all_lines.join("\n")
 }
 
 fn format_table(lines: &[String]) -> String {
@@ -170,7 +220,7 @@ fn format_table(lines: &[String]) -> String {
         .filter_map(|row| format_data_row(headers, row, n_cols))
         .collect();
 
-    cards.join("\n\n")
+    wrap_cards_collapsible(cards)
 }
 
 /// Converts Markdown pipe-tables in `src` into structured card/list blocks.

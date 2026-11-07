@@ -117,6 +117,34 @@ fn replace_markdown_images(text: &str, links: &mut Vec<(String, String)>) -> Str
     }).to_string()
 }
 
+fn extract_inline_codes(text: &str, inline_codes: &mut Vec<String>) -> String {
+    let mut text_buf = if let Ok(ic2_re) = Regex::new(r"``([^\n]+?)``") {
+        ic2_re.replace_all(text, |caps: &Captures| {
+            let raw = caps.get(1).map_or("", |m| m.as_str());
+            let code = if raw.starts_with(' ') && raw.ends_with(' ') && raw.len() > 2 {
+                &raw[1..raw.len() - 1]
+            } else {
+                raw
+            };
+            let idx = inline_codes.len();
+            inline_codes.push(code.to_string());
+            placeholder("IC", idx)
+        }).to_string()
+    } else {
+        text.to_string()
+    };
+
+    if let Ok(ic_re) = Regex::new(r"`([^`\n]+)`") {
+        text_buf = ic_re.replace_all(&text_buf, |caps: &Captures| {
+            let code = caps.get(1).map_or("", |m| m.as_str()).to_string();
+            let idx = inline_codes.len();
+            inline_codes.push(code);
+            placeholder("IC", idx)
+        }).to_string();
+    }
+    text_buf
+}
+
 fn extract_entities(
     text: &str,
     code_blocks: &mut Vec<(String, String, bool)>,
@@ -139,15 +167,7 @@ fn extract_entities(
         cleaned
     };
 
-    if let Ok(ic_re) = Regex::new(r"`([^`\n]+)`") {
-        text_buf = ic_re.replace_all(&text_buf, |caps: &Captures| {
-            let code = caps.get(1).map_or("", |m| m.as_str()).to_string();
-            let idx = inline_codes.len();
-            inline_codes.push(code);
-            placeholder("IC", idx)
-        }).to_string();
-    }
-
+    text_buf = extract_inline_codes(&text_buf, inline_codes);
     text_buf = replace_markdown_images(&text_buf, links);
 
     if let Ok(link_re) = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)") {

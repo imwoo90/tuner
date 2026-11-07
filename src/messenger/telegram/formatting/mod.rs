@@ -60,36 +60,39 @@ pub fn convert_blockquotes(text: &str) -> String {
     let escaped_gt_exp = "&gt;! ";
     let mut is_expandable = false;
 
+    let flush_quote = |quote_buf: &mut Vec<&str>, is_expandable: &mut bool, result: &mut Vec<String>| {
+        if !quote_buf.is_empty() {
+            let tag = if *is_expandable {
+                "<blockquote expandable>"
+            } else {
+                "<blockquote>"
+            };
+            result.push(format!("{}{}</blockquote>", tag, quote_buf.join("\n")));
+            quote_buf.clear();
+            *is_expandable = false;
+        }
+    };
+
     for line in lines {
-        if let Some(rest) = line.strip_prefix(escaped_gt_exp) {
+        if line == "\x00QB\x00" {
+            flush_quote(&mut quote_buf, &mut is_expandable, &mut result);
+        } else if let Some(rest) = line.strip_prefix(escaped_gt_exp) {
             is_expandable = true;
             quote_buf.push(rest);
+        } else if line == "&gt;!" {
+            is_expandable = true;
+            quote_buf.push("");
         } else if let Some(rest) = line.strip_prefix(escaped_gt) {
             quote_buf.push(rest);
+        } else if line == "&gt;" {
+            quote_buf.push("");
         } else {
-            if !quote_buf.is_empty() {
-                let tag = if is_expandable {
-                    "<blockquote expandable>"
-                } else {
-                    "<blockquote>"
-                };
-                result.push(format!("{}{}{}</blockquote>", tag, quote_buf.join("\n"), ""));
-                quote_buf.clear();
-                is_expandable = false;
-            }
+            flush_quote(&mut quote_buf, &mut is_expandable, &mut result);
             result.push(line.to_string());
         }
     }
 
-    if !quote_buf.is_empty() {
-        let tag = if is_expandable {
-            "<blockquote expandable>"
-        } else {
-            "<blockquote>"
-        };
-        result.push(format!("{}{}{}</blockquote>", tag, quote_buf.join("\n"), ""));
-    }
-
+    flush_quote(&mut quote_buf, &mut is_expandable, &mut result);
     result.join("\n")
 }
 

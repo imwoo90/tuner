@@ -206,6 +206,8 @@ mod tests {
         assert!(html.contains("▸ <b>Slack (슬랙)</b>"));
         assert!(html.contains("<code>Block Kit</code>"));
         assert!(html.contains("• <b>장단점 요약</b>: <b>부적합</b>:"));
+        assert_eq!(html.matches("<blockquote expandable>").count(), 2);
+        assert_eq!(html.matches("<blockquote>").count(), 1);
     }
 
     #[test]
@@ -223,6 +225,23 @@ mod tests {
         assert!(html.contains("• <b>Notes</b>: Use <code>a | b</code> or escaped | pipe"));
         assert!(html.contains("▸ <b>Source</b>"));
         assert!(html.contains("• <b>Command &#x2F; Link</b>: <code>main.rs</code>"));
+    }
+
+    #[test]
+    fn test_table_with_double_backtick_inline_code_and_multiple_file_links() {
+        let input = "\
+복합 표(`**볼드**`, `` `인라인 코드` ``, 셀 내부 파이프 `` `A | B` ``) 테스트:
+
+| 계층 | 스택 | 설명 | 링크 |
+| :--- | :---: | :--- | :--- |
+| **1. 렌더러** | `Rust` \\| `Regex` | • 파이프 보호: 인라인 코드(`` `a | b` ``) 및 이스케이프(\\|) 보존 | [`table.rs`](file:///home/user/table.rs)<br>[`helpers.rs`](file:///home/user/helpers.rs) |";
+        let html = markdown_to_telegram_html(input);
+
+        assert!(!html.contains("file:///home/user"));
+        assert!(html.contains("<code>`a | b`</code>"));
+        assert!(html.contains("<code>table.rs</code>"));
+        assert!(html.contains("<code>helpers.rs</code>"));
+        assert!(html.contains("• <b>설명</b>: 파이프 보호: 인라인 코드(<code>`a | b`</code>) 및 이스케이프(|) 보존"));
     }
 
     #[test]
