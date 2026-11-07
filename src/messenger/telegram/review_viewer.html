@@ -826,7 +826,8 @@
     const TOKEN = "__TOKEN__";
     let FILES = [];
     try {
-      FILES = JSON.parse(document.getElementById('files-data').textContent);
+      const rawJson = document.getElementById('files-data').textContent.replace(/\\!/g, '!');
+      FILES = JSON.parse(rawJson);
     } catch (e) {
       console.error('Failed to parse files JSON:', e);
     }

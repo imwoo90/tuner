@@ -7,7 +7,7 @@
 //! ## Submodules
 //! - [`helpers`] (`helpers.rs`): Converts Markdown syntax (links, code blocks, bold) to HTML.
 //! - [`splitting`] (`splitting.rs`): Truncates and chunks HTML payloads to comply with Telegram length limits.
-//! - [`table`] (`table.rs`): Formats Markdown pipe-tables into aligned monospace blocks.
+//! - [`table`] (`table.rs`): Converts Markdown pipe-tables into mobile-friendly structured card/list blocks.
 //!
 //! ## Search Tags
 //! #formatting-index, #markdown-to-html, #message-splitting, #ui-formatting

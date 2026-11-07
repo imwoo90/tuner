@@ -191,13 +191,12 @@ impl ReviewManager {
         let files = self.get_files(token).await?;
         let json_data = serde_json::to_string(&files).unwrap_or_else(|_| "[]".to_string());
         let safe_json = json_data
-            .replace("</script", "<\\/script")
-            .replace("</SCRIPT", "<\\/SCRIPT")
-            .replace("<!--", "<\\!--");
+            .replace('<', "\\u003c")
+            .replace('>', "\\u003e");
         let template = include_str!("review_viewer.html");
         let rendered = template
-            .replace("__FILES_JSON__", &safe_json)
-            .replace("__TOKEN__", token);
+            .replace("__TOKEN__", token)
+            .replace("__FILES_JSON__", &safe_json);
         Some(rendered)
     }
 

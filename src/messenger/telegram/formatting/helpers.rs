@@ -23,13 +23,12 @@ pub fn markdown_to_telegram_html(text: &str) -> String {
     let mut code_blocks: Vec<(String, String, bool)> = Vec::new();
     let mut inline_codes: Vec<String> = Vec::new();
     let mut links: Vec<(String, String)> = Vec::new();
-    let mut table_blocks: Vec<String> = Vec::new();
 
-    let text_buf = extract_entities(&cleaned_text, &mut code_blocks, &mut inline_codes, &mut links, &mut table_blocks);
+    let text_buf = extract_entities(&cleaned_text, &mut code_blocks, &mut inline_codes, &mut links);
     let escaped = html_escape::encode_safe(&text_buf).to_string();
     let formatted = apply_markdown_formatting(&escaped);
 
-    restore_entities(formatted, &code_blocks, &inline_codes, &links, &table_blocks)
+    restore_entities(formatted, &code_blocks, &inline_codes, &links)
 }
 
 fn sanitize_code_block(code: &str, is_quoted: bool) -> String {
@@ -123,7 +122,6 @@ fn extract_entities(
     code_blocks: &mut Vec<(String, String, bool)>,
     inline_codes: &mut Vec<String>,
     links: &mut Vec<(String, String)>,
-    table_blocks: &mut Vec<String>,
 ) -> String {
     let cleaned = unwrap_carousels(text);
     let mut text_buf = if let Ok(cb_re) = Regex::new(r"(?s)([ \t]*>[!]?[ \t]*)?`{3,}(\w*)\n(.*?)`{3,}") {
@@ -141,8 +139,6 @@ fn extract_entities(
         cleaned
     };
 
-    text_buf = super::table::extract_tables(&text_buf, table_blocks);
-
     if let Ok(ic_re) = Regex::new(r"`([^`\n]+)`") {
         text_buf = ic_re.replace_all(&text_buf, |caps: &Captures| {
             let code = caps.get(1).map_or("", |m| m.as_str()).to_string();
@@ -155,16 +151,16 @@ fn extract_entities(
     text_buf = replace_markdown_images(&text_buf, links);
 
     if let Ok(link_re) = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)") {
-        link_re.replace_all(&text_buf, |caps: &Captures| {
+        text_buf = link_re.replace_all(&text_buf, |caps: &Captures| {
             let link_text = caps.get(1).map_or("", |m| m.as_str()).to_string();
             let link_url = caps.get(2).map_or("", |m| m.as_str()).to_string();
             let idx = links.len();
             links.push((link_text, link_url));
             placeholder("LK", idx)
-        }).to_string()
-    } else {
-        text_buf
+        }).to_string();
     }
+
+    super::table::convert_tables(&text_buf)
 }
 
 fn format_restored_link(l_text: &str, l_url: &str) -> String {
@@ -187,14 +183,7 @@ fn restore_entities(
     code_blocks: &[(String, String, bool)],
     inline_codes: &[String],
     links: &[(String, String)],
-    table_blocks: &[String],
 ) -> String {
-    for (i, table_text) in table_blocks.iter().enumerate() {
-        let p = placeholder("TB", i);
-        let escaped_table = html_escape::encode_safe(table_text).to_string();
-        text = text.replace(&p, &format!("<pre>{}</pre>", escaped_table));
-    }
-
     for (i, (l_text, l_url)) in links.iter().enumerate() {
         let p = placeholder("LK", i);
         text = text.replace(&p, &format_restored_link(l_text, l_url));

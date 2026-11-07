@@ -123,12 +123,20 @@ fn flush_chunk(
     *len = open_tags.iter().map(|t| t.chars().count()).sum();
 }
 
+fn opening_tag_close_len(token: &str, is_tag: bool, is_closing_tag: bool) -> usize {
+    if is_tag && !is_closing_tag && !token.ends_with("/>") {
+        get_tag_name(token).chars().count() + 3
+    } else {
+        0
+    }
+}
+
 fn process_token(
     token_ref: &str,
     max_len: usize,
     open_tags: &mut Vec<String>,
-    current_chunk_parts: &mut Vec<String>,
-    current_len: &mut usize,
+    parts: &mut Vec<String>,
+    len: &mut usize,
     chunks: &mut Vec<String>,
 ) {
     let char_len = |s: &str| s.chars().count();
@@ -138,29 +146,30 @@ fn process_token(
     }
 
     let is_tag = token.starts_with('<') && token.ends_with('>');
+    let is_closing = is_tag && token.starts_with("</");
+    let new_close_len = opening_tag_close_len(&token, is_tag, is_closing);
     let is_entity = token.starts_with('&') && token.ends_with(';') && token.len() >= 3;
-    let closing_tags_str = get_closing_tags(open_tags);
-    let closing_tags_len = char_len(&closing_tags_str);
+    let close_str = get_closing_tags(open_tags);
+    let close_len = char_len(&close_str);
 
     if is_entity {
-        if !current_chunk_parts.is_empty() && (*current_len + char_len(&token) + closing_tags_len > max_len) {
-            flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+        if !parts.is_empty() && (*len + char_len(&token) + close_len > max_len) {
+            flush_chunk(close_str, open_tags, parts, len, chunks);
         }
-    } else if !is_tag && char_len(&token) > (max_len.saturating_sub(*current_len).saturating_sub(closing_tags_len)) {
-        let available = max_len.saturating_sub(*current_len).saturating_sub(closing_tags_len);
-        if available > 0 {
-            let (prefix, suffix) = split_at_char_limit(&token, available);
-            current_chunk_parts.push(prefix.to_string());
+    } else if !is_tag && char_len(&token) > max_len.saturating_sub(*len).saturating_sub(close_len) {
+        let avail = max_len.saturating_sub(*len).saturating_sub(close_len);
+        if avail > 0 {
+            let (prefix, suffix) = split_at_char_limit(&token, avail);
+            parts.push(prefix.to_string());
             token = suffix.to_string();
         }
-
-        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
-        token = split_oversized_token(&token, max_len, open_tags, current_chunk_parts, current_len, chunks);
-    } else if !current_chunk_parts.is_empty() && (*current_len + char_len(&token) + closing_tags_len > max_len) {
-        flush_chunk(closing_tags_str, open_tags, current_chunk_parts, current_len, chunks);
+        flush_chunk(close_str, open_tags, parts, len, chunks);
+        token = split_oversized_token(&token, max_len, open_tags, parts, len, chunks);
+    } else if !is_closing && !parts.is_empty() && (*len + char_len(&token) + close_len + new_close_len > max_len) {
+        flush_chunk(close_str, open_tags, parts, len, chunks);
     }
 
-    update_tags_and_len(&token, is_tag, open_tags, current_chunk_parts, current_len);
+    update_tags_and_len(&token, is_tag, open_tags, parts, len);
 }
 
 fn has_text_content(s: &str) -> bool {

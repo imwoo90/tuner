@@ -176,14 +176,80 @@ mod tests {
     // --- Phase 4: Markdown Tables ---
 
     #[test]
-    fn test_table_rendered_as_pre() {
+    fn test_table_rendered_as_structured_cards() {
         let input = "| Header 1 | Header 2 |\n|---|---|\n| Cell 1 | Cell 2 |";
         let html = markdown_to_telegram_html(input);
-        assert!(html.starts_with("<pre>"));
-        assert!(html.ends_with("</pre>"));
-        assert!(html.contains("Header 1  Header 2"));
-        assert!(html.contains("───────  ────────"));
-        assert!(html.contains("Cell 1    Cell 2"));
+        assert!(!html.contains("<pre>"));
+        assert!(!html.contains("─"));
+        assert_eq!(html, "▸ <b>Cell 1</b>\n• <b>Header 2</b>: Cell 2");
+    }
+
+    #[test]
+    fn test_table_with_bold_inline_code_and_br_bullets() {
+        let input = "\
+| 메신저 | 에이전트 적합도 | 장단점 요약 |
+| :--- | :---: | :--- |
+| **Telegram (현재)** | **★★★★★** | • **유일하게 모든 조건 충족**: 무료 Bot API + 인앱 웹뷰<br>• **단점**: 표(Table) 렌더링 불가, **사내망에서 차단되는 경우가 많음** |
+| **Slack (슬랙)** | **★★★☆☆** | • **업무/사내망 친화적**: 스레드 구조와 UI 버튼(`Block Kit`)이 훌륭함<br>• **단점**: 무료 플랜은 **90일 지나면 대화 기록이 다 가려지고** 번거로움 |
+| **카카오톡 / WhatsApp** | **★☆☆☆☆** | • **부적합**: 공식 봇 API가 유료이고, **보낸 메시지 수정(스트리밍) 자체가 불가능**함 |";
+        let html = markdown_to_telegram_html(input);
+
+        assert!(!html.contains("<pre>"));
+        assert!(!html.contains("</pre>"));
+        assert!(!html.contains("**"));
+        assert!(!html.contains("<br>"));
+        assert!(!html.contains("&lt;br&gt;"));
+        assert!(html.contains("▸ <b>Telegram (현재)</b>"));
+        assert!(html.contains("• <b>에이전트 적합도</b>: <b>★★★★★</b>"));
+        assert!(html.contains("• <b>장단점 요약</b>:\n  • <b>유일하게 모든 조건 충족</b>:"));
+        assert!(html.contains("  • <b>단점</b>: 표(Table) 렌더링 불가, <b>사내망에서 차단되는 경우가 많음</b>"));
+        assert!(html.contains("▸ <b>Slack (슬랙)</b>"));
+        assert!(html.contains("<code>Block Kit</code>"));
+        assert!(html.contains("• <b>장단점 요약</b>: <b>부적합</b>:"));
+    }
+
+    #[test]
+    fn test_table_with_links_inline_pipes_and_escaped_pipes() {
+        let input = "\
+| Item | Command / Link | Notes |
+|---|---|---|
+| **Search** | [Google](https://google.com) | Use `a | b` or escaped \\| pipe |
+| **Source** | [main.rs](file:///home/user/src/main.rs) | Local file link |";
+        let html = markdown_to_telegram_html(input);
+
+        assert!(!html.contains("<pre>"));
+        assert!(html.contains("▸ <b>Search</b>"));
+        assert!(html.contains("• <b>Command &#x2F; Link</b>: <a href=\"https://google.com\">Google</a>"));
+        assert!(html.contains("• <b>Notes</b>: Use <code>a | b</code> or escaped | pipe"));
+        assert!(html.contains("▸ <b>Source</b>"));
+        assert!(html.contains("• <b>Command &#x2F; Link</b>: <code>main.rs</code>"));
+    }
+
+    #[test]
+    fn test_non_table_pipe_lines_preserved_without_separator() {
+        let input = "Line 1: a | b | c\nLine 2: d | e | f";
+        let html = markdown_to_telegram_html(input);
+        assert_eq!(html, "Line 1: a | b | c\nLine 2: d | e | f");
+    }
+
+    #[test]
+    fn test_long_table_splits_cleanly_across_telegram_chunks() {
+        let mut rows = String::from("| Service | Status | Description |\n|---|---|---|\n");
+        for i in 0..30 {
+            rows.push_str(&format!(
+                "| **Service {}** | `ONLINE` | **Healthy**: Node {} is processing requests<br>• Latency under 5ms |\n",
+                i, i
+            ));
+        }
+        let html = markdown_to_telegram_html(&rows);
+        assert!(!html.contains("<pre>"));
+        let chunks = split_html_message(&html, 500);
+        assert!(chunks.len() > 2);
+        for chunk in &chunks {
+            assert!(chunk.chars().count() <= 500);
+            assert_eq!(chunk.matches("<b>").count(), chunk.matches("</b>").count());
+            assert_eq!(chunk.matches("<code>").count(), chunk.matches("</code>").count());
+        }
     }
 
     // --- Phase 5: Dynamic Button Stripping ---

@@ -190,4 +190,30 @@ async fn wait_for_server_healthy(port: u16, client: &reqwest::Client) {
         assert_eq!(files[0].size_bytes, zip_bytes.len());
         assert!(files[0].content.contains("front_shell.step"));
     }
+
+    #[tokio::test]
+    async fn test_get_html_escapes_html_comments_and_script_tags_with_valid_json() {
+        let dir = tempdir().unwrap();
+        let tricky_file = dir.path().join("tricky.rs");
+        let tricky_content = "const A: &str = \"<!-- slide --> </script> </SCRIPT> __TOKEN__\";";
+        std::fs::write(&tricky_file, tricky_content).unwrap();
+
+        let mgr = ReviewManager::new();
+        let token = mgr.activate_session(std::slice::from_ref(&tricky_file)).await.unwrap();
+        let html = mgr.get_html(&token).await.unwrap();
+
+        let start_tag = "<script id=\"files-data\" type=\"application/json\">";
+        let start_idx = html.find(start_tag).unwrap() + start_tag.len();
+        let end_idx = html[start_idx..].find("</script>").unwrap() + start_idx;
+        let json_payload = &html[start_idx..end_idx];
+
+        assert!(!json_payload.contains("<!--"));
+        assert!(!json_payload.contains("</script"));
+        assert!(!json_payload.contains("<\\!--"));
+
+        let parsed: Vec<ReviewFile> = serde_json::from_str(json_payload)
+            .expect("Embedded files-data JSON must be 100% RFC 8259 compliant for JSON.parse");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].content, tricky_content);
+    }
 }
