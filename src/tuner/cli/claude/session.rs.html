@@ -220,21 +220,24 @@
 <a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// Returns `true` if a turn is currently running on the warm `claude` session for the topic or `session_id`.
 <a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub async fn </span>is_running(chat_id: i64, topic_id: <span class="prelude-ty">Option</span>&lt;i64&gt;, session_id: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; bool {
 <a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span>map = global_pool().sessions.lock().<span class="kw">await</span>;
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)) {
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">return </span>w.running.load(Ordering::SeqCst);
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">if </span>chat_id == <span class="number">0 </span>&amp;&amp; topic_id.is_none() &amp;&amp; session_id.is_none() {
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">return </span>map.values().any(|w| w.running.load(Ordering::SeqCst));
 <a href=#225 id=225 data-nosnippet>225</a>    }
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = session_id.filter(|s| !s.is_empty()) {
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">for </span>w <span class="kw">in </span>map.values() {
-<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">if </span>w.session_id.lock().<span class="kw">await</span>.as_deref() == <span class="prelude-val">Some</span>(sid) {
-<a href=#229 id=229 data-nosnippet>229</a>                <span class="kw">return </span>w.running.load(Ordering::SeqCst);
-<a href=#230 id=230 data-nosnippet>230</a>            }
-<a href=#231 id=231 data-nosnippet>231</a>        }
-<a href=#232 id=232 data-nosnippet>232</a>    }
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="bool-val">false
-<a href=#234 id=234 data-nosnippet>234</a></span>}
-<a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a><span class="doccomment">/// Returns the number of warm `claude` processes currently registered in the pool.
-<a href=#237 id=237 data-nosnippet>237</a></span><span class="kw">pub async fn </span>active_count() -&gt; usize {
-<a href=#238 id=238 data-nosnippet>238</a>    global_pool().sessions.lock().<span class="kw">await</span>.len()
-<a href=#239 id=239 data-nosnippet>239</a>}
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)) {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">return </span>w.running.load(Ordering::SeqCst);
+<a href=#228 id=228 data-nosnippet>228</a>    }
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = session_id.filter(|s| !s.is_empty()) {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">for </span>w <span class="kw">in </span>map.values() {
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="kw">if </span>w.session_id.lock().<span class="kw">await</span>.as_deref() == <span class="prelude-val">Some</span>(sid) {
+<a href=#232 id=232 data-nosnippet>232</a>                <span class="kw">return </span>w.running.load(Ordering::SeqCst);
+<a href=#233 id=233 data-nosnippet>233</a>            }
+<a href=#234 id=234 data-nosnippet>234</a>        }
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="bool-val">false
+<a href=#237 id=237 data-nosnippet>237</a></span>}
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a><span class="doccomment">/// Returns the number of warm `claude` processes currently registered in the pool.
+<a href=#240 id=240 data-nosnippet>240</a></span><span class="kw">pub async fn </span>active_count() -&gt; usize {
+<a href=#241 id=241 data-nosnippet>241</a>    global_pool().sessions.lock().<span class="kw">await</span>.len()
+<a href=#242 id=242 data-nosnippet>242</a>}
 </code></pre></div></section></main></body></html>

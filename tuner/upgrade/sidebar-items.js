@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["download_archive","get_latest_release","is_newer_version","perform_upgrade","run_cli_upgrade","unpack_archive"],"struct":["GithubAsset","GithubRelease"]};
+window.SIDEBAR_ITEMS = {"fn":["download_archive","get_latest_release","has_any_active_work","is_idle_upgrade_window","is_newer_version","now_epoch_secs","perform_upgrade","record_user_activity","run_cli_upgrade","spawn_auto_upgrade_scheduler","unpack_archive","user_idle_secs"],"static":["LAST_ACTIVITY_EPOCH"],"struct":["GithubAsset","GithubRelease"]};
