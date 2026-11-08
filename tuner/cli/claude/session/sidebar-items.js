@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["active_count","active_pid","cleanup_expired","get_or_spawn_warm_session","global_pool","interrupt_session","is_running","set_model_live","spawn_warm_claude","submit_ask_answers","terminate_all","terminate_all_for_chat","terminate_topic"],"struct":["ClaudeProcessIo","ClaudeSessionPool","WarmClaudeSession"],"type":["TopicKey"]};

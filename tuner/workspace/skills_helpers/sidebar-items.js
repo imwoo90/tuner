@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["clean_broken_links","clean_cross_profile_skill_links","clean_invalid_workspace_skill_links","create_dir_link","ensure_link","is_skill_sync_enabled","sync_profile_agent_skills"]};
+window.SIDEBAR_ITEMS = {"fn":["clean_broken_links","clean_cross_profile_skill_links","clean_invalid_workspace_skill_links","create_dir_link","ensure_link","is_skill_sync_enabled","sync_claude_workspace_bridges","sync_profile_agent_skills"]};

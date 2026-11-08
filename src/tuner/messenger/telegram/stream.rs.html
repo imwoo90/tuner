@@ -25,7 +25,7 @@
 <a href=#25 id=25 data-nosnippet>25</a>    config: <span class="kw-2">&amp;</span>CliConfig,
 <a href=#26 id=26 data-nosnippet>26</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;, teloxide::RequestError&gt; {
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">let </span>last_sid = resp.session_id.clone();
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">if </span>resp.stderr == <span class="string">"Interrupted by user (/stop)" </span>{
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">if </span>resp.stderr == <span class="string">"Interrupted by user (/stop)" </span>|| (!resp.is_error &amp;&amp; resp.result.trim().is_empty()) {
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(last_sid);
 <a href=#30 id=30 data-nosnippet>30</a>    }
 <a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">let </span>raw_text = <span class="kw">if </span>resp.is_error {
@@ -172,9 +172,12 @@
 <a href=#172 id=172 data-nosnippet>172</a>        }
 <a href=#173 id=173 data-nosnippet>173</a>
 <a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">if </span>state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = state.last_sid { updated.set_session_id(<span class="kw-2">&amp;</span>config.provider, <span class="kw-2">&amp;</span>sid); }
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>updated).<span class="kw">await</span>;
-<a href=#177 id=177 data-nosnippet>177</a>    }
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="prelude-val">Ok</span>(())
-<a href=#179 id=179 data-nosnippet>179</a>}
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = state.last_sid {
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">let </span>prov = <span class="kw">if </span>!updated.provider.is_empty() { updated.provider.clone() } <span class="kw">else </span>{ config.provider.clone() };
+<a href=#177 id=177 data-nosnippet>177</a>            updated.set_session_id(<span class="kw-2">&amp;</span>prov, <span class="kw-2">&amp;</span>sid);
+<a href=#178 id=178 data-nosnippet>178</a>        }
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">let _ </span>= sessions.update_session(<span class="kw-2">&amp;</span>updated).<span class="kw">await</span>;
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="prelude-val">Ok</span>(())
+<a href=#182 id=182 data-nosnippet>182</a>}
 </code></pre></div></section></main></body></html>

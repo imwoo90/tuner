@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLAUDE_EFFORTS","CLAUDE_MODELS","DEFAULT_CLAUDE_MODEL"],"fn":["build_command","build_warm_command","discover_commands_live","discover_models","discover_models_live","normalize_claude_model","resolve_claude_bin","resolve_claude_model_effort"],"mod":["runner","session"],"struct":["ClaudeStreamParser"]};

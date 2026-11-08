@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["WARM_SESSION_TTL"],"fn":["clean_claude_model_id","format_stream_preview","kill_process_group","parse_claude_models_response","parse_codex_models_response","probe_cli_json_lines","resolve_cli_bin","resolve_warm_workspace","strip_effort_suffix","write_json_stdin"],"struct":["WarmActivityTracker"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_new_command","handle_session_control_commands","prepare_topic_reset","resolve_target_topic"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_memory_command","handle_new_command","handle_session_control_commands","prepare_topic_reset","resolve_target_topic","send_static_memory_fallback","try_query_live_memory"]};

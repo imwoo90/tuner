@@ -174,4 +174,24 @@
 <a href=#174 id=174 data-nosnippet>174</a>    }
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="prelude-val">Ok</span>(())
 <a href=#176 id=176 data-nosnippet>176</a>}
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a><span class="doccomment">/// Synchronizes Claude Code Tier-0 workspace bridges (`CLAUDE.md`, `.claude/rules`, `.claude/skills`)
+<a href=#179 id=179 data-nosnippet>179</a>/// to point to `&lt;workspace&gt;/AGENTS.md`, `&lt;workspace&gt;/.agents/rules`, and `&lt;workspace&gt;/.agents/skills`.
+<a href=#180 id=180 data-nosnippet>180</a></span><span class="kw">pub fn </span>sync_claude_workspace_bridges(workspace_dir: <span class="kw-2">&amp;</span>Path) {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>agents_md = workspace_dir.join(<span class="string">"AGENTS.md"</span>);
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">if </span>agents_md.is_file() {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>claude_md = workspace_dir.join(<span class="string">"CLAUDE.md"</span>);
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">let _ </span>= ensure_link(<span class="kw-2">&amp;</span>claude_md, <span class="kw-2">&amp;</span>agents_md);
+<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">let </span>agents_dir = workspace_dir.join(<span class="string">".agents"</span>);
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>claude_dir = workspace_dir.join(<span class="string">".claude"</span>);
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">for </span>sub <span class="kw">in </span>[<span class="string">"rules"</span>, <span class="string">"skills"</span>] {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>target = agents_dir.join(sub);
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">if </span>target.is_dir() {
+<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">let _ </span>= std::fs::create_dir_all(<span class="kw-2">&amp;</span>claude_dir);
+<a href=#192 id=192 data-nosnippet>192</a>            <span class="kw">let </span>link = claude_dir.join(sub);
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let _ </span>= ensure_link(<span class="kw-2">&amp;</span>link, <span class="kw-2">&amp;</span>target);
+<a href=#194 id=194 data-nosnippet>194</a>        }
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>}
 </code></pre></div></section></main></body></html>

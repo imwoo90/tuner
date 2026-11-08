@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODEX_EFFORTS","CODEX_MODELS","DEFAULT_CODEX_MODEL"],"fn":["build_app_server_command","build_command","discover_models","discover_models_live","extract_item_text","normalize_codex_model","resolve_codex_bin","resolve_codex_model_effort"],"mod":["runner","session"],"struct":["CodexStreamParser"]};

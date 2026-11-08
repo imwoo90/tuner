@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["StreamEvent"],"mod":["antigravity"],"struct":["AskQuestionData","CliResponse"],"trait":["AgentProvider"]};
+window.SIDEBAR_ITEMS = {"enum":["StreamEvent"],"mod":["antigravity","claude","codex","common","peer"],"struct":["AskQuestionData","CliResponse"],"trait":["AgentProvider"]};
