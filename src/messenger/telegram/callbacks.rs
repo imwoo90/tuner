@@ -160,6 +160,7 @@ pub(crate) async fn handle_callback_query(
         let _ = bot.answer_callback_query(q.id).await;
         return Ok(());
     }
+    crate::upgrade::record_user_activity();
     let lang = if let Some(teloxide::types::MaybeInaccessibleMessage::Regular(ref m)) = q.message {
         let key = crate::session::key::SessionKey::telegram(m.chat.id.0, crate::telegram::get_topic_id(m));
         sessions.get_active(&key).await.ok().flatten().and_then(|s| s.language)

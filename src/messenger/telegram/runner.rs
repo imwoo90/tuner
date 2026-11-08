@@ -49,7 +49,8 @@ fn start_schedulers(
         super::transport::TelegramTransport::with_targets(bot, targets)
             .with_context(cfg.clone(), sess.clone()),
     ));
-    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli, bus.clone())).start();
+    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
+    crate::upgrade::spawn_auto_upgrade_scheduler(cfg.clone(), cli);
     let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
     Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), bus.clone())).start();
     let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), paths.telegram_files_dir(), paths.output_to_user_dir()));

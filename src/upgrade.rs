@@ -9,6 +9,94 @@
 
 use serde::Deserialize;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static LAST_ACTIVITY_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+fn now_epoch_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Records the current timestamp as the latest user or agent activity.
+pub fn record_user_activity() {
+    LAST_ACTIVITY_EPOCH.store(now_epoch_secs(), Ordering::SeqCst);
+}
+
+/// Returns the elapsed seconds since the last recorded user or agent activity.
+pub fn user_idle_secs() -> u64 {
+    let now = now_epoch_secs();
+    let last = LAST_ACTIVITY_EPOCH.load(Ordering::SeqCst);
+    if last == 0 {
+        let _ = LAST_ACTIVITY_EPOCH.compare_exchange(0, now, Ordering::SeqCst, Ordering::SeqCst);
+        return 0;
+    }
+    now.saturating_sub(last)
+}
+
+/// Evaluates the hybrid unattended auto-upgrade gate:
+/// - Blocked whenever `has_active_work` is `true`.
+/// - Night window (`03:00`..`06:00` local time): requires `>= 30 minutes` (`1800s`) of inactivity.
+/// - Daytime window (any hour): requires `>= 3 hours` (`10800s`) of inactivity.
+pub fn is_idle_upgrade_window(local_hour: u32, idle_secs: u64, has_active_work: bool) -> bool {
+    if has_active_work {
+        return false;
+    }
+    let night_idle = (3..6).contains(&(local_hour % 24)) && idle_secs >= 30 * 60;
+    let daytime_long_idle = idle_secs >= 3 * 3600;
+    night_idle || daytime_long_idle
+}
+
+/// Returns `true` if any provider (`agy`, `claude`, or `codex`) has an active turn, background run, or prompt.
+pub async fn has_any_active_work(cli: &crate::cli::antigravity::AntigravityCli) -> bool {
+    !cli.sessions.running_runs.lock().await.is_empty()
+        || !cli.sessions.async_runs.lock().await.is_empty()
+        || !cli.sessions.active_asks.lock().await.is_empty()
+        || !cli.sessions.boot_cancels.lock().await.is_empty()
+        || crate::cli::claude::is_running(0, None, None).await
+        || crate::cli::codex::is_running(0, None, None).await
+}
+
+/// Spawns the background unattended auto-upgrade task that checks GitHub Releases during idle windows.
+pub fn spawn_auto_upgrade_scheduler(
+    config: std::sync::Arc<crate::config::CliConfig>,
+    cli: std::sync::Arc<crate::cli::antigravity::AntigravityCli>,
+) {
+    record_user_activity();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15 * 60));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if std::env::var("TUNER_DISABLE_AUTO_UPGRADE").is_ok_and(|v| v == "1" || v == "true") {
+                continue;
+            }
+            if has_any_active_work(&cli).await {
+                record_user_activity();
+                continue;
+            }
+            let tz_str = config.user_timezone.as_deref().unwrap_or("Asia/Seoul");
+            let tz = tz_str.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::Asia::Seoul);
+            let local_hour = chrono::Timelike::hour(&chrono::Utc::now().with_timezone(&tz));
+            if !is_idle_upgrade_window(local_hour, user_idle_secs(), false) {
+                continue;
+            }
+            if let Ok(rel) = get_latest_release().await {
+                let latest = rel.tag_name.trim_start_matches('v');
+                if is_newer_version(env!("CARGO_PKG_VERSION"), latest)
+                    && let Some(asset) = rel.assets.iter().find(|a| a.name.ends_with(".tar.gz"))
+                    && !has_any_active_work(&cli).await
+                    && perform_upgrade(&asset.browser_download_url).await.is_ok()
+                    && !has_any_active_work(&cli).await
+                {
+                    println!("🤖 [tuner] Auto-upgraded to v{} during idle window. Restarting...", latest);
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    std::process::exit(42);
+                }
+            }
+        }
+    });
+}
 
 #[derive(Deserialize, Clone, Debug)]
 /// Represents `GithubAsset` (github asset).

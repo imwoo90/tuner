@@ -220,6 +220,9 @@ pub async fn active_pid(chat_id: i64, topic_id: Option<i64>) -> Option<u32> {
 /// Returns `true` if a turn is currently running on the warm `claude` session for the topic or `session_id`.
 pub async fn is_running(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
     let map = global_pool().sessions.lock().await;
+    if chat_id == 0 && topic_id.is_none() && session_id.is_none() {
+        return map.values().any(|w| w.running.load(Ordering::SeqCst));
+    }
     if let Some(w) = map.get(&(chat_id, topic_id)) {
         return w.running.load(Ordering::SeqCst);
     }

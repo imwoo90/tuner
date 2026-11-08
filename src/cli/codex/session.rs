@@ -164,11 +164,9 @@ pub async fn submit_ask_answers(chat_id: i64, topic_id: Option<i64>, answers: &[
 /// Reaps dead or 24-hour (`86400s`) idle warm `codex` processes from the pool.
 pub async fn cleanup_expired() {
     let mut map = global_pool().sessions.lock().await;
-    let mut exp = Vec::new();
-    for (k, w) in map.iter() {
-        if !w.running.load(Ordering::SeqCst) && (w.activity.is_expired() || !w.is_alive().await) { exp.push(*k); }
+    for k in map.iter().filter(|(_, w)| !w.running.load(Ordering::SeqCst) && w.activity.is_expired()).map(|(k, _)| *k).collect::<Vec<_>>() {
+        if let Some(old) = map.remove(&k) { old.kill_now(); }
     }
-    for k in exp { if let Some(old) = map.remove(&k) { old.kill_now(); } }
 }
 
 pub(crate) async fn get_or_spawn_warm_codex(
@@ -179,15 +177,12 @@ pub(crate) async fn get_or_spawn_warm_codex(
 ) -> Result<Arc<WarmCodexSession>, String> {
     cleanup_expired().await;
     let (ws, key) = (resolve_warm_workspace(cli, workspace), (cli.config.chat_id, cli.config.topic_id));
-    {
-        let mut map = global_pool().sessions.lock().await;
-        if let Some(ex) = map.get(&key).cloned() {
-            if (resume_sid.is_some_and(|r| ex.thread_id == r) || continue_session) && ex.workspace == ws && ex.is_alive().await {
-                ex.activity.touch();
-                return Ok(ex);
-            }
-            if let Some(old) = map.remove(&key) { old.kill_now(); }
+    if let Some(ex) = global_pool().sessions.lock().await.get(&key).cloned() {
+        if (resume_sid.is_some_and(|r| ex.thread_id == r) || continue_session) && ex.workspace == ws && ex.is_alive().await {
+            ex.activity.touch();
+            return Ok(ex);
         }
+        if let Some(old) = global_pool().sessions.lock().await.remove(&key) { old.kill_now(); }
     }
     let warm = spawn_warm_codex(cli, ws, resume_sid).await?;
     if let Some(old) = global_pool().sessions.lock().await.insert(key, warm.clone()) { old.kill_now(); }
@@ -236,6 +231,9 @@ pub async fn active_pid(chat_id: i64, topic_id: Option<i64>) -> Option<u32> {
 /// Returns `true` if a turn is currently running on the warm `codex` session for the topic or `session_id`.
 pub async fn is_running(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
     let map = global_pool().sessions.lock().await;
+    if chat_id == 0 && topic_id.is_none() && session_id.is_none() {
+        return map.values().any(|w| w.running.load(Ordering::SeqCst));
+    }
     if let Some(w) = map.get(&(chat_id, topic_id)) { return w.running.load(Ordering::SeqCst); }
     session_id.filter(|s| !s.is_empty()).is_some_and(|sid| {
         map.values().any(|w| w.thread_id == sid && w.running.load(Ordering::SeqCst))

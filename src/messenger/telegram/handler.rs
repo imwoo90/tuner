@@ -168,6 +168,7 @@ pub(crate) async fn handle_message(
     if !super::auth::validate_and_auth_message(&bot, &msg, &config, &sessions, &topic_cache).await? {
         return Ok(());
     }
+    crate::upgrade::record_user_activity();
 
     let topic_id = get_topic_id(&msg);
     let active_lang = resolve_active_lang(&sessions, &config, msg.chat.id.0, topic_id).await;
