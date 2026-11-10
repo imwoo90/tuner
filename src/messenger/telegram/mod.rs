@@ -31,19 +31,22 @@
 //! - [`media_group`] (`media_group.rs`): Multi-file album upload aggregator.
 //! - [`upgrade`] (`upgrade.rs`): Self-upgrade command workflow.
 //! - [`async_observer`] (`async_observer.rs`): Watcher for async CLI turn completions.
-//! - [`commands_usage`] (`commands_usage.rs`): `/usage` quota report formatter.
+//! - [`commands_usage`] (`commands_usage.rs`): `/usage` formatter and 1:1:1 dispatcher.
+//! - [`commands_usage_agy`] (`commands_usage_agy.rs`): CloudCode HTTP quota client for `agy`.
+//! - [`commands_usage_claude`] (`commands_usage_claude.rs`): OAuth and JSONL usage for `claude`.
+//! - [`commands_usage_codex`] (`commands_usage_codex.rs`): JSON-RPC and JSONL usage for `codex`.
 //! - [`commands_session`] (`commands_session.rs`): `/new`, `/stop`, and `/abort` handlers.
 //! - [`commands_remote_hub`] (`commands_remote_hub.rs`): Remote service detector and spawner.
 //! - [`commands_remote`] (`commands_remote.rs`): `/remote` dashboard controller.
 //! - [`typing`] (`typing.rs`): Scoped Telegram typing indicator guard.
 //! - [`rate_limiter`] (`rate_limiter.rs`): Outbound per-chat rate limiter.
-//! - [`callbacks_effort`] (`callbacks_effort.rs`): Model and reasoning effort callbacks.
+//! - [`callbacks_effort`] (`callbacks_effort.rs`): Model and effort callbacks.
 //! - [`media`] (`media.rs`): Inbound media download and prompt injection.
-//! - [`commands_model`] (`commands_model.rs`): `/model` and `/effort` command handlers.
-//! - [`commands_registry`] (`commands_registry.rs`): Bot command registration and classification.
-//! - [`auth`] (`auth.rs`): User/group authorization and topic migration checks.
+//! - [`commands_model`] (`commands_model.rs`): `/model` and `/effort` handlers.
+//! - [`commands_registry`] (`commands_registry.rs`): Bot command registration.
+//! - [`auth`] (`auth.rs`): User/group authorization and topic migration.
 //! - [`handler`] (`handler.rs`): Top-level update handler and concurrency gate.
-//! - [`vault`] (`vault.rs`): Ephemeral Web Vault session manager and credential CRUD endpoints.
+//! - [`vault`] (`vault.rs`): Ephemeral Web Vault session and CRUD endpoints.
 //!
 //! ## Search Tags
 //! #telegram-bot, #message-routing, #pty-streaming, #inline-keyboards, #chat-commands
@@ -131,6 +134,9 @@ pub mod media_group;
 pub mod upgrade;
 pub mod async_observer;
 pub mod commands_usage;
+pub mod commands_usage_agy;
+pub mod commands_usage_claude;
+pub mod commands_usage_codex;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod commands_usage_tests;

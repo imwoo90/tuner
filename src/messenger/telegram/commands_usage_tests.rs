@@ -259,4 +259,174 @@ Press Esc or q to exit
 
         cli.sessions.terminate(session_id).await;
     }
+
+    #[test]
+    fn test_parse_antigravity_quota_json_and_disabled_5h() {
+        let val = serde_json::json!({
+            "groups": [
+                {
+                    "groupName": "Gemini Models",
+                    "entries": [
+                        {"quotaId": "gemini-weekly", "label": "Weekly Limit", "remainingFraction": 0.8834, "resetTime": "2099-01-01T00:00:00Z"},
+                        {"quotaId": "gemini-5h", "label": "5-Hour Limit", "remainingFraction": 0.9922, "resetTime": "2099-01-01T00:00:00Z"}
+                    ]
+                },
+                {
+                    "groupName": "Claude and GPT models",
+                    "entries": [
+                        {"quotaId": "3p-weekly", "label": "Weekly Limit", "remainingFraction": 0.0, "resetTime": "2099-01-01T00:00:00Z"},
+                        {"quotaId": "3p-5h", "label": "5-Hour Limit"}
+                    ]
+                }
+            ]
+        });
+        let rep = crate::messenger::telegram::commands_usage_agy::parse_antigravity_quota_json(
+            &val,
+            Some("user@example.com"),
+            Some("Google AI Ultra"),
+        )
+        .unwrap();
+        assert_eq!(rep.account.as_deref(), Some("user@example.com (Google AI Ultra)"));
+        let g = rep.gemini.unwrap();
+        assert!((g.weekly.unwrap().pct - 88.34).abs() < 0.01);
+        assert!((g.five_hour.unwrap().pct - 99.22).abs() < 0.01);
+        let c = rep.claude.unwrap();
+        assert_eq!(c.weekly.unwrap().pct, 0.0);
+        let c5 = c.five_hour.unwrap();
+        assert_eq!(c5.pct, 0.0);
+        assert_eq!(c5.detail, "Disabled: Weekly limit hit.");
+    }
+
+    #[tokio::test]
+    async fn test_antigravity_http_quota_with_oauth_refresh_and_claude_oauth_mock() {
+        use axum::{routing::{get, post}, Json, Router};
+        let app = Router::new()
+            .route("/token", post(|| async {
+                Json(serde_json::json!({
+                    "access_token": "fresh_agy_token_123",
+                    "expires_in": 3600,
+                    "token_type": "Bearer"
+                }))
+            }))
+            .route("/v1internal:method", post(|axum::extract::Path(method): axum::extract::Path<String>| async move {
+                if method.contains("loadCodeAssist") {
+                    Json(serde_json::json!({
+                        "cloudaicompanionProject": "aicode-consumers",
+                        "paidTier": { "name": "Google AI Ultra" }
+                    }))
+                } else {
+                    Json(serde_json::json!({
+                        "groups": [
+                            {
+                                "displayName": "Gemini Models",
+                                "buckets": [
+                                    {"bucketId": "gemini-weekly", "displayName": "Weekly Limit Remaining", "window": "weekly", "remainingFraction": 0.75, "resetTime": "2099-01-01T00:00:00Z"},
+                                    {"bucketId": "gemini-5h", "displayName": "Five Hour Limit Remaining", "window": "5h", "remainingFraction": 1.0, "resetTime": "2099-01-01T00:00:00Z"}
+                                ]
+                            },
+                            {
+                                "displayName": "Claude and GPT models",
+                                "buckets": [
+                                    {"bucketId": "3p-weekly", "displayName": "Weekly Limit Remaining", "window": "weekly", "remainingFraction": 0.50, "resetTime": "2099-01-01T00:00:00Z"},
+                                    {"bucketId": "3p-5h", "displayName": "Five Hour Limit Remaining", "window": "5h", "remainingFraction": 0.90, "resetTime": "2099-01-01T00:00:00Z"}
+                                ]
+                            }
+                        ]
+                    }))
+                }
+            }))
+            .route("/api/oauth/usage", get(|| async {
+                Json(serde_json::json!({
+                    "five_hour": { "utilization": 20.0, "resets_at": "2099-01-01T00:00:00Z" },
+                    "seven_day": { "utilization": 35.0, "resets_at": "2099-01-01T00:00:00Z" }
+                }))
+            }));
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let base_url = format!("http://{}", addr);
+        let token_url = format!("{}/token", base_url);
+
+        let dir = tempfile::tempdir().unwrap();
+        let agy_tok_path = dir.path().join("antigravity-oauth-token");
+        std::fs::write(
+            &agy_tok_path,
+            serde_json::json!({
+                "id_token_email": "wim@holtlab.io",
+                "token": {
+                    "access_token": "expired_tok",
+                    "refresh_token": "valid_refresh_tok",
+                    "expiry": "2020-01-01T00:00:00Z"
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let report = crate::messenger::telegram::commands_usage_agy::query_antigravity_quota_http_with_urls(
+            &agy_tok_path,
+            &base_url,
+            &token_url,
+        )
+        .await
+        .unwrap();
+        assert_eq!(report.account.as_deref(), Some("wim@holtlab.io (Google AI Ultra)"));
+        assert_eq!(report.gemini.unwrap().weekly.unwrap().pct, 75.0);
+        assert_eq!(report.claude.unwrap().five_hour.unwrap().pct, 90.0);
+
+        let updated_tok: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&agy_tok_path).unwrap()).unwrap();
+        assert_eq!(updated_tok["token"]["access_token"].as_str(), Some("fresh_agy_token_123"));
+
+        let claude_creds_path = dir.path().join("claude_creds.json");
+        std::fs::write(
+            &claude_creds_path,
+            serde_json::json!({
+                "claudeAiOauth": {
+                    "accessToken": "claude_oauth_tok",
+                    "subscriptionType": "max"
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut sess = crate::session::data::SessionData::new(
+            123,
+            "telegram".to_string(),
+            Some(42),
+            "claude".to_string(),
+            "claude-opus-4-7".to_string(),
+        );
+        sess.set_session_id("claude", "s-claude");
+        let claude_html = crate::messenger::telegram::commands_usage_claude::query_claude_usage_html(
+            &sess,
+            Some(&claude_creds_path),
+            Some(&base_url),
+        )
+        .await;
+        assert!(claude_html.contains("Claude Code Quota & Usage"));
+        assert!(claude_html.contains("Claude OAuth (max)"));
+        assert!(claude_html.contains("CLAUDE SUBSCRIPTION QUOTA"));
+        assert!(claude_html.contains("Weekly Limit: <code>[███████░░░]</code> 65.0%"));
+        assert!(claude_html.contains("5-Hour Limit: <code>[████████░░]</code> 80.0%"));
+    }
+
+    #[test]
+    fn test_parse_codex_rate_limits_json_schema() {
+        let rpc_val = serde_json::json!({
+            "rateLimits": {
+                "planType": "plus",
+                "primary": { "usedPercent": 15, "windowDurationMins": 300, "resetsAt": 4102444800i64 },
+                "secondary": { "usedPercent": 40, "windowDurationMins": 10080, "resetsAt": 4102444800i64 }
+            }
+        });
+        let (plan, grp) = crate::messenger::telegram::commands_usage_codex::parse_codex_rate_limits_json(&rpc_val);
+        assert_eq!(plan.as_deref(), Some("plus"));
+        let g = grp.unwrap();
+        assert_eq!(g.five_hour.unwrap().pct, 85.0);
+        assert_eq!(g.weekly.unwrap().pct, 60.0);
+    }
 }

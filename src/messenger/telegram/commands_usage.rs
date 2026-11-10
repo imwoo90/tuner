@@ -166,7 +166,7 @@ fn push_limit_line(out: &mut String, branch: &str, sub: &str, label: &str, lim: 
     }
 }
 
-fn render_group_markdown(icon: &str, title: &str, group: &ModelQuotaGroup) -> String {
+pub(crate) fn render_group_markdown(icon: &str, title: &str, group: &ModelQuotaGroup) -> String {
     let mut out = format!("\n{} <b>{}</b>\n", icon, title);
     match (&group.weekly, &group.five_hour) {
         (Some(w), Some(f)) => {
@@ -202,48 +202,6 @@ pub(crate) fn render_quota_message(report: &QuotaReport) -> String {
     text
 }
 
-async fn resolve_session_id(
-    bot: &Bot,
-    msg: &Message,
-    config: &CliConfig,
-    sessions: &SessionManager,
-    cli: &AntigravityCli,
-) -> Option<(String, AntigravityCli)> {
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
-    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-
-    let (mut sess, _) = match sessions.resolve_session(&key, &config.provider, model).await {
-        Ok(s) => s,
-        Err(e) => {
-            let _ = send_reply(bot, msg, format!("❌ Error resolving session: {}", e)).await;
-            return None;
-        }
-    };
-    if matches!(sess.provider.as_str(), "claude" | "codex") {
-        let _ = send_reply(bot, msg, format!("ℹ️ [tuner] `/usage` is only supported on `antigravity` (active: `{}`).", sess.provider)).await;
-        return None;
-    }
-    let sid = match crate::telegram::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await {
-        Ok(s) if !s.is_empty() => s,
-        Ok(_) => {
-            let _ = send_reply(bot, msg, "❌ Could not initialize session for quota check").await;
-            return None;
-        }
-        Err(e) => {
-            let _ = send_reply(bot, msg, format!("❌ Error initializing session: {}", e)).await;
-            return None;
-        }
-    };
-    let mut s_cli = cli.clone();
-    s_cli.config.chat_id = msg.chat.id.0;
-    s_cli.config.topic_id = sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64));
-    if !sess.model.is_empty() && sess.model != "antigravity-default" {
-        s_cli.config.model = Some(sess.model.clone());
-    }
-    if sess.effort.is_some() { s_cli.config.effort = sess.effort.clone(); }
-    Some((sid, s_cli))
-}
-
 pub(crate) async fn handle_usage_command(
     bot: &Bot,
     msg: &Message,
@@ -251,21 +209,29 @@ pub(crate) async fn handle_usage_command(
     sessions: &SessionManager,
     cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let Some((sid, session_cli)) = resolve_session_id(bot, msg, config, sessions, cli).await else {
-        return Ok(());
-    };
-    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
-    let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
-    let report = match query_quota_from_pty(&session_cli, &sid).await {
-        Ok(r) => r,
+    let model = config.model.as_deref().unwrap_or("antigravity-default");
+    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let (sess, _) = match sessions.resolve_session(&key, &config.provider, model).await {
+        Ok(s) => s,
         Err(e) => {
-            drop(_g);
-            let _ = send_reply(bot, msg, format!("⚠️ Could not retrieve quota from session: {}", e)).await;
+            let _ = send_reply(bot, msg, format!("❌ Error resolving session: {}", e)).await;
             return Ok(());
         }
     };
+
+    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+    let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
+    let html = match sess.provider.as_str() {
+        "claude" => super::commands_usage_claude::query_claude_usage_html(&sess, None, None).await,
+        "codex" => super::commands_usage_codex::query_codex_usage_html(&sess).await,
+        _ => {
+            let Some(h) = super::commands_usage_agy::query_antigravity_usage_html(bot, msg, config, sessions, cli, sess).await else {
+                return Ok(());
+            };
+            h
+        }
+    };
     drop(_g);
-    let html = render_quota_message(&report);
     let mut req = bot.send_message(msg.chat.id, &html).parse_mode(teloxide::types::ParseMode::Html);
     if let Some(tid) = msg.thread_id { req = req.message_thread_id(tid); }
     if req.await.is_err() { let _ = send_reply(bot, msg, html).await; }

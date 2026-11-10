@@ -155,7 +155,10 @@ src/
 │       ├── commands.rs       # Primary slash command router (/help, /status, /memory, /cron, etc.)
 │       ├── commands_model.rs # /model & /effort interactive inline selector handlers
 │       ├── commands_session.rs # /new, /reset, /stop & /abort session control handlers
-│       ├── commands_usage.rs # /usage live quota parser, cache & progress bar formatter
+│       ├── commands_usage.rs # /usage 1:1:1 dispatcher, PTY fallback parser & progress bar formatter
+│       ├── commands_usage_agy.rs # Antigravity direct CloudCode HTTP quota client & OAuth refresh
+│       ├── commands_usage_claude.rs # Claude Code /api/oauth/usage & session JSONL telemetry client
+│       ├── commands_usage_codex.rs # OpenAI Codex account/rateLimits/read & token_count telemetry client
 │       ├── commands_remote.rs # /remote dashboard & Cloudflare tunnel lifecycle controller
 │       ├── commands_remote_hub.rs # Local web terminal & remote service hub spawner
 │       ├── commands_registry.rs # BotCommand registration & lock-free command classification
