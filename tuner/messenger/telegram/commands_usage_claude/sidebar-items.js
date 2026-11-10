@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_claude_oauth_quota","format_reset_timestamp","format_seconds_countdown","parse_claude_oauth_usage_json","query_claude_usage_html","read_claude_session_stats"]};

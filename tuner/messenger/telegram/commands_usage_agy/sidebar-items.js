@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AGY_CLOUDCODE_BASE","AGY_USER_AGENT","GOOGLE_TOKEN_URL"],"fn":["load_or_refresh_agy_token","parse_agy_group_entries","parse_antigravity_quota_json","query_antigravity_quota_http","query_antigravity_quota_http_with_urls","query_antigravity_usage_html","refresh_agy_oauth_token"]};
