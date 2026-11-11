@@ -162,38 +162,40 @@
 <a href=#162 id=162 data-nosnippet>162</a>    }
 <a href=#163 id=163 data-nosnippet>163</a>
 <a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">async fn </span>run_heartbeat_for_chat(<span class="kw-2">&amp;</span><span class="self">self</span>, session: <span class="kw-2">&amp;</span>SessionData) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>prompt = <span class="string">"System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly."</span>;
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>ack_token = <span class="self">self</span>.heartbeat_ack_token();
-<a href=#167 id=167 data-nosnippet>167</a>
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>sid = session.get_session_id(<span class="kw-2">&amp;</span><span class="self">self</span>.config.provider);
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>opt_sid = <span class="kw">if </span>sid.is_empty() { <span class="prelude-val">None </span>} <span class="kw">else </span>{ <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>sid[..]) };
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span><span class="kw-2">mut </span>cli = (<span class="kw-2">*</span><span class="self">self</span>.cli).clone();
-<a href=#172 id=172 data-nosnippet>172</a>        cli.config.chat_id = session.chat_id;
-<a href=#173 id=173 data-nosnippet>173</a>        cli.config.topic_id = session.topic_id;
-<a href=#174 id=174 data-nosnippet>174</a>        cli.config.model = <span class="prelude-val">Some</span>(session.model.clone());
-<a href=#175 id=175 data-nosnippet>175</a>        cli.config.effort = session.effort.clone();
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let </span>res = cli.send(prompt, opt_sid, <span class="bool-val">false</span>, <span class="self">self</span>.config.working_dir.clone()).<span class="kw">await</span>;
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(resp) = res {
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span><span class="kw-2">mut </span>updated = session.clone();
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>new_sid) = resp.session_id
-<a href=#181 id=181 data-nosnippet>181</a>                &amp;&amp; !new_sid.is_empty()
-<a href=#182 id=182 data-nosnippet>182</a>            {
-<a href=#183 id=183 data-nosnippet>183</a>                updated.set_session_id(<span class="kw-2">&amp;</span><span class="self">self</span>.config.provider, new_sid);
-<a href=#184 id=184 data-nosnippet>184</a>            }
-<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">let _ </span>= <span class="self">self</span>.sessions.update_session(<span class="kw-2">&amp;</span>updated).<span class="kw">await</span>;
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">if </span>!<span class="kw">super</span>::quiet::should_suppress_heartbeat(<span class="kw-2">&amp;</span>resp.result, <span class="kw-2">&amp;</span>ack_token) {
-<a href=#187 id=187 data-nosnippet>187</a>                <span class="kw">let </span><span class="kw-2">mut </span>env = <span class="kw">crate</span>::bus::adapters::from_heartbeat(
-<a href=#188 id=188 data-nosnippet>188</a>                    session.chat_id,
-<a href=#189 id=189 data-nosnippet>189</a>                    <span class="kw-2">&amp;</span>resp.result,
-<a href=#190 id=190 data-nosnippet>190</a>                    session.topic_id,
-<a href=#191 id=191 data-nosnippet>191</a>                    <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>session.transport),
-<a href=#192 id=192 data-nosnippet>192</a>                );
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="self">self</span>.bus.submit(<span class="kw-2">&amp;mut </span>env).<span class="kw">await</span>;
-<a href=#194 id=194 data-nosnippet>194</a>            }
-<a href=#195 id=195 data-nosnippet>195</a>        }
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="prelude-val">Ok</span>(())
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>_bg_guard = <span class="kw">crate</span>::upgrade::begin_background_run();
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>prompt = <span class="string">"System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly."</span>;
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span>ack_token = <span class="self">self</span>.heartbeat_ack_token();
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>sid = session.get_session_id(<span class="kw-2">&amp;</span><span class="self">self</span>.config.provider);
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>opt_sid = <span class="kw">if </span>sid.is_empty() { <span class="prelude-val">None </span>} <span class="kw">else </span>{ <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>sid[..]) };
+<a href=#171 id=171 data-nosnippet>171</a>
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">let </span><span class="kw-2">mut </span>cli = (<span class="kw-2">*</span><span class="self">self</span>.cli).clone();
+<a href=#173 id=173 data-nosnippet>173</a>        cli.config.chat_id = session.chat_id;
+<a href=#174 id=174 data-nosnippet>174</a>        cli.config.topic_id = session.topic_id;
+<a href=#175 id=175 data-nosnippet>175</a>        cli.config.model = <span class="prelude-val">Some</span>(session.model.clone());
+<a href=#176 id=176 data-nosnippet>176</a>        cli.config.effort = session.effort.clone();
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span>res = cli.send(prompt, opt_sid, <span class="bool-val">false</span>, <span class="self">self</span>.config.working_dir.clone()).<span class="kw">await</span>;
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(resp) = res {
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">let </span><span class="kw-2">mut </span>updated = session.clone();
+<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>new_sid) = resp.session_id
+<a href=#182 id=182 data-nosnippet>182</a>                &amp;&amp; !new_sid.is_empty()
+<a href=#183 id=183 data-nosnippet>183</a>            {
+<a href=#184 id=184 data-nosnippet>184</a>                updated.set_session_id(<span class="kw-2">&amp;</span><span class="self">self</span>.config.provider, new_sid);
+<a href=#185 id=185 data-nosnippet>185</a>            }
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">let _ </span>= <span class="self">self</span>.sessions.update_session(<span class="kw-2">&amp;</span>updated).<span class="kw">await</span>;
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">if </span>!<span class="kw">super</span>::quiet::should_suppress_heartbeat(<span class="kw-2">&amp;</span>resp.result, <span class="kw-2">&amp;</span>ack_token) {
+<a href=#188 id=188 data-nosnippet>188</a>                <span class="kw">crate</span>::upgrade::record_user_activity();
+<a href=#189 id=189 data-nosnippet>189</a>                <span class="kw">let </span><span class="kw-2">mut </span>env = <span class="kw">crate</span>::bus::adapters::from_heartbeat(
+<a href=#190 id=190 data-nosnippet>190</a>                    session.chat_id,
+<a href=#191 id=191 data-nosnippet>191</a>                    <span class="kw-2">&amp;</span>resp.result,
+<a href=#192 id=192 data-nosnippet>192</a>                    session.topic_id,
+<a href=#193 id=193 data-nosnippet>193</a>                    <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>session.transport),
+<a href=#194 id=194 data-nosnippet>194</a>                );
+<a href=#195 id=195 data-nosnippet>195</a>                <span class="self">self</span>.bus.submit(<span class="kw-2">&amp;mut </span>env).<span class="kw">await</span>;
+<a href=#196 id=196 data-nosnippet>196</a>            }
+<a href=#197 id=197 data-nosnippet>197</a>        }
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="prelude-val">Ok</span>(())
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>}
 </code></pre></div></section></main></body></html>

@@ -166,93 +166,127 @@
 <a href=#166 id=166 data-nosnippet>166</a>    <span class="bool-val">false
 <a href=#167 id=167 data-nosnippet>167</a></span>}
 <a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a><span class="doccomment">/// Ensures `agy-vault` binary patch and companion daemon are active when using Antigravity.
-<a href=#170 id=170 data-nosnippet>170</a></span><span class="kw">pub fn </span>ensure_agy_vault_companion(config: <span class="kw-2">&amp;</span>CliConfig) {
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">if </span>config.provider != <span class="string">"antigravity" </span>{
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">return</span>;
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">if </span>std::env::var(<span class="string">"TUNER_DISABLE_AGY_VAULT"</span>).ok().as_deref() == <span class="prelude-val">Some</span>(<span class="string">"1"</span>) {
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">return</span>;
-<a href=#176 id=176 data-nosnippet>176</a>    }
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>home = std::env::var(<span class="string">"HOME"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"."</span>.to_string());
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>agy_dir = std::path::PathBuf::from(<span class="kw-2">&amp;</span>home).join(<span class="string">".gemini/antigravity-cli"</span>);
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">if </span>!agy_dir.is_dir() {
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">return</span>;
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(vault_bin) = find_agy_vault_bin(<span class="kw-2">&amp;</span>home) <span class="kw">else </span>{
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">return</span>;
-<a href=#184 id=184 data-nosnippet>184</a>    };
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">if </span>is_agy_vault_daemon_running() {
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="macro">println!</span>(<span class="string">"🗄️ [tuner] agy-vault companion daemon is already active."</span>);
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">return</span>;
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let _ </span>= std::process::Command::new(<span class="kw-2">&amp;</span>vault_bin)
-<a href=#190 id=190 data-nosnippet>190</a>        .arg(<span class="string">"patch-binary"</span>)
-<a href=#191 id=191 data-nosnippet>191</a>        .stdout(std::process::Stdio::null())
-<a href=#192 id=192 data-nosnippet>192</a>        .stderr(std::process::Stdio::null())
-<a href=#193 id=193 data-nosnippet>193</a>        .status();
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">match </span>std::process::Command::new(<span class="kw-2">&amp;</span>vault_bin)
-<a href=#195 id=195 data-nosnippet>195</a>        .args([<span class="string">"daemon"</span>, <span class="string">"--poll-ms"</span>, <span class="string">"1000"</span>])
-<a href=#196 id=196 data-nosnippet>196</a>        .stdin(std::process::Stdio::null())
-<a href=#197 id=197 data-nosnippet>197</a>        .stdout(std::process::Stdio::null())
-<a href=#198 id=198 data-nosnippet>198</a>        .stderr(std::process::Stdio::null())
-<a href=#199 id=199 data-nosnippet>199</a>        .spawn()
-<a href=#200 id=200 data-nosnippet>200</a>    {
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="prelude-val">Ok</span>(child) =&gt; <span class="macro">println!</span>(
-<a href=#202 id=202 data-nosnippet>202</a>            <span class="string">"🗄️ [tuner] Spawned agy-vault companion daemon (PID: {}, bin: {:?})"</span>,
-<a href=#203 id=203 data-nosnippet>203</a>            child.id(),
-<a href=#204 id=204 data-nosnippet>204</a>            vault_bin
-<a href=#205 id=205 data-nosnippet>205</a>        ),
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">eprintln!</span>(<span class="string">"⚠️ [tuner] Failed to spawn agy-vault companion daemon: {}"</span>, e),
-<a href=#207 id=207 data-nosnippet>207</a>    }
+<a href=#169 id=169 data-nosnippet>169</a><span class="doccomment">/// Checks whether `~/.gemini/agy-vault/.daemon.lock` holds an active exclusive `flock`
+<a href=#170 id=170 data-nosnippet>170</a>/// (including across container bind mounts where the host daemon is outside `/proc`).
+<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">pub fn </span>is_agy_vault_lock_held(home: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>lock_path = std::path::PathBuf::from(home).join(<span class="string">".gemini/agy-vault/.daemon.lock"</span>);
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(file) = std::fs::File::open(lock_path) <span class="kw">else </span>{
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#175 id=175 data-nosnippet>175</a>    };
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="attr">#[cfg(unix)]
+<a href=#177 id=177 data-nosnippet>177</a>    </span>{
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">use </span>std::os::unix::io::AsRawFd;
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">match </span>nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::LockExclusiveNonblock) {
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="prelude-val">Ok</span>(()) =&gt; {
+<a href=#181 id=181 data-nosnippet>181</a>                <span class="kw">let _ </span>= nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::Unlock);
+<a href=#182 id=182 data-nosnippet>182</a>                <span class="bool-val">false
+<a href=#183 id=183 data-nosnippet>183</a>            </span>}
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">true</span>,
+<a href=#185 id=185 data-nosnippet>185</a>        }
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="attr">#[cfg(not(unix))]
+<a href=#188 id=188 data-nosnippet>188</a>    </span>{
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let _ </span>= file;
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="bool-val">false
+<a href=#191 id=191 data-nosnippet>191</a>    </span>}
+<a href=#192 id=192 data-nosnippet>192</a>}
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a><span class="doccomment">/// Spawns `agy-vault daemon --poll-ms 1000` and attaches a background reaper thread
+<a href=#195 id=195 data-nosnippet>195</a>/// so an immediate or future exit never leaves a `&lt;defunct&gt;` zombie entry.
+<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">pub fn </span>spawn_reaped_agy_vault(vault_bin: <span class="kw-2">&amp;</span>Path) -&gt; std::io::Result&lt;u32&gt; {
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span><span class="kw-2">mut </span>child = std::process::Command::new(vault_bin)
+<a href=#198 id=198 data-nosnippet>198</a>        .args([<span class="string">"daemon"</span>, <span class="string">"--poll-ms"</span>, <span class="string">"1000"</span>])
+<a href=#199 id=199 data-nosnippet>199</a>        .stdin(std::process::Stdio::null())
+<a href=#200 id=200 data-nosnippet>200</a>        .stdout(std::process::Stdio::null())
+<a href=#201 id=201 data-nosnippet>201</a>        .stderr(std::process::Stdio::null())
+<a href=#202 id=202 data-nosnippet>202</a>        .spawn()<span class="question-mark">?</span>;
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span>pid = child.id();
+<a href=#204 id=204 data-nosnippet>204</a>    std::thread::spawn(<span class="kw">move </span>|| {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let _ </span>= child.wait();
+<a href=#206 id=206 data-nosnippet>206</a>    });
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="prelude-val">Ok</span>(pid)
 <a href=#208 id=208 data-nosnippet>208</a>}
 <a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="doccomment">/// Executes `override_profile_config` (override profile config).
-<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub fn </span>override_profile_config(
-<a href=#212 id=212 data-nosnippet>212</a>    config: <span class="kw-2">&amp;mut </span>CliConfig,
-<a href=#213 id=213 data-nosnippet>213</a>    profile_name: <span class="kw-2">&amp;</span>str,
-<a href=#214 id=214 data-nosnippet>214</a>    paths: <span class="kw-2">&amp;</span><span class="kw">crate</span>::workspace::paths::TunerPaths,
-<a href=#215 id=215 data-nosnippet>215</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>profile_cfg = config
-<a href=#217 id=217 data-nosnippet>217</a>        .profiles
-<a href=#218 id=218 data-nosnippet>218</a>        .iter()
-<a href=#219 id=219 data-nosnippet>219</a>        .find(|p| p.name == profile_name)
-<a href=#220 id=220 data-nosnippet>220</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"Profile '{}' not found in config.json"</span>, profile_name))<span class="question-mark">?</span>;
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">if </span>!profile_cfg.telegram_token.is_empty()
-<a href=#222 id=222 data-nosnippet>222</a>        &amp;&amp; profile_cfg.telegram_token != <span class="string">"YOUR_BOT_TOKEN_HERE"
-<a href=#223 id=223 data-nosnippet>223</a>        </span>&amp;&amp; !profile_cfg.telegram_token.starts_with(<span class="string">"YOUR_"</span>)
-<a href=#224 id=224 data-nosnippet>224</a>    {
-<a href=#225 id=225 data-nosnippet>225</a>        config.telegram_token = profile_cfg.telegram_token.clone();
-<a href=#226 id=226 data-nosnippet>226</a>    } <span class="kw">else if </span>profile_name != <span class="string">"default" </span>{
-<a href=#227 id=227 data-nosnippet>227</a>        config.telegram_token = String::new();
-<a href=#228 id=228 data-nosnippet>228</a>    }
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">if </span>!profile_cfg.allowed_user_ids.is_empty() &amp;&amp; profile_cfg.allowed_user_ids != <span class="macro">vec!</span>[<span class="number">123456789</span>] {
-<a href=#230 id=230 data-nosnippet>230</a>        config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
-<a href=#231 id=231 data-nosnippet>231</a>    }
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">if </span>!profile_cfg.allowed_group_ids.is_empty()
-<a href=#233 id=233 data-nosnippet>233</a>        &amp;&amp; profile_cfg.allowed_group_ids != <span class="macro">vec!</span>[-<span class="number">1001234567890</span>]
-<a href=#234 id=234 data-nosnippet>234</a>    {
-<a href=#235 id=235 data-nosnippet>235</a>        config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
-<a href=#236 id=236 data-nosnippet>236</a>    }
-<a href=#237 id=237 data-nosnippet>237</a>    config.working_dir = profile_cfg
-<a href=#238 id=238 data-nosnippet>238</a>        .working_dir
-<a href=#239 id=239 data-nosnippet>239</a>        .clone()
-<a href=#240 id=240 data-nosnippet>240</a>        .unwrap_or_else(|| paths.workspace());
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>m) = profile_cfg.model {
-<a href=#242 id=242 data-nosnippet>242</a>        config.model = <span class="prelude-val">Some</span>(m.clone());
-<a href=#243 id=243 data-nosnippet>243</a>    }
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>e) = profile_cfg.effort {
-<a href=#245 id=245 data-nosnippet>245</a>        config.effort = <span class="prelude-val">Some</span>(e.clone());
-<a href=#246 id=246 data-nosnippet>246</a>    }
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.system_prompt {
-<a href=#248 id=248 data-nosnippet>248</a>        config.system_prompt = <span class="prelude-val">Some</span>(p.clone());
-<a href=#249 id=249 data-nosnippet>249</a>    }
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.append_system_prompt {
-<a href=#251 id=251 data-nosnippet>251</a>        config.append_system_prompt = <span class="prelude-val">Some</span>(p.clone());
-<a href=#252 id=252 data-nosnippet>252</a>    }
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>l) = profile_cfg.language {
-<a href=#254 id=254 data-nosnippet>254</a>        config.language = <span class="prelude-val">Some</span>(l.clone());
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="prelude-val">Ok</span>(())
-<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#210 id=210 data-nosnippet>210</a><span class="doccomment">/// Ensures `agy-vault` binary patch and companion daemon are active when using Antigravity.
+<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub fn </span>ensure_agy_vault_companion(config: <span class="kw-2">&amp;</span>CliConfig) {
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">if </span>config.provider != <span class="string">"antigravity" </span>{
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">return</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    }
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">if </span>std::env::var(<span class="string">"TUNER_DISABLE_AGY_VAULT"</span>).ok().as_deref() == <span class="prelude-val">Some</span>(<span class="string">"1"</span>) {
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">return</span>;
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>home = std::env::var(<span class="string">"HOME"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"."</span>.to_string());
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>agy_dir = std::path::PathBuf::from(<span class="kw-2">&amp;</span>home).join(<span class="string">".gemini/antigravity-cli"</span>);
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">if </span>!agy_dir.is_dir() {
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">return</span>;
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(vault_bin) = find_agy_vault_bin(<span class="kw-2">&amp;</span>home) <span class="kw">else </span>{
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">return</span>;
+<a href=#225 id=225 data-nosnippet>225</a>    };
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if </span>is_agy_vault_daemon_running() || is_agy_vault_lock_held(<span class="kw-2">&amp;</span>home) {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">println!</span>(<span class="string">"🗄️ [tuner] agy-vault companion daemon is already active."</span>);
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">return</span>;
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let _ </span>= std::process::Command::new(<span class="kw-2">&amp;</span>vault_bin)
+<a href=#231 id=231 data-nosnippet>231</a>        .arg(<span class="string">"patch-binary"</span>)
+<a href=#232 id=232 data-nosnippet>232</a>        .stdout(std::process::Stdio::null())
+<a href=#233 id=233 data-nosnippet>233</a>        .stderr(std::process::Stdio::null())
+<a href=#234 id=234 data-nosnippet>234</a>        .status();
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">match </span>spawn_reaped_agy_vault(<span class="kw-2">&amp;</span>vault_bin) {
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="prelude-val">Ok</span>(pid) =&gt; <span class="macro">println!</span>(
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="string">"🗄️ [tuner] Spawned agy-vault companion daemon (PID: {}, bin: {:?})"</span>,
+<a href=#238 id=238 data-nosnippet>238</a>            pid, vault_bin
+<a href=#239 id=239 data-nosnippet>239</a>        ),
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">eprintln!</span>(<span class="string">"⚠️ [tuner] Failed to spawn agy-vault companion daemon: {}"</span>, e),
+<a href=#241 id=241 data-nosnippet>241</a>    }
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// Executes `override_profile_config` (override profile config).
+<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub fn </span>override_profile_config(
+<a href=#246 id=246 data-nosnippet>246</a>    config: <span class="kw-2">&amp;mut </span>CliConfig,
+<a href=#247 id=247 data-nosnippet>247</a>    profile_name: <span class="kw-2">&amp;</span>str,
+<a href=#248 id=248 data-nosnippet>248</a>    paths: <span class="kw-2">&amp;</span><span class="kw">crate</span>::workspace::paths::TunerPaths,
+<a href=#249 id=249 data-nosnippet>249</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">let </span>profile_cfg = config
+<a href=#251 id=251 data-nosnippet>251</a>        .profiles
+<a href=#252 id=252 data-nosnippet>252</a>        .iter()
+<a href=#253 id=253 data-nosnippet>253</a>        .find(|p| p.name == profile_name)
+<a href=#254 id=254 data-nosnippet>254</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"Profile '{}' not found in config.json"</span>, profile_name))<span class="question-mark">?</span>;
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">if </span>!profile_cfg.telegram_token.is_empty()
+<a href=#256 id=256 data-nosnippet>256</a>        &amp;&amp; profile_cfg.telegram_token != <span class="string">"YOUR_BOT_TOKEN_HERE"
+<a href=#257 id=257 data-nosnippet>257</a>        </span>&amp;&amp; !profile_cfg.telegram_token.starts_with(<span class="string">"YOUR_"</span>)
+<a href=#258 id=258 data-nosnippet>258</a>    {
+<a href=#259 id=259 data-nosnippet>259</a>        config.telegram_token = profile_cfg.telegram_token.clone();
+<a href=#260 id=260 data-nosnippet>260</a>    } <span class="kw">else if </span>profile_name != <span class="string">"default" </span>{
+<a href=#261 id=261 data-nosnippet>261</a>        config.telegram_token = String::new();
+<a href=#262 id=262 data-nosnippet>262</a>    }
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">if </span>!profile_cfg.allowed_user_ids.is_empty() &amp;&amp; profile_cfg.allowed_user_ids != <span class="macro">vec!</span>[<span class="number">123456789</span>] {
+<a href=#264 id=264 data-nosnippet>264</a>        config.allowed_user_ids = profile_cfg.allowed_user_ids.clone();
+<a href=#265 id=265 data-nosnippet>265</a>    }
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">if </span>!profile_cfg.allowed_group_ids.is_empty()
+<a href=#267 id=267 data-nosnippet>267</a>        &amp;&amp; profile_cfg.allowed_group_ids != <span class="macro">vec!</span>[-<span class="number">1001234567890</span>]
+<a href=#268 id=268 data-nosnippet>268</a>    {
+<a href=#269 id=269 data-nosnippet>269</a>        config.allowed_group_ids = profile_cfg.allowed_group_ids.clone();
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>    config.working_dir = profile_cfg
+<a href=#272 id=272 data-nosnippet>272</a>        .working_dir
+<a href=#273 id=273 data-nosnippet>273</a>        .clone()
+<a href=#274 id=274 data-nosnippet>274</a>        .unwrap_or_else(|| paths.workspace());
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>m) = profile_cfg.model {
+<a href=#276 id=276 data-nosnippet>276</a>        config.model = <span class="prelude-val">Some</span>(m.clone());
+<a href=#277 id=277 data-nosnippet>277</a>    }
+<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>e) = profile_cfg.effort {
+<a href=#279 id=279 data-nosnippet>279</a>        config.effort = <span class="prelude-val">Some</span>(e.clone());
+<a href=#280 id=280 data-nosnippet>280</a>    }
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.system_prompt {
+<a href=#282 id=282 data-nosnippet>282</a>        config.system_prompt = <span class="prelude-val">Some</span>(p.clone());
+<a href=#283 id=283 data-nosnippet>283</a>    }
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>p) = profile_cfg.append_system_prompt {
+<a href=#285 id=285 data-nosnippet>285</a>        config.append_system_prompt = <span class="prelude-val">Some</span>(p.clone());
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>l) = profile_cfg.language {
+<a href=#288 id=288 data-nosnippet>288</a>        config.language = <span class="prelude-val">Some</span>(l.clone());
+<a href=#289 id=289 data-nosnippet>289</a>    }
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="prelude-val">Ok</span>(())
+<a href=#291 id=291 data-nosnippet>291</a>}
 </code></pre></div></section></main></body></html>
