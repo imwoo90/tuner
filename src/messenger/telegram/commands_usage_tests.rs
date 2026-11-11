@@ -198,8 +198,8 @@ Press Esc or q to exit
 
     #[test]
     fn test_usage_command_registry_and_topic_lock() {
-        // /usage must NOT be lock-free: it runs under topic lock in its own turn
-        assert!(!is_lock_free_command("/usage"));
+        // /usage is lock-free (like /status): queries HTTP/JSONL without blocking on or mutating active turns
+        assert!(is_lock_free_command("/usage"));
         assert!(!is_lock_free_command("/usage help"));
 
         // Normal lock-free commands must remain lock-free

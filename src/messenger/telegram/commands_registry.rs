@@ -74,6 +74,7 @@ pub(crate) fn is_lock_free_command(text: &str) -> bool {
         && matches!(
             cmd,
             "/status"
+                | "/usage"
                 | "/help"
                 | "/start"
                 | "/diagnose"

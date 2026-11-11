@@ -210,14 +210,22 @@ pub(crate) async fn handle_usage_command(
     cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     let model = config.model.as_deref().unwrap_or("antigravity-default");
-    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let (sess, _) = match sessions.resolve_session(&key, &config.provider, model).await {
-        Ok(s) => s,
-        Err(e) => {
-            let _ = send_reply(bot, msg, format!("❌ Error resolving session: {}", e)).await;
-            return Ok(());
-        }
-    };
+    let topic_id = crate::telegram::get_topic_id(msg);
+    let key = SessionKey::telegram(msg.chat.id.0, topic_id);
+    let sess = sessions
+        .get_active(&key)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| {
+            crate::session::data::SessionData::new(
+                msg.chat.id.0,
+                "telegram".to_string(),
+                topic_id,
+                config.provider.clone(),
+                model.to_string(),
+            )
+        });
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
@@ -225,7 +233,7 @@ pub(crate) async fn handle_usage_command(
         "claude" => super::commands_usage_claude::query_claude_usage_html(&sess, None, None).await,
         "codex" => super::commands_usage_codex::query_codex_usage_html(&sess).await,
         _ => {
-            let Some(h) = super::commands_usage_agy::query_antigravity_usage_html(bot, msg, config, sessions, cli, sess).await else {
+            let Some(h) = super::commands_usage_agy::query_antigravity_usage_html(bot, msg, sessions, cli, &sess).await else {
                 return Ok(());
             };
             h

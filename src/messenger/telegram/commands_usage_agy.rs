@@ -14,7 +14,6 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use teloxide::prelude::*;
 use crate::cli::antigravity::AntigravityCli;
-use crate::config::CliConfig;
 use crate::session::{data::SessionData, manager::SessionManager};
 use super::commands::send_reply;
 use super::commands_usage::{
@@ -210,47 +209,38 @@ pub async fn query_antigravity_quota_http() -> Result<QuotaReport, String> {
     query_antigravity_quota_http_with_urls(&token_path, AGY_CLOUDCODE_BASE, GOOGLE_TOKEN_URL).await
 }
 
-/// Queries Antigravity quota via direct HTTP with automatic fallback to PTY modal scraping.
+/// Queries Antigravity quota via direct HTTP with non-intrusive fallback to an idle PTY session.
 pub(crate) async fn query_antigravity_usage_html(
     bot: &Bot,
     msg: &Message,
-    config: &CliConfig,
     sessions: &SessionManager,
     cli: &AntigravityCli,
-    mut sess: SessionData,
+    sess: &SessionData,
 ) -> Option<String> {
-    if let Ok(report) = query_antigravity_quota_http().await {
-        return Some(render_quota_message(&report));
-    }
-    let sid = match crate::telegram::session_init::initialize_session_if_needed(
-        bot, msg, sessions, &mut sess, cli, config,
-    )
-    .await
-    {
-        Ok(s) if !s.is_empty() => s,
-        Ok(_) => {
-            let _ = send_reply(bot, msg, "❌ Could not initialize session for quota check").await;
-            return None;
-        }
-        Err(e) => {
-            let _ = send_reply(bot, msg, format!("❌ Error initializing session: {}", e)).await;
-            return None;
-        }
+    let http_err = match query_antigravity_quota_http().await {
+        Ok(report) => return Some(render_quota_message(&report)),
+        Err(e) => e,
     };
-    let mut s_cli = cli.clone();
-    s_cli.config.chat_id = msg.chat.id.0;
-    s_cli.config.topic_id = sess.topic_id.or_else(|| msg.thread_id.map(|t| t.0.0 as i64));
-    if !sess.model.is_empty() && sess.model != "antigravity-default" {
-        s_cli.config.model = Some(sess.model.clone());
-    }
-    if sess.effort.is_some() {
-        s_cli.config.effort = sess.effort.clone();
-    }
-    match query_quota_from_pty(&s_cli, &sid).await {
-        Ok(r) => Some(render_quota_message(&r)),
-        Err(e) => {
-            let _ = send_reply(bot, msg, format!("⚠️ Could not retrieve quota from session: {}", e)).await;
-            None
+    let sid = sess.get_session_id("antigravity");
+    let topic_id = crate::telegram::get_topic_id(msg);
+    let lock = sessions.lock_pool.get((msg.chat.id.0, topic_id));
+    if !sid.is_empty()
+        && let Ok(_guard) = lock.try_lock()
+        && !cli.sessions.is_running(&sid).await
+    {
+        let mut s_cli = cli.clone();
+        s_cli.config.chat_id = msg.chat.id.0;
+        s_cli.config.topic_id = sess.topic_id.or(topic_id);
+        if !sess.model.is_empty() && sess.model != "antigravity-default" {
+            s_cli.config.model = Some(sess.model.clone());
+        }
+        if sess.effort.is_some() {
+            s_cli.config.effort = sess.effort.clone();
+        }
+        if let Ok(r) = query_quota_from_pty(&s_cli, &sid).await {
+            return Some(render_quota_message(&r));
         }
     }
+    let _ = send_reply(bot, msg, format!("⚠️ Could not retrieve quota: {}", http_err)).await;
+    None
 }
