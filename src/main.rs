@@ -18,7 +18,7 @@
 //! - [`i18n`] (`i18n/mod.rs`): TOML localization catalog loader and lookup macros.
 //! - [`supervisor`] (`supervisor.rs`): Child process restart supervisor with backoff.
 //! - [`setup`] (`setup/mod.rs`): Interactive setup wizard, `.env` loader, systemd installer, and system dependency doctor.
-//! - [`upgrade`] (`upgrade.rs`): GitHub release self-upgrade downloader and atomic binary swapper.
+//! - [`upgrade`] (`upgrade/mod.rs`): GitHub release self-upgrade downloader and atomic binary swapper.
 //!
 //! ## Search Tags
 //! #main-entry, #master-mode, #worker-mode, #process-supervisor

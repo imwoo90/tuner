@@ -201,6 +201,7 @@ impl CronScheduler {
     }
 
     async fn run_job_core(&self, job: CronJob) -> Result<(), String> {
+        let _cron_guard = crate::upgrade::begin_cron_run();
         println!("🤖 [tuner] Cron job executing: {}", job.title);
         let ctr = self.config.working_dir.join("cron_tasks");
         let workspace = ctr.join(&job.task_folder);

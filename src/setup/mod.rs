@@ -166,6 +166,47 @@ pub fn is_agy_vault_daemon_running() -> bool {
     false
 }
 
+/// Checks whether `~/.gemini/agy-vault/.daemon.lock` holds an active exclusive `flock`
+/// (including across container bind mounts where the host daemon is outside `/proc`).
+pub fn is_agy_vault_lock_held(home: &str) -> bool {
+    let lock_path = std::path::PathBuf::from(home).join(".gemini/agy-vault/.daemon.lock");
+    let Ok(file) = std::fs::File::open(lock_path) else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        match nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::LockExclusiveNonblock) {
+            Ok(()) => {
+                let _ = nix::fcntl::flock(file.as_raw_fd(), nix::fcntl::FlockArg::Unlock);
+                false
+            }
+            Err(_) => true,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = file;
+        false
+    }
+}
+
+/// Spawns `agy-vault daemon --poll-ms 1000` and attaches a background reaper thread
+/// so an immediate or future exit never leaves a `<defunct>` zombie entry.
+pub fn spawn_reaped_agy_vault(vault_bin: &Path) -> std::io::Result<u32> {
+    let mut child = std::process::Command::new(vault_bin)
+        .args(["daemon", "--poll-ms", "1000"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    let pid = child.id();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(pid)
+}
+
 /// Ensures `agy-vault` binary patch and companion daemon are active when using Antigravity.
 pub fn ensure_agy_vault_companion(config: &CliConfig) {
     if config.provider != "antigravity" {
@@ -182,7 +223,7 @@ pub fn ensure_agy_vault_companion(config: &CliConfig) {
     let Some(vault_bin) = find_agy_vault_bin(&home) else {
         return;
     };
-    if is_agy_vault_daemon_running() {
+    if is_agy_vault_daemon_running() || is_agy_vault_lock_held(&home) {
         println!("🗄️ [tuner] agy-vault companion daemon is already active.");
         return;
     }
@@ -191,17 +232,10 @@ pub fn ensure_agy_vault_companion(config: &CliConfig) {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
-    match std::process::Command::new(&vault_bin)
-        .args(["daemon", "--poll-ms", "1000"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(child) => println!(
+    match spawn_reaped_agy_vault(&vault_bin) {
+        Ok(pid) => println!(
             "🗄️ [tuner] Spawned agy-vault companion daemon (PID: {}, bin: {:?})",
-            child.id(),
-            vault_bin
+            pid, vault_bin
         ),
         Err(e) => eprintln!("⚠️ [tuner] Failed to spawn agy-vault companion daemon: {}", e),
     }

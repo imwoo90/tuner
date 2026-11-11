@@ -187,6 +187,7 @@ async fn check_and_dispatch_delta(
     *last_size = delta.new_size;
     *parser = AntigravityLogParser::new();
     if !delta.has_activity { return; }
+    crate::upgrade::record_user_activity();
 
     ensure_active_turn(ctx, active_turn).await;
     if delta.final_content.is_some() || delta.ask_question.is_some() {

@@ -162,6 +162,7 @@ impl HeartbeatScheduler {
     }
 
     async fn run_heartbeat_for_chat(&self, session: &SessionData) -> Result<(), String> {
+        let _bg_guard = crate::upgrade::begin_background_run();
         let prompt = "System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly.";
         let ack_token = self.heartbeat_ack_token();
 
@@ -184,6 +185,7 @@ impl HeartbeatScheduler {
             }
             let _ = self.sessions.update_session(&updated).await;
             if !super::quiet::should_suppress_heartbeat(&resp.result, &ack_token) {
+                crate::upgrade::record_user_activity();
                 let mut env = crate::bus::adapters::from_heartbeat(
                     session.chat_id,
                     &resp.result,

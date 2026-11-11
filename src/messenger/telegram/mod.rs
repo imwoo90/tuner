@@ -168,6 +168,7 @@ pub(crate) async fn run_cli_stream(
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
     let (sessions, sess) = sess_ctx;
+    let _fg = crate::upgrade::begin_foreground_run();
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let mut cc = cli.clone();

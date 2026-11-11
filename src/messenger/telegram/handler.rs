@@ -90,17 +90,17 @@ async fn route_media_message(
     media_group_manager: Arc<MediaGroupManager>,
 ) -> Result<(), teloxide::RequestError> {
     let media_group_id = msg.media_group_id().map(|s| s.to_string());
-    if let Some(group_id) = media_group_id {
-        return handle_media_group_message(bot, msg, group_id, deps, media_group_manager).await;
-    }
-
-    if reply::has_media(&msg) {
+    let res = if let Some(group_id) = media_group_id {
+        handle_media_group_message(bot, msg, group_id, deps, media_group_manager).await
+    } else if reply::has_media(&msg) {
         handle_single_media_message(bot, msg, text, &deps).await
     } else if !text.is_empty() {
         handle_pure_text_message(bot, msg, text, &deps).await
     } else {
         Ok(())
-    }
+    };
+    crate::upgrade::record_user_activity();
+    res
 }
 
 async fn resolve_active_lang(
