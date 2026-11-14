@@ -132,6 +132,7 @@ pub async fn run_bot(config: CliConfig, paths: TunerPaths) -> Result<(), String>
 
     let (b, s) = (bot.clone(), sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
+    tokio::spawn(async { crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await; });
     spawn_web_warmup(&paths);
 
     let handler = dptree::entry()

@@ -128,16 +128,74 @@ impl SessionData {
         }
     }
 
+    fn resolve_slot_key(provider: &str) -> &str {
+        Self::canonical_provider(provider).unwrap_or_else(|| provider.trim())
+    }
+
+    pub(crate) fn fold_provider_aliases(&mut self, canon: &str) -> bool {
+        if Self::canonical_provider(canon) != Some(canon) {
+            return false;
+        }
+        let alias_keys: Vec<String> = self
+            .provider_sessions
+            .keys()
+            .filter(|k| k.as_str() != canon && Self::canonical_provider(k) == Some(canon))
+            .cloned()
+            .collect();
+        if alias_keys.is_empty() {
+            return false;
+        }
+        for k in alias_keys {
+            if let Some(old_ps) = self.provider_sessions.remove(&k) {
+                let dst = self.provider_sessions.entry(canon.to_string()).or_default();
+                super::merge_provider_session(dst, &old_ps);
+            }
+        }
+        true
+    }
+
     /// Executes `get_session_id` (get session id).
     pub fn get_session_id(&self, provider: &str) -> String {
-        self.provider_sessions.get(provider)
-            .map(|ps| ps.session_id.clone())
-            .unwrap_or_default()
+        let key = Self::resolve_slot_key(provider);
+        if let Some(ps) = self.provider_sessions.get(key)
+            && !ps.session_id.is_empty()
+        {
+            return ps.session_id.clone();
+        }
+        if Self::canonical_provider(key) == Some(key) {
+            for (k, ps) in &self.provider_sessions {
+                if Self::canonical_provider(k) == Some(key) && !ps.session_id.is_empty() {
+                    return ps.session_id.clone();
+                }
+            }
+        }
+        String::new()
+    }
+
+    /// Returns the persisted message count for `provider` (across canonical and alias keys).
+    pub fn get_message_count(&self, provider: &str) -> i64 {
+        let key = Self::resolve_slot_key(provider);
+        let is_canon = Self::canonical_provider(key) == Some(key);
+        self.provider_sessions
+            .iter()
+            .filter(|(k, _)| k.as_str() == key || (is_canon && Self::canonical_provider(k) == Some(key)))
+            .map(|(_, ps)| ps.message_count)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Increments the persisted message count for `provider` under its canonical key.
+    pub fn increment_message_count(&mut self, provider: &str) {
+        let key = Self::resolve_slot_key(provider).to_string();
+        let _ = self.fold_provider_aliases(&key);
+        self.provider_sessions.entry(key).or_default().message_count += 1;
     }
 
     /// Executes `set_session_id` (set session id).
     pub fn set_session_id(&mut self, provider: &str, session_id: &str) {
-        let ps = self.provider_sessions.entry(provider.to_string()).or_default();
+        let key = Self::resolve_slot_key(provider).to_string();
+        let _ = self.fold_provider_aliases(&key);
+        let ps = self.provider_sessions.entry(key).or_default();
         if !ps.session_id.is_empty() && ps.session_id != session_id
             && !ps.past_session_ids.contains(&ps.session_id)
         {
@@ -151,67 +209,36 @@ impl SessionData {
 
     /// Executes `get_past_session_ids` (get past session ids).
     pub fn get_past_session_ids(&self, provider: &str) -> Vec<String> {
-        self.provider_sessions.get(provider)
+        let key = Self::resolve_slot_key(provider);
+        let mut out = self
+            .provider_sessions
+            .get(key)
             .map(|ps| ps.past_session_ids.clone())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if Self::canonical_provider(key) == Some(key) {
+            for (k, ps) in &self.provider_sessions {
+                if k != key && Self::canonical_provider(k) == Some(key) {
+                    for id in &ps.past_session_ids {
+                        if !out.contains(id) {
+                            out.push(id.clone());
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Executes `clear_provider_session` (clear provider session).
     pub fn clear_provider_session(&mut self, provider: &str) {
-        if let Some(ps) = self.provider_sessions.get_mut(provider) {
+        let key = Self::resolve_slot_key(provider).to_string();
+        let _ = self.fold_provider_aliases(&key);
+        if let Some(ps) = self.provider_sessions.get_mut(&key) {
             if !ps.session_id.is_empty() && !ps.past_session_ids.contains(&ps.session_id) {
                 ps.past_session_ids.push(ps.session_id.clone());
             }
             ps.session_id = String::new();
             ps.message_count = 0;
-        }
-    }
-
-    /// Normalizes a provider alias (`agy`, `antigravity`, `claude`, `codex`) into its canonical provider name.
-    pub fn canonical_provider(raw: &str) -> Option<&'static str> {
-        match raw.trim().to_lowercase().as_str() {
-            "antigravity" | "agy" => Some("antigravity"),
-            "claude" | "claude-code" => Some("claude"),
-            "codex" | "openai" => Some("codex"),
-            _ => None,
-        }
-    }
-
-    fn is_model_compatible(model: &str, provider: &str) -> bool {
-        match provider {
-            "claude" => crate::cli::claude::CLAUDE_MODELS.contains(&model),
-            "codex" => crate::cli::codex::CODEX_MODELS.contains(&model),
-            _ => {
-                !crate::cli::claude::CLAUDE_MODELS.contains(&model)
-                    && !crate::cli::codex::CODEX_MODELS.contains(&model)
-                    && !model.starts_with("gpt-6")
-                    && !model.starts_with("gpt-5")
-            }
-        }
-    }
-
-    /// Switches `self.provider` to `target_provider`, updates `self.model` if incompatible, and returns a status summary.
-    pub fn apply_provider_switch(&mut self, target_provider: &str) -> String {
-        self.provider = target_provider.to_string();
-        if !Self::is_model_compatible(&self.model, target_provider) {
-            self.model = match target_provider {
-                "claude" => crate::cli::claude::DEFAULT_CLAUDE_MODEL.to_string(),
-                "codex" => crate::cli::codex::DEFAULT_CODEX_MODEL.to_string(),
-                _ => "gemini-3.8-flash".to_string(),
-            };
-        }
-        let existing_sid = self.get_session_id(target_provider);
-        if !existing_sid.is_empty() {
-            let short = &existing_sid[..existing_sid.len().min(8)];
-            format!(
-                "🤖 [tuner] Provider switched to `{}` (model: `{}`).\nResuming existing session `{}`.",
-                target_provider, self.model, short
-            )
-        } else {
-            format!(
-                "🤖 [tuner] Provider switched to `{}` (model: `{}`).\nA fresh session will start on your next message.",
-                target_provider, self.model
-            )
         }
     }
 }

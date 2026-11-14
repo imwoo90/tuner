@@ -216,38 +216,36 @@ pub fn has_active_descendants_in_table(
     has_active_descendants_in_table_with_worker(0, root_pids, procs)
 }
 
-/// Scans `/proc` and returns `true` if any warm CLI process or direct worker child CLI command is active.
-pub fn has_active_descendant_processes(root_pids: &[u32]) -> bool {
+fn read_proc_table() -> Vec<(u32, u32, char, String)> {
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        return false;
+        return Vec::new();
     };
     let mut procs = Vec::new();
     for entry in entries.flatten() {
-        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
-            continue;
-        };
-        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
-            continue;
-        };
-        let Some(rparen) = stat.rfind(')') else {
-            continue;
-        };
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else { continue };
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else { continue };
+        let Some(rparen) = stat.rfind(')') else { continue };
         let mut fields = stat[rparen + 1..].split_whitespace();
         let state = fields.next().and_then(|s| s.chars().next()).unwrap_or('S');
-        let Some(ppid) = fields.next().and_then(|s| s.parse::<u32>().ok()) else {
-            continue;
-        };
+        let Some(ppid) = fields.next().and_then(|s| s.parse::<u32>().ok()) else { continue };
         let cmdline = std::fs::read(entry.path().join("cmdline"))
-            .map(|b| {
-                b.into_iter()
-                    .map(|c| if c == 0 { b' ' } else { c })
-                    .collect::<Vec<u8>>()
-            })
+            .map(|b| b.into_iter().map(|c| if c == 0 { b' ' } else { c }).collect::<Vec<u8>>())
             .map(|b| String::from_utf8_lossy(&b).trim().to_string())
             .unwrap_or_default();
         procs.push((pid, ppid, state, cmdline));
     }
-    has_active_descendants_in_table_with_worker(std::process::id(), root_pids, &procs)
+    procs
+}
+
+/// Scans `/proc` and returns `true` if any warm CLI process or direct worker child CLI command is active.
+pub fn has_active_descendant_processes(root_pids: &[u32]) -> bool {
+    let procs = read_proc_table();
+    !procs.is_empty() && has_active_descendants_in_table_with_worker(std::process::id(), root_pids, &procs)
+}
+
+/// Returns `true` if warm session `pid` currently has any live non-MCP descendant OS processes.
+pub fn has_session_descendant_processes(pid: u32) -> bool {
+    pid > 0 && has_active_descendants_in_table(&[pid], &read_proc_table())
 }
 
 async fn collect_live_agy_holders(
@@ -290,6 +288,7 @@ async fn inspect_live_agy_brain(
 pub async fn evaluate_active_work(
     cli: &crate::cli::antigravity::AntigravityCli,
 ) -> ActiveWorkStatus {
+    cli.prune_dead_asks().await;
     let running_len = cli.sessions.running_runs.lock().await.len();
     if active_foreground_runs() > 0
         || active_cron_runs() > 0

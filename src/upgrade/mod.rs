@@ -23,12 +23,16 @@ pub use activity::{
     active_background_runs, active_cron_runs, active_foreground_runs, begin_background_run,
     begin_cron_run, begin_foreground_run, evaluate_active_work, has_active_descendant_processes,
     has_active_descendants_in_table, has_active_descendants_in_table_with_worker,
-    is_idle_upgrade_window, observe_activity_epoch, record_user_activity, user_idle_secs,
-    ActiveWorkStatus, BackgroundRunGuard, CronRunGuard, ForegroundRunGuard,
+    has_session_descendant_processes, is_idle_upgrade_window, observe_activity_epoch,
+    record_user_activity, user_idle_secs, ActiveWorkStatus, BackgroundRunGuard, CronRunGuard,
+    ForegroundRunGuard,
 };
 #[cfg(test)]
 pub(crate) use activity::{now_epoch_secs, set_last_activity_epoch_for_test};
-pub use brain_inspector::{inspect_agy_brain_activity, inspect_agy_brain_activity_with_ack};
+pub use brain_inspector::{
+    has_live_or_parked_agy_descendants, inspect_agy_brain_activity,
+    inspect_agy_brain_activity_with_ack,
+};
 
 use serde::Deserialize;
 use std::path::Path;

@@ -12,23 +12,25 @@ use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands::send_reply;
 
-pub(crate) fn resolve_target_topic(
-    msg: &Message,
-    args: &str,
-    topic_cache: &super::TopicNameCache,
-    default_tid: Option<i64>,
-) -> Result<Option<i64>, String> {
-    let trimmed = args.trim();
-    let raw_cmd = trimmed.split_whitespace().next().unwrap_or("");
-    let rest = trimmed[raw_cmd.len()..].trim();
-    if rest.is_empty() {
-        return Ok(default_tid);
+pub(crate) use super::handler::{is_topic_busy_or_asking, resolve_target_topic};
+
+async fn clear_topic_asks(
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+    chat_id: i64,
+    topic_id: Option<i64>,
+) -> bool {
+    let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
+    let mut cleared = false;
+    if let Ok(Some(sess)) = sessions.get_active(&key).await {
+        for ps in sess.provider_sessions.values() {
+            if !ps.session_id.is_empty() && cli.sessions.is_ask_active(&ps.session_id).await {
+                cli.sessions.set_ask_active(&ps.session_id, false).await;
+                cleared = true;
+            }
+        }
     }
-    if let Some(resolved_tid) = topic_cache.find_by_name(msg.chat.id.0, rest) {
-        Ok(Some(resolved_tid))
-    } else {
-        Err(rest.to_string())
-    }
+    cleared
 }
 
 async fn prepare_topic_reset(
@@ -37,30 +39,41 @@ async fn prepare_topic_reset(
     cli: &AntigravityCli,
     chat_id: i64,
     topic_id: Option<i64>,
-) -> (String, String) {
+) -> Option<String> {
     let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let mut preserved_provider = config.provider.clone();
-    let mut preserved_model = default_model.to_string();
-
+    let mut initial_prov = None;
+    let mut sids_to_clean = Vec::new();
     if let Ok(Some(existing_sess)) = sessions.get_active(&key).await {
-        if !existing_sess.provider.is_empty() {
-            preserved_provider = existing_sess.provider.clone();
-        }
-        if !existing_sess.model.is_empty() && existing_sess.model != "antigravity-default" {
-            preserved_model = existing_sess.model.clone();
-        }
-        let old_sid = existing_sess.get_session_id(&preserved_provider);
+        let ap = crate::session::data::SessionData::effective_provider(&existing_sess.provider, &config.provider).to_string();
+        let old_sid = existing_sess.get_session_id(&ap);
         if !old_sid.is_empty() {
-            cli.sessions.terminate(&old_sid).await;
-            let _ = crate::cli::claude::terminate_topic(chat_id, topic_id, Some(&old_sid)).await;
-            let _ = crate::cli::codex::terminate_topic(chat_id, topic_id, Some(&old_sid)).await;
+            sids_to_clean.push(old_sid);
         }
+        initial_prov = Some(ap);
+    }
+    let holder_sids: Vec<String> = cli
+        .sessions
+        .holders
+        .lock()
+        .await
+        .iter()
+        .filter(|(_, h)| h.chat_id == Some(chat_id) && h.topic_id == topic_id)
+        .map(|(sid, _)| sid.clone())
+        .collect();
+    for sid in holder_sids {
+        if !sids_to_clean.contains(&sid) {
+            sids_to_clean.push(sid);
+        }
+    }
+    for old_sid in &sids_to_clean {
+        cli.terminate_session_clean(old_sid).await;
+        let _ = crate::cli::claude::terminate_topic(chat_id, topic_id, Some(old_sid)).await;
+        let _ = crate::cli::codex::terminate_topic(chat_id, topic_id, Some(old_sid)).await;
     }
     let _ = cli.sessions.abort(chat_id, topic_id).await;
     let _ = crate::cli::claude::terminate_topic(chat_id, topic_id, None).await;
     let _ = crate::cli::codex::terminate_topic(chat_id, topic_id, None).await;
-    (preserved_provider, preserved_model)
+    initial_prov
 }
 
 pub(crate) async fn handle_new_command(
@@ -73,7 +86,10 @@ pub(crate) async fn handle_new_command(
     topic_cache: &super::TopicNameCache,
 ) -> Result<bool, teloxide::RequestError> {
     let topic_id = crate::telegram::get_topic_id(msg);
-    let target_topic = match resolve_target_topic(msg, args, topic_cache, topic_id) {
+    let target_res = super::handler::LOCKED_TOPIC_ID
+        .try_with(|r| r.clone())
+        .unwrap_or_else(|_| resolve_target_topic(msg, args, topic_cache, topic_id));
+    let target_topic = match target_res {
         Ok(tid) => tid,
         Err(name) => {
             let _ = send_reply(bot, msg, t!("bot.unknown_topic", name = name)).await;
@@ -81,35 +97,21 @@ pub(crate) async fn handle_new_command(
         }
     };
 
-    let (preserved_provider, preserved_model) = prepare_topic_reset(
-        config, sessions, cli, msg.chat.id.0, target_topic,
-    ).await;
+    let init_prov = prepare_topic_reset(config, sessions, cli, msg.chat.id.0, target_topic).await;
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, target_topic);
-    let Ok(mut sess) = sessions.reset_provider_session(&key, &preserved_provider, &preserved_model).await else {
+    let default_model = config.model.as_deref().unwrap_or("");
+    let topic_hint = target_topic.and_then(|tid| topic_cache.find_by_id(msg.chat.id.0, tid));
+    let Ok(mut sess) = sessions.reset_topic_sessions(&key, &config.provider, default_model, init_prov.as_deref(), topic_hint).await else {
         return Ok(true);
     };
 
-    if sess.topic_name.is_none()
-        && let Some(tid) = target_topic
-        && let Some(name) = topic_cache.find_by_id(msg.chat.id.0, tid)
-    {
-        sess.topic_name = Some(name);
-        let _ = sessions.preserve_session_identity(&sess).await;
-    }
-
-    let sid = crate::telegram::session_init::initialize_session_with_prompt(
-        bot, msg, sessions, &mut sess, cli, config, None,
+    let mut target_msg = msg.clone();
+    target_msg.thread_id = target_topic.map(|tid| teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
+    target_msg.is_topic_message = target_topic.is_some();
+    let _ = crate::telegram::session_init::ensure_session_ready_for_turn(
+        bot, &target_msg, sessions, &mut sess, cli, config,
     ).await?;
-    if !sid.is_empty() {
-        let mut target_msg = msg.clone();
-        if let Some(tid) = sess.topic_id {
-            target_msg.thread_id = Some(teloxide::types::ThreadId(teloxide::types::MessageId(tid as i32)));
-        }
-        crate::telegram::async_observer::spawn_session_async_observer(
-            bot.clone(), &target_msg, sid, cli.clone(), sessions.clone(), config.clone(),
-        );
-    }
     Ok(true)
 }
 
@@ -134,7 +136,8 @@ pub(crate) async fn handle_session_control_commands(
         let agy_int = cli.sessions.interrupt(msg.chat.id.0, topic_id).await;
         let claude_int = crate::cli::claude::interrupt_session(msg.chat.id.0, topic_id).await;
         let codex_int = crate::cli::codex::interrupt_session(msg.chat.id.0, topic_id).await;
-        let interrupted = agy_int || claude_int || codex_int;
+        let ask_int = clear_topic_asks(sessions, cli, msg.chat.id.0, topic_id).await;
+        let interrupted = agy_int || claude_int || codex_int || ask_int;
         let reply_text = if interrupted {
             t!("bot.stop_interrupted")
         } else {
@@ -145,32 +148,62 @@ pub(crate) async fn handle_session_control_commands(
     }
     if cmd == "/stop_all" || cmd == "/abort" {
         cli.sessions.terminate_all().await;
-        crate::cli::claude::terminate_all_for_chat(msg.chat.id.0).await;
-        crate::cli::codex::terminate_all_for_chat(msg.chat.id.0).await;
+        crate::cli::claude::terminate_all().await;
+        crate::cli::codex::terminate_all().await;
+        cli.sessions.active_asks.lock().await.clear();
+        cli.clear_all_pty_applied().await;
         let _ = send_reply(bot, msg, t!("bot.stop_all_success")).await;
         return Ok(true);
     }
     Ok(false)
 }
 
-async fn try_query_live_memory(
+pub(crate) async fn try_query_live_memory(
     bot: &Bot,
     msg: &Message,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
     cli: &AntigravityCli,
 ) -> bool {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, model).await
-        && let Ok(sid) = super::session_init::initialize_session_if_needed(bot, msg, sessions, &mut sess, cli, config).await
-        && !sid.is_empty() && !sid.starts_with("mock-")
-    {
-        let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
-        let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
-        return true;
+    let topic_id = crate::telegram::get_topic_id(msg);
+    let lock = sessions.lock_pool.get((msg.chat.id.0, topic_id));
+    let Ok(_topic_guard) = lock.try_lock() else {
+        return false;
+    };
+    if is_topic_busy_or_asking(sessions, cli, msg.chat.id.0, topic_id).await {
+        return false;
     }
-    false
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    let model = config.model.as_deref().unwrap_or("");
+    let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, model).await else {
+        return false;
+    };
+    let Ok(mut sid) = super::session_init::ensure_session_ready_for_turn(
+        bot, msg, sessions, &mut sess, cli, config,
+    ).await else {
+        return false;
+    };
+    if let Ok(Some(latest)) = sessions.get_active(&key).await {
+        sess = latest;
+        let cp = crate::session::data::SessionData::effective_provider(&sess.provider, &config.provider);
+        if sess.get_session_id(cp) != sid {
+            let Ok(re_sid) = super::session_init::ensure_session_ready_for_turn(
+                bot, msg, sessions, &mut sess, cli, config,
+            ).await else {
+                return false;
+            };
+            sid = re_sid;
+        }
+    }
+    if sid.is_empty()
+        || sid.starts_with("mock-")
+        || is_topic_busy_or_asking(sessions, cli, msg.chat.id.0, topic_id).await
+    {
+        return false;
+    }
+    let prompt = "현재 세션의 시스템 프롬프트 `<user_rules>`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture & Roles, Decisions & Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘.";
+    let _ = super::run_cli_stream(bot, msg, prompt, &sid, cli, (sessions, sess), config).await;
+    true
 }
 
 async fn send_static_memory_fallback(bot: &Bot, msg: &Message, config: &CliConfig) -> Result<(), teloxide::RequestError> {
@@ -191,7 +224,7 @@ pub(crate) async fn handle_memory_command(
     bot: &Bot,
     msg: &Message,
     config: &CliConfig,
-    sessions: &crate::session::manager::SessionManager,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
     cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
     if try_query_live_memory(bot, msg, config, sessions, cli).await {

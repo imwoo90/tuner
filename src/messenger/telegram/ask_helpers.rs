@@ -154,12 +154,13 @@ async fn advance_ask_state(
         let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
         update_question_ui(bot, chat_id, mid, &nq, markup).await;
     } else {
-        super::ask_process::submit_peer_ask_answers_if_needed(chat_id.0, &sess, config, &state.answers).await;
+        let turn_guard = cli.begin_topic_turn(chat_id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
+        super::ask_callbacks::submit_peer_ask_answers_if_needed(chat_id.0, &sess, config, &state.answers).await;
         cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
         let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
-        super::ask_process::spawn_cli_stream_in_background(
-            bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone(),
+        super::ask_callbacks::spawn_cli_stream_in_background(
+            bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,
         );
     }
     Ok(())
@@ -203,28 +204,25 @@ pub(crate) async fn feed_active_session_if_running(
     sess_ctx: (&Arc<SessionManager>, SessionData),
     config: &CliConfig,
 ) -> Result<bool, teloxide::RequestError> {
-    let prov = if !sess_ctx.1.provider.is_empty() { sess_ctx.1.provider.as_str() } else { config.provider.as_str() };
-    let peer_alive = match prov {
-        "claude" => crate::cli::claude::active_pid(msg.chat.id.0, sess_ctx.1.topic_id).await.is_some(),
-        "codex" => crate::cli::codex::active_pid(msg.chat.id.0, sess_ctx.1.topic_id).await.is_some(),
-        _ => false,
-    };
-    let is_active = cli.sessions.is_active(session_id).await || peer_alive;
-    let is_running = cli.sessions.is_running(session_id).await;
-    let is_ask = cli.sessions.is_ask_active(session_id).await;
-
-    if is_active && is_ask
-        && let Some(state) = cli.sessions.get_ask_state(session_id).await {
+    let prov = SessionData::effective_provider(&sess_ctx.1.provider, &config.provider);
+    let (cid, tid) = (msg.chat.id.0, sess_ctx.1.topic_id);
+    if cli.sessions.is_ask_active(session_id).await {
+        if cli.is_ask_backing_alive(prov, cid, tid, session_id).await
+            && let Some(state) = cli.sessions.get_ask_state(session_id).await
+        {
             let _ = handle_ask_input(bot, msg, session_id, current_text, (cli, state), sess_ctx, config).await?;
             return Ok(true);
         }
+        cli.sessions.set_ask_active(session_id, false).await;
+    }
 
-    if is_active && is_running {
-        let start = std::time::Instant::now();
-        while cli.sessions.is_running(session_id).await && start.elapsed().as_secs() < 60 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-        }
-        return Ok(false);
+    let start = std::time::Instant::now();
+    while ((cli.sessions.is_active(session_id).await && cli.sessions.is_running(session_id).await)
+        || crate::cli::claude::is_running(cid, tid, Some(session_id)).await
+        || crate::cli::codex::is_running(cid, tid, Some(session_id)).await)
+        && start.elapsed().as_secs() < 60
+    {
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
     }
     Ok(false)
 }

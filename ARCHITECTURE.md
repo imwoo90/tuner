@@ -73,11 +73,22 @@ The Tuner daemon codebase is structured across 14 top-level modules enforced by 
 
 ```text
 src/
-├── main.rs                   # Entry point: Supervisor mode vs Worker mode (--worker <profile>) & --vault CLI
+├── main.rs                   # Entry point: Supervisor mode vs Worker mode (--worker <profile>), --doctor & --vault CLI
 ├── config.rs                 # Schema definitions, profile merging & placeholder sanitization
-├── setup.rs                  # Setup wizard, .env parser, systemd unit file generator (OOMPolicy=continue)
 ├── supervisor.rs             # Process monitor: fast-crash exponential backoff & hot restarts
-├── upgrade.rs                # GitHub semver check, atomic .tar.gz unpack, zero-downtime rename
+│
+├── setup/                    # Onboarding wizard, .env loader, systemd unit generator & 3-tier --doctor
+│   ├── mod.rs                # Setup wizard, .env parser, systemd unit file generator (OOMPolicy=continue)
+│   ├── doctor.rs             # tuner --doctor [--fix] orchestrator & CLI health diagnostics
+│   ├── doctor_tiers.rs       # System, media & Chromium CDP tier probes
+│   └── doctor_fix.rs         # Automated remediation helpers for tuner --doctor --fix
+│
+├── upgrade/                  # Hybrid idle auto-upgrade & active-work safety inspector
+│   ├── mod.rs                # GitHub semver check, atomic .tar.gz unpack, zero-downtime rename & agy-vault reaping
+│   ├── activity.rs           # Multi-provider active-work, /proc descendant & idle-window evaluator
+│   ├── brain_inspector.rs    # Recursive Antigravity subagent, Native Swarm & task liveness scanner
+│   ├── step_parser.rs        # Transcript JSONL tool-call, subagent & swarm_wait step parser
+│   └── task_tracker.rs       # Background task & long-horizon schedule(DurationSeconds) tracker
 │
 ├── bus/                      # Cross-plane event fabric
 │   ├── mod.rs                # Module index & public re-exports
@@ -100,6 +111,7 @@ src/
 │   ├── mod.rs                # Module index & local timezone daily reset / idle freshness checks
 │   ├── manager.rs            # SessionManager: Two-phase atomic write (.tmp + rename), topic history
 │   ├── data.rs               # SessionData, ProviderSessionData, past_session_ids & handover summaries
+│   ├── provider_catalog.rs   # Canonical provider aliases, cross-provider model compatibility & effort clamping
 │   └── key.rs                # Immutable composite SessionKey (transport, chat_id, topic_id)
 │
 ├── cli/                      # Multi-provider agent substrate abstractions & CLI drivers
@@ -108,7 +120,10 @@ src/
 │   ├── peer.rs               # Peer session disk liveness, workspace auto-trust, AskQuestion & command parsers
 │   ├── antigravity/          # Google Antigravity (agy) PTY + transcript_full.jsonl driver
 │   │   ├── mod.rs            # Driver index, AntigravityCli struct & multi-provider dispatch
+│   │   ├── model_spec.rs     # Live agy models catalog cache, effortless orchestrator & 4-tier effort specs
 │   │   ├── provider.rs       # Provider implementation, env configuration, oneshot & PTY runs
+│   │   ├── pty_sync.rs       # Per-SID PTY synchronization lock & descendant/swarm reset guard
+│   │   ├── pty_model_sync.rs # Race-free warm PTY /model synchronization & pre-OAuth model preservation
 │   │   ├── pty_spawner.rs    # openpty (50x100), non-blocking AsyncFd, setsid, TIOCSCTTY, SessionHolder
 │   │   ├── session.rs        # In-memory PTY child registry, AskState interactive question cache
 │   │   ├── polling.rs        # notify inotify watcher + adaptive ticker monitoring transcript_full.jsonl
@@ -120,10 +135,13 @@ src/
 │   │   └── trust.rs          # Auto-trust workspace injection into ~/.gemini/antigravity-cli/
 │   ├── claude/               # Anthropic Claude Code (claude) persistent stream-json driver
 │   │   ├── mod.rs            # Model/command discovery, workflow prompt rewriting, pool entry points
+│   │   ├── spawner.rs        # Warm & ephemeral claude stream-json process-group spawner
 │   │   ├── session.rs        # ClaudeSessionPool: warm bidirectional stream-json process lifecycle
 │   │   └── runner.rs         # Turn streaming, soft control_request interrupt & AskUserQuestion bridge
 │   └── codex/                # OpenAI Codex (codex) persistent app-server JSON-RPC 2.0 driver
 │       ├── mod.rs            # Model discovery (model/list), workflow rewriting, pool entry points
+│       ├── parser.rs         # Incremental JSON-RPC notification & reasoning summary stream parser
+│       ├── spawner.rs        # Warm & ephemeral codex app-server spawner & thread handshake
 │       ├── session.rs        # CodexSessionPool: warm app-server --stdio JSON-RPC 2.0 lifecycle
 │       └── runner.rs         # Thread/turn streaming, turn/interrupt drain & requestUserInput bridge
 │
@@ -132,6 +150,7 @@ src/
 │   └── telegram/             # Telegram Bot integration, Web Review Viewer & TUI bridge
 │       ├── mod.rs            # Subsystem index & turn orchestration
 │       ├── auth.rs           # User/group authorization & first-user owner auto-registration
+│       ├── message_session.rs # Turn-gated session freshness & @model directive resolver
 │       ├── runner.rs         # Teloxide bot initialization, scheduler wiring, restart watcher
 │       ├── handler.rs        # Ingress message dispatcher, owner auto-registration, forum routing
 │       ├── stream.rs         # Real-time streaming consumer, 2.0s edit debouncing, HTML chunker
@@ -140,7 +159,8 @@ src/
 │       ├── handover_helpers.rs # Transcript tailing & handover prompt formatting
 │       ├── attachments.rs    # Outbound native file:// link & image embed extraction
 │       ├── attachments_dl.rs # Inbound Telegram media/document download to telegram_files/
-│       ├── reply.rs          # Quoted prompt synthesis (> ), @model / --effort directive parser
+│       ├── reply.rs          # Quoted prompt synthesis (> ) & standalone effort validation
+│       ├── reply_directives.rs # @model / --effort directive parser & session model formatting
 │       ├── ask_process.rs    # Interactive ask_question inline keyboard loop
 │       ├── ask_callbacks.rs  # Callback query dispatch for ask_question selections
 │       ├── ask_helpers.rs    # Question state persistence & multi-select formatting
@@ -153,6 +173,7 @@ src/
 │       ├── vault.rs          # /vault command handler & HTTP CRUD endpoints (/vault/<token>/api/entries)
 │       ├── vault_viewer.html # Responsive Web UI for per-profile credential management
 │       ├── commands.rs       # Primary slash command router (/help, /status, /memory, /cron, etc.)
+│       ├── commands_provider.rs # /provider inline switcher & cross-provider session preservation
 │       ├── commands_model.rs # /model & /effort interactive inline selector handlers
 │       ├── commands_session.rs # /new, /reset, /stop & /abort session control handlers
 │       ├── commands_usage.rs # /usage 1:1:1 dispatcher, PTY fallback parser & progress bar formatter
@@ -179,16 +200,16 @@ src/
 │           ├── mod.rs        # Formatting pipeline entry point
 │           ├── helpers.rs    # Markdown inline/block parser & expandable blockquote builder
 │           ├── splitting.rs  # Tag-balanced 4000-char HTML message splitter
-│           └── table.rs      # Box-drawing ASCII table renderer for Telegram <pre> blocks
+│           └── table.rs      # Adaptive collapsible accordion card & ASCII table renderer
 │
 ├── cron/                     # Autonomous cron engine
-│   ├── mod.rs                # Cron models & schedule definitions
+│   ├── mod.rs                # Cron models, provider/model/effort job config & schedule definitions
 │   ├── manager.rs            # CronManager: Job CRUD operations, run history, atomic storage
 │   └── scheduler.rs          # CronScheduler: 5-to-6 field parsing, chrono_tz, quiet-hours skip
 │
 ├── heartbeat/                # Autonomous telemetry & health monitoring
-│   ├── mod.rs                # Heartbeat configuration & midnight-crossing quiet hours math
-│   └── scheduler.rs          # HeartbeatScheduler: is_chat_busy, is_cooling_down, HEARTBEAT_OK silence
+│   ├── mod.rs                # Heartbeat configuration, provider/effort config & quiet-hours math
+│   └── scheduler.rs          # HeartbeatScheduler: is_session_busy, is_cooling_down, HEARTBEAT_OK silence
 │
 ├── cleanup/                  # Storage maintenance & purger
 │   ├── mod.rs                # Cleanup configuration

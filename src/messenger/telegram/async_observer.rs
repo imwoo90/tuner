@@ -68,23 +68,22 @@ async fn get_active_session(ctx: &ObserverCtx) -> Option<SessionData> {
     ctx.sessions.get_active(&key).await.ok().flatten()
 }
 
+pub(crate) use super::stream::{build_observer_ask_session, persist_async_antigravity_turn};
+
 async fn handle_async_turn_output(
     ctx: &ObserverCtx,
     msg_id: Option<MessageId>,
     txt: &str,
 ) {
-    let sess = get_active_session(ctx).await;
-    let topic_name = sess.as_ref().and_then(|s| s.topic_name.as_deref());
+    let key = SessionKey::telegram(ctx.chat_id.0, ctx.thread_id.map(|t| t as i64));
     let chunks = super::formatting::split_html_message(&super::formatting::markdown_to_telegram_html(txt), 4000);
     let (ok, err, sent_id) = super::stream::send_chunks_to_telegram(&ctx.bot, ctx.chat_id, msg_id, ctx.thread_id, &chunks).await;
     let _ = super::attachments::send_file_attachments(&ctx.bot, ctx.chat_id, ctx.thread_id, txt, &ctx.config).await;
-    if let Some(ref s) = sess {
-        let _ = ctx.sessions.update_session(s).await;
-    }
+    let topic_name = persist_async_antigravity_turn(&ctx.sessions, &key, &ctx.session_id, &ctx.config.provider).await;
     super::history::log_telegram_message(
         &ctx.config.working_dir,
         &ctx.session_id,
-        (ctx.thread_id.map(|t| t as i64), topic_name),
+        (ctx.thread_id.map(|t| t as i64), topic_name.as_deref()),
         "bot",
         sent_id,
         txt,
@@ -136,14 +135,14 @@ async fn dispatch_terminal_event(
 
     if let Some(ask) = delta.ask_question {
         if let Some(turn) = active_turn { turn.typing.abort(); }
-        let mut sess_data = get_active_session(ctx).await.unwrap_or_else(|| SessionData {
-            chat_id: ctx.chat_id.0,
+        let sess_data = build_observer_ask_session(
+            get_active_session(ctx).await,
+            ctx.chat_id.0,
             topic_id,
-            ..Default::default()
-        });
-        sess_data.set_session_id(&ctx.config.provider, &ctx.session_id);
+            &ctx.session_id,
+        );
         let _ = super::ask_process::handle_ask_question_event(
-            &ctx.bot, ctx.chat_id, ctx.thread_id, ask, &sess_data, &ctx.config, &ctx.cli,
+            &ctx.bot, ctx.chat_id, ctx.thread_id, ask, &sess_data, (&ctx.config, &ctx.cli, &ctx.sessions),
         ).await;
         *active_turn = None;
     }
@@ -230,16 +229,19 @@ async fn run_observer_loop(ctx: ObserverCtx) {
     let mut parser = AntigravityLogParser::new();
     let (fs_tx, mut fs_rx) = tokio::sync::mpsc::unbounded_channel();
     let watcher = create_brain_dir_watcher(&bd, fs_tx);
-    let mut tick = tokio::time::interval(Duration::from_secs(4));
+    let mut fs_closed = watcher.is_none();
+    let mut tick = tokio::time::interval(Duration::from_secs(2));
     let (mut was_running, mut active_turn) = (false, None::<ActiveAsyncTurn>);
 
     loop {
         tokio::select! {
             _ = ctx.cli.sessions.interrupt_notify.notified() => {}
             _ = tick.tick() => {}
-            res = fs_rx.recv() => if res.is_none() { break; },
+            res = fs_rx.recv(), if !fs_closed => if res.is_none() { fs_closed = true; },
         }
-        if !ctx.cli.sessions.is_active(&ctx.session_id).await && !tp.exists() { break; }
+        let still_current = get_active_session(&ctx).await
+            .is_some_and(|s| s.get_session_id("antigravity") == ctx.session_id);
+        if !ctx.cli.sessions.is_active(&ctx.session_id).await && (!still_current || !tp.exists()) { break; }
         if handle_running_state_check(&ctx.cli, &ctx.session_id, &tp, &mut was_running, &mut last_size, &mut parser).await {
             active_turn = None;
             continue;

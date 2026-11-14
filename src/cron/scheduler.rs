@@ -12,13 +12,13 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use chrono::{DateTime, NaiveTime, Utc};
 use chrono_tz::Tz;
-use cron::Schedule;
-use std::str::FromStr;
 
 use crate::config::CliConfig;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::AgentProvider;
 use crate::cron::manager::{CronJob, CronManager};
+pub use super::calculate_job_next_run;
+use super::build_job_cli_config;
 
 /// Represents `CronScheduler` (cron scheduler).
 pub struct CronScheduler {
@@ -216,41 +216,15 @@ impl CronScheduler {
             return Err(err_msg);
         }
 
-        let mut jc = (*self.config).clone();
-        if let Some(prof_dir) = self.manager.jobs_path().parent() {
-            let prof_cfg = prof_dir.join("config").join("config.json");
-            if prof_cfg.is_file() {
-                let _ = jc.merge_profile_file(&prof_cfg);
-            }
+        let eff_prov = crate::session::data::SessionData::effective_provider(
+            job.provider.as_deref().unwrap_or(&self.config.provider),
+            "antigravity",
+        );
+        if !matches!(eff_prov, "claude" | "codex") {
+            crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
         }
-        jc.working_dir = workspace.clone();
-        jc.chat_id = job.chat_id;
-        jc.topic_id = job.topic_id;
-        jc.transport = job.transport.clone();
-        if let Some(m) = &job.model { jc.model = Some(m.clone()); }
-        if let Some(p) = &job.provider { jc.provider = p.clone(); }
-        if !job.cli_parameters.is_empty() {
-            jc.cli_parameters.insert("antigravity".to_string(), job.cli_parameters.clone());
-        }
-        if let Some(r) = &job.effort {
-            jc.effort = Some(r.clone());
-        }
-
-        let job_cli = AntigravityCli::new(jc);
+        let jc = build_job_cli_config(&self.config, self.manager.jobs_path(), &job, workspace.clone());
+        let job_cli = AntigravityCli::new_oneshot(jc);
         self.run_cli_command(&job, workspace, &job_cli).await
     }
-}
-
-/// Executes `calculate_job_next_run` (calculate job next run).
-pub fn calculate_job_next_run(schedule: &str, timezone: &str) -> Result<DateTime<Tz>, String> {
-    let norm = if schedule.split_whitespace().count() == 5 {
-        format!("0 {}", schedule)
-    } else {
-        schedule.to_string()
-    };
-    let sched = Schedule::from_str(&norm).map_err(|e| e.to_string())?;
-    let tz_s = if timezone.is_empty() { "UTC" } else { timezone };
-    let tz: Tz = tz_s.parse().map_err(|e| format!("Invalid timezone: {}", e))?;
-    let next = sched.upcoming(tz).next().ok_or_else(|| "No upcoming run".to_string())?;
-    Ok(next)
 }

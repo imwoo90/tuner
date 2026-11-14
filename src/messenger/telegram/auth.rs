@@ -152,3 +152,7 @@ pub(crate) async fn validate_and_auth_message(
     ok = ok && (!is_group || config.allowed_group_ids.contains(&chat_id));
     Ok(ok)
 }
+
+pub(crate) use super::message_session::{
+    get_live_open_ask_session, has_leading_directive, resolve_message_session,
+};

@@ -7,61 +7,23 @@
 //! ## Search Tags
 //! #claude-session, #warm-process-pool, #control-request
 
-use super::{build_warm_command, resolve_claude_model_effort};
+use super::resolve_claude_model_effort;
+pub(crate) use super::spawner::ClaudeProcessIo;
+pub use super::spawner::WarmClaudeSession;
+use super::spawner::{model_ctrl, spawn_warm_claude};
 use crate::cli::antigravity::AntigravityCli;
-use crate::cli::common::{kill_process_group, resolve_warm_workspace, write_json_stdin, WarmActivityTracker};
+use crate::cli::common::resolve_warm_workspace;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
-use tokio::io::{AsyncBufReadExt, BufReader, Lines};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 
 type TopicKey = (i64, Option<i64>);
+static EPHEMERAL_RUNS: AtomicUsize = AtomicUsize::new(0);
 
-pub(crate) struct ClaudeProcessIo {
-    pub(crate) child: Child,
-    pub(crate) stdout: Lines<BufReader<ChildStdout>>,
-}
-
-/// Persistent warm `claude` process bound to a `(chat_id, topic_id)` conversation.
-pub struct WarmClaudeSession {
-    /// OS process ID of the warm `claude` child.
-    pub pid: u32,
-    /// Active Claude session UUID once discovered.
-    pub session_id: Mutex<Option<String>>,
-    /// Active canonical model on this warm process.
-    pub model: Mutex<Option<String>>,
-    /// Active reasoning effort level on this warm process.
-    pub effort: Mutex<Option<String>>,
-    /// Workspace path where the warm process was started.
-    pub workspace: PathBuf,
-    /// 24-hour activity tracker matching Antigravity PTY session expiration.
-    pub activity: WarmActivityTracker,
-    pub(crate) pending_ask: Mutex<Option<(String, serde_json::Value)>>,
-    pub(crate) queued_ask_answers: Mutex<Option<Vec<String>>>,
-    pub(crate) stdin: Mutex<ChildStdin>,
-    pub(crate) io: Mutex<ClaudeProcessIo>,
-    pub(crate) running: AtomicBool,
-    pub(crate) interrupted: AtomicBool,
-    pub(crate) interrupt_notify: Notify,
-}
-
-impl WarmClaudeSession {
-    pub(crate) async fn is_alive(&self) -> bool {
-        self.io.try_lock().map(|mut io| io.child.try_wait().map(|s| s.is_none()).unwrap_or(false)).unwrap_or(true)
-    }
-
-    pub(crate) async fn write_json_line(&self, payload: &serde_json::Value) -> Result<(), String> {
-        self.activity.touch();
-        write_json_stdin(&mut *self.stdin.lock().await, payload).await
-    }
-
-    pub(crate) fn kill_now(&self) {
-        if self.pid > 0 { kill_process_group(self.pid); }
-    }
+pub(crate) fn adjust_ephemeral_runs(inc: bool) {
+    if inc { EPHEMERAL_RUNS.fetch_add(1, Ordering::SeqCst); } else { EPHEMERAL_RUNS.fetch_sub(1, Ordering::SeqCst); }
 }
 
 #[derive(Default)]
@@ -70,32 +32,6 @@ struct ClaudeSessionPool { sessions: Mutex<HashMap<TopicKey, Arc<WarmClaudeSessi
 fn global_pool() -> &'static ClaudeSessionPool {
     static POOL: OnceLock<ClaudeSessionPool> = OnceLock::new();
     POOL.get_or_init(ClaudeSessionPool::default)
-}
-
-fn spawn_warm_claude(
-    cli: &AntigravityCli,
-    ws: PathBuf,
-    resume_sid: Option<&str>,
-    continue_session: bool,
-) -> Result<Arc<WarmClaudeSession>, String> {
-    let args = build_warm_command(cli, resume_sid, continue_session);
-    let mut cmd = Command::new(&args[0]);
-    cmd.args(&args[1..]).current_dir(&ws).envs(cli.build_env())
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
-    #[cfg(unix)]
-    cmd.process_group(0);
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn warm claude process: {}", e))?;
-    let pid = child.id().unwrap_or(0);
-    let stdin = child.stdin.take().ok_or_else(|| "Failed to open claude stdin".to_string())?;
-    let stdout = child.stdout.take().ok_or_else(|| "Failed to open claude stdout".to_string())?;
-    let (init_m, init_e) = resolve_claude_model_effort(cli.config.model.as_deref(), cli.config.effort.as_deref());
-    Ok(Arc::new(WarmClaudeSession {
-        pid, session_id: Mutex::new(resume_sid.map(str::to_string)),
-        model: Mutex::new(init_m), effort: Mutex::new(init_e), workspace: ws,
-        activity: WarmActivityTracker::new(), pending_ask: Mutex::new(None), queued_ask_answers: Mutex::new(None),
-        stdin: Mutex::new(stdin), io: Mutex::new(ClaudeProcessIo { child, stdout: BufReader::new(stdout).lines() }),
-        running: AtomicBool::new(false), interrupted: AtomicBool::new(false), interrupt_notify: Notify::new(),
-    }))
 }
 
 /// Queues user answers for a pending `AskUserQuestion` control request on the topic's warm `claude` session.
@@ -108,37 +44,57 @@ pub async fn submit_ask_answers(chat_id: i64, topic_id: Option<i64>, answers: &[
 /// Reaps dead or 24-hour (`86400s`) idle warm `claude` processes from the pool.
 pub async fn cleanup_expired() {
     let mut map = global_pool().sessions.lock().await;
-    let mut expired = Vec::new();
-    for (k, w) in map.iter() {
-        if !w.running.load(Ordering::SeqCst) && (w.activity.is_expired() || !w.is_alive().await) {
-            expired.push(*k);
-        }
+    let mut dead = Vec::new();
+    for (&k, w) in map.iter() {
+        if !w.running.load(Ordering::SeqCst) && (w.activity.is_expired() || !w.is_alive().await) { dead.push(k); }
     }
-    for k in expired {
-        if let Some(old) = map.remove(&k) { old.kill_now(); }
-    }
+    for k in dead { if let Some(old) = map.remove(&k) { old.kill_now(); } }
 }
 
-pub(crate) async fn get_or_spawn_warm_session(
+pub(crate) async fn acquire_claude_session(
     cli: &AntigravityCli,
     workspace: PathBuf,
     resume_sid: Option<&str>,
     continue_session: bool,
-) -> Result<Arc<WarmClaudeSession>, String> {
+    answering_ask: bool,
+) -> Result<(Arc<WarmClaudeSession>, bool), String> {
     cleanup_expired().await;
     let ws = resolve_warm_workspace(cli, workspace);
     crate::cli::common::trust_peer_workspace("claude", &ws, None);
     crate::workspace::skills_helpers::sync_claude_workspace_bridges(&ws);
+    if cli.oneshot {
+        return spawn_warm_claude(cli, ws, resume_sid, continue_session).map(|w| (w, true));
+    }
+    let key = (cli.config.chat_id, cli.config.topic_id);
+    if let Some(ex) = global_pool().sessions.lock().await.get(&key).cloned() {
+        let cur_s = ex.session_id.lock().await.clone();
+        let sid_ok = resume_sid.is_some_and(|r| cur_s.as_deref() == Some(r)) || continue_session;
+        let busy = ex.running.load(Ordering::SeqCst)
+            || ex.pending_ask.lock().await.is_some()
+            || ex.queued_ask_answers.lock().await.is_some();
+        if busy && (!sid_ok || ex.workspace != ws) {
+            return spawn_warm_claude(cli, ws, resume_sid, continue_session).map(|w| (w, true));
+        }
+    }
+    get_or_spawn_warm_session(cli, ws, resume_sid, continue_session, answering_ask).await.map(|w| (w, false))
+}
+
+pub(crate) async fn get_or_spawn_warm_session(
+    cli: &AntigravityCli, ws: PathBuf, resume_sid: Option<&str>, continue_session: bool, answering_ask: bool,
+) -> Result<Arc<WarmClaudeSession>, String> {
     let (req_m, req_e) = resolve_claude_model_effort(cli.config.model.as_deref(), cli.config.effort.as_deref());
     let (key, mut eff_res) = ((cli.config.chat_id, cli.config.topic_id), resume_sid.map(str::to_string));
     let mut map = global_pool().sessions.lock().await;
     if let Some(ex) = map.get(&key).cloned() {
         let (cur_s, cur_e) = (ex.session_id.lock().await.clone(), ex.effort.lock().await.clone());
+        let has_ask = ex.pending_ask.lock().await.is_some();
+        let ask = answering_ask && (has_ask || ex.queued_ask_answers.lock().await.is_some());
         let sid_ok = resume_sid.is_some_and(|r| cur_s.as_deref() == Some(r)) || continue_session;
-        if sid_ok && (req_e.is_none() || req_e == cur_e) && ex.workspace == ws && ex.is_alive().await {
-            if let Some(ref m) = req_m && *ex.model.lock().await != Some(m.clone()) {
-                let ctrl = serde_json::json!({ "type": "control_request", "request_id": format!("model-{}", m), "request": { "subtype": "set_model", "model": m } });
-                if ex.write_json_line(&ctrl).await.is_ok() { *ex.model.lock().await = Some(m.clone()); }
+        if (!has_ask || answering_ask) && sid_ok && (ask || req_e == cur_e) && ex.workspace == ws && ex.is_alive().await {
+            if !ask && let Some(ref m) = req_m && *ex.model.lock().await != Some(m.clone())
+                && ex.write_json_line(&model_ctrl(m)).await.is_ok()
+            {
+                *ex.model.lock().await = Some(m.clone());
             }
             ex.activity.touch();
             return Ok(ex);
@@ -151,10 +107,17 @@ pub(crate) async fn get_or_spawn_warm_session(
     Ok(warm)
 }
 
-/// Sends a soft JSONL `interrupt` control request to the active warm `claude` session for a topic.
+/// Sends a soft JSONL `interrupt` control request (or cancels a pending ask) for a topic.
 pub async fn interrupt_session(chat_id: i64, topic_id: Option<i64>) -> bool {
     let Some(w) = global_pool().sessions.lock().await.get(&(chat_id, topic_id)).cloned() else { return false; };
-    if !w.running.load(Ordering::SeqCst) { return false; }
+    if w.pending_ask.lock().await.is_some() {
+        w.interrupted.store(true, Ordering::SeqCst);
+        w.interrupt_notify.notify_one();
+        return terminate_topic(chat_id, topic_id, None).await;
+    }
+    if !w.running.load(Ordering::SeqCst) {
+        return false;
+    }
     let ctrl = serde_json::json!({ "type": "control_request", "request_id": format!("stop-{}", chat_id), "request": { "subtype": "interrupt" } });
     let _ = w.write_json_line(&ctrl).await;
     w.interrupted.store(true, Ordering::SeqCst);
@@ -162,26 +125,36 @@ pub async fn interrupt_session(chat_id: i64, topic_id: Option<i64>) -> bool {
     true
 }
 
+async fn find_warm(
+    map: &HashMap<TopicKey, Arc<WarmClaudeSession>>,
+    chat_id: i64,
+    topic_id: Option<i64>,
+    session_id: Option<&str>,
+) -> Option<Arc<WarmClaudeSession>> {
+    if chat_id != 0
+        && let Some(w) = map.get(&(chat_id, topic_id)).cloned()
+    {
+        return Some(w);
+    }
+    let sid = session_id.filter(|s| !s.is_empty())?;
+    for w in map.values() {
+        if w.session_id.lock().await.as_deref() == Some(sid) { return Some(w.clone()); }
+    }
+    None
+}
+
 /// Dynamically switches the active model of a warm `claude` session via `set_model` control_request.
 pub async fn set_model_live(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>, model: &str) -> bool {
     let (Some(canonical), _) = resolve_claude_model_effort(Some(model), None) else { return false; };
-    let warm = {
-        let map = global_pool().sessions.lock().await;
-        if let Some(w) = map.get(&(chat_id, topic_id)).cloned() {
-            Some(w)
-        } else if let Some(target_sid) = session_id.filter(|s| !s.is_empty()) {
-            let mut found = None;
-            for w in map.values() {
-                if w.session_id.lock().await.as_deref() == Some(target_sid) { found = Some(w.clone()); break; }
-            }
-            found
-        } else {
-            None
-        }
-    };
+    let warm = { let map = global_pool().sessions.lock().await; find_warm(&map, chat_id, topic_id, session_id).await };
     let Some(w) = warm else { return false; };
-    let ctrl = serde_json::json!({ "type": "control_request", "request_id": format!("model-{}", canonical), "request": { "subtype": "set_model", "model": canonical } });
-    let ok = w.write_json_line(&ctrl).await.is_ok();
+    if w.running.load(Ordering::SeqCst) || w.pending_ask.lock().await.is_some() || w.queued_ask_answers.lock().await.is_some() {
+        return false;
+    }
+    if !super::supports_claude_effort(&canonical) && w.effort.lock().await.is_some() {
+        return terminate_topic(chat_id, topic_id, session_id).await;
+    }
+    let ok = w.write_json_line(&model_ctrl(&canonical)).await.is_ok();
     if ok { *w.model.lock().await = Some(canonical); }
     ok
 }
@@ -217,23 +190,30 @@ pub async fn active_pid(chat_id: i64, topic_id: Option<i64>) -> Option<u32> {
     warm.is_alive().await.then_some(warm.pid)
 }
 
+/// Returns the live session identifier of the topic's warm `claude` process, if any.
+pub async fn active_session_id(chat_id: i64, topic_id: Option<i64>) -> Option<String> {
+    let warm = global_pool().sessions.lock().await.get(&(chat_id, topic_id)).cloned()?;
+    if !warm.is_alive().await { return None; }
+    warm.session_id.lock().await.clone().filter(|s| !s.is_empty())
+}
+
 /// Returns `true` if a turn is currently running on the warm `claude` session for the topic or `session_id`.
 pub async fn is_running(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
     let map = global_pool().sessions.lock().await;
     if chat_id == 0 && topic_id.is_none() && session_id.is_none() {
-        return map.values().any(|w| w.running.load(Ordering::SeqCst));
+        return EPHEMERAL_RUNS.load(Ordering::SeqCst) > 0 || map.values().any(|w| w.running.load(Ordering::SeqCst));
     }
-    if let Some(w) = map.get(&(chat_id, topic_id)) {
-        return w.running.load(Ordering::SeqCst);
-    }
-    if let Some(sid) = session_id.filter(|s| !s.is_empty()) {
-        for w in map.values() {
-            if w.session_id.lock().await.as_deref() == Some(sid) {
-                return w.running.load(Ordering::SeqCst);
-            }
-        }
-    }
-    false
+    find_warm(&map, chat_id, topic_id, session_id).await.is_some_and(|w| w.running.load(Ordering::SeqCst))
+}
+
+/// Returns `true` if a live non-expired warm `claude` session is awaiting `AskUserQuestion` input.
+pub async fn has_pending_ask(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
+    let warm = {
+        let map = global_pool().sessions.lock().await;
+        if chat_id != 0 { map.get(&(chat_id, topic_id)).cloned() } else { find_warm(&map, 0, None, session_id).await }
+    };
+    let Some(w) = warm else { return false; };
+    !w.activity.is_expired() && w.is_alive().await && w.pending_ask.lock().await.is_some()
 }
 
 /// Returns the number of warm `claude` processes currently registered in the pool.

@@ -14,6 +14,9 @@
 //! - [`polling`] (`polling.rs`): File-watcher-driven transcript polling and completion loops.
 //! - [`completion`] (`completion.rs`): Turn completion detection and PTY output stability checks.
 //! - [`trust`] (`trust.rs`): Automatic workspace trust registration and dynamic model discovery.
+//! - [`model_spec`] (`model_spec.rs`): Model alias normalization, effortless orchestrator rules, and `--effort` clamping.
+//! - [`pty_sync`] (`pty_sync.rs`): Per-session PTY prompt initialization lock, applied `/model` tracking, and turn guards.
+//! - [`pty_model_sync`] (`pty_model_sync.rs`): Warm PTY `/model` injection and background-descendant-safe default resets.
 //! - [`error_parser`] (`error_parser.rs`): User-friendly classification of CLI quota and runtime errors.
 //!
 //! ## Search Tags
@@ -57,6 +60,12 @@ pub mod discovery {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod discovery_tests;
 pub mod trust;
+/// Antigravity model alias normalization and reasoning effort compatibility rules.
+pub mod model_spec;
+/// Per-session PTY prompt readiness lock, applied `/model` tracking, and topic turn guards.
+pub mod pty_sync;
+/// Warm PTY `/model` target synchronization and background-descendant-safe default resets.
+pub mod pty_model_sync;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 pub mod trust_tests;
@@ -75,6 +84,9 @@ pub struct AntigravityCli {
     pub config: CliConfig,
     /// Sessions.
     pub sessions: std::sync::Arc<session::SessionManager>,
+    /// Marks stateless one-shot or cron CLI handles that run outside foreground warm pools.
+    pub oneshot: bool,
+    pub(crate) pty_sync: std::sync::Arc<pty_sync::PtySyncState>,
 }
 
 impl AntigravityCli {
@@ -83,7 +95,20 @@ impl AntigravityCli {
         Self {
             config,
             sessions: std::sync::Arc::new(session::SessionManager::new()),
+            oneshot: false,
+            pty_sync: std::sync::Arc::new(pty_sync::PtySyncState::default()),
         }
+    }
+
+    /// Creates a stateless one-shot CLI handle that runs outside foreground warm session pools.
+    pub fn new_oneshot(config: CliConfig) -> Self {
+        let mut cli = Self::new(config);
+        cli.oneshot = true;
+        cli
+    }
+
+    pub(crate) fn canonical_provider(&self) -> &'static str {
+        crate::session::data::SessionData::effective_provider(&self.config.provider, "antigravity")
     }
 
     /// Executes `is_session_alive` (is session alive).
@@ -92,8 +117,9 @@ impl AntigravityCli {
             return false;
         }
         let env = self.build_env();
-        if matches!(self.config.provider.as_str(), "claude" | "codex") {
-            return crate::cli::common::is_peer_session_alive(&self.config.provider, session_id, &env);
+        let prov = self.canonical_provider();
+        if matches!(prov, "claude" | "codex") {
+            return crate::cli::common::is_peer_session_alive(prov, session_id, &env);
         }
         let root = events::agy_state_root(Some(&env));
         let conv_db = root.join("conversations").join(format!("{}.db", session_id));
@@ -101,68 +127,55 @@ impl AntigravityCli {
         conv_db.exists() || transcript.exists()
     }
 
+    pub(crate) fn build_env(&self) -> std::collections::HashMap<String, String> {
+        let mut env: std::collections::HashMap<_, _> = std::env::vars().collect();
+        let th = std::env::var("TUNER_HOME").ok().map(PathBuf::from).unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner")
+        });
+        env.extend([
+            ("TUNER_AGENT_NAME".into(), "main".into()),
+            ("TUNER_CHAT_ID".into(), self.config.chat_id.to_string()),
+            ("TUNER_TRANSPORT".into(), self.config.transport.clone()),
+            ("TERM".into(), "dumb".into()),
+            ("NO_COLOR".into(), "1".into()),
+            ("SSH_CONNECTION".into(), "127.0.0.1 0 127.0.0.1 22".into()),
+            ("TUNER_HOME".into(), th.to_string_lossy().into()),
+        ]);
+        if let Some(tid) = self.config.topic_id {
+            env.insert("TUNER_TOPIC_ID".into(), tid.to_string());
+        }
+        env
+    }
+
     /// Executes `discover_models` (discover models).
     pub async fn discover_models(&self) -> Vec<String> {
         let env = self.build_env();
-        match self.config.provider.as_str() {
+        match self.canonical_provider() {
             "claude" => crate::cli::claude::discover_models_live(&env).await,
             "codex" => crate::cli::codex::discover_models_live(&env).await,
-            _ => discovery::discover_models("agy").await,
-        }
-    }
-
-    pub(crate) fn normalize_model_id(raw: &str) -> &str {
-        match raw {
-            "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
-            "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
-            "flash" | "gemini" | "gemini-2.5-flash" | "gemini-3-flash" | "gemini-3.0-flash" | "gemini-3.5-flash"
-            | "gemini-3.6-flash" | "gemini-3.7-flash" | "gemini-3.8-flash" => "gemini-3.8-flash",
-            "argon" | "gemini-argon" | "gemini-4-argon" | "pro" | "gemini-2.5-pro"
-            | "gemini-3.0-pro" | "gemini-3.1-pro" => "gemini-4-argon",
-            other => other,
-        }
-    }
-
-    pub(crate) fn resolve_cli_model_effort(model: Option<&str>, effort: Option<&str>) -> (Option<String>, Option<String>) {
-        let Some(raw_m) = model.map(str::trim).filter(|&s| !s.is_empty() && s != "antigravity-default") else {
-            return (None, None);
-        };
-        let mut base = raw_m;
-        let mut suffix_eff = None;
-        for (suf, eff_val) in [
-            ("-minimal", "low"),
-            ("-medium", "medium"),
-            ("-xhigh", "high"),
-            ("-high", "high"),
-            ("-low", "low"),
-            ("-max", "high"),
-        ] {
-            if let Some(stripped) = raw_m.strip_suffix(suf) {
-                base = stripped;
-                suffix_eff = Some(eff_val.to_string());
-                break;
+            _ => {
+                let models = discovery::discover_models("agy").await;
+                model_spec::update_live_catalog(&models);
+                models
             }
         }
-        let canonical = Self::normalize_model_id(base);
-        let mut eff = effort
-            .map(str::trim)
-            .filter(|&e| !e.is_empty())
-            .map(|e| match e {
-                "minimal" => "low".to_string(),
-                "xhigh" | "max" => "high".to_string(),
-                other => other.to_string(),
-            })
-            .or(suffix_eff);
-        if eff.is_none()
-            && (canonical.contains("claude-")
-                || canonical.contains("opus")
-                || canonical.contains("sonnet")
-                || canonical.contains("pro")
-                || canonical.contains("argon"))
-        {
-            eff = Some("high".to_string());
-        }
-        (Some(canonical.to_string()), eff)
+    }
+
+    /// Returns `true` when the given Antigravity model accepts `--effort` / `-<effort>` levels.
+    pub fn supports_effort(model: &str) -> bool {
+        model_spec::supports_effort(model)
+    }
+
+    /// Returns the ordered reasoning effort levels supported by the given Antigravity model.
+    pub fn supported_efforts_for_model(model: &str) -> Vec<String> {
+        model_spec::supported_efforts(model)
+    }
+
+    pub(crate) fn resolve_cli_model_effort(
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> (Option<String>, Option<String>) {
+        model_spec::resolve_cli_model_effort(model, effort)
     }
 
     /// Executes `build_command` (build command).
@@ -172,7 +185,7 @@ impl AntigravityCli {
         resume_session: Option<&str>,
         continue_session: bool,
     ) -> Vec<String> {
-        match self.config.provider.as_str() {
+        match self.canonical_provider() {
             "claude" => return crate::cli::claude::build_command(self, prompt, resume_session, continue_session),
             "codex" => return crate::cli::codex::build_command(self, prompt, resume_session, continue_session),
             _ => {}
@@ -296,26 +309,16 @@ fn append_section(target: &mut String, content: &str) {
 
     fn ensure_agy_link(&self, link: &std::path::Path, target: &std::path::Path) -> bool {
         if link.is_symlink() {
-            if let Ok(resolved) = link.canonicalize()
-                && let Ok(target_canon) = target.canonicalize()
-                    && resolved == target_canon {
-                        return true;
-                    }
+            if let (Ok(r), Ok(tc)) = (link.canonicalize(), target.canonicalize()) && r == tc {
+                return true;
+            }
             let _ = std::fs::remove_file(link);
         } else if link.exists() {
             return false;
         }
-
-        if let Some(parent) = link.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-
+        if let Some(parent) = link.parent() { let _ = std::fs::create_dir_all(parent); }
         #[cfg(unix)]
-        {
-            if std::os::unix::fs::symlink(target, link).is_ok() {
-                return link.exists();
-            }
-        }
+        if std::os::unix::fs::symlink(target, link).is_ok() { return link.exists(); }
         false
     }
 }

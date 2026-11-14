@@ -29,11 +29,18 @@ mod tests {
 
     #[test]
     fn test_parse_codex_models_response_from_app_server() {
-        let rpc_line = r#"{"id":2,"result":{"data":[{"id":"gpt-6.1-sol","model":"gpt-6.1-sol","hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"},{"reasoningEffort":"ultra"}]},{"id":"hidden-m","model":"hidden-m","hidden":true}]}}"#;
+        let rpc_line = r#"{"id":2,"result":{"data":[{"id":"gpt-6.1-sol","model":"gpt-6.1-sol","hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"medium"},{"reasoningEffort":"high"},{"reasoningEffort":"xhigh"},{"reasoningEffort":"max"},{"reasoningEffort":"ultra"}]},{"id":"codex-fixed","model":"codex-fixed","hidden":false,"supportedReasoningEfforts":[]},{"id":"hidden-m","model":"hidden-m","hidden":true}]}}"#;
         let models = parse_codex_models_response(rpc_line);
         assert_eq!(
             models,
-            vec!["gpt-6.1-sol-low", "gpt-6.1-sol-high", "gpt-6.1-sol-ultra"]
+            vec![
+                "gpt-6.1-sol-minimal",
+                "gpt-6.1-sol-low",
+                "gpt-6.1-sol-medium",
+                "gpt-6.1-sol-high",
+                "gpt-6.1-sol-xhigh",
+                "codex-fixed",
+            ]
         );
     }
 

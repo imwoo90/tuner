@@ -11,6 +11,7 @@ use teloxide::prelude::*;
 use teloxide::types::MessageId;
 use crate::config::CliConfig;
 use crate::cli::StreamEvent;
+use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
 use std::time::{Instant, Duration};
 use super::formatting;
 pub(crate) use super::rate_limiter::{is_message_not_modified, send_chunks_to_telegram, send_single_chunk};
@@ -96,16 +97,22 @@ struct StreamLoopState {
     last_sid: Option<String>,
 }
 
+type StreamCtx<'a> = (
+    &'a CliConfig,
+    &'a crate::cli::antigravity::AntigravityCli,
+    &'a crate::session::manager::SessionManager,
+);
+
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
     tid: Option<i32>,
     mut stream: futures::stream::BoxStream<'_, StreamEvent>,
     sdata: &crate::session::data::SessionData,
-    ctx: (&CliConfig, &crate::cli::antigravity::AntigravityCli),
+    ctx: StreamCtx<'_>,
     state: &mut StreamLoopState,
 ) -> Result<(), teloxide::RequestError> {
-    let (cfg, cli) = ctx;
+    let (cfg, cli, sessions) = ctx;
     let (mut last_edit, mut pending) = (Instant::now(), false);
     let mut tick = tokio::time::interval(Duration::from_millis(700));
     use futures::StreamExt;
@@ -117,7 +124,9 @@ async fn process_stream_events(
                     handle_text_delta(bot, chat_id, tid, &d, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
                     pending = state.pub_id.is_some() && last_edit == prev;
                 }
-                Some(StreamEvent::AskQuestion(ask)) => super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, cfg, cli).await?,
+                Some(StreamEvent::AskQuestion(ask)) => {
+                    super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, (cfg, cli, sessions)).await?
+                }
                 Some(StreamEvent::Result(resp)) => {
                     pending = false;
                     if !resp.result.is_empty() { state.last_text = resp.result.clone(); }
@@ -128,7 +137,7 @@ async fn process_stream_events(
                 }
                 None => break,
             },
-            _ = tick.tick(), if pending => if last_edit.elapsed() >= Duration::from_secs(2) {
+            _ = tick.tick(), if pending && last_edit.elapsed() >= Duration::from_secs(2) => {
                 let cur = state.last_text.clone();
                 handle_text_delta(bot, chat_id, tid, &cur, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
                 pending = false;
@@ -136,6 +145,78 @@ async fn process_stream_events(
         }
     }
     Ok(())
+}
+
+pub(crate) async fn persist_stream_session_update(
+    sessions: &SessionManager,
+    session_data: &SessionData,
+    updated: SessionData,
+    last_sid: Option<String>,
+    config: &CliConfig,
+) {
+    let turn_prov = SessionData::effective_provider(&session_data.provider, &config.provider);
+    let start_sid = session_data.get_session_id(turn_prov);
+    let new_prog_mid = updated.last_progress_msg_id;
+    let fallback = start_sid.is_empty().then_some(&updated);
+    let _ = sessions
+        .mutate_session(&session_data.session_key(), fallback, |cur| {
+            let latest_sid = cur.get_session_id(turn_prov);
+            let sid_diverged = latest_sid != start_sid
+                && Some(latest_sid.as_str()) != last_sid.as_deref();
+            let was_reset = (!start_sid.is_empty()
+                && (cur.get_past_session_ids(turn_prov).contains(&start_sid) || sid_diverged))
+                || (start_sid.is_empty() && !latest_sid.is_empty() && sid_diverged);
+            if was_reset {
+                return false;
+            }
+            cur.last_progress_msg_id = new_prog_mid;
+            if let Some(ref sid) = last_sid {
+                cur.set_session_id(turn_prov, sid);
+            }
+            cur.increment_message_count(turn_prov);
+            cur.last_active = chrono::Utc::now().to_rfc3339();
+            true
+        })
+        .await;
+}
+
+pub(crate) async fn persist_async_antigravity_turn(
+    sessions: &SessionManager,
+    key: &SessionKey,
+    agy_sid: &str,
+    _default_provider: &str,
+) -> Option<String> {
+    let mut topic_name = None;
+    let _ = sessions
+        .mutate_session(key, None, |cur| {
+            topic_name = cur.topic_name.clone();
+            if cur.get_session_id("antigravity") != agy_sid
+                || cur.get_past_session_ids("antigravity").iter().any(|p| p == agy_sid)
+            {
+                return false;
+            }
+            cur.increment_message_count("antigravity");
+            cur.last_active = chrono::Utc::now().to_rfc3339();
+            true
+        })
+        .await;
+    topic_name
+}
+
+pub(crate) fn build_observer_ask_session(
+    active: Option<SessionData>,
+    chat_id: i64,
+    topic_id: Option<i64>,
+    agy_sid: &str,
+) -> SessionData {
+    let mut sess_data = active.unwrap_or_else(|| SessionData {
+        chat_id,
+        topic_id,
+        ..Default::default()
+    });
+    sess_data.provider = "antigravity".to_string();
+    sess_data.set_session_id("antigravity", agy_sid);
+    sess_data
 }
 
 pub(crate) async fn consume_stream(
@@ -162,7 +243,7 @@ pub(crate) async fn consume_stream(
         cleared = true;
     }
 
-    process_stream_events(bot, chat_id, thread_id, stream, &session_data, (config, cli), &mut state).await?;
+    process_stream_events(bot, chat_id, thread_id, stream, &session_data, (config, cli, sessions), &mut state).await?;
 
     if let Some(mid) = state.pub_id
         && (state.last_text.contains("🛠️ **Tool Calls:") || state.last_text.contains("<!-- Waiting for")) {
@@ -172,11 +253,7 @@ pub(crate) async fn consume_stream(
         }
 
     if state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
-        if let Some(sid) = state.last_sid {
-            let prov = if !updated.provider.is_empty() { updated.provider.clone() } else { config.provider.clone() };
-            updated.set_session_id(&prov, &sid);
-        }
-        let _ = sessions.update_session(&updated).await;
+        persist_stream_session_update(sessions, &session_data, updated, state.last_sid, config).await;
     }
     Ok(())
 }

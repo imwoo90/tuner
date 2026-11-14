@@ -11,15 +11,12 @@ use crate::config::CliConfig;
 use crate::session::manager::SessionManager;
 use crate::cron::manager::CronManager;
 use crate::cli::antigravity::AntigravityCli;
-use super::ask_callbacks::{
-    handle_ask_answer_callback, handle_ask_submit_callback,
-    handle_ask_prev_callback, handle_ask_skip_callback
-};
-use super::multi_select::handle_ask_multi_callback;
+use super::multi_select::route_ask_callback;
 use super::callbacks_effort::{
     handle_model_base_callback, handle_model_effort_callback,
-    handle_standalone_effort_callback, handle_provider_callback
+    handle_standalone_effort_callback,
 };
+use super::commands_provider::handle_provider_callback;
 
 async fn handle_lang_callback(
     bot: &teloxide::Bot,
@@ -29,15 +26,19 @@ async fn handle_lang_callback(
     config: &CliConfig,
 ) {
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+    let dm = config.model.as_deref().unwrap_or("");
+    if let Ok((s, _)) = sessions.get_or_init_session(&key, &config.provider, dm).await {
         let target_lang = if crate::i18n::LANGUAGES.iter().any(|(code, _)| *code == lang) {
             lang
         } else {
             "en"
         };
-        s.language = Some(target_lang.to_string());
-        let _ = sessions.preserve_session_identity(&s).await;
+        let _ = sessions
+            .mutate_session(&key, Some(&s), |cur| {
+                cur.language = Some(target_lang.to_string());
+                true
+            })
+            .await;
         let confirm = crate::i18n::t_for_lang(target_lang, "bot.language_switch_success", &[("language", target_lang)]);
         let html = super::formatting::markdown_to_telegram_html(&confirm);
         let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
@@ -55,7 +56,7 @@ async fn handle_options_and_upgrade_callbacks(
     cli: &AntigravityCli,
 ) -> Result<bool, teloxide::RequestError> {
     if let Some(p) = d.strip_prefix("provider:") {
-        handle_provider_callback(bot, msg, p, sessions, config).await;
+        handle_provider_callback(bot, msg, p, sessions, config, cli).await;
         return Ok(true);
     }
     if let Some(m) = d.strip_prefix("model_base:") {
@@ -84,34 +85,6 @@ async fn handle_options_and_upgrade_callbacks(
     Ok(false)
 }
 
-async fn handle_ask_callbacks(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    d: &str,
-    cli: &AntigravityCli,
-    sessions: &std::sync::Arc<SessionManager>,
-    config: &CliConfig,
-) -> bool {
-    if d.starts_with("ask_ans:") {
-        handle_ask_answer_callback(bot, msg, d, cli, sessions, config).await;
-        true
-    } else if d.starts_with("ask_mul:") {
-        handle_ask_multi_callback(bot, msg, d, &cli.sessions).await;
-        true
-    } else if d.starts_with("ask_sub:") {
-        handle_ask_submit_callback(bot, msg, d, cli, sessions, config).await;
-        true
-    } else if d.starts_with("ask_prev:") {
-        handle_ask_prev_callback(bot, msg, d, cli, config).await;
-        true
-    } else if d.starts_with("ask_skip:") {
-        handle_ask_skip_callback(bot, msg, d, cli, sessions, config).await;
-        true
-    } else {
-        false
-    }
-}
-
 async fn handle_callback_query_inner(
     bot: Bot,
     q: teloxide::types::CallbackQuery,
@@ -132,7 +105,7 @@ async fn handle_callback_query_inner(
                 let _ = crate::telegram::cron_selector::handle_cron_callback(
                     &bot, msg.chat.id, msg.id, d, &cron, tid, (Some(&topic_cache), Some((&config, &sessions))),
                 ).await;
-            } else if handle_ask_callbacks(&bot, msg, d, &cli, &sessions, &config).await {
+            } else if route_ask_callback(&bot, msg, d, &cli, &sessions, &config).await {
             } else if d.starts_with("rem:") {
                 super::commands_remote::handle_remote_callback(&bot, msg, d, &config).await;
             } else if let Some(sid) = d.strip_prefix("review:") {

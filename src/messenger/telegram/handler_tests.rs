@@ -103,7 +103,7 @@ async fn test_telegram_command_model() {
     let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm) = setup();
     let key = SessionKey::telegram(123, None);
     let (sess, _) = mgr.resolve_session(&key, &cfg.provider, "opus").await.unwrap();
-    assert_eq!(sess.model, "opus");
+    assert_eq!(sess.model, "claude-opus-5-5");
 
     let msg = make_msg(r#"{"message_id":5,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model pro"}"#);
     handle_message(bot.clone(), msg, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
@@ -113,8 +113,35 @@ async fn test_telegram_command_model() {
     assert_eq!(s_after.effort.as_deref(), Some("high"));
 
     let msg_interactive = make_msg(r#"{"message_id":6,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model"}"#);
-    let res = handle_message(bot, msg_interactive, cfg, mgr, cli, cron_mgr, topic_cache, bot_info, mgm).await;
+    let res = handle_message(bot.clone(), msg_interactive, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await;
     assert!(res.is_ok());
+
+    let msg_orch = make_msg(r#"{"message_id":61,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model gemini-pro-orchestrator"}"#);
+    handle_message(bot.clone(), msg_orch, cfg.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
+    let s_orch = mgr.get_active(&key).await.unwrap().unwrap();
+    assert_eq!(s_orch.model, "gemini-pro-orchestrator");
+    assert_eq!(s_orch.effort, None);
+
+    let msg_eff = make_msg(r#"{"message_id":62,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/effort high"}"#);
+    handle_message(bot, msg_eff, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+    let s_orch_after = mgr.get_active(&key).await.unwrap().unwrap();
+    assert_eq!(s_orch_after.effort, None);
+}
+
+#[tokio::test]
+async fn test_telegram_antigravity_default_survives_new() {
+    let (mgr, cfg, cli, bot, cron_mgr, topic_cache, bot_info, mgm) = setup();
+    let key = SessionKey::telegram(123, None);
+    let mut cfg_non_def = (*cfg).clone();
+    cfg_non_def.model = Some("gemini-4-carbon".to_string());
+    let cfg_nd = Arc::new(cfg_non_def);
+    let msg_def = make_msg(r#"{"message_id":63,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/model antigravity-default"}"#);
+    handle_message(bot.clone(), msg_def, cfg_nd.clone(), mgr.clone(), cli.clone(), cron_mgr.clone(), topic_cache.clone(), bot_info.clone(), mgm.clone()).await.unwrap();
+    let msg_new = make_msg(r#"{"message_id":64,"date":1,"chat":{"id":123,"type":"private"},"from":{"id":100,"is_bot":false,"first_name":"I","username":"u"},"text":"/new"}"#);
+    handle_message(bot, msg_new, cfg_nd, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await.unwrap();
+    let s_def_after = mgr.get_active(&key).await.unwrap().unwrap();
+    assert_eq!(s_def_after.model, "antigravity-default");
+    assert_eq!(s_def_after.effort, None);
 }
 
 #[tokio::test]

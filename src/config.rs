@@ -168,6 +168,7 @@ impl CliConfig {
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         let mut cfg: Self = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        cfg.provider = crate::session::data::SessionData::effective_provider(&cfg.provider, "antigravity").to_string();
         if cfg.allowed_user_ids == vec![123456789] {
             cfg.allowed_user_ids.clear();
         }
@@ -216,6 +217,7 @@ impl CliConfig {
         merge_json_values(&mut base_val, overrides);
         
         *self = serde_json::from_value(base_val).map_err(|e| e.to_string())?;
+        self.provider = crate::session::data::SessionData::effective_provider(&self.provider, "antigravity").to_string();
         Ok(())
     }
 }

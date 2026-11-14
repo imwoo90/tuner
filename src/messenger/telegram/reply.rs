@@ -10,7 +10,7 @@
 use teloxide::types::{ChatId, Message, MessageId, ThreadId};
 use teloxide::requests::Requester;
 use teloxide::payloads::SendMessageSetters;
-use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
+use crate::session::{data::SessionData, manager::SessionManager};
 
 /// Executes `get_topic_id` (get topic id).
 pub fn get_topic_id(msg: &Message) -> Option<i64> {
@@ -97,81 +97,106 @@ pub(crate) fn build_reply_prompt(message: &Message, user_text: &str) -> String {
 }
 
 pub(crate) use super::media::{has_media, download_telegram_media};
+#[cfg(test)]
+pub(crate) use super::reply_directives::parse_model_directive;
 
-fn get_remaining_prompt(rest: &str, consumed_tokens: usize) -> &str {
-    let mut remaining_text = "";
-    let mut count = 0;
-    for (i, ch) in rest.char_indices() {
-        if ch.is_whitespace()
-            && i > 0 && !rest.as_bytes()[i-1].is_ascii_whitespace() {
-                count += 1;
-                if count == consumed_tokens {
-                    remaining_text = rest[i..].trim();
-                    break;
-                }
-            }
+/// Formats the active session's model and effective reasoning effort for `/status`.
+pub(crate) async fn resolve_session_model(
+    msg: &Message,
+    config: &crate::config::CliConfig,
+    sessions: &SessionManager,
+) -> String {
+    use crate::session::data::SessionData;
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, get_topic_id(msg));
+    let active = sessions.get_active(&key).await.ok().flatten();
+    let raw_prov = active.as_ref().map(|s| s.provider.as_str()).unwrap_or("");
+    if !matches!(SessionData::effective_provider(raw_prov, &config.provider), "claude" | "codex") {
+        crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
     }
-    if count < consumed_tokens {
-        ""
-    } else {
-        remaining_text
+    let (provider, model, display_eff) = SessionData::resolve_display_target(active, config);
+    if !super::reply_directives::session_supports_effort(&provider, &model) {
+        return model;
+    }
+    match display_eff {
+        Some(eff) => format!("{model} (effort: {eff})"),
+        None => model,
     }
 }
 
-fn normalize_model_alias(name: &str) -> (String, Option<String>) {
-    let m = match name.to_lowercase().as_str() {
-        "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
-        "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
-        "fable" | "claude-fable" => "claude-fable-5",
-        "haiku" | "claude-haiku" => "claude-haiku-4-5",
-        "astra" => "gpt-6-astra",
-        "sol" => "gpt-6.1-sol",
-        "terra" => "gpt-6.1-terra",
-        "luna" => "gpt-6-luna",
-        "argon" | "pro" | "gemini-argon" | "gemini-4-argon" | "gemini-3.1-pro" => "gemini-4-argon",
-        "flash" | "gemini" | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" => "gemini-3.8-flash",
-        _ => return (name.to_string(), None),
+fn effort_label(val: &str) -> &str {
+    match val {
+        "minimal" => "Minimal",
+        "low" => "Low",
+        "medium" => "Medium",
+        "high" => "High",
+        "xhigh" => "XHigh",
+        "max" => "Max",
+        other => other,
+    }
+}
+
+/// Builds the inline keyboard of reasoning effort levels supported by `(provider, model)`.
+pub(crate) fn build_effort_keyboard_for_session(
+    provider: &str,
+    model: &str,
+) -> teloxide::types::InlineKeyboardMarkup {
+    use teloxide::types::InlineKeyboardButton as Btn;
+    let p = crate::session::data::SessionData::effective_provider(provider, "antigravity");
+    let row: Vec<_> = match p {
+        "claude" => ["low", "medium", "high", "xhigh", "max"]
+            .into_iter()
+            .map(|v| Btn::callback(effort_label(v), format!("effort:{p}:{v}")))
+            .collect(),
+        "codex" => ["minimal", "low", "medium", "high", "xhigh"]
+            .into_iter()
+            .map(|v| Btn::callback(effort_label(v), format!("effort:{p}:{v}")))
+            .collect(),
+        _ => crate::cli::antigravity::AntigravityCli::supported_efforts_for_model(model)
+            .into_iter()
+            .map(|v| Btn::callback(effort_label(&v).to_string(), format!("effort:{p}:{v}")))
+            .collect(),
     };
-    (m.to_string(), Some("high".to_string()))
+    teloxide::types::InlineKeyboardMarkup::new(vec![row])
 }
 
-fn parse_at_shortcut(t: &str) -> Option<(Option<String>, Option<String>, &str)> {
-    let dir = t.strip_prefix('@')?.split_whitespace().next().unwrap_or("");
-    if ["opus", "sonnet", "fable", "haiku", "astra", "sol", "terra", "luna", "argon", "pro", "flash", "gemini"].contains(&dir) {
-        let (canonical, default_eff) = normalize_model_alias(dir);
-        return Some((Some(canonical), default_eff, t[dir.len() + 1..].trim()));
+/// Validates a standalone `effort:<level>` or `effort:<provider>:<level>` callback payload
+/// against `(cur_provider, cur_model)`, returning `Ok(level)` or `Err(Some(rejection_markdown))`
+/// (or `Err(None)` for malformed unknown strings).
+pub(crate) fn validate_standalone_effort_payload(
+    payload: &str,
+    cur_provider: &str,
+    cur_model: &str,
+) -> Result<String, Option<String>> {
+    let (origin_prov, raw_eff) = match payload.split_once(':') {
+        Some((p, e)) => (Some(p.trim()), e.trim()),
+        None => (None, payload.trim()),
+    };
+    let low = raw_eff.to_ascii_lowercase();
+    if !super::commands_model::is_valid_effort_level(&low) {
+        return Err(None);
     }
-    None
-}
-
-pub(crate) fn parse_model_directive(text: &str) -> (Option<String>, Option<String>, &str) {
-    let t = text.trim();
-    if let Some(r) = t.strip_prefix("@model ") {
-        let rest = r.trim();
-        let parts: Vec<&str> = rest.split_whitespace().collect();
-        if !parts.is_empty() {
-            let (base, suffix_eff) = crate::cli::common::strip_effort_suffix(parts[0]);
-            let mut effort = suffix_eff.map(str::to_string);
-            let mut consumed_tokens = 1;
-            if parts.len() >= 3 && parts[1] == "--effort" {
-                effort = Some(parts[2].to_string());
-                consumed_tokens = 3;
-            } else if parts.len() >= 2 && super::commands_model::is_valid_effort_level(parts[1]) {
-                effort = Some(parts[1].to_string());
-                consumed_tokens = 2;
-            }
-            let (canonical, default_eff) = normalize_model_alias(base);
-            if effort.is_none() {
-                effort = default_eff;
-            }
-            return (Some(canonical), effort, get_remaining_prompt(rest, consumed_tokens));
-        }
-    } else if let Some(res) = parse_at_shortcut(t) {
-        return res;
+    let cur_p = crate::session::data::SessionData::effective_provider(cur_provider, "antigravity");
+    if let Some(op) = origin_prov
+        && crate::session::data::SessionData::effective_provider(op, cur_p) != cur_p
+    {
+        return Err(Some(format!(
+            "⚠️ Active provider changed to `{cur_p}`. Run `/effort` to refresh."
+        )));
     }
-    (None, None, t)
+    if !super::reply_directives::session_supports_effort(cur_p, cur_model) {
+        return Err(Some(format!(
+            "ℹ️ Model `{cur_model}` uses fixed reasoning and does not support `/effort` levels."
+        )));
+    }
+    if super::reply_directives::clamp_session_effort(cur_p, cur_model, &low).as_deref()
+        != Some(low.as_str())
+    {
+        return Err(Some(format!(
+            "⚠️ Effort `{low}` is not supported for `{cur_model}` on `{cur_p}`. Run `/effort` to refresh."
+        )));
+    }
+    Ok(low)
 }
-
 
 pub(crate) async fn load_sessions_cache(
     sessions: &SessionManager,
@@ -184,28 +209,6 @@ pub(crate) async fn load_sessions_cache(
             }
         }
     }
-}
-
-pub(crate) async fn resolve_session_model(
-    msg: &Message,
-    config: &crate::config::CliConfig,
-    sessions: &SessionManager,
-) -> String {
-    let topic_id = get_topic_id(msg);
-    let key = SessionKey::telegram(msg.chat.id.0, topic_id);
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let (model, sess_effort) = if let Ok(Some(sess)) = sessions.get_active(&key).await {
-        let m = if sess.model.is_empty() { default_model.to_string() } else { sess.model };
-        (m, sess.effort)
-    } else {
-        (default_model.to_string(), None)
-    };
-    if let Some(eff_str) = sess_effort.as_deref().or(config.effort.as_deref())
-        && !eff_str.is_empty()
-    {
-        return format!("{} (effort: {})", model, eff_str);
-    }
-    model
 }
 
 fn find_last_active_session(sess_list: &[SessionData]) -> Option<SessionData> {

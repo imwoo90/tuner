@@ -14,34 +14,7 @@ use crate::cli::{AskQuestionData, antigravity::{AntigravityCli, session::AskStat
 use crate::session::{data::SessionData, manager::SessionManager};
 use super::multi_select::{build_multi_select_keyboard, build_single_select_keyboard};
 use super::ask_helpers::find_write_in_index;
-
-pub(crate) fn spawn_cli_stream_in_background(
-    bot: &Bot,
-    msg: &Message,
-    session_id: String,
-    cli: AntigravityCli,
-    sessions: std::sync::Arc<SessionManager>,
-    sess: SessionData,
-    config: CliConfig,
-) {
-    let (b, m) = (bot.clone(), msg.clone());
-    tokio::spawn(async move {
-        let _ = super::run_cli_stream(&b, &m, "", &session_id, &cli, (&sessions, sess), &config).await;
-    });
-}
-
-pub(crate) async fn submit_peer_ask_answers_if_needed(
-    chat_id: i64,
-    sess: &SessionData,
-    config: &CliConfig,
-    answers: &[String],
-) {
-    match if !sess.provider.is_empty() { sess.provider.as_str() } else { config.provider.as_str() } {
-        "claude" => crate::cli::claude::submit_ask_answers(chat_id, sess.topic_id, answers).await,
-        "codex" => crate::cli::codex::submit_ask_answers(chat_id, sess.topic_id, answers).await,
-        _ => {}
-    }
-}
+use super::ask_callbacks::{spawn_cli_stream_in_background, submit_peer_ask_answers_if_needed};
 
 pub(crate) async fn clear_previous_write_in_if_any(
     sid: &str,
@@ -113,10 +86,13 @@ pub(crate) async fn process_answer(
         if state.current_index < state.answers.len() {
             state.answers[state.current_index] = chosen;
         }
+        let turn_guard = cli.begin_topic_turn(msg.chat.id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
             submit_peer_ask_answers_if_needed(msg.chat.id.0, &sess, config, &state.answers).await;
             super::ask_helpers::update_telegram_ask_ui(bot, msg, idx, data).await;
-            spawn_cli_stream_in_background(bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone());
+            spawn_cli_stream_in_background(
+                bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,
+            );
         }
     }
     Ok(())
@@ -144,13 +120,16 @@ pub(crate) async fn process_submit(
         if state.current_index < state.answers.len() {
             state.answers[state.current_index] = opts.join(", ");
         }
+        let turn_guard = cli.begin_topic_turn(msg.chat.id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
             submit_peer_ask_answers_if_needed(msg.chat.id.0, &sess, config, &state.answers).await;
             let ch = if opts.is_empty() { "None".to_string() } else { opts.join(", ") };
             let txt = format!("{}\n\n(Selected: **{}**)", msg.text().unwrap_or(""), ch);
             let html = super::formatting::markdown_to_telegram_html(&txt);
             let _ = bot.edit_message_text(msg.chat.id, msg.id, html).parse_mode(ParseMode::Html).await;
-            spawn_cli_stream_in_background(bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone());
+            spawn_cli_stream_in_background(
+                bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,
+            );
         }
     }
     Ok(())
@@ -185,7 +164,7 @@ pub(crate) async fn handle_stream_ask_question(
     session_data: &SessionData,
     config: &CliConfig,
 ) -> Result<i32, teloxide::RequestError> {
-    let prov = if !session_data.provider.is_empty() { &session_data.provider } else { &config.provider };
+    let prov = SessionData::effective_provider(&session_data.provider, &config.provider);
     let sess_id = session_data.get_session_id(prov);
     let markup = if ask.is_multi_select {
         let initial_bitmap = "0".repeat(ask.options.len());
@@ -216,35 +195,34 @@ pub(crate) async fn handle_stream_ask_question(
     res.map(|s| s.id.0)
 }
 
+pub(crate) use super::commands_provider::{is_stale_ask_session, register_and_verify_ask_state};
+
 pub(crate) async fn handle_ask_question_event(
     bot: &Bot,
     chat_id: ChatId,
     thread_id: Option<i32>,
     ask: Vec<AskQuestionData>,
     session_data: &SessionData,
-    config: &CliConfig,
-    cli: &AntigravityCli,
+    ctx: (&CliConfig, &AntigravityCli, &SessionManager),
 ) -> Result<(), teloxide::RequestError> {
+    let (config, cli, sessions) = ctx;
     if !ask.is_empty() {
-        let prov = if !session_data.provider.is_empty() { &session_data.provider } else { &config.provider };
-        let sess_id = session_data.get_session_id(prov);
-        let first_question = ask[0].clone();
-        if let Ok(msg_id) = handle_stream_ask_question(bot, chat_id, thread_id, first_question.clone(), session_data, config).await {
-            let initial_bitmap = if first_question.is_multi_select {
-                "0".repeat(first_question.options.len())
-            } else {
-                String::new()
-            };
-            let ask_len = ask.len();
-            let state = AskState {
-                msg_id,
-                questions: ask,
-                current_index: 0,
-                answers: vec![String::new(); ask_len],
-                current_bitmap: initial_bitmap,
-                waiting_for_write_in: false,
-            };
-            cli.sessions.set_ask_state(&sess_id, state).await;
+        let prov = SessionData::effective_provider(&session_data.provider, &config.provider);
+        let s0 = session_data.get_session_id(prov);
+        if is_stale_ask_session(sessions, config, session_data, prov, &s0).await {
+            super::commands_provider::cancel_abandoned_provider_ask(cli, prov, chat_id.0, session_data.topic_id, &s0).await;
+            return Ok(());
+        }
+        let eff = super::message_session::sync_live_peer_ask_session(sessions, config, session_data, prov, chat_id.0).await;
+        let sid = eff.get_session_id(prov);
+        if is_stale_ask_session(sessions, config, &eff, prov, &sid).await {
+            super::commands_provider::cancel_abandoned_provider_ask(cli, prov, chat_id.0, eff.topic_id, &sid).await;
+            return Ok(());
+        }
+        if let Ok(mid) = handle_stream_ask_question(bot, chat_id, thread_id, ask[0].clone(), &eff, config).await {
+            register_and_verify_ask_state(bot, chat_id, mid, ask, &eff, ctx).await;
+        } else {
+            super::commands_provider::cancel_abandoned_provider_ask(cli, prov, chat_id.0, eff.topic_id, &sid).await;
         }
     }
     Ok(())

@@ -160,4 +160,43 @@ mod tests {
         };
         assert!(!scheduler.is_cooling_down(&session_cold));
     }
+
+    #[test]
+    fn test_build_heartbeat_cli_config_preserves_effort_and_provider() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        let mgr = std::sync::Arc::new(crate::session::manager::SessionManager::new(
+            temp.path().to_path_buf(), 30, 4, false, "UTC".to_string(), None
+        ));
+        let cfg = std::sync::Arc::new(crate::config::CliConfig {
+            provider: "antigravity".to_string(),
+            effort: Some("medium".to_string()),
+            ..Default::default()
+        });
+        let cli = std::sync::Arc::new(crate::cli::antigravity::AntigravityCli::new((*cfg).clone()));
+        let bus = std::sync::Arc::new(crate::bus::bus::MessageBus::new());
+        let scheduler = crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg, mgr, cli, bus);
+
+        let mut sess_claude = crate::session::data::SessionData::new(
+            42, "tg".into(), Some(7), "claude".into(), "claude-sonnet-5".into(),
+        );
+        let c1 = scheduler.build_heartbeat_cli_config(&sess_claude);
+        assert_eq!(c1.provider, "claude");
+        assert_eq!(c1.effort.as_deref(), Some("medium"));
+
+        sess_claude.model = "claude-haiku-4-5".into();
+        let c2 = scheduler.build_heartbeat_cli_config(&sess_claude);
+        assert_eq!(c2.effort, None);
+
+        let sess_orch = crate::session::data::SessionData::new(
+            42, "tg".into(), Some(7), "antigravity".into(), "gemini-pro-orchestrator".into(),
+        );
+        let c3 = scheduler.build_heartbeat_cli_config(&sess_orch);
+        assert_eq!(c3.effort, None);
+
+        let sess_carbon = crate::session::data::SessionData::new(
+            42, "tg".into(), Some(7), "antigravity".into(), "gemini-4-carbon".into(),
+        );
+        let c4 = scheduler.build_heartbeat_cli_config(&sess_carbon);
+        assert_eq!(c4.effort.as_deref(), Some("medium"));
+    }
 }

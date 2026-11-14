@@ -18,62 +18,45 @@ use std::process::Stdio;
 use tokio::process::Command;
 
 impl AntigravityCli {
-    pub(crate) fn build_env(&self) -> HashMap<String, String> {
-        let mut env: HashMap<_, _> = std::env::vars().collect();
-        let th = std::env::var("TUNER_HOME").ok().map(PathBuf::from).unwrap_or_else(|| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner")
-        });
-        env.extend([
-            ("TUNER_AGENT_NAME".into(), "main".into()),
-            ("TUNER_CHAT_ID".into(), self.config.chat_id.to_string()),
-            ("TUNER_TRANSPORT".into(), self.config.transport.clone()),
-            ("TERM".into(), "dumb".into()),
-            ("NO_COLOR".into(), "1".into()),
-            ("SSH_CONNECTION".into(), "127.0.0.1 0 127.0.0.1 22".into()),
-            ("TUNER_HOME".into(), th.to_string_lossy().into()),
-        ]);
-        if let Some(tid) = self.config.topic_id { env.insert("TUNER_TOPIC_ID".into(), tid.to_string()); }
-        env
-    }
-
-    async fn ensure_interactive_session(&self, session_id: &str, _workspace: &Path, env: &HashMap<String, String>) -> Result<(), String> {
+    pub(crate) async fn ensure_interactive_session(&self, session_id: &str, _workspace: &Path, env: &HashMap<String, String>) -> Result<(), String> {
         let agy_ws = self.agy_workspace();
         let mut args = vec!["--add-dir".into(), agy_ws.to_string_lossy().into(), "--conversation".into(), session_id.into()];
         if self.config.permission_mode == "bypassPermissions" { args.push("--dangerously-skip-permissions".into()); }
-
-        let (m, eff) = Self::resolve_cli_model_effort(self.config.model.as_deref(), self.config.effort.as_deref());
-        if let Some(m) = m { args.extend(["--model".into(), m]); }
-        if let Some(e) = eff { args.extend(["--effort".into(), e]); }
         args.extend(["--prompt-interactive".into(), "".into()]);
         self.sessions.ensure_session(session_id, &agy_ws, "agy", &args, env).await
     }
 
-    async fn init_pty_if_needed(&self, sid: &str) -> Result<(), String> {
-        let u = self.sessions.holders.lock().await.get_mut(sid)
-            .map(|h| { let init = !h.initialized; h.initialized = true; init })
-            .unwrap_or(false);
-        if u {
-            super::pty_spawner::wait_for_pty_prompt(&self.sessions, sid).await?;
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    pub(crate) async fn ensure_interactive_ready_locked(&self, session_id: &str) -> Result<(), String> {
+        if session_id.starts_with("mock-") { return Ok(()); }
+        super::model_spec::ensure_live_catalog_fresh().await;
+        let env = self.build_env();
+        self.ensure_interactive_session(session_id, &self.agy_workspace(), &env).await?;
+        let state = self.init_locked_pty(session_id).await?;
+        if let (Some((pid, applied)), Some(target)) = (state, self.desired_pty_target())
+            && applied.as_deref() != Some(target.as_str())
+        {
+            self.sessions.write_to_session(session_id, &format!("/model {target}\r")).await?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+            self.pty_sync.set_applied(session_id, pid, Some(target)).await;
         }
         Ok(())
     }
 
     /// Executes `ensure_interactive_ready` (ensure interactive ready).
     pub async fn ensure_interactive_ready(&self, session_id: &str) -> Result<(), String> {
-        if session_id.starts_with("mock-") { return Ok(()); }
-        let env = self.build_env();
-        self.ensure_interactive_session(session_id, &self.agy_workspace(), &env).await?;
-        self.init_pty_if_needed(session_id).await
+        let lock = self.pty_sync.lock_for(session_id).await;
+        let _g = lock.lock().await;
+        self.ensure_interactive_ready_locked(session_id).await
     }
 
-    async fn run_in_pty_session(
+    pub(crate) async fn run_in_pty_session(
         &self,
         sid: &str,
         prompt: &str,
         env: &HashMap<String, String>,
         agy_ws: &Path,
     ) -> Result<(String, String, std::process::ExitStatus), String> {
+        self.ensure_pty_turn_idle(sid, prompt).await?;
         let sessions = self.sessions.clone();
         sessions.set_running(sid, true).await;
 
@@ -81,8 +64,7 @@ impl AntigravityCli {
             if !self.sessions.is_active(sid).await && !sid.starts_with("mock-") && !self.is_session_alive(sid) {
                 return Err(format!("Session {} is expired or not found in Antigravity storage", sid));
             }
-            self.ensure_interactive_session(sid, agy_ws, env).await?;
-            self.init_pty_if_needed(sid).await?;
+            self.prepare_pty_for_turn(sid, prompt, agy_ws, env).await?;
             let p = events::agy_state_root(Some(env)).join("brain").join(sid)
                 .join(".system_generated/logs/transcript_full.jsonl");
             let sz = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
@@ -99,9 +81,12 @@ impl AntigravityCli {
         if let Err(ref e) = res
             && e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:")
         {
-            sessions.terminate(sid).await;
+            self.terminate_session_clean(sid).await;
         }
-        if !sessions.is_active(sid).await { sessions.set_ask_active(sid, false).await; }
+        if !sessions.is_active(sid).await {
+            self.pty_sync.remove_applied(sid).await;
+            sessions.set_ask_active(sid, false).await;
+        }
         res
     }
 
@@ -138,20 +123,34 @@ impl AntigravityCli {
             .or_else(|| events::resolve_brain_dir(ws, Some(env)));
         events::read_transcript_answer(ws, Some(env), b.as_deref()).unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
+
+    async fn maybe_seed_warm_pty(&self, ok: bool, resume: Option<&str>, fid: Option<&str>, ws: &Path, env: &HashMap<String, String>) -> Result<(), String> {
+        if ok && !self.oneshot && resume.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
+            && let Some(sid) = fid
+        {
+            self.ensure_interactive_session(sid, ws, env).await?;
+            let pid = self.sessions.holders.lock().await.get(sid).and_then(|h| h.child.id());
+            self.pty_sync.record_seeded_target(sid, pid, self.desired_pty_target().is_some()).await;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl AgentProvider for AntigravityCli {
     async fn send(&self, prompt: &str, resume_session: Option<&str>, continue_session: bool, ws: PathBuf) -> Result<CliResponse, String> {
-        match self.config.provider.as_str() {
+        match self.canonical_provider() {
             "claude" => return crate::cli::claude::send(self, prompt, resume_session, continue_session, ws).await,
             "codex" => return crate::cli::codex::send(self, prompt, resume_session, continue_session, ws).await,
             _ => {}
         }
+        super::model_spec::ensure_live_catalog_fresh().await;
         let env = self.build_env();
         let agy_ws = if ws.as_os_str().is_empty() || ws == self.config.working_dir { self.agy_workspace() } else { ws };
         super::trust::trust_workspace_in_settings(&agy_ws, None);
-        let (out, err, status) = if let Some(sid) = resume_session {
+        let (out, err, status) = if !self.oneshot
+            && let Some(sid) = resume_session
+        {
             self.run_in_pty_session(sid, prompt, &env, &agy_ws).await?
         } else {
             self.run_oneshot(&self.build_command(prompt, resume_session, continue_session), &env, &agy_ws).await?
@@ -164,11 +163,7 @@ impl AgentProvider for AntigravityCli {
             })
         });
         let result = self.resolve_result_text(&agy_ws, &env, &out, final_sid.as_deref(), ok);
-        if ok && resume_session.is_none() && std::sync::Arc::strong_count(&self.sessions) > 1
-            && let Some(ref fid) = final_sid
-        {
-            self.ensure_interactive_session(fid, &agy_ws, &env).await?;
-        }
+        self.maybe_seed_warm_pty(ok, resume_session, final_sid.as_deref(), &agy_ws, &env).await?;
         let returncode = if early && status.success() { Some(1) } else { super::completion::exit_status_code(&status) };
         Ok(CliResponse { session_id: final_sid, result, is_error: !ok, returncode, stderr: err })
     }
@@ -180,7 +175,7 @@ impl AgentProvider for AntigravityCli {
         continue_session: bool,
         workspace: PathBuf,
     ) -> Result<BoxStream<'a, StreamEvent>, String> {
-        match self.config.provider.as_str() {
+        match self.canonical_provider() {
             "claude" => return crate::cli::claude::send_streaming(self, prompt, resume_session, continue_session, workspace).await,
             "codex" => return crate::cli::codex::send_streaming(self, prompt, resume_session, continue_session, workspace).await,
             _ => {}

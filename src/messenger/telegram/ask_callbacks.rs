@@ -15,9 +15,77 @@ use super::multi_select::get_multiselect_keystrokes_and_options;
 use super::ask_process::{
     process_answer, process_submit,
     clear_previous_write_in_if_any, advance_ask_index_or_finish,
-    spawn_cli_stream_in_background,
 };
 use super::ask_helpers::build_ask_keyboard_helper;
+
+pub(crate) fn spawn_cli_stream_in_background(
+    bot: &Bot,
+    msg: &Message,
+    session_id: String,
+    cli: AntigravityCli,
+    sess_ctx: (std::sync::Arc<SessionManager>, crate::session::data::SessionData),
+    config: CliConfig,
+    turn_guard: crate::cli::antigravity::pty_sync::TopicTurnGuard,
+) {
+    let (b, m) = (bot.clone(), msg.clone());
+    let (sessions, sess) = sess_ctx;
+    tokio::spawn(async move {
+        let _turn_guard = turn_guard;
+        let topic_id = sess.topic_id.or_else(|| super::get_topic_id(&m));
+        let lock = sessions.lock_pool.get((m.chat.id.0, topic_id));
+        let _topic_guard = lock.lock().await;
+        let turn_prov = crate::session::data::SessionData::effective_provider(&sess.provider, &config.provider);
+        let active = match sessions.get_active(&sess.session_key()).await {
+            Ok(Some(latest)) => {
+                let latest_prov = crate::session::data::SessionData::effective_provider(&latest.provider, &config.provider);
+                if latest_prov != turn_prov || latest.get_session_id(turn_prov) != session_id {
+                    return;
+                }
+                latest
+            }
+            _ => sess,
+        };
+        let _ = super::run_cli_stream(&b, &m, "", &session_id, &cli, (&sessions, active), &config).await;
+    });
+}
+
+pub(crate) async fn validate_active_ask_callback(
+    bot: &Bot,
+    msg: &Message,
+    sid: &str,
+    cli: &AntigravityCli,
+    sessions: &SessionManager,
+    config: &CliConfig,
+) -> bool {
+    let topic_id = super::get_topic_id(msg);
+    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, topic_id);
+    let valid = if let Ok(Some(sess)) = sessions.get_active(&key).await {
+        let prov = crate::session::data::SessionData::effective_provider(&sess.provider, &config.provider);
+        sess.get_session_id(prov) == sid
+            && cli.sessions.is_ask_active(sid).await
+            && cli.is_ask_backing_alive(prov, msg.chat.id.0, topic_id, sid).await
+    } else {
+        false
+    };
+    if !valid {
+        cli.sessions.set_ask_active(sid, false).await;
+        let _ = bot.edit_message_reply_markup(msg.chat.id, msg.id).await;
+    }
+    valid
+}
+
+pub(crate) async fn submit_peer_ask_answers_if_needed(
+    chat_id: i64,
+    sess: &crate::session::data::SessionData,
+    config: &CliConfig,
+    answers: &[String],
+) {
+    match crate::session::data::SessionData::effective_provider(&sess.provider, &config.provider) {
+        "claude" => crate::cli::claude::submit_ask_answers(chat_id, sess.topic_id, answers).await,
+        "codex" => crate::cli::codex::submit_ask_answers(chat_id, sess.topic_id, answers).await,
+        _ => {}
+    }
+}
 
 pub(crate) async fn handle_ask_answer_callback(
     bot: &teloxide::Bot,
@@ -31,8 +99,8 @@ pub(crate) async fn handle_ask_answer_callback(
     let Some(idx) = data.split(':').nth(2).and_then(|i| i.parse::<usize>().ok()) else { return; };
 
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+    let dm = config.model.as_deref().unwrap_or("");
+    if let Ok((sess, _)) = sessions.get_or_init_session(&key, &config.provider, dm).await {
         let _ = process_answer(bot, msg, sid, (idx, data), cli, (sessions, sess), config).await;
     }
 }
@@ -76,8 +144,8 @@ pub(crate) async fn handle_ask_submit_callback(
         opts = o;
     }
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+    let dm = config.model.as_deref().unwrap_or("");
+    if let Ok((sess, _)) = sessions.get_or_init_session(&key, &config.provider, dm).await {
         let _ = process_submit(bot, msg, sid, (&ks, &opts), cli, (sessions, sess), config).await;
     }
 }
@@ -147,15 +215,16 @@ pub(crate) async fn process_skip(
             state.answers[state.current_index] = "User Skipped".to_string();
         }
 
+        let turn_guard = cli.begin_topic_turn(msg.chat.id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
         if !advance_ask_index_or_finish(bot, msg.chat.id, msg.id, sid, cli, &mut state).await? {
-            super::ask_process::submit_peer_ask_answers_if_needed(msg.chat.id.0, &sess, config, &state.answers).await;
+            submit_peer_ask_answers_if_needed(msg.chat.id.0, &sess, config, &state.answers).await;
             let txt = format!("{}\n\n(Selected: **User Skipped**)", msg.text().unwrap_or(""));
             let html = super::formatting::markdown_to_telegram_html(&txt);
             let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
                 .parse_mode(teloxide::types::ParseMode::Html)
                 .await;
             spawn_cli_stream_in_background(
-                bot, msg, sid.to_string(), cli.clone(), sessions.clone(), sess, config.clone()
+                bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,
             );
         }
     }
@@ -172,8 +241,8 @@ pub(crate) async fn handle_ask_skip_callback(
 ) {
     let Some(sid) = data.split(':').nth(1) else { return; };
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((sess, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
+    let dm = config.model.as_deref().unwrap_or("");
+    if let Ok((sess, _)) = sessions.get_or_init_session(&key, &config.provider, dm).await {
         let _ = process_skip(bot, msg, sid, cli, sessions, sess, config).await;
     }
 }

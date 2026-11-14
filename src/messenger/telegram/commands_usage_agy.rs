@@ -21,7 +21,7 @@ use super::commands_usage::{
 };
 use super::commands_usage_claude::format_reset_timestamp;
 
-const AGY_USER_AGENT: &str = "antigravity/cli/1.5.4 (aidev_client; os_type=linux; arch=amd64; cl=1017748741; auth_method=consumer)";
+const AGY_USER_AGENT: &str = "antigravity/cli/1.5.9 (aidev_client; os_type=linux; arch=amd64; cl=1017748741; auth_method=consumer)";
 const AGY_CLOUDCODE_BASE: &str = "https://daily-cloudcode-pa.googleapis.com";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 
@@ -226,16 +226,21 @@ pub(crate) async fn query_antigravity_usage_html(
     let lock = sessions.lock_pool.get((msg.chat.id.0, topic_id));
     if !sid.is_empty()
         && let Ok(_guard) = lock.try_lock()
-        && !cli.sessions.is_running(&sid).await
+        && !cli.is_pty_busy_or_asking(&sid, msg.chat.id.0, sess.topic_id.or(topic_id)).await
     {
+        crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
         let mut s_cli = cli.clone();
         s_cli.config.chat_id = msg.chat.id.0;
         s_cli.config.topic_id = sess.topic_id.or(topic_id);
-        if !sess.model.is_empty() && sess.model != "antigravity-default" {
+        if !sess.model.is_empty() {
             s_cli.config.model = Some(sess.model.clone());
         }
-        if sess.effort.is_some() {
-            s_cli.config.effort = sess.effort.clone();
+        if s_cli.config.model.as_deref().is_some_and(|m| !AntigravityCli::supports_effort(m)) {
+            s_cli.config.effort = None;
+        } else if let Some(ref eff) = sess.effort
+            && !eff.is_empty()
+        {
+            s_cli.config.effort = Some(eff.clone());
         }
         if let Ok(r) = query_quota_from_pty(&s_cli, &sid).await {
             return Some(render_quota_message(&r));

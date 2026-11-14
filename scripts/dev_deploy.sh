@@ -43,6 +43,7 @@ fi
 
 echo "🔄 Restarting container tuner worker..."
 docker exec "$CONTAINER_NAME" pkill -9 -f 'bin/tuner' || true
+docker exec "$CONTAINER_NAME" pkill -9 -f 'agy --add-dir|claude -p|codex app-server' || true
 if [ -f "$HOME/.tuner-dev/gemini_bridge.py" ]; then
     docker cp "$HOME/.tuner-dev/gemini_bridge.py" "$CONTAINER_NAME:/tmp/gemini_bridge.py"
     docker exec "$CONTAINER_NAME" pkill -9 -f 'gemini_bridge.py' || true

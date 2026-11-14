@@ -37,14 +37,14 @@ mod tests {
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.6-flash (effort: high)");
+        assert_eq!(model_str, "gemini-3.8-flash (effort: high)");
         
         // Scenario 2: Session effort is Some("medium"), should use session effort
         sess.effort = Some("medium".to_string());
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.6-flash (effort: medium)");
+        assert_eq!(model_str, "gemini-3.8-flash (effort: medium)");
         
         // Scenario 3: Config effort is None and session effort is None
         cfg.effort = None;
@@ -52,7 +52,16 @@ mod tests {
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.6-flash");
+        assert_eq!(model_str, "gemini-3.8-flash");
+
+        // Scenario 4: Effortless orchestrator ignores global config.effort ("high")
+        cfg.effort = Some("high".to_string());
+        sess.model = "gemini-pro-orchestrator".to_string();
+        sess.effort = None;
+        mgr.update_session(&sess).await.unwrap();
+
+        let orch_str = resolve_session_model(&msg, &cfg, &mgr).await;
+        assert_eq!(orch_str, "gemini-pro-orchestrator");
     }
 
     #[test]
@@ -80,6 +89,17 @@ mod tests {
         assert_eq!(model, None);
         assert_eq!(effort, None);
         assert_eq!(prompt, "just plain user text");
+
+        // Scenario 5: Orchestrator directive strips unsupported effort flags/suffixes
+        let (om, oe, op) = parse_model_directive("@model gemini-pro-orchestrator-high coordinate tasks");
+        assert_eq!(om.as_deref(), Some("gemini-pro-orchestrator"));
+        assert_eq!(oe, None);
+        assert_eq!(op, "coordinate tasks");
+
+        let (om2, oe2, op2) = parse_model_directive("@orchestrator coordinate swarm");
+        assert_eq!(om2.as_deref(), Some("gemini-pro-orchestrator"));
+        assert_eq!(oe2, None);
+        assert_eq!(op2, "coordinate swarm");
     }
 
     #[test]
@@ -211,5 +231,151 @@ mod tests {
         sess.last_active = (now - chrono::Duration::minutes(10)).to_rfc3339();
         sess.provider_sessions.get_mut(&sess.provider).unwrap().message_count = 6;
         assert!(!mgr.is_fresh(&sess), "Session exceeding max_session_messages must expire");
+    }
+
+    #[test]
+    fn test_provider_aware_directives_and_provider_switch_clamping() {
+        use crate::messenger::telegram::reply_directives::{
+            parse_model_directive_for_provider, parse_model_effort_args_for_provider,
+        };
+        use crate::session::data::SessionData;
+
+        let (cm, ce, cp) = parse_model_directive_for_provider("claude", "@opus write tests");
+        assert_eq!(cm.as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(ce, None);
+        assert_eq!(cp, "write tests");
+
+        let (hm, he, hp) = parse_model_directive_for_provider("claude", "@haiku quick");
+        assert_eq!(hm.as_deref(), Some("claude-haiku-4-5"));
+        assert_eq!(he, None);
+        assert_eq!(hp, "quick");
+
+        let (xm, xe, xp) = parse_model_directive_for_provider("codex", "@pro do work");
+        assert_eq!(xm, None);
+        assert_eq!(xe, None);
+        assert_eq!(xp, "@pro do work");
+
+        let (am, ae, ap) =
+            parse_model_directive_for_provider("antigravity", "@model gemini-4-argon --effort turbo run");
+        assert_eq!(am, None);
+        assert_eq!(ae, None);
+        assert_eq!(ap, "@model gemini-4-argon --effort turbo run");
+
+        let (am2, ae2, ap2) =
+            parse_model_directive_for_provider("antigravity", "@model gemini-4-argon --effort max run");
+        assert_eq!(am2.as_deref(), Some("gemini-4-argon"));
+        assert_eq!(ae2.as_deref(), Some("high"));
+        assert_eq!(ap2, "run");
+
+        assert_eq!(
+            parse_model_effort_args_for_provider("claude", "haiku", Some("high")),
+            ("claude-haiku-4-5".to_string(), None)
+        );
+        assert_eq!(
+            parse_model_effort_args_for_provider("claude", "sonnet --effort minimal", None),
+            ("claude-sonnet-5".to_string(), Some("low".to_string()))
+        );
+        assert_eq!(
+            parse_model_effort_args_for_provider("claude", "--effort=high sonnet", None),
+            ("claude-sonnet-5".to_string(), Some("high".to_string()))
+        );
+        assert_eq!(
+            parse_model_effort_args_for_provider("codex", "luna --effort max", None),
+            ("gpt-6-luna".to_string(), Some("xhigh".to_string()))
+        );
+        assert_eq!(
+            parse_model_effort_args_for_provider("antigravity", "pro", Some("low")),
+            ("gemini-4-argon".to_string(), Some("low".to_string()))
+        );
+        assert_eq!(
+            parse_model_effort_args_for_provider("antigravity", "gpt-oss-120b-medium", Some("high")),
+            ("gpt-oss-120b-medium".to_string(), None)
+        );
+
+        let mut s = SessionData::new(1, "tg".into(), None, "claude".into(), "claude-fable-5".into());
+        s.effort = Some("max".into());
+        s.apply_provider_switch("antigravity");
+        assert_eq!(s.model, "gemini-3.8-flash");
+        assert_eq!(s.effort.as_deref(), Some("high"));
+
+        s.model = "o3".into();
+        s.effort = Some("minimal".into());
+        s.apply_provider_switch("claude");
+        assert_eq!(s.model, "claude-fable-5");
+        assert_eq!(s.effort.as_deref(), Some("low"));
+
+        s.effort = Some("max".into());
+        s.apply_provider_switch("codex");
+        assert_eq!(s.model, "gpt-6-astra");
+        assert_eq!(s.effort.as_deref(), Some("xhigh"));
+    }
+
+    #[test]
+    fn test_round3_shortcut_isolation_effort_inheritance_and_suffix_switch() {
+        use crate::messenger::telegram::commands_model::group_discovered_models;
+        use crate::messenger::telegram::reply_directives::{
+            DirectiveOutcome, parse_model_directive_for_provider, resolve_directive_for_provider,
+            tokenize_model_command_args,
+        };
+
+        // Claude/Codex-only aliases must not hijack `@fable` / `@astra` on Antigravity
+        assert_eq!(parse_model_directive_for_provider("antigravity", "@fable hello").0, None);
+        assert_eq!(parse_model_directive_for_provider("antigravity", "@astra hello").0, None);
+        assert_eq!(
+            resolve_directive_for_provider("antigravity", None, "@model gemini-4-argon --effort turbo run"),
+            DirectiveOutcome::InvalidEffort
+        );
+        assert!(tokenize_model_command_args("sonnet --effort=turbo").is_err());
+        assert_eq!(
+            tokenize_model_command_args("--effort high sonnet").unwrap(),
+            ("sonnet".to_string(), Some("high".to_string()))
+        );
+
+        // Single-variant `gpt-oss-120b-medium` stays intact in `/model` grouping without 1-button effort split
+        let grouped = group_discovered_models(&[
+            "gemini-4-carbon-high".to_string(),
+            "gemini-4-carbon-low".to_string(),
+            "gpt-oss-120b-medium".to_string(),
+        ]);
+        assert_eq!(grouped[0].0, "gemini-4-carbon");
+        assert_eq!(grouped[1], ("gpt-oss-120b-medium".to_string(), Vec::new()));
+    }
+
+    #[test]
+    fn test_round3_orchestrator_aliases_and_suffix_provider_switches() {
+        use crate::messenger::telegram::reply_directives::{
+            DirectiveOutcome, parse_model_directive_for_provider, resolve_directive_for_provider,
+        };
+        use crate::session::data::SessionData;
+
+        // Orchestrator variant aliases resolve cleanly with `None` effort
+        let (oa, oe, op) = parse_model_directive_for_provider("antigravity", "@orchestrator-argon coordinate");
+        assert_eq!(oa.as_deref(), Some("gemini-pro-orchestrator-argon"));
+        assert_eq!(oe, None);
+        assert_eq!(op, "coordinate");
+
+        // Inline `@argon` preserves `prev_effort` (`None` or `Some("low")`) without forcing `"high"`
+        assert_eq!(
+            resolve_directive_for_provider("antigravity", None, "@argon plan"),
+            DirectiveOutcome::Resolved("gemini-4-argon".to_string(), None, "plan")
+        );
+        assert_eq!(
+            resolve_directive_for_provider("antigravity", Some("low"), "@argon plan"),
+            DirectiveOutcome::Resolved("gemini-4-argon".to_string(), Some("low".to_string()), "plan")
+        );
+
+        // Suffixed `claude-opus-5-5-high`: incompatible on `claude`, normalized on `antigravity`
+        let mut s1 = SessionData::new(1, "tg".into(), None, "antigravity".into(), "claude-opus-5-5-high".into());
+        s1.apply_provider_switch("claude");
+        assert_eq!(s1.model, "claude-fable-5");
+
+        let mut s2 = SessionData::new(1, "tg".into(), None, "claude".into(), "claude-opus-5-5-high".into());
+        s2.apply_provider_switch("antigravity");
+        assert_eq!(s2.model, "claude-opus-5-5");
+        assert_eq!(s2.effort.as_deref(), Some("high"));
+
+        let mut s3 = SessionData::new(1, "tg".into(), None, "claude".into(), "codex-mini".into());
+        s3.apply_provider_switch("codex");
+        assert_eq!(s3.model, "codex-mini");
     }
 }

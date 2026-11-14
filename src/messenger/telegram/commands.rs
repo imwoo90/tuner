@@ -13,7 +13,7 @@ use crate::cli::antigravity::AntigravityCli;
 use crate::t;
 use super::commands_model::{handle_model_command, handle_effort_command};
 use super::commands_session::{handle_session_control_commands, handle_memory_command};
-use super::callbacks_effort::handle_provider_command;
+use super::commands_provider::handle_provider_command;
 #[allow(unused_imports)]
 pub(crate) use super::commands_registry::{get_bot_commands, register_commands, is_lock_free_command, handle_help_command};
 
@@ -60,11 +60,11 @@ async fn append_topic_status(
             };
             report.push_str(&format!("\n- Topic: {}", t_label));
         }
-        let active_prov = if !s.provider.is_empty() { &s.provider } else { &config.provider };
+        let active_prov = crate::session::data::SessionData::effective_provider(&s.provider, &config.provider);
         let sid = s.get_session_id(active_prov);
         if !sid.is_empty() {
-            let short_sid = &sid[..sid.len().min(8)];
-            let turns = s.provider_sessions.get(active_prov).map(|p| p.message_count).unwrap_or(0);
+            let short_sid: String = sid.chars().take(8).collect();
+            let turns = s.get_message_count(active_prov);
             let is_turn_running = cli.sessions.is_running(&sid).await
                 || crate::cli::claude::is_running(msg.chat.id.0, topic_id, Some(&sid)).await
                 || crate::cli::codex::is_running(msg.chat.id.0, topic_id, Some(&sid)).await;
@@ -85,14 +85,35 @@ async fn append_topic_status(
     }
 }
 
-async fn resolve_topic_provider(
+pub(crate) async fn resolve_topic_provider(
     msg: &Message,
     config: &CliConfig,
     sessions: &crate::session::manager::SessionManager,
 ) -> String {
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    sessions.get_active(&key).await.ok().flatten()
-        .map(|s| s.provider).filter(|p| !p.is_empty()).unwrap_or_else(|| config.provider.clone())
+    let raw = sessions.get_active(&key).await.ok().flatten().map(|s| s.provider).unwrap_or_default();
+    crate::session::data::SessionData::effective_provider(&raw, &config.provider).to_string()
+}
+
+pub(crate) async fn build_status_report(
+    msg: &Message,
+    config: &CliConfig,
+    sessions: &crate::session::manager::SessionManager,
+    cli: &AntigravityCli,
+) -> String {
+    let agy_status = crate::cli::antigravity::events::agy_version_summary()
+        .map(|v| t!("bot.diagnose_installed", version = v))
+        .unwrap_or_else(|| t!("bot.diagnose_not_found"));
+    let session_count = cli.sessions.active_count().await
+        + crate::cli::claude::active_count().await
+        + crate::cli::codex::active_count().await;
+    let has_tok = std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty();
+    let token_present = if has_tok { t!("bot.diagnose_token_set") } else { t!("bot.diagnose_token_missing") };
+    let active_provider = format!("`{}`", resolve_topic_provider(msg, config, sessions).await);
+    let model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
+    let mut report = t!("bot.status", agy_status = agy_status, token_present = token_present, session_count = session_count, provider = active_provider, model = model);
+    append_topic_status(&mut report, msg, config, sessions, cli).await;
+    report
 }
 
 async fn handle_info_commands(
@@ -113,17 +134,7 @@ async fn handle_info_commands(
         return Ok(true);
     }
     if cmd == "/status" || cmd == "/diagnose" {
-        let agy_status = crate::cli::antigravity::events::agy_version_summary()
-            .map(|v| t!("bot.diagnose_installed", version = v))
-            .unwrap_or_else(|| t!("bot.diagnose_not_found"));
-        let session_count = cli.sessions.active_count().await
-            + crate::cli::claude::active_count().await + crate::cli::codex::active_count().await;
-        let has_tok = std::env::var("TELEGRAM_TOKEN").is_ok() || !config.telegram_token.is_empty();
-        let token_present = if has_tok { t!("bot.diagnose_token_set") } else { t!("bot.diagnose_token_missing") };
-        let active_provider = resolve_topic_provider(msg, config, sessions).await;
-        let model = crate::telegram::reply::resolve_session_model(msg, config, sessions).await;
-        let mut report = t!("bot.status", agy_status = agy_status, token_present = token_present, session_count = session_count, provider = active_provider, model = model);
-        append_topic_status(&mut report, msg, config, sessions, cli).await;
+        let report = build_status_report(msg, config, sessions, cli).await;
         let _ = send_reply(bot, msg, report).await;
         return Ok(true);
     }
@@ -146,7 +157,7 @@ async fn handle_pref_commands(
     let (cmd, args) = super::commands_registry::split_slash_command(text);
     match cmd {
         "/provider" => {
-            let _ = handle_provider_command(bot, msg, args, config, sessions).await;
+            let _ = handle_provider_command(bot, msg, args, config, sessions, cli).await;
             true
         }
         "/model" => {

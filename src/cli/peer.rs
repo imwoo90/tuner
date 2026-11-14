@@ -47,8 +47,8 @@ pub fn is_peer_session_alive(
         return false;
     };
     let home_path = Path::new(&home);
-    match provider {
-        "claude" => {
+    match crate::session::data::SessionData::canonical_provider(provider) {
+        Some("claude") => {
             let projects_dir = home_path.join(".claude").join("projects");
             let file_name = format!("{}.jsonl", session_id);
             std::fs::read_dir(projects_dir)
@@ -58,7 +58,7 @@ pub fn is_peer_session_alive(
                 .flatten()
                 .any(|entry| entry.path().join(&file_name).is_file())
         }
-        "codex" => {
+        Some("codex") => {
             let sessions_dir = home_path.join(".codex").join("sessions");
             let suffix = format!("{}.jsonl", session_id);
             has_codex_session_jsonl(&sessions_dir, &suffix, 0)
@@ -70,7 +70,7 @@ pub fn is_peer_session_alive(
 /// Automatically registers workspace trust in `<HOME>/.claude.json` (`projects[<canonical_workspace>].hasTrustDialogAccepted = true`)
 /// so warm `claude` sessions never block on interactive workspace trust dialogs.
 pub fn trust_peer_workspace(provider: &str, workspace: &Path, home_override: Option<PathBuf>) {
-    if provider != "claude" {
+    if crate::session::data::SessionData::canonical_provider(provider) != Some("claude") {
         return;
     }
     let home = home_override.unwrap_or_else(|| {

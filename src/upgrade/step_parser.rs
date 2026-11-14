@@ -81,6 +81,7 @@ pub(crate) enum PendingCall {
     RunCommand {
         is_daemon: bool,
     },
+    SwarmWait,
     Other,
 }
 
@@ -144,6 +145,7 @@ fn extract_calls(val: &serde_json::Value) -> Vec<PendingCall> {
             "run_command" => PendingCall::RunCommand {
                 is_daemon: args.is_some_and(|a| clean_arg_bool(a, "IsDaemon")),
             },
+            "swarm_wait" => PendingCall::SwarmWait,
             _ => PendingCall::Other,
         };
         out.push(item);
@@ -192,4 +194,65 @@ pub(crate) fn parse_compact_step_with_ack(
         key,
         CompactStep { stype, status, step_ts, has_tools, is_hb_prompt, is_hb_ack, calls, content },
     ))
+}
+
+#[derive(Default)]
+pub(crate) struct SwarmBatchState {
+    bucket: u8,
+    start_idx: u64,
+    total_calls: u64,
+    wait_keys: Vec<(u8, u64)>,
+    settled_results: u64,
+    done_waits: usize,
+}
+
+fn is_sibling_result_settled(step: &CompactStep) -> bool {
+    step.status != "RUNNING"
+        || step.content.as_deref().is_some_and(|c| c.contains("task id:"))
+}
+
+pub(crate) fn update_terminal_state(
+    key: (u8, u64),
+    step: &CompactStep,
+    batch: &mut SwarmBatchState,
+) -> bool {
+    if step.stype == "PLANNER_RESPONSE" {
+        *batch = SwarmBatchState::default();
+        if !step.has_tools {
+            return step.status == "DONE";
+        }
+        batch.bucket = key.0;
+        batch.start_idx = key.1.saturating_add(1);
+        batch.total_calls = step.calls.len() as u64;
+        batch.wait_keys = step
+            .calls
+            .iter()
+            .enumerate()
+            .filter_map(|(k, c)| {
+                matches!(c, PendingCall::SwarmWait)
+                    .then_some((key.0, key.1.saturating_add(1 + k as u64)))
+            })
+            .collect();
+        false
+    } else if step.stype == "GENERIC" {
+        let end_idx = batch.start_idx.saturating_add(batch.total_calls);
+        if batch.total_calls > 0 && key.0 == batch.bucket && key.1 >= batch.start_idx && key.1 < end_idx {
+            if batch.wait_keys.contains(&key) {
+                if step.status == "DONE" {
+                    batch.done_waits += 1;
+                    batch.settled_results = batch.settled_results.saturating_add(1);
+                }
+            } else if is_sibling_result_settled(step) {
+                batch.settled_results = batch.settled_results.saturating_add(1);
+            }
+            !batch.wait_keys.is_empty()
+                && batch.done_waits == batch.wait_keys.len()
+                && batch.settled_results >= batch.total_calls
+        } else {
+            false
+        }
+    } else {
+        *batch = SwarmBatchState::default();
+        false
+    }
 }

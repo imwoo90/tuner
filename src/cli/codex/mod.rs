@@ -9,40 +9,38 @@
 //! #codex-provider, #app-server-stdio, #warm-process, #agent-executor
 //!
 //! ## Submodules
-//! - [`session`] (`session.rs`): Persistent warm `codex app-server --stdio` session pool and JSON-RPC handshake.
+//! - [`parser`] (`parser.rs`): Incremental JSON-RPC and JSONL stream parser.
+//! - [`session`] (`session.rs`): Persistent warm `codex app-server --stdio` session pool and turn signaling.
+//! - [`spawner`] (`spawner.rs`): Child process group spawner and JSON-RPC `initialize`/`thread` handshake.
 //! - [`runner`] (`runner.rs`): Asynchronous JSON-RPC `turn/start` executor and stream finalizer.
 
+pub mod parser;
 pub mod runner;
 pub mod session;
+pub mod spawner;
 
 use crate::cli::antigravity::AntigravityCli;
 pub use crate::cli::common::parse_codex_models_response;
-use crate::cli::common::{format_stream_preview, probe_cli_json_lines, resolve_cli_bin, strip_effort_suffix};
-use crate::cli::StreamEvent;
+use crate::cli::common::{probe_cli_json_lines, resolve_cli_bin, strip_effort_suffix};
+pub use parser::CodexStreamParser;
 pub use runner::{send, send_streaming};
 pub use session::{
-    active_count, active_pid, cleanup_expired, interrupt_session, is_running, submit_ask_answers,
-    terminate_all, terminate_all_for_chat, terminate_topic,
+    active_count, active_pid, active_session_id, cleanup_expired, has_pending_ask,
+    interrupt_session, is_running, submit_ask_answers, terminate_all, terminate_all_for_chat,
+    terminate_topic,
 };
 
 /// Fallback OpenAI Codex model identifiers when `codex app-server` cannot be probed.
 pub const CODEX_MODELS: &[&str] = &[
-    "gpt-6.1-sol",
-    "gpt-6-astra",
-    "gpt-6-sol",
-    "gpt-6-luna",
-    "gpt-5.6-sol",
-    "gpt-6.1-terra",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
+    "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol",
+    "gpt-6.1-terra", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
 ];
 
 /// Default model when switching to the `codex` provider.
 pub const DEFAULT_CODEX_MODEL: &str = "gpt-6-astra";
 
 /// Supported reasoning effort levels for the `codex` CLI.
-pub const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+pub const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh"];
 
 /// Returns the static fallback model list (with effort suffixes) for the `codex` provider.
 pub fn discover_models() -> Vec<String> {
@@ -51,8 +49,12 @@ pub fn discover_models() -> Vec<String> {
 
 /// Dynamically queries `codex app-server --stdio` `model/list` for the user's live `/model` options.
 pub async fn discover_models_live(env: &std::collections::HashMap<String, String>) -> Vec<String> {
+    let init = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"clientInfo":{{"name":"tuner","version":"{}"}}}}}}"#,
+        env!("CARGO_PKG_VERSION")
+    );
     let reqs = [
-        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"tuner","version":"0.2.0"}}}"#,
+        init.as_str(),
         r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#,
         r#"{"jsonrpc":"2.0","id":2,"method":"model/list","params":{}}"#,
     ];
@@ -74,17 +76,38 @@ fn normalize_codex_model(raw: &str) -> &str {
     }
 }
 
+/// Returns `true` when the given Codex model supports reasoning effort configuration.
+pub fn supports_codex_effort(model: &str) -> bool {
+    let low = model.trim().to_ascii_lowercase();
+    !low.is_empty() && low != "antigravity-default"
+}
+
 /// Resolves the canonical model and reasoning effort flags for the `codex` CLI.
 pub fn resolve_codex_model_effort(model: Option<&str>, effort: Option<&str>) -> (Option<String>, Option<String>) {
     let mut suffix_eff = None;
-    let resolved_model = model.map(str::trim).filter(|s| !s.is_empty() && *s != "antigravity-default").and_then(|raw| {
-        let (base, eff) = strip_effort_suffix(raw);
-        suffix_eff = eff.map(str::to_string);
-        let c = normalize_codex_model(base);
-        let ok = (c.starts_with("gpt-") && !c.starts_with("gpt-oss"))
-            || ["o1", "o3", "o4", "codex"].iter().any(|p| c.starts_with(p));
-        ok.then(|| c.to_string())
-    });
+    let explicit_effortless = model.map(str::trim).is_some_and(|m| !m.is_empty() && !supports_codex_effort(m));
+    let resolved_model = model
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("antigravity-default"))
+        .and_then(|raw| {
+            let low = raw.to_ascii_lowercase();
+            let (base, eff) = strip_effort_suffix(&low);
+            let c = normalize_codex_model(base);
+            let ok = crate::cli::codex::CODEX_MODELS.contains(&c)
+                || ((c.starts_with("gpt-5")
+                    || c.starts_with("gpt-6")
+                    || ["o1", "o3", "o4", "codex"].iter().any(|p| c.starts_with(p)))
+                    && !c.starts_with("gpt-oss"));
+            if ok {
+                suffix_eff = eff.map(str::to_string);
+                Some(c.to_string())
+            } else {
+                None
+            }
+        });
+    if explicit_effortless {
+        return (resolved_model, None);
+    }
     let raw_eff = effort.map(str::trim).filter(|e| !e.is_empty()).map(str::to_lowercase).or(suffix_eff);
     let resolved_eff = raw_eff.and_then(|e| match e.as_str() {
         "minimal" | "low" | "medium" | "high" => Some(e),
@@ -137,139 +160,6 @@ pub fn build_command(
     if let Some(p) = cli.config.cli_parameters.get("codex") { cmd.extend(p.iter().cloned()); }
     cmd.push(cli.format_prompt(prompt));
     cmd
-}
-
-fn extract_item_text(item: &serde_json::Value) -> Option<String> {
-    if let Some(t) = item.get("text").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
-        return Some(t.to_string());
-    }
-    for key in ["content", "summary"] {
-        if let Some(arr) = item.get(key).and_then(|v| v.as_array()) {
-            let parts: Vec<&str> = arr.iter().filter_map(|c| {
-                c.as_str().or_else(|| c.get("text").and_then(|v| v.as_str())).map(str::trim).filter(|s| !s.is_empty())
-            }).collect();
-            if !parts.is_empty() { return Some(parts.join("\n")); }
-        }
-    }
-    None
-}
-
-#[derive(Default, Debug, Clone)]
-/// Incremental parser for `codex app-server --stdio` JSON-RPC and `codex exec --json` JSONL lines.
-pub struct CodexStreamParser {
-    /// Captured thread/session identifier.
-    pub session_id: Option<String>,
-    /// Collected reasoning blocks in the current turn.
-    pub thinking_blocks: Vec<String>,
-    /// Collected command executions in the current turn.
-    pub tool_calls: Vec<String>,
-    /// Latest assistant message text.
-    pub assistant_text: String,
-    /// Captured error message if `turn.failed` or fatal `error` occurred.
-    pub error_message: Option<String>,
-    /// Whether `turn/completed` was received on an `app-server` turn.
-    pub turn_completed: bool,
-    delta_buffer: String,
-}
-
-impl CodexStreamParser {
-    /// Creates a new `CodexStreamParser`.
-    pub fn new() -> Self { Self::default() }
-
-    fn preview(&self) -> Option<String> {
-        format_stream_preview(&self.thinking_blocks, &self.tool_calls, &self.assistant_text)
-    }
-
-    fn ingest_item(&mut self, item: &serde_json::Value) -> bool {
-        match item.get("type").and_then(|v| v.as_str()).unwrap_or("") {
-            "reasoning" | "Reasoning" => {
-                if let Some(t) = extract_item_text(item) && self.thinking_blocks.last() != Some(&t) {
-                    self.thinking_blocks.push(t);
-                    return true;
-                }
-            }
-            "command_execution" | "CommandExecution" | "commandExecution" => {
-                if let Some(c) = item.get("command").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
-                    let entry = format!("🛠 `{}`", c);
-                    if self.tool_calls.last() != Some(&entry) {
-                        self.tool_calls.push(entry);
-                        return true;
-                    }
-                }
-            }
-            "agent_message" | "AgentMessage" | "agentMessage" => {
-                self.delta_buffer.clear();
-                if let Some(t) = extract_item_text(item) {
-                    self.assistant_text = t;
-                    return true;
-                }
-            }
-            _ => {}
-        }
-        false
-    }
-
-    fn parse_rpc_method(&mut self, method: &str, params: &serde_json::Value) -> Vec<StreamEvent> {
-        let mut ev = Vec::new();
-        match method {
-            "item/started" | "item/completed" => {
-                if let Some(i) = params.get("item") && self.ingest_item(i) && let Some(p) = self.preview() {
-                    ev.push(StreamEvent::TextDelta(p));
-                }
-            }
-            "item/agentMessage/delta" => {
-                if let Some(d) = params.get("delta").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-                    self.delta_buffer.push_str(d);
-                    self.assistant_text = self.delta_buffer.trim().to_string();
-                    if let Some(p) = self.preview() { ev.push(StreamEvent::TextDelta(p)); }
-                }
-            }
-            "turn/completed" => {
-                self.turn_completed = true;
-                if let Some(e) = params.get("turn").and_then(|t| t.get("error")).and_then(|e| e.get("message")).and_then(|v| v.as_str()) {
-                    self.error_message = Some(e.to_string());
-                }
-            }
-            "error" => {
-                if let Some(m) = params.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str()) && !m.starts_with("Reconnecting...") {
-                    self.error_message = Some(m.to_string());
-                }
-            }
-            _ => {}
-        }
-        ev
-    }
-
-    /// Parses a single JSON line from `codex` stdout and returns any emitted `StreamEvent`s.
-    pub fn parse_line(&mut self, line: &str) -> Vec<StreamEvent> {
-        let Ok(val) = serde_json::from_str::<serde_json::Value>(line.trim()) else { return Vec::new(); };
-        if let Some(tid) = val.get("thread_id").or_else(|| val.get("params").and_then(|p| p.get("threadId"))).and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-            self.session_id = Some(tid.to_string());
-        }
-        if let Some(m) = val.get("method").and_then(|v| v.as_str()) {
-            return self.parse_rpc_method(m, val.get("params").unwrap_or(&serde_json::Value::Null));
-        }
-        let mut ev = Vec::new();
-        match val.get("type").and_then(|v| v.as_str()) {
-            Some("item.started" | "item.completed") => {
-                if let Some(i) = val.get("item") && self.ingest_item(i) && let Some(p) = self.preview() {
-                    ev.push(StreamEvent::TextDelta(p));
-                }
-            }
-            Some("turn.failed") => {
-                if let Some(m) = val.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str()) {
-                    self.error_message = Some(m.to_string());
-                }
-            }
-            Some("error") => {
-                if let Some(m) = val.get("message").and_then(|v| v.as_str()) && !m.starts_with("Reconnecting...") {
-                    self.error_message = Some(m.to_string());
-                }
-            }
-            _ => {}
-        }
-        ev
-    }
 }
 
 #[cfg(test)]

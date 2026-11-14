@@ -52,12 +52,19 @@ impl TelegramTransport {
         let Ok(Some(sess)) = sessions.get_active(&key).await else {
             return;
         };
-        let active_sid = sess.get_session_id(&cfg.provider);
-        let target_sid = if !active_sid.is_empty() {
-            active_sid
-        } else {
-            sess.get_past_session_ids(&cfg.provider).last().cloned().unwrap_or_default()
-        };
+        let eff_prov = crate::session::data::SessionData::effective_provider(&sess.provider, &cfg.provider);
+        let mut target_sid = sess.get_session_id(eff_prov);
+        if target_sid.is_empty() {
+            target_sid = sess.get_session_id(&cfg.provider);
+        }
+        if target_sid.is_empty() {
+            target_sid = sess
+                .get_past_session_ids(eff_prov)
+                .last()
+                .cloned()
+                .or_else(|| sess.get_past_session_ids(&cfg.provider).last().cloned())
+                .unwrap_or_default();
+        }
         if !target_sid.is_empty() {
             super::history::log_telegram_message(
                 &cfg.working_dir,

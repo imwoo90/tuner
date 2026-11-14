@@ -146,7 +146,12 @@ async fn read_quota_modal_pass(cli: &AntigravityCli, sid: &str, settle_ms: u64) 
 }
 
 pub(crate) async fn query_quota_from_pty(cli: &AntigravityCli, sid: &str) -> Result<QuotaReport, String> {
-    cli.ensure_interactive_ready(sid).await?;
+    let pty_lock = cli.pty_sync.lock_for(sid).await;
+    let _pty_g = pty_lock.lock().await;
+    if cli.is_pty_busy_or_asking(sid, cli.config.chat_id, cli.config.topic_id).await {
+        return Err("Session is busy or waiting for user input".to_string());
+    }
+    cli.ensure_interactive_ready_locked(sid).await?;
     let first = read_quota_modal_pass(cli, sid, 550).await?;
     let text = if !first.contains("Loading quota") && is_quota_modal_ready(&first) {
         read_quota_modal_pass(cli, sid, 0).await.ok().filter(|s| is_quota_modal_ready(s)).unwrap_or(first)
@@ -209,23 +214,13 @@ pub(crate) async fn handle_usage_command(
     sessions: &SessionManager,
     cli: &AntigravityCli,
 ) -> Result<(), teloxide::RequestError> {
-    let model = config.model.as_deref().unwrap_or("antigravity-default");
+    let raw_cfg_model = config.model.as_deref().unwrap_or("");
     let topic_id = crate::telegram::get_topic_id(msg);
     let key = SessionKey::telegram(msg.chat.id.0, topic_id);
-    let sess = sessions
-        .get_active(&key)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| {
-            crate::session::data::SessionData::new(
-                msg.chat.id.0,
-                "telegram".to_string(),
-                topic_id,
-                config.provider.clone(),
-                model.to_string(),
-            )
-        });
+    let mut sess = sessions.get_active(&key).await.ok().flatten().unwrap_or_else(|| {
+        crate::session::create_seeded_session(&key, &config.provider, raw_cfg_model, None)
+    });
+    let _ = crate::session::heal_session_defaults(&mut sess, &config.provider, raw_cfg_model, None);
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;

@@ -9,29 +9,76 @@
 
 use teloxide::prelude::*;
 use crate::config::CliConfig;
-use crate::session::manager::SessionManager;
-use crate::cli::antigravity::AntigravityCli;
+use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
+use crate::cli::{antigravity::AntigravityCli, common::strip_effort_suffix};
+use std::collections::HashMap;
 
-fn get_efforts_for_base(base: &str, models: &[String]) -> Vec<String> {
-    let mut efforts = Vec::new();
-    for m in models {
-        if let Some(suffix) = m.strip_prefix(base) {
-            for (suf, eff) in [
-                ("-minimal", "minimal"),
-                ("-low", "low"),
-                ("-medium", "medium"),
-                ("-high", "high"),
-                ("-xhigh", "xhigh"),
-                ("-max", "max"),
-                ("-ultra", "ultra"),
-            ] {
-                if suffix == suf && !efforts.contains(&eff.to_string()) {
-                    efforts.push(eff.to_string());
-                }
+fn count_efforts_per_base(raw_models: &[String]) -> HashMap<String, usize> {
+    let mut counts: HashMap<String, Vec<String>> = HashMap::new();
+    for m in raw_models {
+        let (base, eff_opt) = strip_effort_suffix(m);
+        if let Some(eff) = eff_opt {
+            let list = counts.entry(base.to_string()).or_default();
+            if !list.iter().any(|e| e == eff) {
+                list.push(eff.to_string());
             }
         }
     }
-    efforts
+    counts.into_iter().map(|(b, v)| (b, v.len())).collect()
+}
+
+pub(crate) fn group_discovered_models(raw_models: &[String]) -> Vec<(String, Vec<String>)> {
+    let counts = count_efforts_per_base(raw_models);
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    for m in raw_models {
+        let (base, effort) = strip_effort_suffix(m);
+        if counts.get(base).copied().unwrap_or(0) >= 2 {
+            if let Some((_, effs)) = out.iter_mut().find(|(b, _)| b == base) {
+                if let Some(eff) = effort.map(str::to_string) && !effs.contains(&eff) {
+                    effs.push(eff);
+                }
+            } else {
+                out.push((base.to_string(), effort.map(|e| vec![e.to_string()]).unwrap_or_default()));
+            }
+        } else if !out.iter().any(|(b, _)| b == m) {
+            out.push((m.clone(), Vec::new()));
+        }
+    }
+    out
+}
+
+pub(crate) async fn discover_models_with_default(cli: &AntigravityCli, provider: &str) -> Vec<String> {
+    let mut p_cli = cli.clone();
+    p_cli.config.provider = provider.to_string();
+    let mut models = p_cli.discover_models().await;
+    if models.is_empty() {
+        models = match provider {
+            "claude" => crate::cli::claude::discover_models(),
+            "codex" => crate::cli::codex::discover_models(),
+            _ => crate::cli::antigravity::model_spec::fallback_models(),
+        };
+    }
+    if !matches!(provider, "claude" | "codex") && !models.iter().any(|m| m == "antigravity-default") {
+        models.push("antigravity-default".to_string());
+    }
+    models
+}
+
+fn get_efforts_for_base(base: &str, models: &[String]) -> Vec<String> {
+    if models.iter().any(|m| m == base) {
+        return Vec::new();
+    }
+    let mut efforts = Vec::new();
+    for m in models {
+        let (b, eff_opt) = strip_effort_suffix(m);
+        if b == base
+            && let Some(eff) = eff_opt
+            && !efforts.iter().any(|e| e == eff)
+        {
+            efforts.push(eff.to_string());
+        }
+    }
+    if efforts.len() < 2 { Vec::new() } else { efforts }
 }
 
 async fn render_effort_keyboard(
@@ -40,22 +87,84 @@ async fn render_effort_keyboard(
     base: &str,
     efforts: &[String],
 ) -> Result<(), teloxide::RequestError> {
-    let mut keyboard = Vec::new();
-    let mut row = Vec::new();
-    for eff in efforts {
-        row.push(teloxide::types::InlineKeyboardButton::callback(
-            eff.to_uppercase(),
-            format!("model_effort:{}:{}", base, eff),
-        ));
-    }
-    keyboard.push(row);
-    let markup = teloxide::types::InlineKeyboardMarkup::new(keyboard);
-    let prompt_html = super::formatting::markdown_to_telegram_html(&format!("Select reasoning effort level for `{}`:", base));
+    let row: Vec<_> = efforts
+        .iter()
+        .map(|eff| teloxide::types::InlineKeyboardButton::callback(eff.to_uppercase(), format!("model_effort:{base}:{eff}")))
+        .collect();
+    let markup = teloxide::types::InlineKeyboardMarkup::new(vec![row]);
+    let prompt_html = super::formatting::markdown_to_telegram_html(&format!("Select reasoning effort level for `{base}`:"));
     let _ = bot.edit_message_text(msg.chat.id, msg.id, prompt_html)
         .parse_mode(teloxide::types::ParseMode::Html)
         .reply_markup(markup)
         .await;
     Ok(())
+}
+
+pub(crate) fn is_model_in_provider_catalog(base: &str, models: &[String]) -> bool {
+    models.iter().any(|m| m == base || strip_effort_suffix(m).0 == base)
+}
+
+async fn validate_callback_provider_catalog(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    base: &str,
+    key: &SessionKey,
+    sessions: &SessionManager,
+    config: &CliConfig,
+    cli: &AntigravityCli,
+) -> Option<(String, Vec<String>)> {
+    let raw_prov = sessions
+        .get_active(key)
+        .await
+        .ok()
+        .flatten()
+        .map(|s| s.provider)
+        .unwrap_or_default();
+    let active_provider = SessionData::effective_provider(&raw_prov, &config.provider).to_string();
+    let models = discover_models_with_default(cli, &active_provider).await;
+    if !is_model_in_provider_catalog(base, &models) {
+        edit_markdown_status(
+            bot,
+            msg,
+            &format!("⚠️ Model `{base}` is not available for active provider `{active_provider}`. Run `/model` to refresh."),
+        )
+        .await;
+        return None;
+    }
+    Some((active_provider, models))
+}
+
+async fn apply_callback_model_selection(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    key: &SessionKey,
+    selection: (&str, &str, Option<&str>),
+    sessions: &SessionManager,
+    config: &CliConfig,
+    cli: &AntigravityCli,
+) {
+    let (active_provider, base, raw_effort) = selection;
+    let dm = config.model.as_deref().unwrap_or("");
+    let Ok((mut s, _)) = sessions.get_or_init_session(key, &config.provider, dm).await else { return; };
+    let mut changed_prov = None;
+    if let Ok(Some(u)) = sessions.mutate_session(key, Some(&s), |cur| {
+        let cp = SessionData::effective_provider(&cur.provider, &config.provider);
+        if cp != active_provider { changed_prov = Some(cp.to_string()); return false; }
+        cur.provider = cp.to_string();
+        cur.model = base.to_string();
+        cur.effort = raw_effort.and_then(|e| super::reply_directives::clamp_session_effort(cp, base, e));
+        true
+    }).await { s = u; }
+    if let Some(cp) = changed_prov {
+        edit_markdown_status(bot, msg, &format!("⚠️ Active provider changed to `{cp}`. Run `/model` to refresh.")).await;
+        return;
+    }
+    super::commands_model::apply_model_to_active_pty(cli, sessions, &s).await;
+    let display = match s.effort {
+        Some(ref e) => format!("{base} (effort: {e})"),
+        None => base.to_string(),
+    };
+    edit_markdown_status(bot, msg, &crate::t!("bot.model_switch_success", model = display)).await;
 }
 
 /// Executes `handle_model_base_callback` (handle model base callback).
@@ -67,37 +176,15 @@ pub async fn handle_model_base_callback(
     config: &CliConfig,
     cli: &AntigravityCli,
 ) {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    let active_provider = sessions
-        .get_active(&key)
-        .await
-        .ok()
-        .flatten()
-        .map(|s| s.provider)
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| config.provider.clone());
-
-    let mut p_cli = cli.clone();
-    p_cli.config.provider = active_provider.clone();
-    let mut models = p_cli.discover_models().await;
-    if models.is_empty() {
-        models = crate::telegram::commands_model::fallback_models_for_provider(&active_provider);
-    }
-
+    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let Some((active_provider, models)) =
+        validate_callback_provider_catalog(bot, msg, base, &key, sessions, config, cli).await
+    else {
+        return;
+    };
     let efforts = get_efforts_for_base(base, &models);
-
     if efforts.is_empty() {
-        if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-            s.model = base.to_string();
-            s.effort = None;
-            let _ = sessions.preserve_session_identity(&s).await;
-            crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &s).await;
-            let html = super::formatting::markdown_to_telegram_html(&crate::t!("bot.model_switch_success", model = base));
-            let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
-                .parse_mode(teloxide::types::ParseMode::Html)
-                .await;
-        }
+        apply_callback_model_selection(bot, msg, &key, (&active_provider, base, None), sessions, config, cli).await;
     } else {
         let _ = render_effort_keyboard(bot, msg, base, &efforts).await;
     }
@@ -113,19 +200,28 @@ pub async fn handle_model_effort_callback(
     config: &CliConfig,
     cli: &AntigravityCli,
 ) {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-        s.model = base.to_string();
-        s.effort = Some(effort.to_string());
-        let _ = sessions.preserve_session_identity(&s).await;
-        crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &s).await;
-        let display = format!("{} (effort: {})", base, effort);
-        let html = super::formatting::markdown_to_telegram_html(&crate::t!("bot.model_switch_success", model = display));
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await;
+    let low = effort.to_ascii_lowercase();
+    if !super::commands_model::is_valid_effort_level(&low) {
+        return;
     }
+    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let Some((active_provider, models)) =
+        validate_callback_provider_catalog(bot, msg, base, &key, sessions, config, cli).await
+    else {
+        return;
+    };
+    if !get_efforts_for_base(base, &models).iter().any(|e| e == &low) {
+        edit_markdown_status(bot, msg, &format!("⚠️ Effort `{low}` is not available for `{base}`. Run `/model` to refresh.")).await;
+        return;
+    }
+    apply_callback_model_selection(bot, msg, &key, (&active_provider, base, Some(effort)), sessions, config, cli).await;
+}
+
+pub(crate) async fn edit_markdown_status(bot: &teloxide::Bot, msg: &Message, md: &str) {
+    let html = super::formatting::markdown_to_telegram_html(md);
+    let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
+        .parse_mode(teloxide::types::ParseMode::Html)
+        .await;
 }
 
 /// Executes `handle_standalone_effort_callback` (handle standalone effort callback).
@@ -137,88 +233,36 @@ pub async fn handle_standalone_effort_callback(
     config: &CliConfig,
     cli: &AntigravityCli,
 ) {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-        s.effort = Some(effort.to_string());
-        let _ = sessions.preserve_session_identity(&s).await;
-        crate::messenger::telegram::commands_model::apply_model_to_active_pty(cli, &s).await;
-        let display_msg = super::formatting::markdown_to_telegram_html(&format!("🤖 [tuner] Session reasoning effort switched to `{}`.", effort));
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, display_msg)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await;
+    let key = SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
+    let raw_prov = sessions.get_active(&key).await.ok().flatten().map(|s| s.provider).unwrap_or_default();
+    if !matches!(SessionData::effective_provider(&raw_prov, &config.provider), "claude" | "codex") {
+        crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
     }
-}
-
-fn build_provider_keyboard() -> teloxide::types::InlineKeyboardMarkup {
-    use teloxide::types::InlineKeyboardButton as Btn;
-    teloxide::types::InlineKeyboardMarkup::new(vec![
-        vec![Btn::callback("🚀 Antigravity (agy)", "provider:antigravity")],
-        vec![Btn::callback("🟠 Claude Code (claude)", "provider:claude")],
-        vec![Btn::callback("🟢 OpenAI Codex (codex)", "provider:codex")],
-    ])
-}
-
-/// Handles the `/provider` slash command and optional `<name>` argument.
-pub async fn handle_provider_command(
-    bot: &Bot,
-    msg: &Message,
-    args: &str,
-    config: &CliConfig,
-    sessions: &SessionManager,
-) -> Result<(), teloxide::RequestError> {
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await else {
-        return Ok(());
-    };
-
-    if args.is_empty() {
-        let text = super::formatting::markdown_to_telegram_html(&format!(
-            "Current CLI provider is `{}` (model: `{}`). Select a CLI provider:",
-            sess.provider, sess.model
-        ));
-        let mut req = bot.send_message(msg.chat.id, text).parse_mode(teloxide::types::ParseMode::Html);
-        if let Some(tid) = msg.thread_id {
-            req = req.message_thread_id(tid);
+    let dm = config.model.as_deref().unwrap_or("");
+    let Ok((mut s, _)) = sessions.get_or_init_session(&key, &config.provider, dm).await else { return; };
+    let mut outcome = Err(None);
+    if let Ok(Some(u)) = sessions.mutate_session(&key, Some(&s), |cur| {
+        let (cp, cm) = super::commands_model::eff_prov_model(cur, config);
+        outcome = super::reply::validate_standalone_effort_payload(effort, &cp, &cm);
+        match &outcome {
+            Ok(resolved) => {
+                cur.provider = cp;
+                cur.effort = Some(resolved.clone());
+                true
+            }
+            Err(Some(_)) if !super::reply_directives::session_supports_effort(&cp, &cm) && cur.effort.is_some() => {
+                cur.effort = None;
+                true
+            }
+            _ => false,
         }
-        let _ = req.reply_markup(build_provider_keyboard()).await;
-    } else if let Some(target) = crate::session::data::SessionData::canonical_provider(args) {
-        let reply_msg = sess.apply_provider_switch(target);
-        let _ = sessions.preserve_session_identity(&sess).await;
-        super::commands_registry::update_chat_commands_for_provider(bot, msg.chat.id, target).await;
-        let _ = super::commands::send_reply(bot, msg, reply_msg).await;
-    } else {
-        let _ = super::commands::send_reply(
-            bot,
-            msg,
-            "❌ Invalid provider. Supported providers: `antigravity` (`agy`), `claude`, `codex`.",
-        )
-        .await;
-    }
-    Ok(())
-}
-
-/// Handles inline keyboard callbacks (`provider:<name>`) for switching the active CLI provider.
-pub async fn handle_provider_callback(
-    bot: &teloxide::Bot,
-    msg: &Message,
-    raw_provider: &str,
-    sessions: &SessionManager,
-    config: &CliConfig,
-) {
-    let Some(target) = crate::session::data::SessionData::canonical_provider(raw_provider) else {
-        return;
-    };
-    let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let dm = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut s, _)) = sessions.resolve_session(&key, &config.provider, dm).await {
-        let status_text = s.apply_provider_switch(target);
-        let _ = sessions.preserve_session_identity(&s).await;
-        super::commands_registry::update_chat_commands_for_provider(bot, msg.chat.id, target).await;
-        let html = super::formatting::markdown_to_telegram_html(&status_text);
-        let _ = bot.edit_message_text(msg.chat.id, msg.id, html)
-            .parse_mode(teloxide::types::ParseMode::Html)
-            .await;
+    }).await { s = u; }
+    match outcome {
+        Ok(resolved) => {
+            super::commands_model::apply_model_to_active_pty(cli, sessions, &s).await;
+            edit_markdown_status(bot, msg, &format!("🤖 [tuner] Session reasoning effort switched to `{resolved}`.")).await;
+        }
+        Err(Some(warn)) => edit_markdown_status(bot, msg, &warn).await,
+        Err(None) => {}
     }
 }

@@ -42,8 +42,8 @@ pub(crate) async fn handle_lang_command(
             eprintln!("❌ [tuner] Failed to send language select keyboard: {:?}", e);
         }
     } else {
-        let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-        let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await else {
+        let default_model = config.model.as_deref().unwrap_or("");
+        let Ok((sess, _)) = sessions.get_or_init_session(&key, &config.provider, default_model).await else {
             return Ok(());
         };
         
@@ -53,8 +53,12 @@ pub(crate) async fn handle_lang_command(
             "en"
         };
         
-        sess.language = Some(target_lang.to_string());
-        let _ = sessions.preserve_session_identity(&sess).await;
+        let _ = sessions
+            .mutate_session(&key, Some(&sess), |cur| {
+                cur.language = Some(target_lang.to_string());
+                true
+            })
+            .await;
         
         let confirm = crate::i18n::t_for_lang(target_lang, "bot.language_switch_success", &[("language", target_lang)]);
         if let Err(e) = super::commands::send_reply(bot, msg, confirm).await {
@@ -62,6 +66,30 @@ pub(crate) async fn handle_lang_command(
         }
     }
     Ok(())
+}
+
+pub(crate) async fn send_effort_menu(
+    bot: &Bot,
+    msg: &Message,
+    sess: &crate::session::data::SessionData,
+    cfg_eff: Option<&str>,
+    eff_model: &str,
+) {
+    let cur = sess
+        .effort
+        .as_deref()
+        .or(cfg_eff)
+        .filter(|s| !s.is_empty())
+        .and_then(|e| super::reply_directives::clamp_session_effort(&sess.provider, eff_model, e))
+        .unwrap_or_else(|| "default".to_string());
+    let text = super::formatting::markdown_to_telegram_html(&format!(
+        "Current reasoning effort is `{cur}`. Select a new reasoning effort level:"
+    ));
+    let mut req = bot.send_message(msg.chat.id, text).parse_mode(teloxide::types::ParseMode::Html);
+    if let Some(tid) = msg.thread_id {
+        req = req.message_thread_id(tid);
+    }
+    let _ = req.reply_markup(super::reply::build_effort_keyboard_for_session(&sess.provider, eff_model)).await;
 }
 
 #[cfg(test)]

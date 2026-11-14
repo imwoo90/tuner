@@ -25,12 +25,52 @@ pub(crate) async fn initialize_session_if_needed(
     initialize_session_with_prompt(bot, msg, sessions, sess, cli, config, None).await
 }
 
+pub(crate) async fn ensure_session_ready_for_turn(
+    bot: &Bot,
+    msg: &Message,
+    sessions: &std::sync::Arc<SessionManager>,
+    sess: &mut SessionData,
+    cli: &AntigravityCli,
+    config: &CliConfig,
+) -> Result<String, teloxide::RequestError> {
+    let boot_prov = SessionData::effective_provider(&sess.provider, &config.provider);
+    let mut sid = initialize_session_if_needed(bot, msg, sessions, sess, cli, config).await?;
+    if sid.is_empty() {
+        return Ok(String::new());
+    }
+    let mut cur_prov = SessionData::effective_provider(&sess.provider, &config.provider);
+    if cur_prov != boot_prov {
+        sid = initialize_session_if_needed(bot, msg, sessions, sess, cli, config).await?;
+        if sid.is_empty() {
+            return Ok(String::new());
+        }
+        cur_prov = SessionData::effective_provider(&sess.provider, &config.provider);
+    }
+    if cur_prov == "antigravity" {
+        super::async_observer::spawn_session_async_observer(
+            bot.clone(), msg, sid.clone(), cli.clone(), sessions.clone(), config.clone(),
+        );
+    }
+    Ok(sid)
+}
+
+async fn mutate_or_local<F>(sessions: &SessionManager, sess: &mut SessionData, f: F)
+where
+    F: FnOnce(&mut SessionData) -> bool + Clone,
+{
+    if let Ok(Some(updated)) = sessions.mutate_session(&sess.session_key(), Some(sess), f.clone()).await {
+        *sess = updated;
+    } else {
+        let _ = f(sess);
+    }
+}
+
 async fn resolve_auto_handover(
     sess: &mut SessionData,
     config: &CliConfig,
     sessions: &SessionManager,
 ) -> Option<String> {
-    let provider = if !sess.provider.is_empty() { &sess.provider } else { &config.provider };
+    let provider = SessionData::effective_provider(&sess.provider, &config.provider);
     let past_ids = sess.get_past_session_ids(provider);
     if past_ids.is_empty() && sess.last_handover_summary.is_none() {
         return None;
@@ -44,13 +84,16 @@ async fn resolve_auto_handover(
         sess.last_handover_summary.as_deref(),
         &past_ids,
     )?;
-    sess.last_handover_summary = Some(format!(
+    let summary = format!(
         "Objective: {}\nDecisions: {}\nProgress: {}",
         handover.topic_objective,
         handover.agreed_decisions.join("; "),
         handover.current_progress
-    ));
-    let _ = sessions.preserve_session_identity(sess).await;
+    );
+    mutate_or_local(sessions, sess, |cur| {
+        cur.last_handover_summary = Some(summary.clone());
+        true
+    }).await;
     Some(handover.handover_prompt)
 }
 
@@ -63,17 +106,22 @@ pub(crate) async fn initialize_session_with_prompt(
     config: &CliConfig,
     startup_prompt: Option<&str>,
 ) -> Result<String, teloxide::RequestError> {
-    let provider = if !sess.provider.is_empty() { sess.provider.clone() } else { config.provider.clone() };
-    let session_id = sess.get_session_id(&provider);
+    let provider = SessionData::effective_provider(&sess.provider, &config.provider);
+    let session_id = sess.get_session_id(provider);
     if !session_id.is_empty() {
         let mut check_cli = cli.clone();
-        check_cli.config.provider = provider.clone();
+        check_cli.config.provider = provider.to_string();
         if session_id.starts_with("mock-") || check_cli.is_session_alive(&session_id) {
             return Ok(session_id);
         }
         eprintln!("⚠️ [tuner] Session {} for topic {:?} is expired. Resetting...", session_id, sess.topic_name);
-        sess.set_session_id(&provider, "");
-        let _ = sessions.preserve_session_identity(sess).await;
+        mutate_or_local(sessions, sess, |cur| {
+            if cur.get_session_id(provider) == session_id {
+                cur.set_session_id(provider, "");
+                return true;
+            }
+            false
+        }).await;
     }
 
     let auto_handover = if startup_prompt.is_none() {
@@ -85,14 +133,34 @@ pub(crate) async fn initialize_session_with_prompt(
 
     if cfg!(test) {
         let mock_sid = "mock-session-123".to_string();
-        sess.set_session_id(&provider, &mock_sid);
-        let _ = sessions.preserve_session_identity(sess).await;
+        mutate_or_local(sessions, sess, |cur| {
+            cur.set_session_id(provider, &mock_sid);
+            cur.last_active = chrono::Utc::now().to_rfc3339();
+            true
+        }).await;
         return Ok(mock_sid);
     }
 
     let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
     let _g = super::typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     boot_fresh_session(bot, msg, sessions, sess, cli, effective_prompt).await
+}
+
+#[cfg(test)]
+pub(crate) fn merge_booted_session_id(
+    sess: &mut SessionData,
+    latest: Option<SessionData>,
+    boot_prov: &str,
+    new_sid: &str,
+) {
+    if let Some(mut cur) = latest {
+        if cur.get_session_id(boot_prov).is_empty() {
+            cur.set_session_id(boot_prov, new_sid);
+        }
+        *sess = cur;
+    } else {
+        sess.set_session_id(boot_prov, new_sid);
+    }
 }
 
 async fn handle_boot_success(
@@ -113,9 +181,15 @@ async fn handle_boot_success(
         eprintln!("Initialization oneshot did not return a session_id");
         return Ok(String::new());
     };
-    let provider = if !sess.provider.is_empty() { sess.provider.clone() } else { config.provider.clone() };
-    sess.set_session_id(&provider, &new_sid);
-    let _ = sessions.preserve_session_identity(sess).await;
+    let boot_prov = SessionData::effective_provider(&config.provider, &sess.provider);
+    mutate_or_local(sessions, sess, |cur| {
+        if cur.get_session_id(boot_prov).is_empty() {
+            cur.set_session_id(boot_prov, &new_sid);
+            cur.last_active = chrono::Utc::now().to_rfc3339();
+            return true;
+        }
+        false
+    }).await;
     if res.result.trim().is_empty() {
         res.result = crate::t!("bot.new_session");
     }
@@ -146,6 +220,23 @@ async fn handle_boot_response(
     }
 }
 
+pub(crate) async fn configure_session_cli(
+    cli: &AntigravityCli,
+    sess: &SessionData,
+    chat_id: i64,
+    topic_id: Option<i64>,
+) -> AntigravityCli {
+    let mut session_cli = cli.clone();
+    session_cli.config.chat_id = chat_id;
+    session_cli.config.topic_id = topic_id;
+    let prov = SessionData::effective_provider(&sess.provider, &session_cli.config.provider);
+    if !matches!(prov, "claude" | "codex") {
+        crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
+    }
+    sess.apply_to_cli_config(&mut session_cli.config);
+    session_cli
+}
+
 async fn boot_fresh_session(
     bot: &Bot,
     msg: &Message,
@@ -157,22 +248,12 @@ async fn boot_fresh_session(
     let default_prompt = crate::t!("bot.session_init_prompt");
     let initial_prompt = startup_prompt.unwrap_or(&default_prompt);
     let ws = cli.agy_workspace();
-    let mut session_cli = cli.clone();
     let (chat_id, topic_id) = (
         msg.chat.id.0,
         sess.topic_id.or_else(|| super::get_topic_id(msg)),
     );
-    session_cli.config.chat_id = chat_id;
-    session_cli.config.topic_id = topic_id;
-    if !sess.provider.is_empty() {
-        session_cli.config.provider = sess.provider.clone();
-    }
-    if !sess.model.is_empty() && sess.model != "antigravity-default" {
-        session_cli.config.model = Some(sess.model.clone());
-    }
-    if sess.effort.is_some() {
-        session_cli.config.effort = sess.effort.clone();
-    }
+    let _turn_guard = cli.begin_topic_turn(chat_id, topic_id);
+    let session_cli = configure_session_cli(cli, sess, chat_id, topic_id).await;
 
     let mut cancel_rx = cli.sessions.register_boot(chat_id, topic_id).await;
     let send_fut = session_cli.send(initial_prompt, None, false, ws);

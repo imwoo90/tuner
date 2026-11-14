@@ -127,6 +127,42 @@ pub(crate) async fn handle_ask_multi_callback(
     }
 }
 
+pub(crate) async fn route_ask_callback(
+    bot: &teloxide::Bot,
+    msg: &Message,
+    d: &str,
+    cli: &crate::cli::antigravity::AntigravityCli,
+    sessions: &std::sync::Arc<crate::session::manager::SessionManager>,
+    config: &crate::config::CliConfig,
+) -> bool {
+    let is_ask_cb = ["ask_ans:", "ask_mul:", "ask_sub:", "ask_prev:", "ask_skip:"]
+        .iter()
+        .any(|p| d.starts_with(p));
+    if !is_ask_cb {
+        return false;
+    }
+    let Some(sid) = d.split(':').nth(1).filter(|s| !s.is_empty()) else {
+        return true;
+    };
+    let lock = sessions.lock_pool.get((msg.chat.id.0, super::get_topic_id(msg)));
+    let _guard = lock.lock().await;
+    if !super::ask_callbacks::validate_active_ask_callback(bot, msg, sid, cli, sessions, config).await {
+        return true;
+    }
+    if d.starts_with("ask_ans:") {
+        super::ask_callbacks::handle_ask_answer_callback(bot, msg, d, cli, sessions, config).await;
+    } else if d.starts_with("ask_mul:") {
+        handle_ask_multi_callback(bot, msg, d, &cli.sessions).await;
+    } else if d.starts_with("ask_sub:") {
+        super::ask_callbacks::handle_ask_submit_callback(bot, msg, d, cli, sessions, config).await;
+    } else if d.starts_with("ask_prev:") {
+        super::ask_callbacks::handle_ask_prev_callback(bot, msg, d, cli, config).await;
+    } else if d.starts_with("ask_skip:") {
+        super::ask_callbacks::handle_ask_skip_callback(bot, msg, d, cli, sessions, config).await;
+    }
+    true
+}
+
 pub(crate) fn extract_options_from_markup(reply_markup: &teloxide::types::InlineKeyboardMarkup) -> Vec<String> {
     let mut options = Vec::new();
     for row in &reply_markup.inline_keyboard {

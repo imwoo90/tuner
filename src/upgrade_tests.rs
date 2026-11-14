@@ -455,6 +455,153 @@ fn test_agy_vault_lock_probe_and_zombie_reaping() {
 }
 
 #[test]
+fn test_agy_brain_native_swarm_members_detection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let brain = tmp.path();
+    let now = 1_800_000_000_u64;
+    let roots = vec!["coord".to_string()];
+
+    write_transcript(
+        brain,
+        "coord",
+        &[r#"{"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[]}"#],
+        now - 3600,
+    );
+    let swarm_dir = brain.join("coord").join(".system_generated").join("swarm");
+    std::fs::create_dir_all(&swarm_dir).unwrap();
+    let roster = serde_json::json!({
+        "title": "orchestrator swarm",
+        "members": {
+            "worker_alive": { "conversation_id": "sw_alive", "killed": false },
+            "worker_dead": { "conversation_id": "sw_dead", "killed": true },
+            "worker_stopping": { "conversation_id": "sw_stopping", "desired_state": "KILLED" }
+        }
+    });
+    std::fs::write(swarm_dir.join("members.json"), roster.to_string()).unwrap();
+
+    write_transcript(
+        brain,
+        "sw_dead",
+        &[r#"{"type":"GENERIC","status":"RUNNING"}"#],
+        now - 30,
+    );
+    write_transcript(
+        brain,
+        "sw_stopping",
+        &[r#"{"type":"GENERIC","status":"RUNNING"}"#],
+        now - 30,
+    );
+    write_transcript(
+        brain,
+        "sw_alive",
+        &[r#"{"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[]}"#],
+        now - 1800,
+    );
+    assert!(!inspect_agy_brain_activity(brain, &roots, now).0);
+
+    write_transcript(
+        brain,
+        "sw_alive",
+        &[r#"{"type":"GENERIC","status":"DONE","content":"building crate"}"#],
+        now - 120,
+    );
+    let (active, max_m) = inspect_agy_brain_activity(brain, &roots, now);
+    assert!(active);
+    assert_eq!(max_m, now - 120);
+}
+
+#[test]
+fn test_agy_brain_swarm_wait_parked_pre_transcript_and_path_safety() {
+    let tmp = tempfile::tempdir().unwrap();
+    let brain = tmp.path();
+    let now = 1_800_000_000_u64;
+    let roots = vec!["coord2".to_string()];
+
+    write_transcript(
+        brain,
+        "coord2",
+        &[r#"{"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[]}"#],
+        now - 3600,
+    );
+    write_transcript(
+        brain.parent().unwrap_or(brain),
+        "outside_escape",
+        &[r#"{"type":"GENERIC","status":"RUNNING"}"#],
+        now - 10,
+    );
+
+    let swarm_dir = brain.join("coord2").join(".system_generated").join("swarm");
+    std::fs::create_dir_all(&swarm_dir).unwrap();
+    let members_path = swarm_dir.join("members.json");
+
+    // 1. Pre-transcript newly spawned worker (`wake_mode` absent, fresh `members.json`) -> active!
+    let roster_booting = serde_json::json!({
+        "members": {
+            "booting": { "conversation_id": "sw_booting", "killed": false },
+            "phase_killed": { "conversation_id": "sw_pk", "phase": "KILLED" },
+            "traversal": { "conversation_id": "../outside_escape", "killed": false }
+        }
+    });
+    std::fs::write(&members_path, roster_booting.to_string()).unwrap();
+    let f = std::fs::File::options().write(true).open(&members_path).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - 30)).unwrap();
+    write_transcript(brain, "sw_pk", &[r#"{"type":"GENERIC","status":"RUNNING"}"#], now - 10);
+
+    let (boot_active, boot_m) = inspect_agy_brain_activity(brain, &roots, now);
+    assert!(boot_active);
+    assert_eq!(boot_m, now - 30);
+
+    // 2. Parked monitor/worker (`[schedule{IsDaemon:true}, swarm_wait]` + DONE at `now - 300`) -> IDLE!
+    write_transcript(
+        brain,
+        "sw_booting",
+        &[
+            r#"{"step_index":1,"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[{"name":"schedule","args":{"CronExpression":"*/3 * * * *","IsDaemon":true}},{"name":"swarm_wait","args":{"since":1,"mentions_only":true}}]}"#,
+            r#"{"step_index":2,"type":"GENERIC","status":"RUNNING","content":"Scheduled background task id: sw_booting/task-1\nTask Description: Cron: */3 * * * *"}"#,
+            r#"{"step_index":3,"type":"GENERIC","status":"DONE","content":"Parked on board"}"#,
+        ],
+        now - 300,
+    );
+    assert!(!inspect_agy_brain_activity(brain, &roots, now).0);
+}
+
+#[test]
+fn test_agy_brain_swarm_wait_batch_order_and_pending_sibling() {
+    let tmp = tempfile::tempdir().unwrap();
+    let brain = tmp.path();
+    let now = 1_800_000_000_u64;
+    let roots = vec!["sw_batch".to_string()];
+
+    // 1. `[swarm_wait, run_command]` where `swarm_wait` is DONE and `run_command` flushed foreground `RUNNING` ("Step is still running") -> ACTIVE!
+    write_transcript(
+        brain,
+        "sw_batch",
+        &[
+            r#"{"step_index":1,"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[{"name":"swarm_wait","args":{}},{"name":"run_command","args":{"CommandLine":"cargo test"}}]}"#,
+            r#"{"step_index":2,"type":"GENERIC","status":"DONE","content":"Board wakeup"}"#,
+            r#"{"step_index":3,"type":"GENERIC","status":"RUNNING","content":"Step is still running"}"#,
+        ],
+        now - 300,
+    );
+    assert!(inspect_agy_brain_activity(brain, &roots, now).0);
+
+    // 2. `[swarm_wait, schedule{IsDaemon:true}]` without `step_index` (with blank lines!) after both settle -> IDLE!
+    write_transcript(
+        brain,
+        "sw_batch",
+        &[
+            r#"{"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[{"name":"swarm_wait","args":{}},{"name":"schedule","args":{"CronExpression":"*/3 * * * *","IsDaemon":true}}]}"#,
+            "",
+            r#"{"type":"GENERIC","status":"DONE","content":"Parked on board"}"#,
+            "",
+            r#"{"type":"GENERIC","status":"RUNNING","content":"Scheduled background task id: sw_batch/task-2\nTask Description: Cron: */3 * * * *"}"#,
+        ],
+        now - 300,
+    );
+    assert!(!inspect_agy_brain_activity(brain, &roots, now).0);
+}
+
+#[test]
 fn test_github_release_deserialization() {
     let json_data = r#"{
         "tag_name": "v0.1.1",

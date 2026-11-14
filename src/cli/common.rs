@@ -98,8 +98,9 @@ pub fn kill_process_group(pid: u32) {
 }
 
 /// Strips trailing reasoning effort suffixes (`-minimal`, `-low`, `-medium`, `-high`, `-xhigh`, `-max`, `-ultra`)
-/// from a combined model identifier string.
+/// case-insensitively from a combined model identifier string.
 pub fn strip_effort_suffix(raw: &str) -> (&str, Option<&'static str>) {
+    let raw = raw.trim();
     for (suf, eff) in [
         ("-minimal", "minimal"),
         ("-medium", "medium"),
@@ -109,8 +110,11 @@ pub fn strip_effort_suffix(raw: &str) -> (&str, Option<&'static str>) {
         ("-low", "low"),
         ("-max", "max"),
     ] {
-        if let Some(base) = raw.strip_suffix(suf) {
-            return (base, Some(eff));
+        if raw.len() > suf.len() && raw.is_char_boundary(raw.len() - suf.len()) {
+            let (base, tail) = raw.split_at(raw.len() - suf.len());
+            if tail.eq_ignore_ascii_case(suf) {
+                return (base, Some(eff));
+            }
         }
     }
     (raw, None)
@@ -191,17 +195,23 @@ pub fn parse_claude_models_response(line: &str) -> Vec<String> {
         else {
             continue;
         };
-        let base = clean_claude_model_id(raw);
+        let base = clean_claude_model_id(raw).to_ascii_lowercase();
         if seen.contains(&base) {
             continue;
         }
         seen.push(base.clone());
-        let efforts: Vec<&str> = item
+        let efforts: Vec<String> = item
             .get("supportedEffortLevels")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|e| e.as_str()).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| e.as_str())
+                    .map(|e| e.trim().to_ascii_lowercase())
+                    .filter(|e| crate::cli::claude::CLAUDE_EFFORTS.contains(&e.as_str()))
+                    .collect()
+            })
             .unwrap_or_default();
-        if efforts.is_empty() {
+        if efforts.is_empty() || !crate::cli::claude::supports_claude_effort(&base) {
             out.push(base);
         } else {
             out.extend(efforts.into_iter().map(|e| format!("{}-{}", base, e)));
@@ -210,38 +220,49 @@ pub fn parse_claude_models_response(line: &str) -> Vec<String> {
     out
 }
 
-/// Parses the `model/list` JSON-RPC response line from `codex app-server --stdio` into selectable model strings.
+/// Parses the `model/list` JSON-RPC response line from `codex app-server --stdio` into selectable
+/// model strings normalized to Tuner's 5-tier Codex effort contract (`minimal..xhigh`).
 pub fn parse_codex_models_response(line: &str) -> Vec<String> {
     let Ok(val) = serde_json::from_str::<serde_json::Value>(line.trim()) else { return Vec::new(); };
     let Some(arr) = val.get("result").and_then(|r| r.get("data")).and_then(|d| d.as_array()) else {
         return Vec::new();
     };
+    let mut seen = Vec::new();
     let mut out = Vec::new();
     for item in arr {
         if item.get("hidden").and_then(|v| v.as_bool()) == Some(true) {
             continue;
         }
-        let Some(base) = item
+        let Some(raw_base) = item
             .get("model")
             .or_else(|| item.get("id"))
             .and_then(|v| v.as_str())
+            .map(str::trim)
             .filter(|s| !s.is_empty())
         else {
             continue;
         };
-        let efforts: Vec<&str> = item
+        let base = raw_base.to_ascii_lowercase();
+        if seen.contains(&base) {
+            continue;
+        }
+        seen.push(base.clone());
+        let has_efforts = item
             .get("supportedReasoningEfforts")
             .and_then(|v| v.as_array())
-            .map(|a| {
+            .is_some_and(|a| {
                 a.iter()
                     .filter_map(|e| e.as_str().or_else(|| e.get("reasoningEffort").and_then(|v| v.as_str())))
-                    .collect()
-            })
-            .unwrap_or_default();
-        if efforts.is_empty() {
-            out.push(base.to_string());
+                    .any(|e| !e.trim().is_empty())
+            });
+        if !has_efforts || !crate::cli::codex::supports_codex_effort(&base) {
+            out.push(base);
         } else {
-            out.extend(efforts.into_iter().map(|e| format!("{}-{}", base, e)));
+            out.extend(
+                crate::cli::codex::CODEX_EFFORTS
+                    .iter()
+                    .map(|e| format!("{}-{}", base, e)),
+            );
         }
     }
     out

@@ -39,7 +39,7 @@ graph LR
 
 ### 1. Install at least one supported Agent CLI
 Authenticate any (or all) of the supported agent CLIs on your Linux machine:
-- **Google Antigravity**: `agy` (verified with `v1.5.3`)
+- **Google Antigravity**: `agy` (verified with `v1.5.9`)
 - **Anthropic Claude Code**: `claude` (verified with `v2.1.197`)
 - **OpenAI Codex**: `codex` (verified with `v0.167.0`)
 

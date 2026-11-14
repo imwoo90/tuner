@@ -8,12 +8,15 @@
 //! #session-registry, #json-persistence, #session-resolving, #freshness-check
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use chrono::Utc;
 use tokio::sync::Mutex;
 use crate::session::key::SessionKey;
 use crate::session::data::SessionData;
+use super::{
+    apply_identity_fields, create_seeded_session, heal_session_defaults, load_sessions_from_path,
+    reset_existing_topic_session, save_sessions_to_path,
+};
 
 /// Type alias `TopicNameResolver` (topic name resolver).
 pub type TopicNameResolver = std::sync::Arc<dyn Fn(i64, i64) -> Option<String> + Send + Sync>;
@@ -30,30 +33,6 @@ pub struct SessionManager {
     resolver: Option<TopicNameResolver>,
     /// Lock pool.
     pub lock_pool: std::sync::Arc<crate::bus::lock_pool::LockPool>,
-}
-
-fn merge_provider_session(
-    cur_data: &mut crate::session::data::ProviderSessionData,
-    data: &crate::session::data::ProviderSessionData,
-) {
-    let same_session = cur_data.session_id == data.session_id;
-    if !same_session
-        && !cur_data.session_id.is_empty()
-        && !cur_data.past_session_ids.contains(&cur_data.session_id)
-    {
-        cur_data.past_session_ids.push(cur_data.session_id.clone());
-    }
-    cur_data.session_id = data.session_id.clone();
-    for past_id in &data.past_session_ids {
-        if !cur_data.past_session_ids.contains(past_id) {
-            cur_data.past_session_ids.push(past_id.clone());
-        }
-    }
-    cur_data.message_count = if same_session {
-        cur_data.message_count.max(data.message_count)
-    } else {
-        data.message_count
-    };
 }
 
 impl SessionManager {
@@ -81,8 +60,13 @@ impl SessionManager {
 
     /// Executes `is_fresh` (is fresh).
     pub fn is_fresh(&self, session: &SessionData) -> bool {
-        super::freshness::is_session_fresh(
+        self.is_fresh_for_provider(session, "antigravity")
+    }
+
+    pub(crate) fn is_fresh_for_provider(&self, session: &SessionData, default_prov: &str) -> bool {
+        super::is_session_fresh_for_provider(
             session,
+            default_prov,
             self.max_msgs,
             self.idle_mins,
             self.reset_enabled,
@@ -93,28 +77,12 @@ impl SessionManager {
 
     /// Executes `load` (load).
     pub fn load(&self) -> Result<HashMap<String, SessionData>, String> {
-        if !self.path.exists() { return Ok(HashMap::new()); }
-        let content = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
-        if content.trim().is_empty() { return Ok(HashMap::new()); }
-        let raw_map: HashMap<String, serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
-        let mut result = HashMap::new();
-        for (k, v) in raw_map {
-            let Ok(pk) = k.parse::<SessionKey>() else { continue; };
-            let Ok(mut sd) = serde_json::from_value::<SessionData>(v) else { continue; };
-            if sd.transport.is_empty() { sd.transport = pk.transport.clone(); }
-            result.insert(pk.storage_key(), sd);
-        }
-        Ok(result)
+        load_sessions_from_path(&self.path)
     }
 
     /// Executes `save` (save).
     pub fn save(&self, sessions: &HashMap<String, SessionData>) -> Result<(), String> {
-        let temp_path = self.path.with_extension("tmp");
-        let content = serde_json::to_string_pretty(sessions).map_err(|e| e.to_string())?;
-        if let Some(p) = self.path.parent() { fs::create_dir_all(p).map_err(|e| e.to_string())?; }
-        fs::write(&temp_path, content).map_err(|e| e.to_string())?;
-        fs::rename(&temp_path, &self.path).map_err(|e| e.to_string())?;
-        Ok(())
+        save_sessions_to_path(&self.path, sessions)
     }
 
     /// Executes `get_active` (get active).
@@ -122,6 +90,25 @@ impl SessionManager {
         let _guard = self.lock.lock().await;
         let sessions = self.load()?;
         Ok(sessions.get(&key.storage_key()).cloned())
+    }
+
+    /// Loads or initializes `SessionData` for `key` WITHOUT expiring stale `provider_sessions`.
+    pub async fn get_or_init_session(&self, key: &SessionKey, provider: &str, model: &str) -> Result<(SessionData, bool), String> {
+        let _guard = self.lock.lock().await;
+        let mut sessions = self.load()?;
+        let skey = key.storage_key();
+        let r_name = self.resolver.as_ref().zip(key.topic_id).and_then(|(r, tid)| r(key.chat_id, tid));
+        if let Some(existing) = sessions.get_mut(&skey) {
+            let changed = heal_session_defaults(existing, provider, model, r_name);
+            let sid_empty = existing.get_session_id(&existing.provider).is_empty();
+            let cloned = existing.clone();
+            if changed { self.save(&sessions)?; }
+            return Ok((cloned, sid_empty));
+        }
+        let new_session = create_seeded_session(key, provider, model, r_name);
+        sessions.insert(skey, new_session.clone());
+        self.save(&sessions)?;
+        Ok((new_session, true))
     }
 
     /// Executes `resolve_session` (resolve session).
@@ -132,29 +119,24 @@ impl SessionManager {
         let resolved_topic_name = self.resolver.as_ref().zip(key.topic_id).and_then(|(r, tid)| r(key.chat_id, tid));
 
         if let Some(existing) = sessions.get_mut(&skey) {
-            if self.is_fresh(existing) {
-                let mut to_save = false;
-                if resolved_topic_name.is_some() && existing.topic_name != resolved_topic_name {
-                    existing.topic_name = resolved_topic_name;
-                    to_save = true;
-                }
+            if self.is_fresh_for_provider(existing, provider) {
+                let to_save = heal_session_defaults(existing, provider, model, resolved_topic_name);
                 let sid = existing.get_session_id(&existing.provider);
                 let cloned = existing.clone();
                 if to_save { self.save(&sessions)?; }
                 return Ok((cloned, sid.is_empty()));
             }
-            let active_prov = if existing.provider.is_empty() { provider.to_string() } else { existing.provider.clone() };
+            let _ = heal_session_defaults(existing, provider, model, resolved_topic_name);
+            let active_prov = existing.provider.clone();
             existing.clear_provider_session(&active_prov);
             existing.last_active = Utc::now().to_rfc3339();
             existing.last_progress_msg_id = None;
-            if resolved_topic_name.is_some() { existing.topic_name = resolved_topic_name; }
             let cloned = existing.clone();
             self.save(&sessions)?;
             return Ok((cloned, true));
         }
 
-        let mut new_session = SessionData::new(key.chat_id, key.transport.clone(), key.topic_id, provider.to_string(), model.to_string());
-        new_session.topic_name = resolved_topic_name;
+        let new_session = create_seeded_session(key, provider, model, resolved_topic_name);
         sessions.insert(skey, new_session.clone());
         self.save(&sessions)?;
         Ok((new_session, true))
@@ -166,21 +148,7 @@ impl SessionManager {
         let mut sessions = self.load()?;
         let skey = session.session_key().storage_key();
         let mut current = sessions.remove(&skey).unwrap_or_else(|| session.clone());
-        current.provider = session.provider.clone();
-        current.model = session.model.clone();
-        current.language = session.language.clone();
-        current.effort = session.effort.clone();
-        current.last_progress_msg_id = session.last_progress_msg_id;
-        current.pending_attachments = session.pending_attachments.clone();
-        current.last_handover_summary = session.last_handover_summary.clone();
-        if session.topic_name.is_some() && current.topic_name.is_none() {
-            current.topic_name = session.topic_name.clone();
-        }
-        for (prov, data) in &session.provider_sessions {
-            let cur_data = current.provider_sessions.entry(prov.clone()).or_default();
-            merge_provider_session(cur_data, data);
-        }
-        current.last_active = Utc::now().to_rfc3339();
+        apply_identity_fields(&mut current, session);
         sessions.insert(skey, current.clone());
         self.save(&sessions)?;
         Ok(current)
@@ -188,14 +156,58 @@ impl SessionManager {
 
     /// Executes `update_session` (update session).
     pub async fn update_session(&self, session: &SessionData) -> Result<SessionData, String> {
-        let mut cur = self.preserve_session_identity(session).await?;
         let _guard = self.lock.lock().await;
         let mut sessions = self.load()?;
-        let skey = cur.session_key().storage_key();
-        let act_ps = cur.provider_sessions.entry(cur.provider.clone()).or_default();
-        act_ps.message_count += 1;
+        let skey = session.session_key().storage_key();
+        let mut cur = sessions.remove(&skey).unwrap_or_else(|| session.clone());
+        apply_identity_fields(&mut cur, session);
+        let pk = SessionData::effective_provider(&cur.provider, "antigravity").to_string();
+        cur.provider = pk.clone();
+        cur.increment_message_count(&pk);
         sessions.insert(skey, cur.clone());
         self.save(&sessions)?;
+        Ok(cur)
+    }
+
+    /// Atomically mutates an existing session (or inserts `fallback` when absent) under one lock.
+    pub async fn mutate_session<F>(&self, key: &SessionKey, fallback: Option<&SessionData>, f: F) -> Result<Option<SessionData>, String>
+    where
+        F: FnOnce(&mut SessionData) -> bool,
+    {
+        let _guard = self.lock.lock().await;
+        let mut sessions = self.load()?;
+        let skey = key.storage_key();
+        if !sessions.contains_key(&skey) {
+            let Some(init) = fallback else { return Ok(None); };
+            sessions.insert(skey.clone(), init.clone());
+        }
+        let Some(cur) = sessions.get_mut(&skey) else { return Ok(None); };
+        if !f(cur) {
+            return Ok(Some(cur.clone()));
+        }
+        let out = cur.clone();
+        self.save(&sessions)?;
+        Ok(Some(out))
+    }
+
+    /// Resets the active (and optional `init_prov`) session ID for `k` while preserving live preferences and inactive provider slots.
+    pub async fn reset_topic_sessions(&self, k: &SessionKey, default_prov: &str, default_model: &str, init_prov: Option<&str>, topic_hint: Option<String>) -> Result<SessionData, String> {
+        let _guard = self.lock.lock().await;
+        let mut map = self.load()?;
+        let skey = k.storage_key();
+        let r_name = topic_hint.or_else(|| self.resolver.as_ref().zip(k.topic_id).and_then(|(r, tid)| r(k.chat_id, tid)));
+        let cur = match map.get_mut(&skey) {
+            Some(ex) => {
+                reset_existing_topic_session(ex, default_prov, default_model, init_prov, r_name);
+                ex.clone()
+            }
+            None => {
+                let n = create_seeded_session(k, default_prov, default_model, r_name);
+                map.insert(skey, n.clone());
+                n
+            }
+        };
+        self.save(&map)?;
         Ok(cur)
     }
 
@@ -204,17 +216,24 @@ impl SessionManager {
         let _guard = self.lock.lock().await;
         let mut map = self.load()?;
         let skey = k.storage_key();
+        let eff_prov = SessionData::effective_provider(provider, "antigravity");
+        let suf_eff = SessionData::extract_compatible_effort_suffix(eff_prov, model);
+        let eff_model = SessionData::default_model_for_provider(eff_prov, Some(model));
         let cur = match map.get_mut(&skey) {
             Some(ex) => {
-                ex.clear_provider_session(provider);
-                ex.provider = provider.to_string();
-                ex.model = model.to_string();
+                ex.clear_provider_session(eff_prov);
+                ex.provider = eff_prov.to_string();
+                ex.model = eff_model;
+                if let Some(se) = suf_eff {
+                    ex.effort = Some(se);
+                }
+                ex.normalize_effort_for_provider(eff_prov);
                 ex.last_active = Utc::now().to_rfc3339();
                 ex.last_progress_msg_id = None;
                 ex.clone()
             }
             None => {
-                let n = SessionData::new(k.chat_id, k.transport.clone(), k.topic_id, provider.to_string(), model.to_string());
+                let n = create_seeded_session(k, eff_prov, model, None);
                 map.insert(skey, n.clone());
                 n
             }

@@ -7,7 +7,8 @@
 //! ## Search Tags
 //! #claude-runner, #stream-unfold, #warm-turn
 
-use super::session::{get_or_spawn_warm_session, terminate_topic, ClaudeProcessIo, WarmClaudeSession};
+use super::session::{acquire_claude_session, adjust_ephemeral_runs, terminate_topic, ClaudeProcessIo, WarmClaudeSession};
+use super::spawner::prepare_claude_turn_payload;
 use super::ClaudeStreamParser;
 use crate::cli::antigravity::AntigravityCli;
 use crate::cli::{CliResponse, StreamEvent};
@@ -16,18 +17,56 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-async fn drain_after_interrupt(io: &mut ClaudeProcessIo) {
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(2500);
-    while let Ok(Ok(Some(line))) = tokio::time::timeout_at(deadline, io.stdout.next_line()).await {
-        if line.contains("\"type\":\"result\"") {
-            break;
-        }
+async fn handle_claude_ask_tool(
+    warm: &WarmClaudeSession,
+    req_id: String,
+    input: serde_json::Value,
+    allow_ask: bool,
+    parser: &mut ClaudeStreamParser,
+    tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
+) -> bool {
+    let questions = crate::cli::common::parse_claude_ask_questions(&input);
+    if !allow_ask {
+        let deny = serde_json::json!({
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": req_id,
+                "response": {
+                    "behavior": "deny",
+                    "message": "Interactive questions are unavailable in non-interactive mode; proceed autonomously."
+                }
+            }
+        });
+        let _ = warm.write_json_line(&deny).await;
+        return true;
     }
+    if questions.is_empty() {
+        return false;
+    }
+    *warm.pending_ask.lock().await = Some((req_id, input));
+    warm.running.store(false, Ordering::SeqCst);
+    if tx.send(StreamEvent::AskQuestion(questions)).is_err() {
+        *warm.pending_ask.lock().await = None;
+        warm.interrupted.store(true, Ordering::SeqCst);
+        return true;
+    }
+    let resp = CliResponse {
+        session_id: parser.session_id.clone(),
+        result: String::new(),
+        is_error: false,
+        returncode: Some(0),
+        stderr: String::new(),
+    };
+    parser.final_result = Some(resp.clone());
+    let _ = tx.send(StreamEvent::Result(resp));
+    true
 }
 
 async fn handle_claude_control_request(
     warm: &WarmClaudeSession,
     line: &str,
+    allow_ask: bool,
     parser: &mut ClaudeStreamParser,
     tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) -> bool {
@@ -35,27 +74,19 @@ async fn handle_claude_control_request(
     if val.get("type").and_then(|v| v.as_str()) != Some("control_request") {
         return false;
     }
+    if let Some(sid) = val.get("session_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        parser.session_id = Some(sid.to_string());
+        *warm.session_id.lock().await = Some(sid.to_string());
+    }
     let req_id = val.get("request_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let req = val.get("request").unwrap_or(&serde_json::Value::Null);
     if req.get("subtype").and_then(|v| v.as_str()) == Some("can_use_tool") {
         let tool = req.get("tool_name").and_then(|v| v.as_str()).unwrap_or("");
         let input = req.get("input").cloned().unwrap_or_else(|| serde_json::json!({}));
-        if tool == "AskUserQuestion" {
-            let questions = crate::cli::common::parse_claude_ask_questions(&input);
-            if !questions.is_empty() {
-                *warm.pending_ask.lock().await = Some((req_id, input));
-                let _ = tx.send(StreamEvent::AskQuestion(questions));
-                let resp = CliResponse {
-                    session_id: parser.session_id.clone(),
-                    result: String::new(),
-                    is_error: false,
-                    returncode: Some(0),
-                    stderr: String::new(),
-                };
-                parser.final_result = Some(resp.clone());
-                let _ = tx.send(StreamEvent::Result(resp));
-                return true;
-            }
+        if tool == "AskUserQuestion"
+            && handle_claude_ask_tool(warm, req_id.clone(), input.clone(), allow_ask, parser, tx).await
+        {
+            return true;
         }
         let allow = serde_json::json!({
             "type": "control_response",
@@ -73,6 +104,7 @@ async fn handle_claude_control_request(
 async fn read_claude_turn_stream(
     warm: &Arc<WarmClaudeSession>,
     io: &mut ClaudeProcessIo,
+    allow_ask: bool,
     parser: &mut ClaudeStreamParser,
     tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) {
@@ -95,7 +127,7 @@ async fn read_claude_turn_stream(
             }
             line_res = io.stdout.next_line() => {
                 let Ok(Some(line)) = line_res else { break; };
-                if handle_claude_control_request(warm, &line, parser, tx).await {
+                if handle_claude_control_request(warm, &line, allow_ask, parser, tx).await {
                     if parser.final_result.is_some() { break; }
                     continue;
                 }
@@ -112,6 +144,7 @@ async fn read_claude_turn_stream(
 async fn finalize_claude_turn(
     cli: &AntigravityCli,
     warm: &WarmClaudeSession,
+    ephemeral: bool,
     io: &mut ClaudeProcessIo,
     parser: ClaudeStreamParser,
     resume_sid: Option<String>,
@@ -119,14 +152,23 @@ async fn finalize_claude_turn(
 ) {
     let _ = tokio::time::timeout(std::time::Duration::ZERO, warm.interrupt_notify.notified()).await;
     if warm.interrupted.swap(false, Ordering::SeqCst) {
+        let had_ask = warm.pending_ask.lock().await.take().is_some();
         let _ = tx.send(StreamEvent::Result(CliResponse {
             session_id: parser.session_id.or(resume_sid),
             result: String::new(), is_error: true, returncode: Some(130),
             stderr: "Interrupted by user (/stop)".to_string(),
         }));
-        drain_after_interrupt(io).await;
+        if !ephemeral {
+            if had_ask {
+                let _ = terminate_topic(cli.config.chat_id, cli.config.topic_id, None).await;
+            } else {
+                io.drain_after_interrupt().await;
+            }
+        }
     } else if parser.final_result.is_none() {
-        let _ = terminate_topic(cli.config.chat_id, cli.config.topic_id, None).await;
+        if !ephemeral {
+            let _ = terminate_topic(cli.config.chat_id, cli.config.topic_id, None).await;
+        }
         let _ = tx.send(StreamEvent::Result(CliResponse {
             session_id: parser.session_id.or(resume_sid),
             result: parser.assistant_text, is_error: true, returncode: Some(1),
@@ -135,17 +177,32 @@ async fn finalize_claude_turn(
     }
 }
 
-async fn prepare_claude_turn_payload(warm: &WarmClaudeSession, cli: &AntigravityCli, prompt: &str) -> serde_json::Value {
-    if prompt.is_empty()
-        && let Some((req_id, input)) = warm.pending_ask.lock().await.take()
-    {
-        let ans = warm.queued_ask_answers.lock().await.take().unwrap_or_default();
-        return crate::cli::common::build_claude_ask_control_response(&req_id, input, &ans);
+fn emit_error_event(
+    tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
+    sid: Option<String>,
+    err: String,
+) {
+    let _ = tx.send(StreamEvent::Result(CliResponse {
+        session_id: sid,
+        result: err.clone(),
+        is_error: true,
+        returncode: Some(1),
+        stderr: err,
+    }));
+}
+
+async fn finish_ephemeral_or_broken(
+    cli: &AntigravityCli,
+    warm: &WarmClaudeSession,
+    ephemeral: bool,
+    broken: bool,
+) {
+    if ephemeral {
+        adjust_ephemeral_runs(false);
+        warm.kill_now();
+    } else if broken {
+        let _ = terminate_topic(cli.config.chat_id, cli.config.topic_id, None).await;
     }
-    serde_json::json!({
-        "type": "user",
-        "message": { "role": "user", "content": cli.format_prompt(prompt) }
-    })
 }
 
 async fn execute_warm_claude_turn(
@@ -153,18 +210,15 @@ async fn execute_warm_claude_turn(
     prompt: String,
     workspace: PathBuf,
     resume_sid: Option<String>,
-    continue_session: bool,
+    flags: (bool, bool),
     tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) {
-    let warm = match get_or_spawn_warm_session(&cli, workspace, resume_sid.as_deref(), continue_session).await {
-        Ok(w) => w,
-        Err(msg) => {
-            let _ = tx.send(StreamEvent::Result(CliResponse {
-                session_id: resume_sid, result: msg.clone(), is_error: true, returncode: Some(1), stderr: msg,
-            }));
-            return;
-        }
+    let (continue_session, interactive) = flags;
+    let (warm, ephemeral) = match acquire_claude_session(&cli, workspace, resume_sid.as_deref(), continue_session, prompt.is_empty()).await {
+        Ok(pair) => pair,
+        Err(msg) => return emit_error_event(&tx, resume_sid, msg),
     };
+    if ephemeral { adjust_ephemeral_runs(true); }
     let mut io = warm.io.lock().await;
     let _ = tokio::time::timeout(std::time::Duration::ZERO, warm.interrupt_notify.notified()).await;
     warm.interrupted.store(false, Ordering::SeqCst);
@@ -172,16 +226,15 @@ async fn execute_warm_claude_turn(
     let outbound = prepare_claude_turn_payload(&warm, &cli, &prompt).await;
     if let Err(err) = warm.write_json_line(&outbound).await {
         warm.running.store(false, Ordering::SeqCst);
-        let _ = terminate_topic(cli.config.chat_id, cli.config.topic_id, None).await;
-        let _ = tx.send(StreamEvent::Result(CliResponse {
-            session_id: resume_sid, result: err.clone(), is_error: true, returncode: Some(1), stderr: err,
-        }));
-        return;
+        finish_ephemeral_or_broken(&cli, &warm, ephemeral, true).await;
+        return emit_error_event(&tx, resume_sid, err);
     }
     let mut parser = ClaudeStreamParser { session_id: resume_sid.clone(), ..Default::default() };
-    read_claude_turn_stream(&warm, &mut io, &mut parser, &tx).await;
+    read_claude_turn_stream(&warm, &mut io, interactive && !ephemeral, &mut parser, &tx).await;
     warm.running.store(false, Ordering::SeqCst);
-    finalize_claude_turn(&cli, &warm, &mut io, parser, resume_sid, &tx).await;
+    finalize_claude_turn(&cli, &warm, ephemeral, &mut io, parser, resume_sid, &tx).await;
+    drop(io);
+    finish_ephemeral_or_broken(&cli, &warm, ephemeral, false).await;
 }
 
 /// Streams a `claude` CLI turn using the topic's persistent warm process.
@@ -194,7 +247,7 @@ pub async fn send_streaming<'a>(
 ) -> Result<BoxStream<'a, StreamEvent>, String> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(execute_warm_claude_turn(
-        cli.clone(), prompt.to_string(), workspace, resume_session.map(str::to_string), continue_session, tx,
+        cli.clone(), prompt.to_string(), workspace, resume_session.map(str::to_string), (continue_session, true), tx,
     ));
     Ok(Box::pin(futures::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) })))
 }
@@ -208,7 +261,11 @@ pub async fn send(
     workspace: PathBuf,
 ) -> Result<CliResponse, String> {
     use futures::StreamExt;
-    let mut stream = send_streaming(cli, prompt, resume_session, continue_session, workspace).await?;
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(execute_warm_claude_turn(
+        cli.clone(), prompt.to_string(), workspace, resume_session.map(str::to_string), (continue_session, false), tx,
+    ));
+    let mut stream = Box::pin(futures::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|ev| (ev, rx)) }));
     let mut last_result = None;
     while let Some(ev) = stream.next().await {
         if let StreamEvent::Result(resp) = ev { last_result = Some(resp); }

@@ -10,10 +10,12 @@
 //!
 //! ## Submodules
 //! - [`session`] (`session.rs`): Persistent warm process pool, control-request interrupts, and live model switching.
+//! - [`spawner`] (`spawner.rs`): Child process group spawner for warm and isolated ephemeral `claude` sessions.
 //! - [`runner`] (`runner.rs`): Asynchronous warm turn executor and stream finalizer.
 
 pub mod runner;
 pub mod session;
+pub mod spawner;
 
 use crate::cli::antigravity::AntigravityCli;
 pub use crate::cli::common::{parse_claude_commands_response, parse_claude_models_response};
@@ -21,8 +23,9 @@ use crate::cli::common::{format_stream_preview, probe_cli_json_lines, resolve_cl
 use crate::cli::{CliResponse, StreamEvent};
 pub use runner::{send, send_streaming};
 pub use session::{
-    active_count, active_pid, cleanup_expired, interrupt_session, is_running, set_model_live,
-    submit_ask_answers, terminate_all, terminate_all_for_chat, terminate_topic,
+    active_count, active_pid, active_session_id, cleanup_expired, has_pending_ask,
+    interrupt_session, is_running, set_model_live, submit_ask_answers, terminate_all,
+    terminate_all_for_chat, terminate_topic,
 };
 
 /// Fallback Claude Code model identifiers when the CLI binary cannot be probed.
@@ -96,31 +99,51 @@ pub fn resolve_claude_bin() -> String {
 fn normalize_claude_model(raw: &str) -> &str {
     match raw {
         "fable" | "claude-fable" => "claude-fable-5",
-        "sonnet" | "claude-sonnet" | "claude-sonnet-5-5" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5",
-        "opus" | "claude-opus" | "claude-opus-5-5" | "opus-5-5" | "opus5.5" => "claude-opus-4-8",
+        "sonnet" | "claude-sonnet" => "claude-sonnet-5",
+        "opus" | "claude-opus" => "claude-opus-4-8",
         "haiku" | "claude-haiku" => "claude-haiku-4-5",
         other => other,
     }
 }
 
+/// Returns `true` when the given Claude Code model supports reasoning `--effort` levels.
+pub fn supports_claude_effort(model: &str) -> bool {
+    let low = model.trim().to_ascii_lowercase();
+    !low.is_empty() && low != "antigravity-default" && !low.contains("haiku")
+}
+
 /// Resolves the canonical model and effort flags for the `claude` CLI.
 pub fn resolve_claude_model_effort(model: Option<&str>, effort: Option<&str>) -> (Option<String>, Option<String>) {
     let mut suffix_eff = None;
-    let resolved_model = model.map(str::trim).filter(|s| !s.is_empty() && *s != "antigravity-default").and_then(|raw| {
-        let (base, eff) = strip_effort_suffix(raw);
-        suffix_eff = eff.map(str::to_string);
-        let canonical = normalize_claude_model(base);
-        let valid = canonical.starts_with("claude-") || canonical.starts_with("sonnet")
-            || canonical.starts_with("opus") || canonical.starts_with("haiku") || canonical.starts_with("fable");
-        valid.then(|| canonical.to_string())
-    });
+    let explicit_effortless = model.map(str::trim).is_some_and(|m| !m.is_empty() && !supports_claude_effort(m));
+    let resolved_model = model
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("antigravity-default"))
+        .and_then(|raw| {
+            let low = raw.to_ascii_lowercase();
+            let (base, eff) = strip_effort_suffix(&low);
+            let canonical = normalize_claude_model(base);
+            let valid = canonical.starts_with("claude-")
+                && !canonical.ends_with("-5-5")
+                && !canonical.starts_with("claude-opus-5-5")
+                && !canonical.starts_with("claude-sonnet-5-5");
+            if valid {
+                suffix_eff = eff.map(str::to_string);
+                Some(canonical.to_string())
+            } else {
+                None
+            }
+        });
+    if explicit_effortless || resolved_model.as_deref().is_some_and(|m| !supports_claude_effort(m)) {
+        return (resolved_model, None);
+    }
     let raw_eff = effort.map(str::trim).filter(|e| !e.is_empty()).map(str::to_lowercase).or(suffix_eff);
     let resolved_eff = raw_eff.and_then(|e| match e.as_str() {
         "minimal" | "low" => Some("low".to_string()),
         "medium" => Some("medium".to_string()),
         "high" => Some("high".to_string()),
         "xhigh" => Some("xhigh".to_string()),
-        "max" => Some("max".to_string()),
+        "max" | "ultra" => Some("max".to_string()),
         _ => None,
     });
     (resolved_model, resolved_eff)

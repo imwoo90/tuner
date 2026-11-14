@@ -91,7 +91,7 @@ pub(crate) fn is_lock_free_command(text: &str) -> bool {
 }
 
 pub(crate) fn workflow_commands_for_provider(provider: &str) -> &'static [(&'static str, &'static str)] {
-    match provider {
+    match crate::session::data::SessionData::canonical_provider(provider).unwrap_or("antigravity") {
         "claude" => CLAUDE_WORKFLOW_COMMANDS,
         "codex" => CODEX_WORKFLOW_COMMANDS,
         _ => ANTIGRAVITY_WORKFLOW_COMMANDS,
@@ -134,14 +134,15 @@ pub(crate) fn get_bot_commands() -> Vec<teloxide::types::BotCommand> {
 }
 
 pub(crate) async fn update_chat_commands_for_provider(bot: &Bot, chat_id: ChatId, provider: &str) {
+    let prov = crate::session::data::SessionData::canonical_provider(provider).unwrap_or("antigravity");
     if let Ok(mut map) = LAST_SYNCED_CHAT_PROVIDER.lock() {
-        map.insert(chat_id.0, provider.to_string());
+        map.insert(chat_id.0, prov.to_string());
     }
-    let cmds = if provider == "claude" && !cfg!(test) {
+    let cmds = if prov == "claude" && !cfg!(test) {
         let env: std::collections::HashMap<_, _> = std::env::vars().collect();
         merge_claude_bot_commands(crate::cli::claude::discover_commands_live(&env).await)
     } else {
-        get_bot_commands_for_provider(provider)
+        get_bot_commands_for_provider(prov)
     };
     let _ = bot.set_my_commands(cmds).scope(teloxide::types::BotCommandScope::Chat { chat_id: chat_id.into() }).await;
 }
@@ -154,8 +155,8 @@ pub(crate) async fn sync_chat_commands_for_topic(
 ) {
     if cfg!(test) { return; }
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, crate::telegram::get_topic_id(msg));
-    let prov = sessions.get_active(&key).await.ok().flatten().map(|s| s.provider).filter(|p| !p.is_empty()).unwrap_or_else(|| config.provider.clone());
-    if prov.is_empty() { return; }
+    let raw = sessions.get_active(&key).await.ok().flatten().map(|s| s.provider).unwrap_or_default();
+    let prov = crate::session::data::SessionData::effective_provider(&raw, &config.provider).to_string();
     if LAST_SYNCED_CHAT_PROVIDER.lock().ok().is_some_and(|m| m.get(&msg.chat.id.0).map(String::as_str) != Some(prov.as_str())) {
         let (b, cid) = (bot.clone(), msg.chat.id);
         tokio::spawn(async move { update_chat_commands_for_provider(&b, cid, &prov).await; });
@@ -188,12 +189,13 @@ pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::Request
 }
 
 pub(crate) fn format_help_text_for_provider(provider: &str) -> String {
+    let prov = crate::session::data::SessionData::canonical_provider(provider).unwrap_or("antigravity");
     let mut text = String::from("🤖 <b>[tuner] Command Reference:</b>\n\n");
     for (cmd, desc) in COMMON_COMMANDS {
         text.push_str(&format!("• /{} - {}\n", cmd, desc));
     }
-    text.push_str(&format!("\n⚡ <b>Workflow Commands ({}):</b>\n", provider));
-    for (cmd, desc) in workflow_commands_for_provider(provider) {
+    text.push_str(&format!("\n⚡ <b>Workflow Commands ({}):</b>\n", prov));
+    for (cmd, desc) in workflow_commands_for_provider(prov) {
         text.push_str(&format!("• /{} - {}\n", cmd, desc));
     }
     text

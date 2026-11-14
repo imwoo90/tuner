@@ -161,14 +161,20 @@ pub(crate) async fn queue_pending_files(
         return;
     }
     let key = crate::session::key::SessionKey::telegram(msg.chat.id.0, super::get_topic_id(msg));
-    let default_model = config.model.as_deref().unwrap_or("antigravity-default");
-    if let Ok((mut sess, _)) = sessions.resolve_session(&key, &config.provider, default_model).await {
-        for f in files {
-            if !sess.pending_attachments.contains(f) {
-                sess.pending_attachments.push(f.clone());
-            }
-        }
-        let _ = sessions.preserve_session_identity(&sess).await;
+    let default_model = config.model.as_deref().unwrap_or("");
+    if let Ok((sess, _)) = sessions.get_or_init_session(&key, &config.provider, default_model).await {
+        let _ = sessions
+            .mutate_session(&key, Some(&sess), |cur| {
+                let mut added = false;
+                for f in files {
+                    if !cur.pending_attachments.contains(f) {
+                        cur.pending_attachments.push(f.clone());
+                        added = true;
+                    }
+                }
+                added
+            })
+            .await;
     }
 }
 
@@ -180,22 +186,32 @@ pub(crate) async fn drain_session_attachments(
     pre_downloaded_files: &[String],
     sessions: &crate::session::manager::SessionManager,
 ) -> Vec<String> {
-    let mut all_files = if !sess.pending_attachments.is_empty() {
-        let drained = std::mem::take(&mut sess.pending_attachments);
-        let _ = sessions.preserve_session_identity(sess).await;
-        drained
-    } else {
-        Vec::new()
-    };
+    let mut replied_file_opt = None;
     if let Some(replied) = msg.reply_to_message()
         && has_media(replied)
     {
         let dest_dir = config.working_dir.join("telegram_files");
-        if let Ok(Some(replied_file)) = download_telegram_media(bot, replied, &dest_dir).await
-            && !all_files.contains(&replied_file)
-        {
-            all_files.push(replied_file);
-        }
+        replied_file_opt = download_telegram_media(bot, replied, &dest_dir).await.ok().flatten();
+    }
+    let mut all_files = Vec::new();
+    if let Ok(Some(updated)) = sessions
+        .mutate_session(&sess.session_key(), None, |cur| {
+            if cur.pending_attachments.is_empty() {
+                return false;
+            }
+            all_files = std::mem::take(&mut cur.pending_attachments);
+            true
+        })
+        .await
+    {
+        *sess = updated;
+    } else if !sess.pending_attachments.is_empty() {
+        all_files = std::mem::take(&mut sess.pending_attachments);
+    }
+    if let Some(replied_file) = replied_file_opt
+        && !all_files.contains(&replied_file)
+    {
+        all_files.push(replied_file);
     }
     for f in pre_downloaded_files {
         if !all_files.contains(f) {
