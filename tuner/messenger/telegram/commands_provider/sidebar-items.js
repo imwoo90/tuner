@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_model_to_active_pty","build_provider_keyboard","cancel_abandoned_provider_ask","execute_provider_switch","handle_provider_callback","handle_provider_command","is_stale_ask_session","register_and_verify_ask_state","switch_session_provider"]};

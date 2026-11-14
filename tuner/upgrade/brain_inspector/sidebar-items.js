@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["collect_alive_subagent_tree","evaluate_ordered_steps","inspect_agy_brain_activity","inspect_agy_brain_activity_with_ack","inspect_transcript_file"]};
+window.SIDEBAR_ITEMS = {"fn":["collect_alive_subagent_tree","evaluate_ordered_steps","file_mtime_epoch","has_any_transcript","has_live_or_parked_agy_descendants","inspect_agy_brain_activity","inspect_agy_brain_activity_with_ack","inspect_transcript_mode","is_safe_conv_id","is_swarm_member_killed","push_alive_subagents","push_swarm_members","resolve_transcript_path"]};

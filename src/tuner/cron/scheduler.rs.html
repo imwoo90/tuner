@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/cron/scheduler.rs`."><title>scheduler.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.1 (58cf8f9c3 2026-10-13)" data-channel="1.99.1" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/cron/</div>scheduler.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Cron Engine Event Loop
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/cron/scheduler.rs`."><title>scheduler.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0 (0ef1bc386 2026-11-09)" data-channel="1.100.0" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/cron/</div>scheduler.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Cron Engine Event Loop
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! ## Overview
 <a href=#4 id=4 data-nosnippet>4</a>//! Continuously polls active cron jobs, evaluates timezone-adjusted upcoming runs, checks quiet hours,
@@ -12,13 +12,13 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::time::SystemTime;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>chrono::{DateTime, NaiveTime, Utc};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>chrono_tz::Tz;
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>cron::Schedule;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>std::str::FromStr;
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::cli::AgentProvider;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::cron::manager::{CronJob, CronManager};
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::config::CliConfig;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::cli::AgentProvider;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::cron::manager::{CronJob, CronManager};
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub use </span><span class="kw">super</span>::calculate_job_next_run;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">super</span>::build_job_cli_config;
 <a href=#22 id=22 data-nosnippet>22</a>
 <a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Represents `CronScheduler` (cron scheduler).
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub struct </span>CronScheduler {
@@ -216,42 +216,16 @@
 <a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(err_msg);
 <a href=#217 id=217 data-nosnippet>217</a>        }
 <a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span><span class="kw-2">mut </span>jc = (<span class="kw-2">*</span><span class="self">self</span>.config).clone();
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(prof_dir) = <span class="self">self</span>.manager.jobs_path().parent() {
-<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">let </span>prof_cfg = prof_dir.join(<span class="string">"config"</span>).join(<span class="string">"config.json"</span>);
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="kw">if </span>prof_cfg.is_file() {
-<a href=#223 id=223 data-nosnippet>223</a>                <span class="kw">let _ </span>= jc.merge_profile_file(<span class="kw-2">&amp;</span>prof_cfg);
-<a href=#224 id=224 data-nosnippet>224</a>            }
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>eff_prov = <span class="kw">crate</span>::session::data::SessionData::effective_provider(
+<a href=#220 id=220 data-nosnippet>220</a>            job.provider.as_deref().unwrap_or(<span class="kw-2">&amp;</span><span class="self">self</span>.config.provider),
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="string">"antigravity"</span>,
+<a href=#222 id=222 data-nosnippet>222</a>        );
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(eff_prov, <span class="string">"claude" </span>| <span class="string">"codex"</span>) {
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">crate</span>::cli::antigravity::model_spec::ensure_live_catalog_fresh().<span class="kw">await</span>;
 <a href=#225 id=225 data-nosnippet>225</a>        }
-<a href=#226 id=226 data-nosnippet>226</a>        jc.working_dir = workspace.clone();
-<a href=#227 id=227 data-nosnippet>227</a>        jc.chat_id = job.chat_id;
-<a href=#228 id=228 data-nosnippet>228</a>        jc.topic_id = job.topic_id;
-<a href=#229 id=229 data-nosnippet>229</a>        jc.transport = job.transport.clone();
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = <span class="kw-2">&amp;</span>job.model { jc.model = <span class="prelude-val">Some</span>(m.clone()); }
-<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(p) = <span class="kw-2">&amp;</span>job.provider { jc.provider = p.clone(); }
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">if </span>!job.cli_parameters.is_empty() {
-<a href=#233 id=233 data-nosnippet>233</a>            jc.cli_parameters.insert(<span class="string">"antigravity"</span>.to_string(), job.cli_parameters.clone());
-<a href=#234 id=234 data-nosnippet>234</a>        }
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(r) = <span class="kw-2">&amp;</span>job.effort {
-<a href=#236 id=236 data-nosnippet>236</a>            jc.effort = <span class="prelude-val">Some</span>(r.clone());
-<a href=#237 id=237 data-nosnippet>237</a>        }
-<a href=#238 id=238 data-nosnippet>238</a>
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>job_cli = AntigravityCli::new(jc);
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="self">self</span>.run_cli_command(<span class="kw-2">&amp;</span>job, workspace, <span class="kw-2">&amp;</span>job_cli).<span class="kw">await
-<a href=#241 id=241 data-nosnippet>241</a>    </span>}
-<a href=#242 id=242 data-nosnippet>242</a>}
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// Executes `calculate_job_next_run` (calculate job next run).
-<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub fn </span>calculate_job_next_run(schedule: <span class="kw-2">&amp;</span>str, timezone: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;DateTime&lt;Tz&gt;, String&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">let </span>norm = <span class="kw">if </span>schedule.split_whitespace().count() == <span class="number">5 </span>{
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="macro">format!</span>(<span class="string">"0 {}"</span>, schedule)
-<a href=#248 id=248 data-nosnippet>248</a>    } <span class="kw">else </span>{
-<a href=#249 id=249 data-nosnippet>249</a>        schedule.to_string()
-<a href=#250 id=250 data-nosnippet>250</a>    };
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">let </span>sched = Schedule::from_str(<span class="kw-2">&amp;</span>norm).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span>tz_s = <span class="kw">if </span>timezone.is_empty() { <span class="string">"UTC" </span>} <span class="kw">else </span>{ timezone };
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>tz: Tz = tz_s.parse().map_err(|e| <span class="macro">format!</span>(<span class="string">"Invalid timezone: {}"</span>, e))<span class="question-mark">?</span>;
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>next = sched.upcoming(tz).next().ok_or_else(|| <span class="string">"No upcoming run"</span>.to_string())<span class="question-mark">?</span>;
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="prelude-val">Ok</span>(next)
-<a href=#256 id=256 data-nosnippet>256</a>}
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>jc = build_job_cli_config(<span class="kw-2">&amp;</span><span class="self">self</span>.config, <span class="self">self</span>.manager.jobs_path(), <span class="kw-2">&amp;</span>job, workspace.clone());
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">let </span>job_cli = AntigravityCli::new_oneshot(jc);
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="self">self</span>.run_cli_command(<span class="kw-2">&amp;</span>job, workspace, <span class="kw-2">&amp;</span>job_cli).<span class="kw">await
+<a href=#229 id=229 data-nosnippet>229</a>    </span>}
+<a href=#230 id=230 data-nosnippet>230</a>}
 </code></pre></div></section></main></body></html>

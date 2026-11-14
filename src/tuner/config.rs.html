@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.1 (58cf8f9c3 2026-10-13)" data-channel="1.99.1" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Config Loader and User Validator
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0 (0ef1bc386 2026-11-09)" data-channel="1.100.0" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Config Loader and User Validator
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! ## Overview
 <a href=#4 id=4 data-nosnippet>4</a>//! Manages loading and merging JSON configurations. Registers telegram credentials
@@ -168,69 +168,71 @@
 <a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">pub fn </span>load_from_file(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt; {
 <a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>content = std::fs::read_to_string(path).map_err(|e| e.to_string())<span class="question-mark">?</span>;
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span><span class="kw-2">mut </span>cfg: <span class="self">Self </span>= serde_json::from_str(<span class="kw-2">&amp;</span>content).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">if </span>cfg.allowed_user_ids == <span class="macro">vec!</span>[<span class="number">123456789</span>] {
-<a href=#172 id=172 data-nosnippet>172</a>            cfg.allowed_user_ids.clear();
-<a href=#173 id=173 data-nosnippet>173</a>        }
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">if </span>cfg.allowed_group_ids == <span class="macro">vec!</span>[-<span class="number">1001234567890</span>] {
-<a href=#175 id=175 data-nosnippet>175</a>            cfg.allowed_group_ids.clear();
-<a href=#176 id=176 data-nosnippet>176</a>        }
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">if </span>cfg.profiles.is_empty() {
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">let </span>default_profile = ProfileConfig {
-<a href=#179 id=179 data-nosnippet>179</a>                name: <span class="string">"default"</span>.to_string(),
-<a href=#180 id=180 data-nosnippet>180</a>                telegram_token: cfg.telegram_token.clone(),
-<a href=#181 id=181 data-nosnippet>181</a>                allowed_user_ids: cfg.allowed_user_ids.clone(),
-<a href=#182 id=182 data-nosnippet>182</a>                allowed_group_ids: cfg.allowed_group_ids.clone(),
-<a href=#183 id=183 data-nosnippet>183</a>                working_dir: <span class="prelude-val">Some</span>(cfg.working_dir.clone()),
-<a href=#184 id=184 data-nosnippet>184</a>                model: cfg.model.clone(),
-<a href=#185 id=185 data-nosnippet>185</a>                effort: cfg.effort.clone(),
-<a href=#186 id=186 data-nosnippet>186</a>                system_prompt: cfg.system_prompt.clone(),
-<a href=#187 id=187 data-nosnippet>187</a>                append_system_prompt: cfg.append_system_prompt.clone(),
-<a href=#188 id=188 data-nosnippet>188</a>                language: cfg.language.clone(),
-<a href=#189 id=189 data-nosnippet>189</a>            };
-<a href=#190 id=190 data-nosnippet>190</a>            cfg.profiles.push(default_profile);
-<a href=#191 id=191 data-nosnippet>191</a>        }
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="prelude-val">Ok</span>(cfg)
-<a href=#193 id=193 data-nosnippet>193</a>    }
-<a href=#194 id=194 data-nosnippet>194</a>
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="doccomment">/// Executes `merge_profile_file` (merge profile file).
-<a href=#196 id=196 data-nosnippet>196</a>    </span><span class="kw">pub fn </span>merge_profile_file(<span class="kw-2">&amp;mut </span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">let </span>content = std::fs::read_to_string(path).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">let </span><span class="kw-2">mut </span>overrides: serde_json::Value = serde_json::from_str(<span class="kw-2">&amp;</span>content).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#199 id=199 data-nosnippet>199</a>        
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(obj) = overrides.as_object_mut() {
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(tok) = obj.get(<span class="string">"telegram_token"</span>).and_then(|t| t.as_str())
-<a href=#202 id=202 data-nosnippet>202</a>                &amp;&amp; (tok.is_empty() || tok == <span class="string">"YOUR_BOT_TOKEN_HERE" </span>|| tok.starts_with(<span class="string">"YOUR_"</span>)) {
-<a href=#203 id=203 data-nosnippet>203</a>                    obj.remove(<span class="string">"telegram_token"</span>);
-<a href=#204 id=204 data-nosnippet>204</a>                }
-<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ids) = obj.get(<span class="string">"allowed_user_ids"</span>).and_then(|i| i.as_array())
-<a href=#206 id=206 data-nosnippet>206</a>                &amp;&amp; ids.len() == <span class="number">1 </span>&amp;&amp; ids[<span class="number">0</span>] == serde_json::Value::Number(<span class="number">123456789</span>.into()) {
-<a href=#207 id=207 data-nosnippet>207</a>                    obj.remove(<span class="string">"allowed_user_ids"</span>);
-<a href=#208 id=208 data-nosnippet>208</a>                }
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ids) = obj.get(<span class="string">"allowed_group_ids"</span>).and_then(|i| i.as_array())
-<a href=#210 id=210 data-nosnippet>210</a>                &amp;&amp; ids.len() == <span class="number">1 </span>&amp;&amp; ids[<span class="number">0</span>] == serde_json::Value::Number((-<span class="number">1001234567890i64</span>).into()) {
-<a href=#211 id=211 data-nosnippet>211</a>                    obj.remove(<span class="string">"allowed_group_ids"</span>);
-<a href=#212 id=212 data-nosnippet>212</a>                }
-<a href=#213 id=213 data-nosnippet>213</a>        }
-<a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span><span class="kw-2">mut </span>base_val = serde_json::to_value(<span class="kw-2">&amp;</span><span class="self">self</span>).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#216 id=216 data-nosnippet>216</a>        merge_json_values(<span class="kw-2">&amp;mut </span>base_val, overrides);
-<a href=#217 id=217 data-nosnippet>217</a>        
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw-2">*</span><span class="self">self </span>= serde_json::from_value(base_val).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="prelude-val">Ok</span>(())
-<a href=#220 id=220 data-nosnippet>220</a>    }
-<a href=#221 id=221 data-nosnippet>221</a>}
-<a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="kw">fn </span>merge_json_values(base: <span class="kw-2">&amp;mut </span>serde_json::Value, overrides: serde_json::Value) {
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(base_obj), <span class="prelude-val">Some</span>(over_obj)) = (base.as_object_mut(), overrides.as_object()) {
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">for </span>(k, v) <span class="kw">in </span>over_obj {
-<a href=#226 id=226 data-nosnippet>226</a>            <span class="kw">if </span>v.is_object() &amp;&amp; base_obj.contains_key(k) &amp;&amp; base_obj[k].is_object() {
-<a href=#227 id=227 data-nosnippet>227</a>                merge_json_values(<span class="kw-2">&amp;mut </span>base_obj[k], v.clone());
-<a href=#228 id=228 data-nosnippet>228</a>            } <span class="kw">else if </span>!v.is_null() {
-<a href=#229 id=229 data-nosnippet>229</a>                base_obj.insert(k.clone(), v.clone());
-<a href=#230 id=230 data-nosnippet>230</a>            }
-<a href=#231 id=231 data-nosnippet>231</a>        }
-<a href=#232 id=232 data-nosnippet>232</a>    }
-<a href=#233 id=233 data-nosnippet>233</a>}
-<a href=#234 id=234 data-nosnippet>234</a>
-<a href=#235 id=235 data-nosnippet>235</a>
+<a href=#171 id=171 data-nosnippet>171</a>        cfg.provider = <span class="kw">crate</span>::session::data::SessionData::effective_provider(<span class="kw-2">&amp;</span>cfg.provider, <span class="string">"antigravity"</span>).to_string();
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">if </span>cfg.allowed_user_ids == <span class="macro">vec!</span>[<span class="number">123456789</span>] {
+<a href=#173 id=173 data-nosnippet>173</a>            cfg.allowed_user_ids.clear();
+<a href=#174 id=174 data-nosnippet>174</a>        }
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span>cfg.allowed_group_ids == <span class="macro">vec!</span>[-<span class="number">1001234567890</span>] {
+<a href=#176 id=176 data-nosnippet>176</a>            cfg.allowed_group_ids.clear();
+<a href=#177 id=177 data-nosnippet>177</a>        }
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">if </span>cfg.profiles.is_empty() {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span>default_profile = ProfileConfig {
+<a href=#180 id=180 data-nosnippet>180</a>                name: <span class="string">"default"</span>.to_string(),
+<a href=#181 id=181 data-nosnippet>181</a>                telegram_token: cfg.telegram_token.clone(),
+<a href=#182 id=182 data-nosnippet>182</a>                allowed_user_ids: cfg.allowed_user_ids.clone(),
+<a href=#183 id=183 data-nosnippet>183</a>                allowed_group_ids: cfg.allowed_group_ids.clone(),
+<a href=#184 id=184 data-nosnippet>184</a>                working_dir: <span class="prelude-val">Some</span>(cfg.working_dir.clone()),
+<a href=#185 id=185 data-nosnippet>185</a>                model: cfg.model.clone(),
+<a href=#186 id=186 data-nosnippet>186</a>                effort: cfg.effort.clone(),
+<a href=#187 id=187 data-nosnippet>187</a>                system_prompt: cfg.system_prompt.clone(),
+<a href=#188 id=188 data-nosnippet>188</a>                append_system_prompt: cfg.append_system_prompt.clone(),
+<a href=#189 id=189 data-nosnippet>189</a>                language: cfg.language.clone(),
+<a href=#190 id=190 data-nosnippet>190</a>            };
+<a href=#191 id=191 data-nosnippet>191</a>            cfg.profiles.push(default_profile);
+<a href=#192 id=192 data-nosnippet>192</a>        }
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="prelude-val">Ok</span>(cfg)
+<a href=#194 id=194 data-nosnippet>194</a>    }
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// Executes `merge_profile_file` (merge profile file).
+<a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">pub fn </span>merge_profile_file(<span class="kw-2">&amp;mut </span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">let </span>content = std::fs::read_to_string(path).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span><span class="kw-2">mut </span>overrides: serde_json::Value = serde_json::from_str(<span class="kw-2">&amp;</span>content).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#200 id=200 data-nosnippet>200</a>        
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(obj) = overrides.as_object_mut() {
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(tok) = obj.get(<span class="string">"telegram_token"</span>).and_then(|t| t.as_str())
+<a href=#203 id=203 data-nosnippet>203</a>                &amp;&amp; (tok.is_empty() || tok == <span class="string">"YOUR_BOT_TOKEN_HERE" </span>|| tok.starts_with(<span class="string">"YOUR_"</span>)) {
+<a href=#204 id=204 data-nosnippet>204</a>                    obj.remove(<span class="string">"telegram_token"</span>);
+<a href=#205 id=205 data-nosnippet>205</a>                }
+<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ids) = obj.get(<span class="string">"allowed_user_ids"</span>).and_then(|i| i.as_array())
+<a href=#207 id=207 data-nosnippet>207</a>                &amp;&amp; ids.len() == <span class="number">1 </span>&amp;&amp; ids[<span class="number">0</span>] == serde_json::Value::Number(<span class="number">123456789</span>.into()) {
+<a href=#208 id=208 data-nosnippet>208</a>                    obj.remove(<span class="string">"allowed_user_ids"</span>);
+<a href=#209 id=209 data-nosnippet>209</a>                }
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ids) = obj.get(<span class="string">"allowed_group_ids"</span>).and_then(|i| i.as_array())
+<a href=#211 id=211 data-nosnippet>211</a>                &amp;&amp; ids.len() == <span class="number">1 </span>&amp;&amp; ids[<span class="number">0</span>] == serde_json::Value::Number((-<span class="number">1001234567890i64</span>).into()) {
+<a href=#212 id=212 data-nosnippet>212</a>                    obj.remove(<span class="string">"allowed_group_ids"</span>);
+<a href=#213 id=213 data-nosnippet>213</a>                }
+<a href=#214 id=214 data-nosnippet>214</a>        }
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">let </span><span class="kw-2">mut </span>base_val = serde_json::to_value(<span class="kw-2">&amp;</span><span class="self">self</span>).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#217 id=217 data-nosnippet>217</a>        merge_json_values(<span class="kw-2">&amp;mut </span>base_val, overrides);
+<a href=#218 id=218 data-nosnippet>218</a>        
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw-2">*</span><span class="self">self </span>= serde_json::from_value(base_val).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="self">self</span>.provider = <span class="kw">crate</span>::session::data::SessionData::effective_provider(<span class="kw-2">&amp;</span><span class="self">self</span>.provider, <span class="string">"antigravity"</span>).to_string();
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="prelude-val">Ok</span>(())
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>}
+<a href=#224 id=224 data-nosnippet>224</a>
+<a href=#225 id=225 data-nosnippet>225</a><span class="kw">fn </span>merge_json_values(base: <span class="kw-2">&amp;mut </span>serde_json::Value, overrides: serde_json::Value) {
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(base_obj), <span class="prelude-val">Some</span>(over_obj)) = (base.as_object_mut(), overrides.as_object()) {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">for </span>(k, v) <span class="kw">in </span>over_obj {
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">if </span>v.is_object() &amp;&amp; base_obj.contains_key(k) &amp;&amp; base_obj[k].is_object() {
+<a href=#229 id=229 data-nosnippet>229</a>                merge_json_values(<span class="kw-2">&amp;mut </span>base_obj[k], v.clone());
+<a href=#230 id=230 data-nosnippet>230</a>            } <span class="kw">else if </span>!v.is_null() {
+<a href=#231 id=231 data-nosnippet>231</a>                base_obj.insert(k.clone(), v.clone());
+<a href=#232 id=232 data-nosnippet>232</a>            }
+<a href=#233 id=233 data-nosnippet>233</a>        }
+<a href=#234 id=234 data-nosnippet>234</a>    }
+<a href=#235 id=235 data-nosnippet>235</a>}
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a>
 </code></pre></div></section></main></body></html>

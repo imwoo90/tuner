@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_turn_start_rpc","drain_after_interrupt","emit_codex_final_result","execute_warm_codex_turn","handle_codex_rpc_line","prepare_codex_turn_rpc","read_codex_turn_stream","send","send_streaming"]};
+window.SIDEBAR_ITEMS = {"fn":["drain_after_interrupt","emit_codex_final_result","emit_error_event","execute_warm_codex_turn","finish_ephemeral_or_broken","handle_codex_ask_request","handle_codex_rpc_line","read_codex_turn_stream","send","send_streaming"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["has_crossed_daily_reset","is_session_fresh"],"mod":["data","freshness","key","manager"]};
+window.SIDEBAR_ITEMS = {"fn":["apply_identity_fields","create_seeded_session","has_crossed_daily_reset","heal_session_defaults","is_session_fresh","is_session_fresh_for_provider","load_sessions_from_path","merge_provider_session","reset_existing_topic_session","save_sessions_to_path"],"mod":["data","freshness","key","manager","provider_catalog"]};

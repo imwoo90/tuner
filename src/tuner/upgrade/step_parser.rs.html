@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/upgrade/step_parser.rs`."><title>step_parser.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.1 (58cf8f9c3 2026-10-13)" data-channel="1.99.1" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/upgrade/</div>step_parser.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Antigravity Transcript Step Parser
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/upgrade/step_parser.rs`."><title>step_parser.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tuner" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0 (0ef1bc386 2026-11-09)" data-channel="1.100.0" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">tuner/upgrade/</div>step_parser.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Antigravity Transcript Step Parser
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! ## Overview
 <a href=#4 id=4 data-nosnippet>4</a>//! Parses individual JSONL transcript lines from Antigravity `transcript.jsonl` /
@@ -81,116 +81,179 @@
 <a href=#81 id=81 data-nosnippet>81</a>    RunCommand {
 <a href=#82 id=82 data-nosnippet>82</a>        is_daemon: bool,
 <a href=#83 id=83 data-nosnippet>83</a>    },
-<a href=#84 id=84 data-nosnippet>84</a>    Other,
-<a href=#85 id=85 data-nosnippet>85</a>}
-<a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>CompactStep {
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) stype: String,
-<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) status: String,
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) step_ts: u64,
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) has_tools: bool,
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) is_hb_prompt: bool,
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) is_hb_ack: bool,
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) calls: Vec&lt;PendingCall&gt;,
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) content: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#96 id=96 data-nosnippet>96</a>}
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a><span class="kw">fn </span>is_relevant_content(stype: <span class="kw-2">&amp;</span>str, status: <span class="kw-2">&amp;</span>str, c: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#99 id=99 data-nosnippet>99</a>    status == <span class="string">"RUNNING"
-<a href=#100 id=100 data-nosnippet>100</a>        </span>|| stype == <span class="string">"SYSTEM_MESSAGE"
-<a href=#101 id=101 data-nosnippet>101</a>        </span>|| (stype == <span class="string">"GENERIC"
-<a href=#102 id=102 data-nosnippet>102</a>            </span>&amp;&amp; status == <span class="string">"DONE"
-<a href=#103 id=103 data-nosnippet>103</a>            </span>&amp;&amp; (c.contains(<span class="string">"No background tasks are currently running."</span>)
-<a href=#104 id=104 data-nosnippet>104</a>                || c.contains(<span class="string">"background task(s) currently running:"</span>)
-<a href=#105 id=105 data-nosnippet>105</a>                || c.contains(<span class="string">" cancelled."</span>)
-<a href=#106 id=106 data-nosnippet>106</a>                || (c.contains(<span class="string">"Task:"</span>) &amp;&amp; c.contains(<span class="string">"Status:"</span>))))
-<a href=#107 id=107 data-nosnippet>107</a>}
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="kw">fn </span>extract_calls(val: <span class="kw-2">&amp;</span>serde_json::Value) -&gt; Vec&lt;PendingCall&gt; {
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(arr) = val.get(<span class="string">"tool_calls"</span>).and_then(|v| v.as_array()) <span class="kw">else </span>{
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">return </span>Vec::new();
-<a href=#112 id=112 data-nosnippet>112</a>    };
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::with_capacity(arr.len());
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">for </span>tc <span class="kw">in </span>arr {
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>name = tc.get(<span class="string">"name"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>);
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>args = tc.get(<span class="string">"args"</span>).or_else(|| tc.get(<span class="string">"arguments"</span>));
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">let </span>item = <span class="kw">match </span>name {
-<a href=#118 id=118 data-nosnippet>118</a>            <span class="string">"manage_task" </span>=&gt; {
-<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">let </span>kill_tid = args.and_then(|a| {
-<a href=#120 id=120 data-nosnippet>120</a>                    (clean_json_scalar(a.get(<span class="string">"Action"</span>)).as_deref() == <span class="prelude-val">Some</span>(<span class="string">"kill"</span>))
-<a href=#121 id=121 data-nosnippet>121</a>                        .then(|| clean_json_scalar(a.get(<span class="string">"TaskId"</span>)))
-<a href=#122 id=122 data-nosnippet>122</a>                        .flatten()
-<a href=#123 id=123 data-nosnippet>123</a>                });
-<a href=#124 id=124 data-nosnippet>124</a>                PendingCall::ManageTask { kill_tid }
-<a href=#125 id=125 data-nosnippet>125</a>            }
-<a href=#126 id=126 data-nosnippet>126</a>            <span class="string">"schedule" </span>=&gt; {
-<a href=#127 id=127 data-nosnippet>127</a>                <span class="kw">let </span>(dur, cond, is_daemon) = <span class="kw">if let </span><span class="prelude-val">Some</span>(a) = args {
-<a href=#128 id=128 data-nosnippet>128</a>                    (
-<a href=#129 id=129 data-nosnippet>129</a>                        clean_json_scalar(a.get(<span class="string">"DurationSeconds"</span>))
-<a href=#130 id=130 data-nosnippet>130</a>                            .and_then(|s| s.parse::&lt;u64&gt;().ok()),
-<a href=#131 id=131 data-nosnippet>131</a>                        clean_json_scalar(a.get(<span class="string">"TimerCondition"</span>))
-<a href=#132 id=132 data-nosnippet>132</a>                            .unwrap_or_else(|| <span class="string">"never"</span>.into()),
-<a href=#133 id=133 data-nosnippet>133</a>                        clean_arg_bool(a, <span class="string">"IsDaemon"</span>),
-<a href=#134 id=134 data-nosnippet>134</a>                    )
-<a href=#135 id=135 data-nosnippet>135</a>                } <span class="kw">else </span>{
-<a href=#136 id=136 data-nosnippet>136</a>                    (<span class="prelude-val">None</span>, <span class="string">"never"</span>.into(), <span class="bool-val">false</span>)
-<a href=#137 id=137 data-nosnippet>137</a>                };
-<a href=#138 id=138 data-nosnippet>138</a>                PendingCall::Schedule {
-<a href=#139 id=139 data-nosnippet>139</a>                    dur,
-<a href=#140 id=140 data-nosnippet>140</a>                    cond,
-<a href=#141 id=141 data-nosnippet>141</a>                    is_daemon,
-<a href=#142 id=142 data-nosnippet>142</a>                }
-<a href=#143 id=143 data-nosnippet>143</a>            }
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="string">"run_command" </span>=&gt; PendingCall::RunCommand {
-<a href=#145 id=145 data-nosnippet>145</a>                is_daemon: args.is_some_and(|a| clean_arg_bool(a, <span class="string">"IsDaemon"</span>)),
-<a href=#146 id=146 data-nosnippet>146</a>            },
-<a href=#147 id=147 data-nosnippet>147</a>            <span class="kw">_ </span>=&gt; PendingCall::Other,
-<a href=#148 id=148 data-nosnippet>148</a>        };
-<a href=#149 id=149 data-nosnippet>149</a>        out.push(item);
-<a href=#150 id=150 data-nosnippet>150</a>    }
-<a href=#151 id=151 data-nosnippet>151</a>    out
-<a href=#152 id=152 data-nosnippet>152</a>}
-<a href=#153 id=153 data-nosnippet>153</a>
-<a href=#154 id=154 data-nosnippet>154</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>parse_compact_step_with_ack(
-<a href=#155 id=155 data-nosnippet>155</a>    line: <span class="kw-2">&amp;</span>str,
-<a href=#156 id=156 data-nosnippet>156</a>    seq: u64,
-<a href=#157 id=157 data-nosnippet>157</a>    fallback_epoch: u64,
-<a href=#158 id=158 data-nosnippet>158</a>    ack_token: <span class="kw-2">&amp;</span>str,
-<a href=#159 id=159 data-nosnippet>159</a>) -&gt; <span class="prelude-ty">Option</span>&lt;((u8, u64), CompactStep)&gt; {
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">let </span>val = serde_json::from_str::&lt;serde_json::Value&gt;(line).ok()<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">let </span>key = <span class="kw">match </span>val.get(<span class="string">"step_index"</span>).and_then(|v| v.as_u64()) {
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="prelude-val">Some</span>(idx) =&gt; (<span class="number">0_u8</span>, idx),
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="prelude-val">None </span>=&gt; (<span class="number">1_u8</span>, seq),
-<a href=#164 id=164 data-nosnippet>164</a>    };
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>stype = val.get(<span class="string">"type"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>).to_string();
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>status = val.get(<span class="string">"status"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>).to_string();
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>step_ts = val
-<a href=#168 id=168 data-nosnippet>168</a>        .get(<span class="string">"created_at"</span>)
-<a href=#169 id=169 data-nosnippet>169</a>        .and_then(|v| v.as_str())
-<a href=#170 id=170 data-nosnippet>170</a>        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-<a href=#171 id=171 data-nosnippet>171</a>        .map(|dt| dt.timestamp().max(<span class="number">0</span>) <span class="kw">as </span>u64)
-<a href=#172 id=172 data-nosnippet>172</a>        .unwrap_or(fallback_epoch);
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>calls = <span class="kw">if </span>stype == <span class="string">"PLANNER_RESPONSE" </span>{ extract_calls(<span class="kw-2">&amp;</span>val) } <span class="kw">else </span>{ Vec::new() };
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span>has_tools = val
-<a href=#175 id=175 data-nosnippet>175</a>        .get(<span class="string">"tool_calls"</span>)
-<a href=#176 id=176 data-nosnippet>176</a>        .and_then(|v| v.as_array())
-<a href=#177 id=177 data-nosnippet>177</a>        .is_some_and(|a| !a.is_empty());
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>raw_content = val.get(<span class="string">"content"</span>).and_then(|v| v.as_str());
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>is_hb_prompt = stype == <span class="string">"USER_INPUT"
-<a href=#180 id=180 data-nosnippet>180</a>        </span>&amp;&amp; raw_content.is_some_and(|c| c.contains(HEARTBEAT_PROMPT_PREFIX));
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>clean_ack = ack_token.trim();
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>is_hb_ack = stype == <span class="string">"PLANNER_RESPONSE"
-<a href=#183 id=183 data-nosnippet>183</a>        </span>&amp;&amp; !has_tools
-<a href=#184 id=184 data-nosnippet>184</a>        &amp;&amp; raw_content.is_some_and(|c| {
-<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">let </span>t = c.trim();
-<a href=#186 id=186 data-nosnippet>186</a>            t == <span class="string">"HEARTBEAT_OK" </span>|| (!clean_ack.is_empty() &amp;&amp; t == clean_ack)
-<a href=#187 id=187 data-nosnippet>187</a>        });
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span>content = raw_content
-<a href=#189 id=189 data-nosnippet>189</a>        .filter(|c| is_relevant_content(<span class="kw-2">&amp;</span>stype, <span class="kw-2">&amp;</span>status, c))
-<a href=#190 id=190 data-nosnippet>190</a>        .map(|c| c.to_string());
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="prelude-val">Some</span>((
-<a href=#192 id=192 data-nosnippet>192</a>        key,
-<a href=#193 id=193 data-nosnippet>193</a>        CompactStep { stype, status, step_ts, has_tools, is_hb_prompt, is_hb_ack, calls, content },
-<a href=#194 id=194 data-nosnippet>194</a>    ))
-<a href=#195 id=195 data-nosnippet>195</a>}
+<a href=#84 id=84 data-nosnippet>84</a>    SwarmWait,
+<a href=#85 id=85 data-nosnippet>85</a>    Other,
+<a href=#86 id=86 data-nosnippet>86</a>}
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>CompactStep {
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) stype: String,
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) status: String,
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) step_ts: u64,
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) has_tools: bool,
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) is_hb_prompt: bool,
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) is_hb_ack: bool,
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) calls: Vec&lt;PendingCall&gt;,
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) content: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#97 id=97 data-nosnippet>97</a>}
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a><span class="kw">fn </span>is_relevant_content(stype: <span class="kw-2">&amp;</span>str, status: <span class="kw-2">&amp;</span>str, c: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#100 id=100 data-nosnippet>100</a>    status == <span class="string">"RUNNING"
+<a href=#101 id=101 data-nosnippet>101</a>        </span>|| stype == <span class="string">"SYSTEM_MESSAGE"
+<a href=#102 id=102 data-nosnippet>102</a>        </span>|| (stype == <span class="string">"GENERIC"
+<a href=#103 id=103 data-nosnippet>103</a>            </span>&amp;&amp; status == <span class="string">"DONE"
+<a href=#104 id=104 data-nosnippet>104</a>            </span>&amp;&amp; (c.contains(<span class="string">"No background tasks are currently running."</span>)
+<a href=#105 id=105 data-nosnippet>105</a>                || c.contains(<span class="string">"background task(s) currently running:"</span>)
+<a href=#106 id=106 data-nosnippet>106</a>                || c.contains(<span class="string">" cancelled."</span>)
+<a href=#107 id=107 data-nosnippet>107</a>                || (c.contains(<span class="string">"Task:"</span>) &amp;&amp; c.contains(<span class="string">"Status:"</span>))))
+<a href=#108 id=108 data-nosnippet>108</a>}
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">fn </span>extract_calls(val: <span class="kw-2">&amp;</span>serde_json::Value) -&gt; Vec&lt;PendingCall&gt; {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(arr) = val.get(<span class="string">"tool_calls"</span>).and_then(|v| v.as_array()) <span class="kw">else </span>{
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">return </span>Vec::new();
+<a href=#113 id=113 data-nosnippet>113</a>    };
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::with_capacity(arr.len());
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">for </span>tc <span class="kw">in </span>arr {
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>name = tc.get(<span class="string">"name"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>);
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">let </span>args = tc.get(<span class="string">"args"</span>).or_else(|| tc.get(<span class="string">"arguments"</span>));
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>item = <span class="kw">match </span>name {
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="string">"manage_task" </span>=&gt; {
+<a href=#120 id=120 data-nosnippet>120</a>                <span class="kw">let </span>kill_tid = args.and_then(|a| {
+<a href=#121 id=121 data-nosnippet>121</a>                    (clean_json_scalar(a.get(<span class="string">"Action"</span>)).as_deref() == <span class="prelude-val">Some</span>(<span class="string">"kill"</span>))
+<a href=#122 id=122 data-nosnippet>122</a>                        .then(|| clean_json_scalar(a.get(<span class="string">"TaskId"</span>)))
+<a href=#123 id=123 data-nosnippet>123</a>                        .flatten()
+<a href=#124 id=124 data-nosnippet>124</a>                });
+<a href=#125 id=125 data-nosnippet>125</a>                PendingCall::ManageTask { kill_tid }
+<a href=#126 id=126 data-nosnippet>126</a>            }
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="string">"schedule" </span>=&gt; {
+<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">let </span>(dur, cond, is_daemon) = <span class="kw">if let </span><span class="prelude-val">Some</span>(a) = args {
+<a href=#129 id=129 data-nosnippet>129</a>                    (
+<a href=#130 id=130 data-nosnippet>130</a>                        clean_json_scalar(a.get(<span class="string">"DurationSeconds"</span>))
+<a href=#131 id=131 data-nosnippet>131</a>                            .and_then(|s| s.parse::&lt;u64&gt;().ok()),
+<a href=#132 id=132 data-nosnippet>132</a>                        clean_json_scalar(a.get(<span class="string">"TimerCondition"</span>))
+<a href=#133 id=133 data-nosnippet>133</a>                            .unwrap_or_else(|| <span class="string">"never"</span>.into()),
+<a href=#134 id=134 data-nosnippet>134</a>                        clean_arg_bool(a, <span class="string">"IsDaemon"</span>),
+<a href=#135 id=135 data-nosnippet>135</a>                    )
+<a href=#136 id=136 data-nosnippet>136</a>                } <span class="kw">else </span>{
+<a href=#137 id=137 data-nosnippet>137</a>                    (<span class="prelude-val">None</span>, <span class="string">"never"</span>.into(), <span class="bool-val">false</span>)
+<a href=#138 id=138 data-nosnippet>138</a>                };
+<a href=#139 id=139 data-nosnippet>139</a>                PendingCall::Schedule {
+<a href=#140 id=140 data-nosnippet>140</a>                    dur,
+<a href=#141 id=141 data-nosnippet>141</a>                    cond,
+<a href=#142 id=142 data-nosnippet>142</a>                    is_daemon,
+<a href=#143 id=143 data-nosnippet>143</a>                }
+<a href=#144 id=144 data-nosnippet>144</a>            }
+<a href=#145 id=145 data-nosnippet>145</a>            <span class="string">"run_command" </span>=&gt; PendingCall::RunCommand {
+<a href=#146 id=146 data-nosnippet>146</a>                is_daemon: args.is_some_and(|a| clean_arg_bool(a, <span class="string">"IsDaemon"</span>)),
+<a href=#147 id=147 data-nosnippet>147</a>            },
+<a href=#148 id=148 data-nosnippet>148</a>            <span class="string">"swarm_wait" </span>=&gt; PendingCall::SwarmWait,
+<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">_ </span>=&gt; PendingCall::Other,
+<a href=#150 id=150 data-nosnippet>150</a>        };
+<a href=#151 id=151 data-nosnippet>151</a>        out.push(item);
+<a href=#152 id=152 data-nosnippet>152</a>    }
+<a href=#153 id=153 data-nosnippet>153</a>    out
+<a href=#154 id=154 data-nosnippet>154</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>parse_compact_step_with_ack(
+<a href=#157 id=157 data-nosnippet>157</a>    line: <span class="kw-2">&amp;</span>str,
+<a href=#158 id=158 data-nosnippet>158</a>    seq: u64,
+<a href=#159 id=159 data-nosnippet>159</a>    fallback_epoch: u64,
+<a href=#160 id=160 data-nosnippet>160</a>    ack_token: <span class="kw-2">&amp;</span>str,
+<a href=#161 id=161 data-nosnippet>161</a>) -&gt; <span class="prelude-ty">Option</span>&lt;((u8, u64), CompactStep)&gt; {
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>val = serde_json::from_str::&lt;serde_json::Value&gt;(line).ok()<span class="question-mark">?</span>;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">let </span>key = <span class="kw">match </span>val.get(<span class="string">"step_index"</span>).and_then(|v| v.as_u64()) {
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="prelude-val">Some</span>(idx) =&gt; (<span class="number">0_u8</span>, idx),
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="prelude-val">None </span>=&gt; (<span class="number">1_u8</span>, seq),
+<a href=#166 id=166 data-nosnippet>166</a>    };
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>stype = val.get(<span class="string">"type"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>).to_string();
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>status = val.get(<span class="string">"status"</span>).and_then(|v| v.as_str()).unwrap_or(<span class="string">""</span>).to_string();
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">let </span>step_ts = val
+<a href=#170 id=170 data-nosnippet>170</a>        .get(<span class="string">"created_at"</span>)
+<a href=#171 id=171 data-nosnippet>171</a>        .and_then(|v| v.as_str())
+<a href=#172 id=172 data-nosnippet>172</a>        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+<a href=#173 id=173 data-nosnippet>173</a>        .map(|dt| dt.timestamp().max(<span class="number">0</span>) <span class="kw">as </span>u64)
+<a href=#174 id=174 data-nosnippet>174</a>        .unwrap_or(fallback_epoch);
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>calls = <span class="kw">if </span>stype == <span class="string">"PLANNER_RESPONSE" </span>{ extract_calls(<span class="kw-2">&amp;</span>val) } <span class="kw">else </span>{ Vec::new() };
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>has_tools = val
+<a href=#177 id=177 data-nosnippet>177</a>        .get(<span class="string">"tool_calls"</span>)
+<a href=#178 id=178 data-nosnippet>178</a>        .and_then(|v| v.as_array())
+<a href=#179 id=179 data-nosnippet>179</a>        .is_some_and(|a| !a.is_empty());
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>raw_content = val.get(<span class="string">"content"</span>).and_then(|v| v.as_str());
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>is_hb_prompt = stype == <span class="string">"USER_INPUT"
+<a href=#182 id=182 data-nosnippet>182</a>        </span>&amp;&amp; raw_content.is_some_and(|c| c.contains(HEARTBEAT_PROMPT_PREFIX));
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>clean_ack = ack_token.trim();
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>is_hb_ack = stype == <span class="string">"PLANNER_RESPONSE"
+<a href=#185 id=185 data-nosnippet>185</a>        </span>&amp;&amp; !has_tools
+<a href=#186 id=186 data-nosnippet>186</a>        &amp;&amp; raw_content.is_some_and(|c| {
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">let </span>t = c.trim();
+<a href=#188 id=188 data-nosnippet>188</a>            t == <span class="string">"HEARTBEAT_OK" </span>|| (!clean_ack.is_empty() &amp;&amp; t == clean_ack)
+<a href=#189 id=189 data-nosnippet>189</a>        });
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>content = raw_content
+<a href=#191 id=191 data-nosnippet>191</a>        .filter(|c| is_relevant_content(<span class="kw-2">&amp;</span>stype, <span class="kw-2">&amp;</span>status, c))
+<a href=#192 id=192 data-nosnippet>192</a>        .map(|c| c.to_string());
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="prelude-val">Some</span>((
+<a href=#194 id=194 data-nosnippet>194</a>        key,
+<a href=#195 id=195 data-nosnippet>195</a>        CompactStep { stype, status, step_ts, has_tools, is_hb_prompt, is_hb_ack, calls, content },
+<a href=#196 id=196 data-nosnippet>196</a>    ))
+<a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a><span class="attr">#[derive(Default)]
+<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>SwarmBatchState {
+<a href=#201 id=201 data-nosnippet>201</a>    bucket: u8,
+<a href=#202 id=202 data-nosnippet>202</a>    start_idx: u64,
+<a href=#203 id=203 data-nosnippet>203</a>    total_calls: u64,
+<a href=#204 id=204 data-nosnippet>204</a>    wait_keys: Vec&lt;(u8, u64)&gt;,
+<a href=#205 id=205 data-nosnippet>205</a>    settled_results: u64,
+<a href=#206 id=206 data-nosnippet>206</a>    done_waits: usize,
+<a href=#207 id=207 data-nosnippet>207</a>}
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a><span class="kw">fn </span>is_sibling_result_settled(step: <span class="kw-2">&amp;</span>CompactStep) -&gt; bool {
+<a href=#210 id=210 data-nosnippet>210</a>    step.status != <span class="string">"RUNNING"
+<a href=#211 id=211 data-nosnippet>211</a>        </span>|| step.content.as_deref().is_some_and(|c| c.contains(<span class="string">"task id:"</span>))
+<a href=#212 id=212 data-nosnippet>212</a>}
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>update_terminal_state(
+<a href=#215 id=215 data-nosnippet>215</a>    key: (u8, u64),
+<a href=#216 id=216 data-nosnippet>216</a>    step: <span class="kw-2">&amp;</span>CompactStep,
+<a href=#217 id=217 data-nosnippet>217</a>    batch: <span class="kw-2">&amp;mut </span>SwarmBatchState,
+<a href=#218 id=218 data-nosnippet>218</a>) -&gt; bool {
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">if </span>step.stype == <span class="string">"PLANNER_RESPONSE" </span>{
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw-2">*</span>batch = SwarmBatchState::default();
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">if </span>!step.has_tools {
+<a href=#222 id=222 data-nosnippet>222</a>            <span class="kw">return </span>step.status == <span class="string">"DONE"</span>;
+<a href=#223 id=223 data-nosnippet>223</a>        }
+<a href=#224 id=224 data-nosnippet>224</a>        batch.bucket = key.<span class="number">0</span>;
+<a href=#225 id=225 data-nosnippet>225</a>        batch.start_idx = key.<span class="number">1</span>.saturating_add(<span class="number">1</span>);
+<a href=#226 id=226 data-nosnippet>226</a>        batch.total_calls = step.calls.len() <span class="kw">as </span>u64;
+<a href=#227 id=227 data-nosnippet>227</a>        batch.wait_keys = step
+<a href=#228 id=228 data-nosnippet>228</a>            .calls
+<a href=#229 id=229 data-nosnippet>229</a>            .iter()
+<a href=#230 id=230 data-nosnippet>230</a>            .enumerate()
+<a href=#231 id=231 data-nosnippet>231</a>            .filter_map(|(k, c)| {
+<a href=#232 id=232 data-nosnippet>232</a>                <span class="macro">matches!</span>(c, PendingCall::SwarmWait)
+<a href=#233 id=233 data-nosnippet>233</a>                    .then_some((key.<span class="number">0</span>, key.<span class="number">1</span>.saturating_add(<span class="number">1 </span>+ k <span class="kw">as </span>u64)))
+<a href=#234 id=234 data-nosnippet>234</a>            })
+<a href=#235 id=235 data-nosnippet>235</a>            .collect();
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="bool-val">false
+<a href=#237 id=237 data-nosnippet>237</a>    </span>} <span class="kw">else if </span>step.stype == <span class="string">"GENERIC" </span>{
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>end_idx = batch.start_idx.saturating_add(batch.total_calls);
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">if </span>batch.total_calls &gt; <span class="number">0 </span>&amp;&amp; key.<span class="number">0 </span>== batch.bucket &amp;&amp; key.<span class="number">1 </span>&gt;= batch.start_idx &amp;&amp; key.<span class="number">1 </span>&lt; end_idx {
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">if </span>batch.wait_keys.contains(<span class="kw-2">&amp;</span>key) {
+<a href=#241 id=241 data-nosnippet>241</a>                <span class="kw">if </span>step.status == <span class="string">"DONE" </span>{
+<a href=#242 id=242 data-nosnippet>242</a>                    batch.done_waits += <span class="number">1</span>;
+<a href=#243 id=243 data-nosnippet>243</a>                    batch.settled_results = batch.settled_results.saturating_add(<span class="number">1</span>);
+<a href=#244 id=244 data-nosnippet>244</a>                }
+<a href=#245 id=245 data-nosnippet>245</a>            } <span class="kw">else if </span>is_sibling_result_settled(step) {
+<a href=#246 id=246 data-nosnippet>246</a>                batch.settled_results = batch.settled_results.saturating_add(<span class="number">1</span>);
+<a href=#247 id=247 data-nosnippet>247</a>            }
+<a href=#248 id=248 data-nosnippet>248</a>            !batch.wait_keys.is_empty()
+<a href=#249 id=249 data-nosnippet>249</a>                &amp;&amp; batch.done_waits == batch.wait_keys.len()
+<a href=#250 id=250 data-nosnippet>250</a>                &amp;&amp; batch.settled_results &gt;= batch.total_calls
+<a href=#251 id=251 data-nosnippet>251</a>        } <span class="kw">else </span>{
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="bool-val">false
+<a href=#253 id=253 data-nosnippet>253</a>        </span>}
+<a href=#254 id=254 data-nosnippet>254</a>    } <span class="kw">else </span>{
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw-2">*</span>batch = SwarmBatchState::default();
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="bool-val">false
+<a href=#257 id=257 data-nosnippet>257</a>    </span>}
+<a href=#258 id=258 data-nosnippet>258</a>}
 </code></pre></div></section></main></body></html>

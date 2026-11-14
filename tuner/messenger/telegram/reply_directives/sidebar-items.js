@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DirectiveOutcome"],"fn":["clamp_session_effort","get_remaining_prompt","is_shortcut_for_provider","parse_at_model_tokens","parse_model_effort_args_for_provider","resolve_directive_for_provider","session_supports_effort","tokenize_model_command_args"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_lang_keyboard","handle_lang_command"]};
+window.SIDEBAR_ITEMS = {"fn":["build_lang_keyboard","handle_lang_command","send_effort_menu"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["drain_after_interrupt","execute_warm_claude_turn","finalize_claude_turn","handle_claude_control_request","prepare_claude_turn_payload","read_claude_turn_stream","send","send_streaming"]};
+window.SIDEBAR_ITEMS = {"fn":["emit_error_event","execute_warm_claude_turn","finalize_claude_turn","finish_ephemeral_or_broken","handle_claude_ask_tool","handle_claude_control_request","read_claude_turn_stream","send","send_streaming"]};

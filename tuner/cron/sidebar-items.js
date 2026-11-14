@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["manager","scheduler"]};
+window.SIDEBAR_ITEMS = {"fn":["apply_job_model_effort","build_job_cli_config","calculate_job_next_run"],"mod":["manager","scheduler"]};

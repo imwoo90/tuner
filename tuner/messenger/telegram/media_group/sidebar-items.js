@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["process_media_group","spawn_timer_task"],"struct":["MediaGroupBuffer","MediaGroupDeps","MediaGroupManager"]};
+window.SIDEBAR_ITEMS = {"fn":["flush_group_on_timeout","process_media_group","resolve_group_lock_context","spawn_timer_task"],"struct":["MediaGroupBuffer","MediaGroupDeps","MediaGroupManager"],"type":["DrainedMediaGroup","GroupLockContext","TargetTopicResult"]};
