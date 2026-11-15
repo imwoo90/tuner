@@ -94,7 +94,7 @@ pub struct SessionData {
 
 fn default_transport() -> String { "tg".to_string() }
 fn default_provider() -> String { "antigravity".to_string() }
-fn default_model() -> String { "gemini-3.8-flash".to_string() }
+fn default_model() -> String { "gemini-4-hydrogen".to_string() }
 fn default_now_iso() -> String { Utc::now().to_rfc3339() }
 
 impl SessionData {

@@ -92,13 +92,12 @@ pub fn normalize_model_id(raw: &str) -> &str {
         "opus" | "claude-opus" | "opus-5-5" | "opus5.5" => "claude-opus-5-5",
         "sonnet" | "claude-sonnet" | "sonnet-5-5" | "sonnet5.5" => "claude-sonnet-5-5",
         "flash" | "gemini" | "gemini-2.5-flash" | "gemini-3-flash" | "gemini-3.0-flash"
-        | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" | "gemini-3.8-flash" => {
-            "gemini-3.8-flash"
-        }
+        | "gemini-3.5-flash" | "gemini-3.6-flash" | "gemini-3.7-flash" | "hydrogen"
+        | "gemini-hydrogen" | "gemini-4-hydrogen" => "gemini-4-hydrogen",
+        "gemini-3.8-flash" => "gemini-3.8-flash",
         "argon" | "gemini-argon" | "gemini-4-argon" | "pro" | "gemini-2.5-pro"
         | "gemini-3.0-pro" | "gemini-3.1-pro" => "gemini-4-argon",
         "carbon" | "gemini-carbon" | "gemini-4-carbon" => "gemini-4-carbon",
-        "hydrogen" | "gemini-hydrogen" | "gemini-4-hydrogen" => "gemini-4-hydrogen",
         "orchestrator" | "orchestrator-carbon" | "gemini-orchestrator"
         | "gemini-pro-orchestrator" => "gemini-pro-orchestrator",
         "orchestrator-argon" | "gemini-pro-orchestrator-argon" => "gemini-pro-orchestrator-argon",

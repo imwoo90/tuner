@@ -7,8 +7,9 @@ Scripts for creating, editing, listing, and removing scheduled jobs.
 **When the user requests a new cron job, you MUST ask:**
 
 1. **Which model?**
-   - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended)
-   - `gemini-4-argon` (effort: `high` | `medium` | `low`) - Frontier reasoning model
+   - `gemini-4-hydrogen` (effort: `high` | `xhigh` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended)
+   - `gemini-pro-orchestrator` (effortless) - Hybrid Carbon planner + Hydrogen High executor for complex reasoning & orchestration
+   - `gemini-4-carbon` / `gemini-4-argon` (effort: `high` | `medium` | `low`) - Direct frontier reasoning models
    - `claude-opus-5-5` - Claude frontier reasoning model
    - `claude-sonnet-5-5` - Claude reasoning model
 
@@ -37,7 +38,7 @@ Verify the active time and offset before recommending cron schedules by running:
 
 ## Commands
 
-- `python3 tools/cron_tools/cron_add.py --name "task-name" --title "Task Title" --description "Task description..." --schedule "*/5 * * * *" --model "gemini-3.8-flash" --effort "high"`
+- `python3 tools/cron_tools/cron_add.py --name "task-name" --title "Task Title" --description "Task description..." --schedule "*/5 * * * *" --model "gemini-4-hydrogen" --effort "high"`
 - `python3 tools/cron_tools/cron_edit.py JOB_ID --schedule "0 9 * * *"`
 - `python3 tools/cron_tools/cron_remove.py JOB_ID`
 - `python3 tools/cron_tools/cron_list.py`

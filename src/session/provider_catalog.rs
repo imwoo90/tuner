@@ -150,7 +150,7 @@ impl SessionData {
             self.model = match prov {
                 "claude" => crate::cli::claude::DEFAULT_CLAUDE_MODEL.to_string(),
                 "codex" => crate::cli::codex::DEFAULT_CODEX_MODEL.to_string(),
-                _ => "gemini-3.8-flash".to_string(),
+                _ => "gemini-4-hydrogen".to_string(),
             };
         }
         self.normalize_effort_for_provider(prov);

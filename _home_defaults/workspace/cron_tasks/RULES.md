@@ -9,8 +9,9 @@ For cron tool commands (add/edit/remove/list), see `tools/cron_tools/RULES.md`.
 
 1. **Which model?** (`--model <name>`)
    - Options:
-     - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended)
-     - `gemini-4-argon` (effort: `high` | `medium` | `low`) - Frontier reasoning model
+     - `gemini-4-hydrogen` (effort: `high` | `xhigh` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended)
+     - `gemini-pro-orchestrator` (effortless) - Hybrid Carbon planner + Hydrogen High executor for complex reasoning & orchestration
+     - `gemini-4-carbon` / `gemini-4-argon` (effort: `high` | `medium` | `low`) - Direct frontier reasoning models
      - `claude-opus-5-5` - Claude frontier reasoning model
      - `claude-sonnet-5-5` - Claude reasoning model
    - Default if user doesn't specify: Use global config model
@@ -28,8 +29,9 @@ User: "Create a cron job to check weather every 3 minutes"
 You: "I'll create a cron job to check weather every 3 minutes. Let me configure the execution:
 
 **Model**: Which Antigravity model should execute this task?
-   - `gemini-3.8-flash` (effort: `high` - recommended)
-   - `gemini-4-argon` (effort: `high`)
+   - `gemini-4-hydrogen` (effort: `high` - recommended)
+   - `gemini-pro-orchestrator` (effortless - hybrid Carbon/Hydrogen)
+   - `gemini-4-carbon` / `gemini-4-argon` (effort: `high`)
    - `claude-opus-5-5`
    - `claude-sonnet-5-5`
 

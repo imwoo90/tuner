@@ -1,7 +1,7 @@
 {
     "_comment": "Full example config showing all supported Tuner features. Copy to ~/.tuner/config/config.json and adjust.",
     "provider": "antigravity",
-    "model": "gemini-3.8-flash",
+    "model": "gemini-4-hydrogen",
     "effort": "high",
     "language": "en",
     "user_timezone": "Asia/Seoul",

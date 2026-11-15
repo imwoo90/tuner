@@ -179,8 +179,12 @@ fn test_resolve_cli_model_effort_argon_defaults_to_high() {
     assert_eq!(eff3.as_deref(), Some("high"));
 
     let (m4, eff4) = AntigravityCli::resolve_cli_model_effort(Some("gemini-3.6-flash"), Some("high"));
-    assert_eq!(m4.as_deref(), Some("gemini-3.8-flash"));
+    assert_eq!(m4.as_deref(), Some("gemini-4-hydrogen"));
     assert_eq!(eff4.as_deref(), Some("high"));
+
+    let (m5, eff5) = AntigravityCli::resolve_cli_model_effort(Some("flash"), None);
+    assert_eq!(m5.as_deref(), Some("gemini-4-hydrogen"));
+    assert_eq!(eff5.as_deref(), Some("high"));
 }
 
 #[test]

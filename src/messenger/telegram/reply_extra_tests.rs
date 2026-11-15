@@ -37,14 +37,14 @@ mod tests {
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.8-flash (effort: high)");
+        assert_eq!(model_str, "gemini-4-hydrogen (effort: high)");
         
         // Scenario 2: Session effort is Some("medium"), should use session effort
         sess.effort = Some("medium".to_string());
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.8-flash (effort: medium)");
+        assert_eq!(model_str, "gemini-4-hydrogen (effort: medium)");
         
         // Scenario 3: Config effort is None and session effort is None
         cfg.effort = None;
@@ -52,7 +52,7 @@ mod tests {
         mgr.update_session(&sess).await.unwrap();
         
         let model_str = resolve_session_model(&msg, &cfg, &mgr).await;
-        assert_eq!(model_str, "gemini-3.8-flash");
+        assert_eq!(model_str, "gemini-4-hydrogen");
 
         // Scenario 4: Effortless orchestrator ignores global config.effort ("high")
         cfg.effort = Some("high".to_string());
@@ -66,21 +66,21 @@ mod tests {
 
     #[test]
     fn test_parse_model_directive_scenarios() {
-        // Scenario 1: Standard format with @model prefix and effort flag (normalizes legacy 3.6 -> 3.8)
+        // Scenario 1: Standard format with @model prefix and effort flag (normalizes legacy 3.6 -> 4-hydrogen)
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash --effort high write code");
-        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
+        assert_eq!(model, Some("gemini-4-hydrogen".to_string()));
         assert_eq!(effort, Some("high".to_string()));
         assert_eq!(prompt, "write code");
 
         // Scenario 2: Standard format with @model prefix and positional effort
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash medium refactor this");
-        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
+        assert_eq!(model, Some("gemini-4-hydrogen".to_string()));
         assert_eq!(effort, Some("medium".to_string()));
         assert_eq!(prompt, "refactor this");
 
         // Scenario 3: Legacy format with suffix
         let (model, effort, prompt) = parse_model_directive("@model gemini-3.6-flash-high write a test");
-        assert_eq!(model, Some("gemini-3.8-flash".to_string()));
+        assert_eq!(model, Some("gemini-4-hydrogen".to_string()));
         assert_eq!(effort, Some("high".to_string()));
         assert_eq!(prompt, "write a test");
 
@@ -295,8 +295,8 @@ mod tests {
         let mut s = SessionData::new(1, "tg".into(), None, "claude".into(), "claude-fable-5".into());
         s.effort = Some("max".into());
         s.apply_provider_switch("antigravity");
-        assert_eq!(s.model, "gemini-3.8-flash");
-        assert_eq!(s.effort.as_deref(), Some("high"));
+        assert_eq!(s.model, "gemini-4-hydrogen");
+        assert_eq!(s.effort.as_deref(), Some("xhigh"));
 
         s.model = "o3".into();
         s.effort = Some("minimal".into());

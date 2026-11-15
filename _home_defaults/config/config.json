@@ -3,6 +3,6 @@
   "allowed_user_ids": [],
   "allowed_group_ids": [],
   "language": "en",
-  "model": "gemini-3.8-flash",
+  "model": "gemini-4-hydrogen",
   "effort": "high"
 }

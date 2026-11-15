@@ -17,11 +17,12 @@ Edit only when the user asks for behavior changes.
 
 - `provider`: `antigravity`
 - `model`: default model id
-    - `gemini-4-argon` (effort: `high` | `medium` | `low`) - Frontier reasoning & agentic model
-    - `gemini-3.8-flash` (effort: `high` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended default)
-    - `claude-opus-5-5` - Claude frontier deep reasoning model
-    - `claude-sonnet-5-5` - Claude reasoning model
-- `effort`: reasoning effort level (`high`, `medium`, `low`) for compatible models
+    - `gemini-4-hydrogen` (effort: `high` | `xhigh` | `medium` | `low`) - Fast, state-of-the-art agentic model (recommended default)
+    - `gemini-pro-orchestrator` (effortless) - Hybrid Carbon planner + Hydrogen High executor for complex reasoning & orchestration
+    - `gemini-pro-orchestrator-argon` (effortless) - Hybrid Argon planner + Hydrogen High executor
+    - `gemini-4-carbon` / `gemini-4-argon` (effort: `high` | `medium` | `low`) - Direct frontier reasoning models
+    - `claude-opus-5-5` / `claude-sonnet-5-5`
+- `effort`: reasoning effort level (`low`, `medium`, `high`, `xhigh`) for compatible models
 - `permission_mode`: CLI permission behavior (`bypassPermissions` or standard)
 
 ### Time and Scheduling

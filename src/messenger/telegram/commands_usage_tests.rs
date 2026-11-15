@@ -222,8 +222,8 @@ Press Esc or q to exit
             serde_json::from_str(&serde_json::from_str::<serde_json::Value>(&content).unwrap()["jobs"][0].to_string())
                 .unwrap();
         assert_eq!(job.id, "memory-consolidator");
-        assert_eq!(job.model.as_deref(), Some("gemini-4-argon"));
-        assert_eq!(job.effort.as_deref(), Some("high"));
+        assert_eq!(job.model.as_deref(), Some("gemini-pro-orchestrator"));
+        assert_eq!(job.effort, None);
     }
 
     #[tokio::test]

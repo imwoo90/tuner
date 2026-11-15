@@ -47,7 +47,7 @@ cat new_memory.md | python3 skills/memory-system/scripts/memory_tool.py save-mem
 
 ## Memory Consolidator Cron-Job Workflow
 
-When running the `memory-consolidator` cron job (executed by the `gemini-4-argon-high` agent), follow these steps:
+When running the `memory-consolidator` cron job (executed by the `gemini-pro-orchestrator` agent), follow these steps:
 1. Locate the current workspace root path.
 2. Run `get-logs` to retrieve the recent chat history.
 3. If no new messages are found, only run `save-memory` with the existing `MAINMEMORY.md` content to update the consolidation timestamp.

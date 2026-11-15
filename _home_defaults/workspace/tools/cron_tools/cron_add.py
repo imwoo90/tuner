@@ -56,8 +56,8 @@ OPTIONAL:
 
 EXECUTION OVERRIDES (optional, override global config for this specific job):
   --provider          CLI provider: 'antigravity' (defaults to global config)
-  --model             Model name (e.g. 'gemini-3.8-flash', 'gemini-4-argon', 'claude-opus-5-5')
-  --effort            Thinking effort level: 'low', 'medium', 'high'
+  --model             Model name (e.g. 'gemini-4-hydrogen', 'gemini-pro-orchestrator', 'claude-opus-5-5')
+  --effort            Thinking effort level: 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'
   --cli-parameters    Additional CLI flags as JSON array
 
 QUIET HOURS (optional, prevent jobs from running during specific hours):
@@ -149,14 +149,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--model",
-        help="Model name for this job (e.g. 'gemini-3.8-flash', 'gemini-4-argon', 'claude-opus-5-5'). "
+        help="Model name for this job (e.g. 'gemini-4-hydrogen', 'gemini-pro-orchestrator', 'claude-opus-5-5'). "
         "If omitted, uses global config.",
     )
     parser.add_argument(
         "--effort",
         dest="effort",
-        choices=["low", "medium", "high"],
-        help="Thinking effort level for this job (low, medium, high). "
+        choices=["minimal", "low", "medium", "high", "xhigh", "max"],
+        help="Thinking effort level for this job (minimal, low, medium, high, xhigh, max). "
         "If omitted, uses global config or model default.",
     )
     parser.add_argument(

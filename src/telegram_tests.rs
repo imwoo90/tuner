@@ -166,6 +166,6 @@ mod tests {
         let _ = handle_message(bot, msg_agy, cfg, mgr.clone(), cli, cron_mgr, topic_cache, bot_info, mgm).await;
         let sess_agy = mgr.get_active(&key).await.unwrap().unwrap();
         assert_eq!(sess_agy.provider, "antigravity");
-        assert_eq!(sess_agy.model, "gemini-3.8-flash");
+        assert_eq!(sess_agy.model, "gemini-4-hydrogen");
     }
 }

@@ -43,8 +43,8 @@ CHANGES:
   --schedule "<cron-expr>"   Update execution schedule
   --timezone "<iana>"        Set per-job timezone override (e.g. 'Asia/Seoul')
   --provider "<name>"        Set provider override ('antigravity')
-  --model "<model-id>"       Set model override (e.g. 'gemini-3.8-flash', 'gemini-4-argon')
-  --effort <lvl>             Set thinking effort level (low, medium, high)
+  --model "<model-id>"       Set model override (e.g. 'gemini-4-hydrogen', 'gemini-pro-orchestrator')
+  --effort <lvl>             Set thinking effort level (minimal, low, medium, high, xhigh, max)
   --cli-parameters "<json>"  Set extra CLI flags as JSON array
   --quiet-start <hour>       Start of quiet hours (0-23, job won't run during this time)
   --quiet-end <hour>         End of quiet hours (0-23, exclusive)
@@ -67,7 +67,7 @@ EXAMPLES:
   python3 tools/cron_tools/cron_edit.py "weather-check" --title "Weather 08:30"
   python3 tools/cron_tools/cron_edit.py "weather-check" --name "weather-morning"
   python3 tools/cron_tools/cron_edit.py "weather-check" --disable
-  python3 tools/cron_tools/cron_edit.py "analysis-job" --model gemini-4-argon --effort high
+  python3 tools/cron_tools/cron_edit.py "analysis-job" --model gemini-pro-orchestrator --clear-effort
   python3 tools/cron_tools/cron_edit.py "web-scraper" --quiet-start 22 --quiet-end 7
   python3 tools/cron_tools/cron_edit.py "web-scraper" --clear-quiet-hours
   python3 tools/cron_tools/cron_edit.py "morning-brief" --topic-id 42
@@ -94,12 +94,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        help="Model override for this job (e.g. 'gemini-3.8-flash', 'gemini-4-argon').",
+        help="Model override for this job (e.g. 'gemini-4-hydrogen', 'gemini-pro-orchestrator').",
     )
     parser.add_argument(
         "--effort",
         dest="effort",
-        choices=["low", "medium", "high"],
+        choices=["minimal", "low", "medium", "high", "xhigh", "max"],
         help="Thinking effort level override.",
     )
     parser.add_argument(
