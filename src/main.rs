@@ -228,11 +228,11 @@ async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
         return Ok(Some(()));
     }
     if args.contains(&"--vault".to_string()) {
-        security::vault_cli::run_vault_cli(args)?;
+        security::vault_cli::run_vault_cli(args).await?;
         return Ok(Some(()));
     }
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --doctor [--fix]   Check (and optionally install) required tools & dependencies\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
+        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --doctor [--fix]   Check (and optionally install) required tools & dependencies\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|auth|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
         return Ok(Some(()));
     }
     if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {

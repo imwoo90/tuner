@@ -76,6 +76,7 @@ pub fn build_review_router() -> Router {
             "/vault/:token/api/lock",
             axum::routing::post(super::vault::handle_vault_lock),
         )
+        .merge(crate::security::vault_auth::proxy::auth_proxy_routes())
         .route("/health", get(handle_health))
 }
 
@@ -115,17 +116,35 @@ pub async fn get_vault_url(
     tunnel_url: &Arc<Mutex<Option<String>>>,
     token: &str,
 ) -> String {
+    resolve_tunneled_path(server_port, tunnel_url, "vault", token).await
+}
+
+/// Resolves the public or loopback URL for `/auth/:token`.
+pub async fn get_auth_url(
+    server_port: &Arc<Mutex<Option<u16>>>,
+    tunnel_url: &Arc<Mutex<Option<String>>>,
+    token: &str,
+) -> String {
+    resolve_tunneled_path(server_port, tunnel_url, "auth", token).await
+}
+
+async fn resolve_tunneled_path(
+    server_port: &Arc<Mutex<Option<u16>>>,
+    tunnel_url: &Arc<Mutex<Option<String>>>,
+    prefix: &str,
+    token: &str,
+) -> String {
     let port = ensure_server_running(server_port).await;
     let mut tunnel_guard = tunnel_url.lock().await;
     if let Some(ref base) = *tunnel_guard {
-        return format!("{}/vault/{}", base, token);
+        return format!("{}/{}/{}", base, prefix, token);
     }
 
     if let Some(url) = spawn_quick_tunnel_tracked(port, Some(tunnel_url.clone())).await {
         *tunnel_guard = Some(url.clone());
-        format!("{}/vault/{}", url, token)
+        format!("{}/{}/{}", url, prefix, token)
     } else {
-        format!("http://127.0.0.1:{}/vault/{}", port, token)
+        format!("http://127.0.0.1:{}/{}/{}", port, prefix, token)
     }
 }
 

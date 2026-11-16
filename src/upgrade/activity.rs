@@ -292,6 +292,7 @@ pub async fn evaluate_active_work(
     let running_len = cli.sessions.running_runs.lock().await.len();
     if active_foreground_runs() > 0
         || active_cron_runs() > 0
+        || crate::security::vault_auth::proxy::has_active_auth_sessions().await
         || !cli.sessions.async_runs.lock().await.is_empty()
         || !cli.sessions.active_asks.lock().await.is_empty()
         || !cli.sessions.boot_cancels.lock().await.is_empty()

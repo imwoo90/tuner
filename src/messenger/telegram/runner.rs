@@ -105,10 +105,12 @@ fn spawn_web_warmup(paths: &TunerPaths) {
     let vault_dir = paths.vault_dir();
     tokio::spawn(async move {
         super::vault::global_vault_manager()
-            .init_storage(vault_prof, vault_dir)
+            .init_storage(vault_prof, vault_dir.clone())
             .await;
         let mgr = super::review::global_review_manager();
         mgr.init_storage(review_path).await;
+        let port = mgr.ensure_server_running().await;
+        crate::security::vault_auth::proxy::publish_tunnel_endpoint(&vault_dir, port).await;
         mgr.warmup().await;
     });
 }

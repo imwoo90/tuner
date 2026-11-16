@@ -100,6 +100,7 @@ fn print_vault_help() {
     println!(
         "Usage:
   tuner --vault list [--profile <name>]
+  tuner --vault auth <site_key> [--url <url>] [--ttl <secs>] [--state-name <slug>] [--profile <name>]
   tuner --vault exec <site_key> [--profile <name>] -- <command> [args...]
 
 Environment variables injected during `exec`:
@@ -190,7 +191,7 @@ fn handle_vault_session(profile: &str) -> Result<(), String> {
 }
 
 /// Entrypoint for `tuner --vault ...` CLI invocation.
-pub fn run_vault_cli(args: &[String]) -> Result<(), String> {
+pub async fn run_vault_cli(args: &[String]) -> Result<(), String> {
     let vault_pos = match args.iter().position(|a| a == "--vault") {
         Some(p) => p,
         None => return Ok(()),
@@ -201,6 +202,14 @@ pub fn run_vault_cli(args: &[String]) -> Result<(), String> {
     match sub {
         "list" | "ls" => handle_vault_list(&profile),
         "session" | "token" => handle_vault_session(&profile),
+        "auth" | "login" => {
+            let tail = if vault_pos + 2 < args.len() {
+                &args[vault_pos + 2..]
+            } else {
+                &[]
+            };
+            super::vault_auth::run_vault_auth_cli(&profile, tail).await
+        }
         "exec" | "run" => {
             let site = args
                 .get(vault_pos + 2)

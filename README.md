@@ -28,8 +28,8 @@ graph LR
   Watch `💭 Thinking Process` and `🛠️ Tool Calls` stream live inside collapsible Telegram `<blockquote expandable>` blocks. When an agent asks a multiple-choice question (`ask_question` / `AskUserQuestion` / `request_user_input`), answer it directly by tapping Telegram inline buttons.
 - 🔍 **Mobile-Ready Web File & 3D Viewer (`/review`)**
   Whenever an agent references or generates files (`file://`), `tuner` attaches a one-tap **`🔍 Open File Viewer`** button backed by an ephemeral Cloudflare Quick Tunnel—supporting code diffs, Markdown, PDFs, image galleries, ZIP archives, and interactive **3D CAD (`.step` / `.stl` / `.glb`)** previews.
-- 🔐 **Zero-Knowledge Credential Vault (`/vault`)**
-  Store site logins per profile in an encrypted vault (`XSalsa20-Poly1305`). Agents run authenticated tools via `tuner --vault exec <site> -- <cmd>` while `tuner` automatically redacts secrets (`***REDACTED***`) from stdout/stderr so plaintext credentials never enter the LLM context.
+- 🔐 **Zero-Knowledge Credential Vault & HITL Browser Auth (`/vault`)**
+  Store site logins per profile in an encrypted vault (`XSalsa20-Poly1305`). Agents run authenticated tools via `tuner --vault exec <site> -- <cmd>` (auto-redacting `***REDACTED***` from stdout/stderr), or hand off CAPTCHA/2FA/OAuth gates to your phone via `tuner --vault auth <site>`—streaming a temporary one-time remote browser with 1-tap server-side Vault autofill and reactive agent wakeup on save.
 - ⏰ **Autonomous Cron & Background Task Wakeup (`/cron`)**
   Schedule recurring agent workflows or let long-running builds/subagents finish asynchronously and wake the session automatically when done.
 

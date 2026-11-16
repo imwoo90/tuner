@@ -53,6 +53,7 @@ pub fn check_tier2_os_tools(checks: &mut Vec<DoctorCheck>) {
         ("screen", "Background session multiplexer (/remote)"),
         ("pgrep", "Process inspection (procps)"),
         ("ffmpeg", "Audio/video media processing (tools/media_tools)"),
+        ("Xvfb", "X11 virtual framebuffer (tuner --vault auth)"),
     ];
     for (bin, desc) in required_bins {
         match which_bin(bin) {

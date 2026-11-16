@@ -219,6 +219,11 @@ impl ReviewManager {
     pub async fn get_vault_url(&self, token: &str) -> String {
         super::review_server::get_vault_url(&self.server_port, &self.tunnel_url, token).await
     }
+
+    /// Resolves the external or local URL for an `/auth/:token` HITL browser session.
+    pub async fn get_auth_url(&self, token: &str) -> String {
+        super::review_server::get_auth_url(&self.server_port, &self.tunnel_url, token).await
+    }
 }
 
 fn resolve_unique_filename(path: &StdPath, used_names: &mut HashSet<String>) -> String {

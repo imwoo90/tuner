@@ -219,7 +219,18 @@ src/
 │   ├── mod.rs                # Security module index & path/vault re-exports
 │   ├── paths.rs              # Path traversal protection: canonical root containment checks
 │   ├── vault.rs              # Per-profile XSalsa20-Poly1305 encrypted credential store (vault/vault.enc & vault/vault.key)
-│   └── vault_cli.rs          # tuner --vault (list|session|exec) CLI & stdout/stderr secret redactor
+│   ├── vault_cli.rs          # tuner --vault (list|auth|session|exec) CLI & stdout/stderr secret redactor
+│   └── vault_auth/           # Human-in-the-Loop (HITL) remote Chrome CDP streaming & session handoff
+│       ├── mod.rs            # CLI orchestrator & banner/outcome lifecycle
+│       ├── options.rs        # CLI flag parser, canonical storage slug mapper & Vault target resolver
+│       ├── browser_env.rs    # Browser executable discovery & stale SingletonLock cleanup
+│       ├── browser.rs        # Xvfb -displayfd 1 & headed Chrome persistent profile runtime
+│       ├── cdp.rs            # Pure Rust CDP WebSocket controller, MRU tab tracking & JPEG screenshots
+│       ├── cdp_input.rs      # CDP mouse, wheel, keyboard & Zero-Knowledge Vault credential typing
+│       ├── cdp_state.rs      # Cookie seeding & Playwright storage_state.json (0600) exporter
+│       ├── proxy.rs          # :8743 warm Quick Tunnel IPC endpoint & HTTP/WebSocket reverse proxy
+│       ├── server.rs         # Loopback Axum UI/WebSocket server, single-viewer lock & signal/TTL flush
+│       └── tunnel.rs         # Warm :8743 proxy registration & standalone cloudflared fallback
 │
 └── i18n/                     # Thread-safe multi-language localization
     ├── mod.rs                # Context hierarchy: TASK_ACTIVE_LANG -> GLOBAL_ACTIVE_LANG -> "en"
@@ -251,6 +262,7 @@ src/
 * **Per-Profile Encrypted Credential Vault (`src/security/vault.rs`)**:
   - Encryption: 256-bit symmetric key (`vault/vault.key`, `chmod 0600`) encrypting `vault/vault.enc` via `XSalsa20-Poly1305` (`crypto_box::SalsaBox` with fresh 24-byte `OsRng` nonces).
   - Zero-Knowledge Execution (`tuner --vault exec <site> -- <cmd>`): Injects decrypted credentials (`TUNER_VAULT_SITE`, `TUNER_VAULT_TITLE`, `TUNER_VAULT_URL`, `TUNER_VAULT_USER`, `TUNER_VAULT_PASS`) directly into the child process environment while scrubbing all secret values from `stdout` and `stderr` (`***REDACTED***`), preventing credentials from leaking into the LLM transcript.
+  - Human-in-the-Loop Remote Browser Handoff (`tuner --vault auth <site> [--url <url>] [--ttl <secs>]`): Launches headed Chrome under an isolated `Xvfb -displayfd 1` framebuffer bound to `<vault_dir>/chromium_<slug>_ctx` (`0700`), streams `760 × 980` JPEG frames over a 256-bit token-gated WebSocket (reusing `:8743`'s warm Cloudflare Quick Tunnel via `0600` IPC secret or falling back to standalone `cloudflared`), types `VaultStore` credentials server-side over CDP without exposing plaintext on the network or in logs, exports Playwright-compatible `<slug>_storage_state.json` (`0600`), and exits `0` on `[Save & Finish]` to reactively wake the waiting agent turn.
 * **Path Traversal Sandboxing (`src/security/paths.rs`)**:
   - All outbound file attachments and web review viewer entries are canonicalized and verified against allowed workspace roots, preventing arbitrary host file exfiltration.
 

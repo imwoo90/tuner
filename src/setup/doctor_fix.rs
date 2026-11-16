@@ -119,14 +119,14 @@ fn can_run_privileged_apt() -> Option<&'static str> {
 }
 
 fn install_os_packages_if_needed() {
-    let missing_bin = ["curl", "git", "screen", "pgrep", "ffmpeg", "node"]
+    let missing_bin = ["curl", "git", "screen", "pgrep", "ffmpeg", "Xvfb", "node"]
         .iter()
         .any(|b| which_bin(b).is_none());
     let pip_ok = Command::new("python3").args(["-m", "pip", "--version"]).output().map(|o| o.status.success()).unwrap_or(false);
     if !missing_bin && pip_ok {
         return;
     }
-    let pkgs = "curl git screen procps ffmpeg nodejs python3-pip python3-requests python3-bs4 python3-pil python3-lxml libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2";
+    let pkgs = "curl git screen procps ffmpeg xvfb nodejs python3-pip python3-requests python3-bs4 python3-pil python3-lxml libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2";
     if let Some(p) = can_run_privileged_apt() {
         println!("📦 [doctor] Installing missing OS & media packages via apt-get...");
         let env_p = if p.is_empty() { "env DEBIAN_FRONTEND=noninteractive" } else { "sudo -n env DEBIAN_FRONTEND=noninteractive" };

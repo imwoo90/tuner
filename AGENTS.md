@@ -33,7 +33,7 @@ Tuner is an asynchronous multi-profile daemon built with Rust, Tokio, Teloxide, 
 7. **`src/cleanup/` (`src/cleanup/mod.rs`)**:
    - Retention-based temporary file and process cleanup (`cleanup/observer.rs`).
 8. **`src/security/` (`src/security/mod.rs`)**:
-   - Path/credential sandboxing (`security/mod.rs`, `security/paths.rs`), per-profile `XSalsa20-Poly1305` encrypted credential vault (`security/vault.rs`), and Zero-Knowledge CLI secret injection & redaction (`security/vault_cli.rs`).
+   - Path/credential sandboxing (`security/mod.rs`, `security/paths.rs`), per-profile `XSalsa20-Poly1305` encrypted credential vault (`security/vault.rs`), Zero-Knowledge CLI secret injection & redaction (`security/vault_cli.rs`), and Human-in-the-Loop (HITL) remote Chrome CDP browser handoff (`security/vault_auth/mod.rs`: `browser.rs`, `browser_env.rs`, `cdp.rs`, `cdp_input.rs`, `cdp_state.rs`, `options.rs`, `proxy.rs`, `server.rs`, `tunnel.rs`, `vault_auth_viewer.html`).
 9. **`src/config.rs`, `src/i18n/` (`src/i18n/mod.rs`), `src/supervisor.rs`, `src/setup/` (`src/setup/mod.rs`), & `src/upgrade/` (`src/upgrade/mod.rs`)**:
    - JSON configuration (`config.rs`), localization (`i18n/mod.rs`, `i18n/loader.rs`), process supervision (`supervisor.rs`), initial setup & system dependency doctor (`setup/mod.rs`, `setup/doctor.rs`, `setup/doctor_tiers.rs`, `setup/doctor_fix.rs`), and hybrid idle auto-upgrade & active-work inspector (`upgrade/mod.rs`, `upgrade/activity.rs`, `upgrade/brain_inspector.rs`, `upgrade/step_parser.rs`, `upgrade/task_tracker.rs`).
 

@@ -1,6 +1,6 @@
 [package]
 name = "tuner"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -25,6 +25,7 @@ flate2 = "1.0"
 tar = "0.4"
 
 axum = { version = "0.7", features = ["ws", "multipart"] }
+tokio-tungstenite = "0.24"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tower = { version = "0.4", features = ["util"] }
 crypto_box = { version = "0.9", features = ["serde"] }
