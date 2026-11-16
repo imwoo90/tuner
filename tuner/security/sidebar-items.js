@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["paths","vault","vault_cli"]};
+window.SIDEBAR_ITEMS = {"mod":["paths","vault","vault_auth","vault_cli"]};

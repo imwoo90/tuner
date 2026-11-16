@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_AUTH_TTL_SECS"],"fn":["canonical_storage_slug","consume_option_flag","default_url_for_slug","find_matching_vault_entry","parse_vault_auth_args","resolve_auth_target"],"struct":["ResolvedAuthTarget","VaultAuthOptions"]};

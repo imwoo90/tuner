@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VIEWPORT_HEIGHT","VIEWPORT_WIDTH"],"fn":["await_devtools_port","spawn_chrome_process","spawn_parent_death_watchdog","spawn_xvfb"],"struct":["BrowserRuntime"]};

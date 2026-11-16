@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_open_page_origins","export_storage_state","normalize_playwright_cookie","seed_existing_storage_state","send_graceful_browser_close","validate_http_url"],"struct":["ExportedStateSummary"]};

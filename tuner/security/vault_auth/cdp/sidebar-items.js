@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cdp_call_ws","list_page_targets","open_configured_page_conn","send_rpc_on_stream"],"struct":["ActivePageConn","CdpController","CdpPageTarget","FrameSnapshot"],"type":["CdpWsStream"]};

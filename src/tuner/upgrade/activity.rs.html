@@ -292,35 +292,36 @@
 <a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">let </span>running_len = cli.sessions.running_runs.lock().<span class="kw">await</span>.len();
 <a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">if </span>active_foreground_runs() &gt; <span class="number">0
 <a href=#294 id=294 data-nosnippet>294</a>        </span>|| active_cron_runs() &gt; <span class="number">0
-<a href=#295 id=295 data-nosnippet>295</a>        </span>|| !cli.sessions.async_runs.lock().<span class="kw">await</span>.is_empty()
-<a href=#296 id=296 data-nosnippet>296</a>        || !cli.sessions.active_asks.lock().<span class="kw">await</span>.is_empty()
-<a href=#297 id=297 data-nosnippet>297</a>        || !cli.sessions.boot_cancels.lock().<span class="kw">await</span>.is_empty()
-<a href=#298 id=298 data-nosnippet>298</a>    {
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">return </span>ActiveWorkStatus { is_busy: <span class="bool-val">true</span>, is_user_activity: <span class="bool-val">true </span>};
-<a href=#300 id=300 data-nosnippet>300</a>    }
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">let </span>(live_agy_sids, warm_pids) = collect_live_agy_holders(cli).<span class="kw">await</span>;
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>bg_runs = active_background_runs();
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">if </span>bg_runs &gt; <span class="number">0 </span>{
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">let </span>brain_active = inspect_live_agy_brain(cli, <span class="kw-2">&amp;</span>live_agy_sids).<span class="kw">await</span>;
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">return </span>ActiveWorkStatus {
-<a href=#306 id=306 data-nosnippet>306</a>            is_busy: <span class="bool-val">true</span>,
-<a href=#307 id=307 data-nosnippet>307</a>            is_user_activity: running_len &gt; bg_runs || brain_active,
-<a href=#308 id=308 data-nosnippet>308</a>        };
-<a href=#309 id=309 data-nosnippet>309</a>    }
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">if </span>running_len &gt; <span class="number">0
-<a href=#311 id=311 data-nosnippet>311</a>        </span>|| <span class="kw">crate</span>::cli::claude::is_running(<span class="number">0</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>).<span class="kw">await
-<a href=#312 id=312 data-nosnippet>312</a>        </span>|| <span class="kw">crate</span>::cli::codex::is_running(<span class="number">0</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>).<span class="kw">await
-<a href=#313 id=313 data-nosnippet>313</a>        </span>|| has_active_descendant_processes(<span class="kw-2">&amp;</span>warm_pids)
-<a href=#314 id=314 data-nosnippet>314</a>    {
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">return </span>ActiveWorkStatus { is_busy: <span class="bool-val">true</span>, is_user_activity: <span class="bool-val">true </span>};
-<a href=#316 id=316 data-nosnippet>316</a>    }
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>brain_active = inspect_live_agy_brain(cli, <span class="kw-2">&amp;</span>live_agy_sids).<span class="kw">await</span>;
-<a href=#318 id=318 data-nosnippet>318</a>    ActiveWorkStatus { is_busy: brain_active, is_user_activity: brain_active }
-<a href=#319 id=319 data-nosnippet>319</a>}
-<a href=#320 id=320 data-nosnippet>320</a>
-<a href=#321 id=321 data-nosnippet>321</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>detect_any_active_work(
-<a href=#322 id=322 data-nosnippet>322</a>    cli: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::antigravity::AntigravityCli,
-<a href=#323 id=323 data-nosnippet>323</a>) -&gt; bool {
-<a href=#324 id=324 data-nosnippet>324</a>    evaluate_active_work(cli).<span class="kw">await</span>.is_busy
-<a href=#325 id=325 data-nosnippet>325</a>}
+<a href=#295 id=295 data-nosnippet>295</a>        </span>|| <span class="kw">crate</span>::security::vault_auth::proxy::has_active_auth_sessions().<span class="kw">await
+<a href=#296 id=296 data-nosnippet>296</a>        </span>|| !cli.sessions.async_runs.lock().<span class="kw">await</span>.is_empty()
+<a href=#297 id=297 data-nosnippet>297</a>        || !cli.sessions.active_asks.lock().<span class="kw">await</span>.is_empty()
+<a href=#298 id=298 data-nosnippet>298</a>        || !cli.sessions.boot_cancels.lock().<span class="kw">await</span>.is_empty()
+<a href=#299 id=299 data-nosnippet>299</a>    {
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="kw">return </span>ActiveWorkStatus { is_busy: <span class="bool-val">true</span>, is_user_activity: <span class="bool-val">true </span>};
+<a href=#301 id=301 data-nosnippet>301</a>    }
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>(live_agy_sids, warm_pids) = collect_live_agy_holders(cli).<span class="kw">await</span>;
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">let </span>bg_runs = active_background_runs();
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span>bg_runs &gt; <span class="number">0 </span>{
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">let </span>brain_active = inspect_live_agy_brain(cli, <span class="kw-2">&amp;</span>live_agy_sids).<span class="kw">await</span>;
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">return </span>ActiveWorkStatus {
+<a href=#307 id=307 data-nosnippet>307</a>            is_busy: <span class="bool-val">true</span>,
+<a href=#308 id=308 data-nosnippet>308</a>            is_user_activity: running_len &gt; bg_runs || brain_active,
+<a href=#309 id=309 data-nosnippet>309</a>        };
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">if </span>running_len &gt; <span class="number">0
+<a href=#312 id=312 data-nosnippet>312</a>        </span>|| <span class="kw">crate</span>::cli::claude::is_running(<span class="number">0</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>).<span class="kw">await
+<a href=#313 id=313 data-nosnippet>313</a>        </span>|| <span class="kw">crate</span>::cli::codex::is_running(<span class="number">0</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>).<span class="kw">await
+<a href=#314 id=314 data-nosnippet>314</a>        </span>|| has_active_descendant_processes(<span class="kw-2">&amp;</span>warm_pids)
+<a href=#315 id=315 data-nosnippet>315</a>    {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">return </span>ActiveWorkStatus { is_busy: <span class="bool-val">true</span>, is_user_activity: <span class="bool-val">true </span>};
+<a href=#317 id=317 data-nosnippet>317</a>    }
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span>brain_active = inspect_live_agy_brain(cli, <span class="kw-2">&amp;</span>live_agy_sids).<span class="kw">await</span>;
+<a href=#319 id=319 data-nosnippet>319</a>    ActiveWorkStatus { is_busy: brain_active, is_user_activity: brain_active }
+<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>detect_any_active_work(
+<a href=#323 id=323 data-nosnippet>323</a>    cli: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::antigravity::AntigravityCli,
+<a href=#324 id=324 data-nosnippet>324</a>) -&gt; bool {
+<a href=#325 id=325 data-nosnippet>325</a>    evaluate_active_work(cli).<span class="kw">await</span>.is_busy
+<a href=#326 id=326 data-nosnippet>326</a>}
 </code></pre></div></section></main></body></html>

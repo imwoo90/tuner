@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IPC_HEADER"],"enum":["ActiveTunnel"],"fn":["establish_auth_tunnel","extract_trycloudflare_base","find_cloudflared","read_cloudflared_base","spawn_cf_watchdog","spawn_standalone_tunnel","try_register_warm_proxy","unregister_warm_proxy","wait_for_http_ready"],"struct":["StandaloneTunnelHandle"]};

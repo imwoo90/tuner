@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SessionOutcome"],"fn":["handle_explicit_save","handle_viewer_html","handle_viewer_ping","handle_viewer_ws","process_viewer_inputs","run_viewer_socket","spawn_local_auth_server","stream_viewer_frames"],"struct":["AuthServerState"],"type":["WsSender"]};

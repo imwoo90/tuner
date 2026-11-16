@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["find_playwright_chromium","is_profile_in_use","needs_no_sandbox","prepare_profile_dir","resolve_browser_binary"]};
