@@ -10,7 +10,7 @@
 use teloxide::prelude::*;
 use teloxide::types::MessageId;
 use crate::config::CliConfig;
-use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
+use crate::session::{data::SessionData, manager::SessionManager};
 use crate::cli::{AskQuestionData, antigravity::{AntigravityCli, session::AskState}};
 
 pub(crate) async fn is_stale_ask_session(
@@ -52,6 +52,8 @@ pub(crate) async fn register_and_verify_ask_state(
         if bot.delete_message(chat_id, MessageId(msg_id)).await.is_err() {
             let _ = bot.edit_message_reply_markup(chat_id, MessageId(msg_id)).await;
         }
+    } else {
+        crate::messenger::web::events_bridge::tg_ask(session_data, &sess_id, prov).await;
     }
 }
 
@@ -68,7 +70,7 @@ pub(crate) async fn apply_model_to_active_pty(
     let lk = if sid.is_empty() { format!("claude:{}:{:?}", sess.chat_id, sess.topic_id) } else { sid.clone() };
     let lock = cli.pty_sync.lock_for(&lk).await;
     let _guard = lock.lock().await;
-    let key = SessionKey::telegram(sess.chat_id, sess.topic_id);
+    let key = sess.session_key();
     let latest = sessions.get_active(&key).await.ok().flatten().unwrap_or_else(|| sess.clone());
     let lp = SessionData::effective_provider(&latest.provider, &cli.config.provider);
     if lp != sp || latest.get_session_id(lp) != sid {
@@ -167,6 +169,7 @@ pub(crate) async fn switch_session_provider(
         }
     }
     super::commands_model::apply_model_to_active_pty(cli, sessions, sess).await;
+    crate::messenger::web::events_bridge::emit_s(sess).await;
     status_text
 }
 

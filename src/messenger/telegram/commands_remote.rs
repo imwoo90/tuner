@@ -97,6 +97,7 @@ fn build_dashboard_keyboard(status: &RemoteHubStatus) -> InlineKeyboardMarkup {
         keyboard.push(row2);
     }
 
+    keyboard.push(vec![InlineKeyboardButton::callback("🖥️ Web Dashboard", "rem:dash")]);
     keyboard.push(vec![InlineKeyboardButton::callback("🔄 새로고침", "rem:refresh")]);
     InlineKeyboardMarkup::new(keyboard)
 }
@@ -133,6 +134,10 @@ pub async fn handle_remote_callback(
     data: &str,
     config: &crate::config::CliConfig,
 ) {
+    if data == "rem:dash" {
+        let _ = crate::messenger::web::cli_dash::handle_telegram_dashboard_command(bot, msg, config).await;
+        return;
+    }
     match data {
         "rem:agy:start" => {
             let _ = start_antigravity_remote(&config.working_dir).await;

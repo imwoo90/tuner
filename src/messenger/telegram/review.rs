@@ -210,6 +210,11 @@ impl ReviewManager {
         super::review_server::warmup(&self.server_port, &self.tunnel_url).await
     }
 
+    /// Returns the active Cloudflare Quick Tunnel base URL if one is running.
+    pub async fn current_tunnel_url(&self) -> Option<String> {
+        self.tunnel_url.lock().await.clone()
+    }
+
     /// Executes `get_review_url` (get review url).
     pub async fn get_review_url(&self, token: &str) -> String {
         super::review_server::get_review_url(&self.server_port, &self.tunnel_url, token).await

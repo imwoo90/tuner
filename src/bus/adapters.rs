@@ -23,7 +23,7 @@ pub fn from_cron_result(
     env.result_text = result_text.to_string();
     env.status = status.to_string();
     env.is_error = status.to_lowercase().contains("error");
-    if chat_id.is_some() {
+    if chat_id.is_some() || (transport == Some("web") && topic_id.is_some()) {
         env.delivery = DeliveryMode::Unicast;
     } else {
         env.delivery = DeliveryMode::Broadcast;

@@ -29,6 +29,7 @@ tokio-tungstenite = "0.24"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tower = { version = "0.4", features = ["util"] }
 crypto_box = { version = "0.9", features = ["serde"] }
+ring = "0.17"
 hex = "0.4"
 base64 = "0.22"
 rand = "0.8"

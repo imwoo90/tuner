@@ -9,6 +9,7 @@
 //! - [`data`] (`data.rs`): In-memory and JSON-serialized structure of active session state.
 //! - [`provider_catalog`] (`provider_catalog.rs`): Cross-provider model compatibility, defaults, and `/provider` switching.
 //! - [`manager`] (`manager.rs`): Resolves, loads, updates, and resets persisted sessions.
+//! - [`web_session`] (`web_session.rs`): Atomic `web:0:<tid>` Web-native topic allocation.
 //!
 //! ## Search Tags
 //! #session-lifecycle, #session-manager, #timezone-reset
@@ -20,6 +21,7 @@ pub mod key;
 pub mod data;
 pub mod provider_catalog;
 pub mod manager;
+pub mod web_session;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]

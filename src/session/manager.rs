@@ -29,7 +29,7 @@ pub struct SessionManager {
     reset_enabled: bool,
     tz: String,
     max_msgs: Option<i64>,
-    lock: Mutex<()>,
+    pub(crate) lock: Mutex<()>,
     resolver: Option<TopicNameResolver>,
     /// Lock pool.
     pub lock_pool: std::sync::Arc<crate::bus::lock_pool::LockPool>,

@@ -151,13 +151,16 @@ async fn advance_ask_state(
         state.current_bitmap = bitmap.clone();
         state.waiting_for_write_in = false;
         cli.sessions.set_ask_state(sid, state).await;
+        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, false, "").await;
         let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
         update_question_ui(bot, chat_id, mid, &nq, markup).await;
     } else {
         let turn_guard = cli.begin_topic_turn(chat_id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
+        let summary = state.answers.last().cloned().unwrap_or_default();
         super::ask_callbacks::submit_peer_ask_answers_if_needed(chat_id.0, &sess, config, &state.answers).await;
         cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
+        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, true, &summary).await;
         let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
         super::ask_callbacks::spawn_cli_stream_in_background(
             bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,

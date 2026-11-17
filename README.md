@@ -77,6 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bas
 | Command | What it does |
 |---|---|
 | `/vault` | Open the encrypted per-profile Credential Vault Web UI via an ephemeral Quick Tunnel. |
+| `/dashboard` | Issue a single-use Magic Link and open the responsive Web UI / PWA Dashboard (`:8743/dashboard`, also available without Telegram via `tuner --dashboard [--set-pin <pin>]`). |
 | `/remote` | Manage remote development access (`Antigravity` Web IDE tunnel, `Tailscale`, `SSH`). |
 | `/cron` | Inspect, toggle, or immediately trigger scheduled background tasks (`⚡ Run Now`). |
 | `/memory` · `/lang` | View durable workspace memory (`MAINMEMORY.md`) or switch session language. |

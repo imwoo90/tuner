@@ -77,7 +77,7 @@ pub fn parse_claude_oauth_usage_json(val: &Value) -> Option<ModelQuotaGroup> {
     (weekly.is_some() || five_hour.is_some()).then_some(ModelQuotaGroup { weekly, five_hour })
 }
 
-fn read_claude_session_stats(session_id: &str) -> (u64, u64, u64, u64, usize) {
+pub(crate) fn read_claude_session_stats(session_id: &str) -> (u64, u64, u64, u64, usize) {
     if session_id.is_empty() {
         return (0, 0, 0, 0, 0);
     }
@@ -109,7 +109,7 @@ fn read_claude_session_stats(session_id: &str) -> (u64, u64, u64, u64, usize) {
     (0, 0, 0, 0, 0)
 }
 
-async fn fetch_claude_oauth_quota(creds_path: &Path, base_url: &str) -> (Option<String>, Option<ModelQuotaGroup>) {
+pub(crate) async fn fetch_claude_oauth_quota(creds_path: &Path, base_url: &str) -> (Option<String>, Option<ModelQuotaGroup>) {
     let Ok(raw) = tokio::fs::read_to_string(creds_path).await else { return (None, None) };
     let Ok(doc) = serde_json::from_str::<Value>(&raw) else { return (None, None) };
     let Some(oauth) = doc.get("claudeAiOauth") else { return (None, None) };

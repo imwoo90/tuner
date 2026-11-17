@@ -14,7 +14,7 @@ use crate::session::{key::SessionKey, manager::SessionManager};
 use crate::cli::antigravity::{pty_spawner::strip_ansi, AntigravityCli};
 use super::commands::send_reply;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 /// Represents `QuotaLimit` (quota limit).
 pub struct QuotaLimit {
     /// Pct.
@@ -23,7 +23,7 @@ pub struct QuotaLimit {
     pub detail: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 /// Represents `ModelQuotaGroup` (model quota group).
 pub struct ModelQuotaGroup {
     /// Weekly.
@@ -32,7 +32,7 @@ pub struct ModelQuotaGroup {
     pub five_hour: Option<QuotaLimit>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 /// Represents `QuotaReport` (quota report).
 pub struct QuotaReport {
     /// Account.

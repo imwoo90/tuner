@@ -13,7 +13,9 @@ use crate::config::CliConfig;
 use crate::cli::StreamEvent;
 use crate::session::{data::SessionData, key::SessionKey, manager::SessionManager};
 use std::time::{Instant, Duration};
+use futures::StreamExt;
 use super::formatting;
+use crate::messenger::web::events_bridge as wev;
 pub(crate) use super::rate_limiter::{is_message_not_modified, send_chunks_to_telegram, send_single_chunk};
 
 pub(crate) async fn handle_stream_result(
@@ -29,7 +31,8 @@ pub(crate) async fn handle_stream_result(
     if resp.stderr == "Interrupted by user (/stop)" || (!resp.is_error && resp.result.trim().is_empty()) {
         return Ok(last_sid);
     }
-    let raw_text = if resp.is_error {
+    let is_err = resp.is_error;
+    let raw_text = if is_err {
         let err_msg = if !resp.stderr.is_empty() { &resp.stderr } else { &resp.result };
         crate::cli::antigravity::error_parser::parse_cli_error(err_msg, resp.returncode.unwrap_or(1), config.model.as_deref())
     } else {
@@ -41,6 +44,8 @@ pub(crate) async fn handle_stream_result(
     if let Some(ref sid) = last_sid {
         super::history::log_telegram_message(&config.working_dir, sid, topic, "bot", sent_id, &raw_text, (ok, err.as_deref()));
     }
+    let tid64 = thread_id.map(|t| t as i64).or(topic.0);
+    wev::emit_turn_res("tg", chat_id.0, tid64, last_sid.clone(), &raw_text, is_err).await;
     Ok(last_sid)
 }
 
@@ -115,12 +120,12 @@ async fn process_stream_events(
     let (cfg, cli, sessions) = ctx;
     let (mut last_edit, mut pending) = (Instant::now(), false);
     let mut tick = tokio::time::interval(Duration::from_millis(700));
-    use futures::StreamExt;
     loop {
         tokio::select! {
             ev = stream.next() => match ev {
                 Some(StreamEvent::TextDelta(d)) => {
                     let prev = last_edit;
+                    wev::tg_delta(chat_id.0, sdata.topic_id, &d).await;
                     handle_text_delta(bot, chat_id, tid, &d, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
                     pending = state.pub_id.is_some() && last_edit == prev;
                 }

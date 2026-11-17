@@ -160,6 +160,7 @@ async fn apply_callback_model_selection(
         return;
     }
     super::commands_model::apply_model_to_active_pty(cli, sessions, &s).await;
+    crate::messenger::web::events_bridge::emit_s(&s).await;
     let display = match s.effort {
         Some(ref e) => format!("{base} (effort: {e})"),
         None => base.to_string(),
@@ -260,6 +261,7 @@ pub async fn handle_standalone_effort_callback(
     match outcome {
         Ok(resolved) => {
             super::commands_model::apply_model_to_active_pty(cli, sessions, &s).await;
+            crate::messenger::web::events_bridge::emit_s(&s).await;
             edit_markdown_status(bot, msg, &format!("🤖 [tuner] Session reasoning effort switched to `{resolved}`.")).await;
         }
         Err(Some(warn)) => edit_markdown_status(bot, msg, &warn).await,

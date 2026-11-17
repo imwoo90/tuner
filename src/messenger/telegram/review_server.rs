@@ -17,6 +17,7 @@ use axum::{
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
@@ -50,7 +51,8 @@ pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16
     let app = build_review_router();
 
     tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
+        let svc = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
+        axum::serve(listener, svc).await.ok();
     });
 
     port
@@ -77,6 +79,7 @@ pub fn build_review_router() -> Router {
             axum::routing::post(super::vault::handle_vault_lock),
         )
         .merge(crate::security::vault_auth::proxy::auth_proxy_routes())
+        .merge(crate::messenger::web::dashboard_routes())
         .route("/health", get(handle_health))
 }
 
@@ -169,6 +172,29 @@ fn parse_tunnel_url(line: &str) -> Option<String> {
     }
 }
 
+fn spawn_tunnel_monitor(
+    mut child: tokio::process::Child,
+    mut reader: tokio::io::BufReader<tokio::process::ChildStderr>,
+    url: String,
+    slot: Option<Arc<Mutex<Option<String>>>>,
+) {
+    crate::messenger::web::cli_dash::publish_global_tunnel_url(Some(&url));
+    tokio::spawn(async move {
+        let mut discard = String::new();
+        while reader.read_line(&mut discard).await.unwrap_or(0) > 0 {
+            discard.clear();
+        }
+        let _ = child.wait().await;
+        crate::messenger::web::cli_dash::publish_global_tunnel_url(None);
+        if let Some(s) = slot {
+            let mut g = s.lock().await;
+            if g.as_deref() == Some(url.as_str()) {
+                *g = None;
+            }
+        }
+    });
+}
+
 async fn spawn_quick_tunnel_tracked(
     port: u16,
     tunnel_url_slot: Option<Arc<Mutex<Option<String>>>>,
@@ -186,39 +212,18 @@ async fn spawn_quick_tunnel_tracked(
             Ok(())
         });
     }
-
     let mut child = cmd.spawn().ok()?;
-    let stderr = child.stderr.take()?;
-    let mut reader = tokio::io::BufReader::new(stderr);
+    let mut reader = tokio::io::BufReader::new(child.stderr.take()?);
     let mut line = String::new();
-
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(10) {
-        use tokio::io::AsyncBufReadExt;
         line.clear();
         let rem = Duration::from_secs(10).saturating_sub(start.elapsed());
         if tokio::time::timeout(rem, reader.read_line(&mut line)).await.ok().and_then(Result::ok).unwrap_or(0) == 0 {
             break;
         }
         if let Some(url) = parse_tunnel_url(&line) {
-            let url_clone = url.clone();
-            tokio::spawn(async move {
-                use tokio::io::AsyncBufReadExt;
-                let mut discard = String::new();
-                while let Ok(n) = reader.read_line(&mut discard).await {
-                    if n == 0 {
-                        break;
-                    }
-                    discard.clear();
-                }
-                let _ = child.wait().await;
-                if let Some(slot) = tunnel_url_slot {
-                    let mut guard = slot.lock().await;
-                    if guard.as_deref() == Some(url_clone.as_str()) {
-                        *guard = None;
-                    }
-                }
-            });
+            spawn_tunnel_monitor(child, reader, url.clone(), tunnel_url_slot);
             return Some(url);
         }
     }

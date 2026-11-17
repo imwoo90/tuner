@@ -143,6 +143,10 @@ async fn handle_info_commands(
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         std::process::exit(42);
     }
+    if cmd == "/dashboard" {
+        crate::messenger::web::cli_dash::handle_telegram_dashboard_command(bot, msg, config).await?;
+        return Ok(true);
+    }
     Ok(false)
 }
 

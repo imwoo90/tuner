@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF9F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)">
+  <title>Tuner</title>
+  <link rel="manifest" href="/dashboard/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/dashboard/icon.svg">
+  <script>
+    (() => {
+      try {
+        const saved = localStorage.getItem("tuner_theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/dashboard/assets/dashboard.css">
+</head>
+<body>
+  <div id="app-shell" class="app-shell">
+    <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+
+    <div class="workspace-grid">
+      <aside id="sidebar" class="sidebar" aria-label="Chats">
+        <div class="sidebar-top">
+          <div class="brand-row">
+            <div class="brand-title-group">
+              <span class="brand-mark">T</span>
+              <span class="brand-name">Tuner</span>
+              <span id="profile-badge" class="profile-tag hidden">default</span>
+              <span id="ws-status" class="ws-dot offline"></span>
+            </div>
+            <button id="btn-new-topic" class="ghost-btn btn-new-topic" type="button" data-i18n="newTopicBtn" data-i18n-title="newTopicTitle">+ 새 대화</button>
+          </div>
+
+          <input id="session-search" class="search-input" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="대화 검색..." autocomplete="off">
+          <span id="warm-pool-pill" class="hidden">0</span>
+
+          <form id="new-topic-form" class="new-topic-form hidden">
+            <input id="new-topic-name" type="text" data-i18n-placeholder="topicNamePlaceholder" placeholder="대화 제목 (선택 사항)" maxlength="80">
+            <div class="new-topic-row">
+              <select id="new-topic-provider" class="ctrl-select">
+                <option value="antigravity">antigravity</option>
+                <option value="claude">claude</option>
+                <option value="codex">codex</option>
+              </select>
+              <div class="new-topic-btns">
+                <button id="btn-create-topic-cancel" class="btn btn-sm" type="button" data-i18n="cancel">취소</button>
+                <button id="btn-create-topic-submit" class="btn btn-primary btn-sm" type="submit" data-i18n="create">만들기</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div id="session-list" class="session-list"></div>
+      </aside>
+
+      <main id="chat-pane" class="chat-pane">
+        <header id="topic-banner" class="chat-header">
+          <div class="chat-header-left">
+            <button id="btn-toggle-sidebar" class="ghost-icon-btn mobile-only" type="button" aria-label="Menu">☰</button>
+            <h1 id="active-topic-title" class="topic-title" data-i18n="selectTopic">대화를 선택하세요</h1>
+            <span id="active-topic-key" class="sr-only"></span>
+            <span id="active-topic-state" class="status-badge hidden" data-state="Idle">Idle</span>
+          </div>
+
+          <div class="chat-header-right">
+            <button id="btn-new" class="ghost-btn" type="button" data-i18n="newSession" data-i18n-title="newSessionTitle">새 세션</button>
+            <button id="btn-toggle-inspector" class="ghost-btn" type="button" data-i18n="toolsPanel" data-i18n-title="toolsPanelTitle">도구 패널</button>
+            <button id="btn-lang" class="ghost-btn lang-btn" type="button" data-i18n-title="langToggleTitle">KO</button>
+            <button id="btn-theme" class="ghost-icon-btn" type="button" aria-label="Theme">◐</button>
+          </div>
+        </header>
+
+        <div id="drop-overlay" class="drop-overlay hidden">
+          <div class="drop-overlay-box" data-i18n="dropFiles">파일을 놓아 첨부하기</div>
+        </div>
+
+        <div id="chat-scroll" class="chat-scroll">
+          <div id="chat-messages" class="chat-messages">
+            <div class="empty-state" data-i18n="emptyNoSession">좌측 목록에서 대화를 선택하거나 + 새 대화를 눌러 시작하세요.</div>
+          </div>
+
+          <div id="live-stream-bubble" class="msg-row msg-bot live-stream hidden">
+            <div class="msg-sender-row"><span>Tuner</span><span class="stream-indicator" data-i18n="streaming">작성 중…</span></div>
+            <div id="live-stream-body" class="msg-body"></div>
+          </div>
+
+          <section id="ask-card" class="ask-card hidden" aria-live="polite">
+            <div class="ask-header">
+              <span class="ask-badge" data-i18n="askBadge">확인 질문</span>
+              <span id="ask-progress" class="muted mono"></span>
+            </div>
+            <div id="ask-question-text" class="ask-question-text msg-body"></div>
+            <div id="ask-options" class="ask-options"></div>
+            <div id="ask-writein-row" class="ask-writein-row">
+              <input id="ask-writein-input" type="text" data-i18n-placeholder="askWriteinPlaceholder" placeholder="직접 답변 입력...">
+              <button id="ask-writein-btn" class="btn btn-primary btn-sm" type="button" data-i18n="askSendBtn">답변 전송</button>
+            </div>
+            <div class="ask-footer">
+              <button id="ask-prev-btn" class="btn btn-sm hidden" type="button" data-i18n="askPrevBtn">← 이전</button>
+              <button id="ask-submit-btn" class="btn btn-primary btn-sm hidden" type="button" data-i18n="askSubmitBtn">선택 완료</button>
+              <button id="ask-skip-btn" class="btn btn-sm" type="button" data-i18n="askSkipBtn">건너뛰기</button>
+            </div>
+          </section>
+        </div>
+
+        <footer class="composer-shell">
+          <div class="composer-container">
+            <div id="slash-menu" class="autocomplete-menu hidden" role="listbox"></div>
+
+            <div class="composer-card">
+              <div id="pending-attachments" class="pending-attachments hidden"></div>
+              <textarea
+                id="chat-input"
+                rows="1"
+                data-i18n-placeholder="composerPlaceholder"
+                placeholder="메시지를 입력하세요... ('/' 명령어 자동완성, '@' 모델 전환)"
+              ></textarea>
+
+              <div class="composer-toolbar">
+                <div class="composer-tools-left">
+                  <input id="file-upload-input" type="file" multiple class="hidden">
+                  <button id="btn-attach" class="tool-icon-btn" type="button" data-i18n-title="attachTitle" data-i18n-aria="attachTitle">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </button>
+                  <button id="btn-slash" class="tool-icon-btn mono" type="button" data-i18n-title="slashBtnTitle">/</button>
+                  <span class="toolbar-divider"></span>
+                  <select id="sel-provider" class="chip-select" data-i18n-title="providerTitle" data-i18n-aria="providerTitle">
+                    <option value="antigravity">antigravity</option>
+                    <option value="claude">claude</option>
+                    <option value="codex">codex</option>
+                  </select>
+                  <select id="sel-model" class="chip-select chip-model" data-i18n-title="modelTitle" data-i18n-aria="modelTitle"></select>
+                  <select id="sel-effort" class="chip-select chip-effort" data-i18n-title="effortTitle" data-i18n-aria="effortTitle"></select>
+                </div>
+
+                <div class="composer-tools-right">
+                  <button id="btn-stop" class="stop-btn hidden" type="button" data-i18n="stopBtn" data-i18n-title="stopBtnTitle">■ 중지</button>
+                  <button id="btn-send" class="send-btn" type="button" data-i18n-title="sendBtnTitle" data-i18n-aria="sendBtnTitle">↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </main>
+
+      <aside id="inspector" class="inspector collapsed" aria-label="Inspector">
+        <div class="inspector-header">
+          <strong data-i18n="toolsPanel">도구 패널</strong>
+          <button id="btn-close-inspector" class="ghost-icon-btn" type="button" data-i18n-title="closePanel" data-i18n-aria="closePanel">✕</button>
+        </div>
+        <nav id="inspector-tabs" class="inspector-tabs" role="tablist">
+          <button class="tab-btn active" data-tab="preview" type="button" data-i18n="tabPreview">미리보기</button>
+          <button class="tab-btn" data-tab="usage" type="button" data-i18n="tabUsage">사용량</button>
+          <button class="tab-btn" data-tab="cron" type="button" data-i18n="tabCron">스케줄</button>
+          <button class="tab-btn" data-tab="vault" type="button" data-i18n="tabVault">보안 금고</button>
+          <button class="tab-btn" data-tab="security" type="button" data-i18n="tabSecurity">PIN·세션</button>
+          <button class="tab-btn" data-tab="tree" type="button" data-i18n="tabTree">에이전트</button>
+        </nav>
+        <div id="inspector-content" class="inspector-content"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="/dashboard/assets/app.js"></script>
+</body>
+</html>

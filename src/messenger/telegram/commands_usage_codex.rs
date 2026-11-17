@@ -88,7 +88,7 @@ async fn read_codex_rpc_responses(stdout: tokio::process::ChildStdout) -> (Optio
     (account_label, rate_group)
 }
 
-async fn query_codex_app_server_rate_limits() -> (Option<String>, Option<ModelQuotaGroup>) {
+pub(crate) async fn query_codex_app_server_rate_limits() -> (Option<String>, Option<ModelQuotaGroup>) {
     let Ok(mut child) = tokio::process::Command::new("codex")
         .args(["app-server", "--stdio"])
         .stdin(std::process::Stdio::piped())
@@ -138,7 +138,7 @@ fn find_codex_session_jsonl(dir: &Path, session_id: &str) -> Option<PathBuf> {
 
 type CodexSessionStats = (u64, u64, u64, u64, u64, u64, Option<String>, Option<ModelQuotaGroup>);
 
-async fn read_codex_session_telemetry(session_id: &str) -> CodexSessionStats {
+pub(crate) async fn read_codex_session_telemetry(session_id: &str) -> CodexSessionStats {
     let mut out = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64, None, None);
     if session_id.is_empty() {
         return out;

@@ -234,7 +234,8 @@ impl HeartbeatScheduler {
             .await;
         if active {
             crate::upgrade::record_user_activity();
-            let mut env = crate::bus::adapters::from_heartbeat(cur.chat_id, &resp.result, cur.topic_id, Some(&cur.transport));
+            let eff_transport = if self.config.transport == "web" { "web" } else { cur.transport.as_str() };
+            let mut env = crate::bus::adapters::from_heartbeat(cur.chat_id, &resp.result, cur.topic_id, Some(eff_transport));
             self.bus.submit(&mut env).await;
         }
     }

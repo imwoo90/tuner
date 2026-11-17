@@ -223,28 +223,21 @@ async fn run_master_mode(config: config::CliConfig, paths: &workspace::paths::Tu
 
 
 async fn handle_early_args(args: &[String]) -> Result<Option<()>, String> {
-    if args.contains(&"--doctor".to_string()) {
-        setup::doctor_fix::run_doctor_cli(args)?;
-        return Ok(Some(()));
-    }
-    if args.contains(&"--vault".to_string()) {
-        security::vault_cli::run_vault_cli(args).await?;
-        return Ok(Some(()));
-    }
-    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --doctor [--fix]   Check (and optionally install) required tools & dependencies\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage or execute per-profile vault credentials (list|auth|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
-        return Ok(Some(()));
-    }
-    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+    let has = |f: &str| args.iter().any(|a| a == f);
+    if has("--doctor") { setup::doctor_fix::run_doctor_cli(args)?; }
+    else if has("--vault") { security::vault_cli::run_vault_cli(args).await?; }
+    else if has("--dashboard") { messenger::web::cli_dash::run_dashboard_cli(args).await?; }
+    else if has("--help") || has("-h") {
+        println!("tuner {} (verified agy: {})\nUsage: tuner [OPTIONS]\n\nOptions:\n  --setup            Run the interactive configuration wizard\n  --doctor [--fix]   Check (and optionally install) required tools & dependencies\n  --dashboard        Issue a single-use Web Dashboard Magic Link (--profile, --set-pin)\n  --install-systemd  Register tuner as a systemd user service\n  --upgrade          Upgrade tuner to the latest release\n  --vault <subcmd>   Manage per-profile vault credentials (list|auth|session|exec)\n  --version, -V      Print version information\n  --help, -h         Print help information", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
+    } else if has("--version") || has("-V") {
         println!("tuner {} (verified agy: {})", env!("CARGO_PKG_VERSION"), env!("TUNER_VERIFIED_AGY_VERSION"));
-        return Ok(Some(()));
-    }
-    if args.contains(&"--upgrade".to_string()) {
+    } else if has("--upgrade") {
         upgrade::run_cli_upgrade().await?;
-        return Ok(Some(()));
+    } else {
+        validate_remaining_args(args)?;
+        return Ok(None);
     }
-    validate_remaining_args(args)?;
-    Ok(None)
+    Ok(Some(()))
 }
 
 pub(crate) fn validate_remaining_args(args: &[String]) -> Result<(), String> {

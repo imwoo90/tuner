@@ -213,6 +213,7 @@ impl CronManager {
             }
         if changed {
             self.save(&jobs)?;
+            crate::messenger::web::events_bridge::cron_updated(job_id, enabled, None);
         }
         Ok(changed)
     }
@@ -241,7 +242,9 @@ impl CronManager {
         if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
             job.last_run_at = Some(Utc::now().to_rfc3339());
             job.last_run_status = Some(status.to_string());
+            let en = job.enabled;
             self.save(&jobs)?;
+            crate::messenger::web::events_bridge::cron_updated(job_id, en, Some(status.to_string()));
         }
         Ok(())
     }

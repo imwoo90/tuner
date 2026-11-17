@@ -141,6 +141,7 @@ async fn handle_model_command_switch(
         return Ok(());
     }
     apply_model_to_active_pty(cli, sessions, &sess).await;
+    crate::messenger::web::events_bridge::emit_s(&sess).await;
     let display = match effort_part {
         Some(ref eff) => format!("{} (effort: {eff})", sess.model),
         None => sess.model.clone(),
@@ -201,6 +202,7 @@ async fn apply_explicit_effort_switch(
         return Ok(());
     };
     apply_model_to_active_pty(cli, sessions, sess).await;
+    crate::messenger::web::events_bridge::emit_s(sess).await;
     let _ = send_reply(bot, msg, format!("🤖 [tuner] Session reasoning effort switched to `{level}`.")).await;
     Ok(())
 }

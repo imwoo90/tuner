@@ -40,6 +40,15 @@ impl SessionKey {
         }
     }
 
+    /// Create a new collision-free session key for the Web Dashboard (`web:0:<topic_id>`).
+    pub fn web(topic_id: i64) -> Self {
+        Self {
+            transport: "web".to_string(),
+            chat_id: 0,
+            topic_id: Some(topic_id),
+        }
+    }
+
     /// Generate a JSON-serializable key for `sessions.json` persistence.
     pub fn storage_key(&self) -> String {
         match self.topic_id {

@@ -210,6 +210,7 @@ async fn try_feed_open_ask_message(
     let p = SessionData::effective_provider(&active_sess.provider, &config.provider);
     let sid = active_sess.get_session_id(p);
     history::log_telegram_message(&config.working_dir, &sid, (active_sess.topic_id, active_sess.topic_name.as_deref()), "user", Some(msg.id.0), text, (true, None));
+    crate::messenger::web::events_bridge::tg_user(&active_sess, text).await;
     if ask_helpers::feed_active_session_if_running(bot, msg, &sid, &escaped, cli, (sessions, active_sess), config).await? {
         queue_pending_files(msg, files, config, sessions).await;
         return Ok(true);
@@ -234,6 +235,7 @@ async fn execute_resolved_turn(
         return Ok(());
     }
     history::log_telegram_message(&config.working_dir, &sid, (sess.topic_id, sess.topic_name.as_deref()), "user", Some(msg.id.0), raw_text, (true, None));
+    crate::messenger::web::events_bridge::tg_user(&sess, raw_text).await;
     if ask_helpers::feed_active_session_if_running(bot, msg, &sid, &escaped, cli, (sessions, sess.clone()), config).await? {
         queue_pending_files(msg, files, config, sessions).await;
         return Ok(());

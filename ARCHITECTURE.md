@@ -110,6 +110,7 @@ src/
 ├── session/                  # State continuity, handover & disk serialization
 │   ├── mod.rs                # Module index & local timezone daily reset / idle freshness checks
 │   ├── manager.rs            # SessionManager: Two-phase atomic write (.tmp + rename), topic history
+│   ├── web_session.rs        # Monotonic web:0:<tid> Web-native session allocation
 │   ├── data.rs               # SessionData, ProviderSessionData, past_session_ids & handover summaries
 │   ├── provider_catalog.rs   # Canonical provider aliases, cross-provider model compatibility & effort clamping
 │   └── key.rs                # Immutable composite SessionKey (transport, chat_id, topic_id)
@@ -147,6 +148,28 @@ src/
 │
 ├── messenger/                # Messaging frontend adapters
 │   ├── mod.rs                # Messenger module index
+│   ├── web/                  # Responsive Web UI / PWA Dashboard & Control Plane (:8743/dashboard, Co-Resident & Web-Standalone)
+│   │   ├── mod.rs            # WebAppCtx, WebTransport & /dashboard/* Axum router assembly
+│   │   ├── auth.rs           # 0600 dashboard_auth.json Magic Links (10m) & PBKDF2_HMAC_SHA256 PIN store
+│   │   ├── auth_store.rs     # flock persistence & per-IP 5-failure 429 lockout map
+│   │   ├── auth_http.rs      # Magic exchange, PIN login/set, session status, CSRF & cookie checks
+│   │   ├── ws.rs             # Origin, cookie & ?csrf= validated WebSocket event stream (/dashboard/api/ws)
+│   │   ├── events.rs         # WebEventHub broadcast ring buffer & throttled live preview buffers
+│   │   ├── events_bridge.rs  # Bidirectional Telegram & Cron event emission hooks
+│   │   ├── api_sessions.rs   # Unified tg:* + web:0:* CRUD & live provider/model/effort config PATCH
+│   │   ├── api_models.rs     # Live CLI model & effort catalog endpoint (/dashboard/api/models)
+│   │   ├── api_history.rs    # Merged JSONL transcript, active AskQuestion & multipart upload endpoints
+│   │   ├── api_chat.rs       # Web prompt dispatch, soft /stop & /new handover reset endpoints
+│   │   ├── api_ask.rs        # Multi-provider AskQuestion REST answers & background continuation resume
+│   │   ├── api_ask_helpers.rs # Antigravity PTY keystroke translator & multi-select helpers
+│   │   ├── api_files.rs      # Sandboxed Split-Pane /file preview/raw & Zero-Knowledge /vault CRUD
+│   │   ├── api_ops.rs        # Structured 3-provider /usage, /cron toggle/run & /hitl status endpoints
+│   │   ├── subagent_tree.rs  # Warm PID & recursive .system_generated/ Subagent/Swarm/Task inspector
+│   │   ├── turn_boot.rs      # Session initialization, handover synthesis & async observer attach
+│   │   ├── turn_runner.rs    # LockPool Web turn dispatch, @model directives & [🌐 Web] Telegram mirror
+│   │   ├── turn_stream.rs    # StreamEvent multiplexer broadcasting Web & Telegram updates
+│   │   ├── cli_dash.rs       # tuner --dashboard CLI & Telegram /dashboard Magic Link issuer
+│   │   └── assets/           # Embedded zero-build dark slate PWA (HTML, CSS, ES modules, SW & manifest)
 │   └── telegram/             # Telegram Bot integration, Web Review Viewer & TUI bridge
 │       ├── mod.rs            # Subsystem index & turn orchestration
 │       ├── auth.rs           # User/group authorization & first-user owner auto-registration
@@ -172,7 +195,7 @@ src/
 │       ├── review_viewer.html # Responsive dual-UX Web File, Code, Markdown, PDF, ZIP & 3D STEP Viewer
 │       ├── vault.rs          # /vault command handler & HTTP CRUD endpoints (/vault/<token>/api/entries)
 │       ├── vault_viewer.html # Responsive Web UI for per-profile credential management
-│       ├── commands.rs       # Primary slash command router (/help, /status, /memory, /cron, etc.)
+│       ├── commands.rs       # Primary slash command router (/help, /status, /dashboard, /memory, /cron, etc.)
 │       ├── commands_provider.rs # /provider inline switcher & cross-provider session preservation
 │       ├── commands_model.rs # /model & /effort interactive inline selector handlers
 │       ├── commands_session.rs # /new, /reset, /stop & /abort session control handlers

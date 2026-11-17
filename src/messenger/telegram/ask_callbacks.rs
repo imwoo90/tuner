@@ -178,6 +178,7 @@ pub(crate) async fn handle_ask_prev_callback(
             state.waiting_for_write_in = false;
             let show_prev = state.current_index > 0;
             cli.sessions.set_ask_state(sid, state).await;
+            crate::messenger::web::events_bridge::tg_ask_by_sid(msg.chat.id.0, sid, false, "").await;
             let _ = cli.sessions.write_to_session(sid, key).await;
             let markup = build_ask_keyboard_helper(sid, &prev_q, &bitmap, show_prev);
             let html = super::formatting::markdown_to_telegram_html(&prev_q.question);

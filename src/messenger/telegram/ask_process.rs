@@ -51,6 +51,7 @@ pub(crate) async fn advance_ask_index_or_finish(
         state.waiting_for_write_in = false;
         let show_prev = state.current_index > 0;
         cli.sessions.set_ask_state(sid, state.clone()).await;
+        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, false, "").await;
         let markup = super::ask_helpers::build_ask_keyboard_helper(sid, nq, &state.current_bitmap, show_prev);
         let html = super::formatting::markdown_to_telegram_html(&nq.question);
         let _ = bot.edit_message_text(chat_id, msg_id, html).parse_mode(ParseMode::Html).reply_markup(markup).await;
@@ -58,6 +59,8 @@ pub(crate) async fn advance_ask_index_or_finish(
     } else {
         cli.sessions.set_ask_state(sid, state.clone()).await;
         cli.sessions.set_ask_active(sid, false).await;
+        let sum = state.answers.last().map(String::as_str).unwrap_or("");
+        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, true, sum).await;
         Ok(false)
     }
 }

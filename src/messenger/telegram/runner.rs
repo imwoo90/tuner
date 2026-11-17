@@ -1,25 +1,33 @@
-//! # Telegram Bot Event Loop Runner
+//! # Control-Plane & Messenger Event Loop Runner
 //!
 //! ## Overview
-//! Connects to the Telegram Bot API and starts long-polling listener using Teloxide. Coordinates
-//! session caches, message queues, and worker status.
+//! Initializes shared sessions, message bus, cron/heartbeat schedulers, and the embedded
+//! `:8743` Web Dashboard before attempting Telegram bot validation, supporting both Co-Resident
+//! Telegram+Web mode and Web-Standalone mode when `TELEGRAM_TOKEN` is missing or invalid.
 //!
 //! ## Search Tags
-//! #polling-loop, #bot-initializer, #teloxide-runner
+//! #polling-loop, #bot-initializer, #teloxide-runner, #web-standalone
 
-use teloxide::prelude::*;
-use crate::config::CliConfig;
-use crate::cli::antigravity::AntigravityCli;
-use crate::session::manager::SessionManager;
-use std::sync::Arc;
 use super::topic_cache::{BotInfo, TopicNameCache};
-use super::commands;
-use super::reply;
-use super::callbacks;
-use super::handle_message;
+use super::{callbacks, commands, handle_message, reply};
+use crate::bus::bus::MessageBus;
+use crate::cli::antigravity::AntigravityCli;
+use crate::config::CliConfig;
+use crate::cron::manager::CronManager;
+use crate::messenger::web::{
+    auth::WebAuthStore, events::WebEventHub, init_global_web_ctx, WebAppCtx, WebTransport,
+};
+use crate::session::manager::SessionManager;
 use crate::workspace::paths::TunerPaths;
+use std::sync::Arc;
+use teloxide::prelude::*;
+use tokio::sync::RwLock;
 
-pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache>, config: &CliConfig) -> SessionManager {
+pub(crate) fn build_sessions(
+    path: std::path::PathBuf,
+    cache: Arc<TopicNameCache>,
+    config: &CliConfig,
+) -> SessionManager {
     let tz = config.user_timezone.clone().unwrap_or_else(|| "UTC".to_string());
     SessionManager::new(
         path,
@@ -32,54 +40,94 @@ pub(crate) fn build_sessions(path: std::path::PathBuf, cache: Arc<TopicNameCache
     .with_topic_resolver(Arc::new(move |c, t| cache.find_by_id(c, t)))
 }
 
-fn start_schedulers(
-    bot: Bot,
+struct CoreRuntime {
     cfg: Arc<CliConfig>,
-    sess: Arc<SessionManager>,
+    topic_cache: Arc<TopicNameCache>,
+    sessions: Arc<SessionManager>,
     cli: Arc<AntigravityCli>,
-    paths: TunerPaths,
-) -> Arc<crate::cron::manager::CronManager> {
-    let bus = Arc::new(crate::bus::bus::MessageBus::with_lock_pool(sess.lock_pool.clone()));
-    let targets = if !cfg.allowed_group_ids.is_empty() {
-        cfg.allowed_group_ids.clone()
-    } else {
-        cfg.allowed_user_ids.clone()
-    };
-    bus.register_transport(Arc::new(
-        super::transport::TelegramTransport::with_targets(bot, targets)
-            .with_context(cfg.clone(), sess.clone()),
+    bus: Arc<MessageBus>,
+    cron: Arc<CronManager>,
+    web_ctx: Arc<WebAppCtx>,
+}
+
+async fn init_core_runtime(config: CliConfig, paths: &TunerPaths) -> CoreRuntime {
+    let cfg = Arc::new(config);
+    spawn_restart_watcher(paths.tuner_home.clone());
+    let topic_cache = Arc::new(TopicNameCache::new());
+    let sessions = Arc::new(build_sessions(paths.sessions_path(), topic_cache.clone(), &cfg));
+    reply::load_sessions_cache(&sessions, &topic_cache).await;
+    let cli = Arc::new(AntigravityCli::new((*cfg).clone()));
+    let bus = Arc::new(MessageBus::with_lock_pool(sessions.lock_pool.clone()));
+    let cron = Arc::new(CronManager::new(paths.cron_jobs_path()));
+    let vault_dir = paths.vault_dir();
+    let profile = paths.profile.clone().unwrap_or_else(|| "default".to_string());
+    let web_ctx = Arc::new(WebAppCtx {
+        profile,
+        tuner_home: paths.tuner_home.clone(),
+        vault_dir: vault_dir.clone(),
+        working_dir: paths.workspace().clone(),
+        config: cfg.clone(),
+        sessions: sessions.clone(),
+        cli: cli.clone(),
+        cron_manager: cron.clone(),
+        topic_cache: topic_cache.clone(),
+        bus: bus.clone(),
+        bot: RwLock::new(None),
+        events: Arc::new(WebEventHub::new()),
+        auth: Arc::new(WebAuthStore::new(vault_dir)),
+    });
+    init_global_web_ctx(web_ctx.clone());
+    bus.register_transport(Arc::new(WebTransport::new(web_ctx.clone())));
+    CoreRuntime { cfg, topic_cache, sessions, cli, bus, cron, web_ctx }
+}
+
+fn start_background_schedulers(rt: &CoreRuntime, paths: &TunerPaths) {
+    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(
+        rt.cfg.clone(),
+        rt.sessions.clone(),
+        rt.cli.clone(),
+        rt.bus.clone(),
+    ))
+    .start();
+    crate::upgrade::spawn_auto_upgrade_scheduler(rt.cfg.clone(), rt.cli.clone());
+    Arc::new(crate::cron::scheduler::CronScheduler::new(
+        rt.cfg.clone(),
+        rt.cron.clone(),
+        rt.bus.clone(),
+    ))
+    .start();
+    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(
+        rt.cfg.cleanup.clone(),
+        paths.telegram_files_dir(),
+        paths.output_to_user_dir(),
     ));
-    Arc::new(crate::heartbeat::scheduler::HeartbeatScheduler::new(cfg.clone(), sess, cli.clone(), bus.clone())).start();
-    crate::upgrade::spawn_auto_upgrade_scheduler(cfg.clone(), cli);
-    let cron = Arc::new(crate::cron::manager::CronManager::new(paths.cron_jobs_path()));
-    Arc::new(crate::cron::scheduler::CronScheduler::new(cfg.clone(), cron.clone(), bus.clone())).start();
-    let clean = Arc::new(crate::cleanup::observer::CleanupObserver::new(cfg.cleanup.clone(), paths.telegram_files_dir(), paths.output_to_user_dir()));
     tokio::spawn(async move { clean.start().await; });
     let skill_paths = paths.clone();
     tokio::spawn(async move {
         let _ = crate::workspace::skills::watch_skill_sync(&skill_paths, 30_000).await;
     });
-    cron
+    tokio::spawn(async {
+        crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await;
+    });
+    spawn_web_warmup(paths);
 }
 
-async fn init_telegram_bot(tok: String, profile: Option<String>) -> (Bot, Arc<BotInfo>) {
-    if tok.is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
-        eprintln!("❌ [tuner] Profile '{}' Telegram token is not configured or is placeholder. Worker will sleep to prevent tight restart loop.", profile.as_deref().unwrap_or("default"));
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
-        }
+async fn try_init_telegram_bot(tok: String, profile: Option<String>) -> Option<(Bot, Arc<BotInfo>)> {
+    let prof_name = profile.as_deref().unwrap_or("default");
+    if tok.trim().is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
+        eprintln!("ℹ️ [tuner] Profile '{prof_name}' has no Telegram token; starting Web-Standalone mode.");
+        return None;
     }
     let bot = Bot::new(tok);
-    match bot.get_me().await {
-        Ok(me) => {
-            let bot_info = Arc::new(BotInfo { username: me.user.username });
-            (bot, bot_info)
+    match tokio::time::timeout(tokio::time::Duration::from_secs(15), bot.get_me()).await {
+        Ok(Ok(me)) => Some((bot, Arc::new(BotInfo { username: me.user.username }))),
+        Ok(Err(e)) => {
+            eprintln!("⚠️ [tuner] Profile '{prof_name}' failed Telegram token validation ({e}); starting Web-Standalone mode.");
+            None
         }
-        Err(e) => {
-            eprintln!("❌ [tuner] Profile '{}' failed to validate Telegram token: {}. Worker will sleep to prevent tight restart loop.", profile.as_deref().unwrap_or("default"), e);
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
-            }
+        Err(_) => {
+            eprintln!("⚠️ [tuner] Profile '{prof_name}' Telegram API probe timed out; starting Web-Standalone mode.");
+            None
         }
     }
 }
@@ -115,36 +163,58 @@ fn spawn_web_warmup(paths: &TunerPaths) {
     });
 }
 
-/// Executes `run_bot` (run bot).
-pub async fn run_bot(config: CliConfig, paths: TunerPaths) -> Result<(), String> {
-    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or(config.telegram_token.clone());
-    let (bot, bot_info) = init_telegram_bot(tok, paths.profile.clone()).await;
+async fn run_telegram_dispatcher(rt: CoreRuntime, bot: Bot, bot_info: Arc<BotInfo>) {
+    rt.web_ctx.set_bot(bot.clone()).await;
+    let targets = if !rt.cfg.allowed_group_ids.is_empty() {
+        rt.cfg.allowed_group_ids.clone()
+    } else {
+        rt.cfg.allowed_user_ids.clone()
+    };
+    rt.bus.register_transport(Arc::new(
+        super::transport::TelegramTransport::with_targets(bot.clone(), targets)
+            .with_context(rt.cfg.clone(), rt.sessions.clone()),
+    ));
     let _ = commands::register_commands(&bot).await;
-    let config_arc = Arc::new(config);
-    
-    spawn_restart_watcher(paths.tuner_home.clone());
-    let topic_cache = Arc::new(TopicNameCache::new());
-    let p = paths.sessions_path();
-    let sessions = Arc::new(build_sessions(p, topic_cache.clone(), &config_arc));
-
-    reply::load_sessions_cache(&sessions, &topic_cache).await;
-    let cli = Arc::new(AntigravityCli::new((*config_arc).clone()));
-    let cron_manager = start_schedulers(bot.clone(), config_arc.clone(), sessions.clone(), cli.clone(), paths.clone());
-    let media_group_manager = Arc::new(super::media_group::MediaGroupManager::new());
-
-    let (b, s) = (bot.clone(), sessions.clone());
+    let (b, s) = (bot.clone(), rt.sessions.clone());
     tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
-    tokio::spawn(async { crate::cli::antigravity::model_spec::ensure_live_catalog_fresh().await; });
-    spawn_web_warmup(&paths);
 
+    let media_group_manager = Arc::new(super::media_group::MediaGroupManager::new());
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
         .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
 
-    let aux_deps = (cron_manager.clone(), topic_cache.clone());
+    let aux_deps = (rt.cron.clone(), rt.topic_cache.clone());
     let meta_deps = (bot_info.clone(), media_group_manager.clone());
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![config_arc, sessions, cli, cron_manager, topic_cache, bot_info, media_group_manager, aux_deps, meta_deps])
-        .build().dispatch().await;
+        .dependencies(dptree::deps![
+            rt.cfg,
+            rt.sessions,
+            rt.cli,
+            rt.cron,
+            rt.topic_cache,
+            bot_info,
+            media_group_manager,
+            aux_deps,
+            meta_deps
+        ])
+        .build()
+        .dispatch()
+        .await;
+}
+
+/// Executes `run_bot` (starting Web/control-plane services and optional Telegram dispatcher).
+pub async fn run_bot(mut config: CliConfig, paths: TunerPaths) -> Result<(), String> {
+    let tok = std::env::var("TELEGRAM_TOKEN").unwrap_or_else(|_| config.telegram_token.clone());
+    if tok.trim().is_empty() || tok == "YOUR_BOT_TOKEN_HERE" || tok.starts_with("YOUR_") {
+        config.transport = "web".to_string();
+    }
+    let rt = init_core_runtime(config, &paths).await;
+    start_background_schedulers(&rt, &paths);
+    if let Some((bot, bot_info)) = try_init_telegram_bot(tok, paths.profile.clone()).await {
+        run_telegram_dispatcher(rt, bot, bot_info).await;
+    } else {
+        println!("🖥️ [tuner] Web-Standalone Dashboard active on http://127.0.0.1:8743/dashboard (run 'tuner --dashboard' for Magic Link).");
+        std::future::pending::<()>().await;
+    }
     Ok(())
 }

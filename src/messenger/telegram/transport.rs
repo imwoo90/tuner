@@ -107,6 +107,15 @@ impl Transport for TelegramTransport {
                 self.log_to_topic_history(cfg, sessions, envelope, sent_id, status).await;
             }
         }
+        crate::messenger::web::events_bridge::emit_turn_res(
+            "tg",
+            envelope.chat_id,
+            envelope.topic_id,
+            None,
+            &envelope.result_text,
+            envelope.is_error,
+        )
+        .await;
         Ok(())
     }
 

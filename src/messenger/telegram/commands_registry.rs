@@ -9,7 +9,7 @@
 
 use teloxide::prelude::*;
 
-const COMMON_COMMANDS: &[(&str, &str)] = &[
+pub(crate) const COMMON_COMMANDS: &[(&str, &str)] = &[
     ("new", "Start a fresh conversation session"),
     ("reset", "Alias for /new"),
     ("stop", "Cancel active CLI processes in chat"),
@@ -24,6 +24,7 @@ const COMMON_COMMANDS: &[(&str, &str)] = &[
     ("memory", "Print workspace MAINMEMORY.md contents"),
     ("cron", "Manage scheduled cron tasks"),
     ("remote", "Manage remote dev services"),
+    ("dashboard", "Open responsive Web UI / PWA dashboard"),
     ("vault", "Manage per-profile site login credentials"),
     ("upgrade", "Check for updates and perform self-upgrade"),
     ("restart", "Trigger clean restart of tuner service"),
@@ -86,6 +87,7 @@ pub(crate) fn is_lock_free_command(text: &str) -> bool {
                 | "/stop_all"
                 | "/abort"
                 | "/remote"
+                | "/dashboard"
                 | "/vault"
         )
 }

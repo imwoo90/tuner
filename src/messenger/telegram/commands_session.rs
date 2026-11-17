@@ -19,14 +19,14 @@ async fn clear_topic_asks(
     cli: &AntigravityCli,
     chat_id: i64,
     topic_id: Option<i64>,
-) -> bool {
+) -> Vec<String> {
     let key = crate::session::key::SessionKey::telegram(chat_id, topic_id);
-    let mut cleared = false;
+    let mut cleared = Vec::new();
     if let Ok(Some(sess)) = sessions.get_active(&key).await {
         for ps in sess.provider_sessions.values() {
             if !ps.session_id.is_empty() && cli.sessions.is_ask_active(&ps.session_id).await {
                 cli.sessions.set_ask_active(&ps.session_id, false).await;
-                cleared = true;
+                cleared.push(ps.session_id.clone());
             }
         }
     }
@@ -112,6 +112,7 @@ pub(crate) async fn handle_new_command(
     let _ = crate::telegram::session_init::ensure_session_ready_for_turn(
         bot, &target_msg, sessions, &mut sess, cli, config,
     ).await?;
+    crate::messenger::web::events_bridge::emit_s(&sess).await;
     Ok(true)
 }
 
@@ -136,8 +137,9 @@ pub(crate) async fn handle_session_control_commands(
         let agy_int = cli.sessions.interrupt(msg.chat.id.0, topic_id).await;
         let claude_int = crate::cli::claude::interrupt_session(msg.chat.id.0, topic_id).await;
         let codex_int = crate::cli::codex::interrupt_session(msg.chat.id.0, topic_id).await;
-        let ask_int = clear_topic_asks(sessions, cli, msg.chat.id.0, topic_id).await;
-        let interrupted = agy_int || claude_int || codex_int || ask_int;
+        let cleared_asks = clear_topic_asks(sessions, cli, msg.chat.id.0, topic_id).await;
+        crate::messenger::web::events_bridge::tg_stop(msg.chat.id.0, topic_id, &cleared_asks).await;
+        let interrupted = agy_int || claude_int || codex_int || !cleared_asks.is_empty();
         let reply_text = if interrupted {
             t!("bot.stop_interrupted")
         } else {
@@ -150,8 +152,9 @@ pub(crate) async fn handle_session_control_commands(
         cli.sessions.terminate_all().await;
         crate::cli::claude::terminate_all().await;
         crate::cli::codex::terminate_all().await;
-        cli.sessions.active_asks.lock().await.clear();
+        let cleared_asks: Vec<String> = cli.sessions.active_asks.lock().await.drain().map(|(k, _)| k).collect();
         cli.clear_all_pty_applied().await;
+        crate::messenger::web::events_bridge::tg_stop_all(&cleared_asks).await;
         let _ = send_reply(bot, msg, t!("bot.stop_all_success")).await;
         return Ok(true);
     }

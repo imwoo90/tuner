@@ -218,7 +218,9 @@ pub async fn is_running(chat_id: i64, topic_id: Option<i64>, session_id: Option<
 pub async fn has_pending_ask(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
     let warm = {
         let map = global_pool().sessions.lock().await;
-        if chat_id != 0 { map.get(&(chat_id, topic_id)).cloned() } else {
+        if chat_id != 0 || topic_id.is_some() {
+            map.get(&(chat_id, topic_id)).cloned()
+        } else {
             session_id.filter(|s| !s.is_empty()).and_then(|sid| map.values().find(|w| w.thread_id == sid).cloned())
         }
     };

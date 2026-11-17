@@ -131,7 +131,7 @@ async fn find_warm(
     topic_id: Option<i64>,
     session_id: Option<&str>,
 ) -> Option<Arc<WarmClaudeSession>> {
-    if chat_id != 0
+    if (chat_id != 0 || topic_id.is_some())
         && let Some(w) = map.get(&(chat_id, topic_id)).cloned()
     {
         return Some(w);
@@ -210,7 +210,11 @@ pub async fn is_running(chat_id: i64, topic_id: Option<i64>, session_id: Option<
 pub async fn has_pending_ask(chat_id: i64, topic_id: Option<i64>, session_id: Option<&str>) -> bool {
     let warm = {
         let map = global_pool().sessions.lock().await;
-        if chat_id != 0 { map.get(&(chat_id, topic_id)).cloned() } else { find_warm(&map, 0, None, session_id).await }
+        if chat_id != 0 || topic_id.is_some() {
+            map.get(&(chat_id, topic_id)).cloned()
+        } else {
+            find_warm(&map, 0, None, session_id).await
+        }
     };
     let Some(w) = warm else { return false; };
     !w.activity.is_expired() && w.is_alive().await && w.pending_ask.lock().await.is_some()

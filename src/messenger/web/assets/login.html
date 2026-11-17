@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF9F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)">
+  <title>Tuner</title>
+  <link rel="manifest" href="/dashboard/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/dashboard/icon.svg">
+  <script>
+    (() => {
+      try {
+        const saved = localStorage.getItem("tuner_theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/dashboard/assets/dashboard.css">
+</head>
+<body class="login-page">
+  <main class="login-card" role="main">
+    <div class="card-row">
+      <div class="login-brand">
+        <div class="brand-mark brand-mark-lg">T</div>
+        <div>
+          <h1>Tuner</h1>
+          <p class="muted" data-i18n="loginSubtitle">개인 AI 에이전트 워크스페이스</p>
+        </div>
+      </div>
+      <button id="btn-lang" class="ghost-btn lang-btn" type="button">KO</button>
+    </div>
+
+    <div id="login-error" class="alert alert-danger hidden" role="alert"></div>
+
+    <form id="pin-login-form" class="login-form">
+      <label for="pin-input" class="form-label" data-i18n="loginPinLabel">대시보드 PIN 또는 패스프레이즈</label>
+      <input
+        id="pin-input"
+        type="password"
+        autocomplete="current-password"
+        data-i18n-placeholder="loginPinPh"
+        placeholder="설정한 PIN 입력"
+        required
+      >
+      <button id="login-submit-btn" type="submit" class="btn btn-primary btn-block" data-i18n="loginSubmitBtn">
+        대시보드 열기
+      </button>
+    </form>
+
+    <div id="no-pin-note" class="login-help hidden">
+      <strong data-i18n="loginNoPinTitle">아직 설정된 PIN이 없습니다.</strong>
+      <p class="muted" data-i18n="loginNoPinBody">텔레그램 채팅방에서 /dashboard 를 입력하거나 터미널에서 일회용 매직 링크를 발급해 주세요:</p>
+      <pre>tuner --dashboard [--set-pin &lt;pin&gt;]</pre>
+      <p class="muted" data-i18n="loginNoPinHint">접속 후 우측 도구 패널 → PIN·세션에서 고정 PIN을 등록할 수 있습니다.</p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { initLang, toggleLang, applyDomI18n, t } from "/dashboard/assets/i18n.js";
+
+    const errEl = document.getElementById("login-error");
+    const formEl = document.getElementById("pin-login-form");
+    const pinEl = document.getElementById("pin-input");
+    const noPinEl = document.getElementById("no-pin-note");
+    const btnEl = document.getElementById("login-submit-btn");
+
+    applyDomI18n();
+    document.getElementById("btn-lang")?.addEventListener("click", () => toggleLang());
+
+    function showError(msg) {
+      errEl.textContent = msg;
+      errEl.classList.remove("hidden");
+    }
+
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const qErr = params.get("error");
+
+      try {
+        const res = await fetch("/dashboard/api/auth/me", { credentials: "same-origin" });
+        const data = await res.json().catch(() => ({}));
+        initLang(data?.language);
+        applyDomI18n();
+        if (res.ok && data.authenticated) {
+          window.location.replace("/dashboard");
+          return;
+        }
+        if (data && data.has_pin === false) {
+          noPinEl.classList.remove("hidden");
+        }
+      } catch (_) {}
+
+      if (qErr) {
+        showError(t("loginAuthReq", { err: qErr }));
+      }
+    })();
+
+    formEl.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.classList.add("hidden");
+      const pin = pinEl.value;
+      if (!pin) return;
+      btnEl.disabled = true;
+      try {
+        const res = await fetch("/dashboard/api/auth/login", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.authenticated) {
+          window.location.replace("/dashboard");
+          return;
+        }
+        showError(data.error || t("loginFailed", { status: res.status }));
+      } catch (_) {
+        showError(t("loginNetErr"));
+      } finally {
+        btnEl.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
