@@ -22,6 +22,7 @@
 //! - [`events`] (`events.rs`): Real-time `WebEventHub` broadcast channel and stream cache.
 //! - [`events_bridge`] (`events_bridge.rs`): Compact Telegram & Cron hooks emitting Web events.
 //! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID and recursive `.system_generated/` inspector.
+//! - [`tg_topics`] (`tg_topics.rs`): Live Telegram `createForumTopic` / `editForumTopic` / `deleteForumTopic` sync.
 //! - [`turn_boot`] (`turn_boot.rs`): Session init, auto-handover, and observer attach.
 //! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled Web turn dispatch and Telegram mirror.
 //! - [`turn_stream`] (`turn_stream.rs`): Live `StreamEvent` pump and result persistence.
@@ -47,6 +48,7 @@ pub mod cli_dash;
 pub mod events;
 pub mod events_bridge;
 pub mod subagent_tree;
+pub mod tg_topics;
 pub mod turn_boot;
 pub mod turn_runner;
 pub mod turn_stream;

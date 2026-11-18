@@ -1252,3 +1252,97 @@ async fn test_slash_catalog_and_web_session_delete() {
         .unwrap();
     assert_eq!(bad_hitl.status(), StatusCode::BAD_REQUEST);
 }
+
+async fn spawn_mock_tg_api() -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
+    let calls = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let c_clone = calls.clone();
+    let router = Router::new().route(
+        "/botmocktoken/:method",
+        axum::routing::post(move |axum::extract::Path(m): axum::extract::Path<String>, body: String| {
+            let log = c_clone.clone();
+            async move {
+                log.lock().await.push(format!("{m}:{body}"));
+                if m == "createForumTopic" {
+                    axum::Json(serde_json::json!({
+                        "ok": true,
+                        "result": { "message_thread_id": 777, "name": "Synced TG Topic" }
+                    }))
+                } else {
+                    axum::Json(serde_json::json!({ "ok": true, "result": true }))
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { let _ = axum::serve(listener, router).await; });
+    (format!("http://{addr}"), calls)
+}
+
+#[tokio::test]
+async fn test_telegram_forum_topic_create_rename_and_delete() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = build_test_ctx(dir.path());
+    let (mock_url, calls) = spawn_mock_tg_api().await;
+    let bot = teloxide::Bot::new("mocktoken").set_api_url(reqwest::Url::parse(&mock_url).unwrap());
+    ctx.set_bot(bot).await;
+
+    let app = build_router_with_ctx(ctx.clone());
+    let (cookie, csrf) = login_via_magic(&app, &ctx).await;
+
+    let create_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/dashboard/api/sessions")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"transport":"tg","topic_name":"Synced TG Topic","silent_greeting":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_res.status(), StatusCode::CREATED);
+    let created: serde_json::Value =
+        serde_json::from_slice(&to_bytes(create_res.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(created["session_key"], "tg:12345:777");
+    assert_eq!(created["transport"], "tg");
+
+    let rename_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/dashboard/api/sessions/config")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"session_key":"tg:12345:777","topic_name":"Renamed TG"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rename_res.status(), StatusCode::OK);
+
+    let del_res = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("/dashboard/api/sessions")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"session_key":"tg:12345:777","delete_remote_topic":true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(del_res.status(), StatusCode::OK);
+
+    let recorded = calls.lock().await.clone();
+    assert!(recorded.iter().any(|c| c.starts_with("createForumTopic:")));
+    assert!(recorded.iter().any(|c| c.starts_with("editForumTopic:") && c.contains("Renamed TG")));
+    assert!(recorded.iter().any(|c| c.starts_with("deleteForumTopic:") && c.contains("777")));
+}

@@ -10,7 +10,9 @@ export function createChatController({
   apiFetch,
   onOpenFile,
   onOpenInspectorTab,
-  onRefreshSessions
+  onRefreshSessions,
+  getActiveTransport,
+  getPreferredTgChatId
 }) {
   const els = {
     scrollWrap: document.getElementById("chat-scroll"),
@@ -27,6 +29,7 @@ export function createChatController({
     askSubmitBtn: document.getElementById("ask-submit-btn"),
     askSkipBtn: document.getElementById("ask-skip-btn"),
     topicTitle: document.getElementById("active-topic-title"),
+    channelBadge: document.getElementById("active-channel-badge"),
     topicKey: document.getElementById("active-topic-key"),
     topicState: document.getElementById("active-topic-state"),
     selProvider: document.getElementById("sel-provider"),
@@ -237,6 +240,7 @@ export function createChatController({
     const s = state.session;
     if (!s) {
       els.topicTitle.textContent = t("selectTopic");
+      els.channelBadge?.classList.add("hidden");
       els.topicKey.textContent = "";
       els.topicState.dataset.state = "Idle";
       els.topicState.textContent = "Idle";
@@ -245,6 +249,10 @@ export function createChatController({
       return;
     }
     els.topicTitle.textContent = formatTopicLabel(s);
+    if (els.channelBadge) {
+      els.channelBadge.textContent = s.transport === "tg" ? t("channelBadgeTg") : t("channelBadgeWeb");
+      els.channelBadge.className = s.transport === "tg" ? "pill pill-info" : "pill";
+    }
     els.topicKey.textContent = s.session_key;
     if (s.asking) {
       els.topicState.dataset.state = "Asking";
@@ -397,10 +405,18 @@ export function createChatController({
     if (state.session) return state.session;
     const title = seedText.replace(/\s+/g, " ").trim().slice(0, 36) || null;
     const prov = els.selProvider?.value || "antigravity";
+    const tr = typeof getActiveTransport === "function" ? getActiveTransport() : "web";
+    const prefChat = tr === "tg" && typeof getPreferredTgChatId === "function" ? getPreferredTgChatId() : null;
     const res = await apiFetch("/dashboard/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic_name: title, provider: prov })
+      body: JSON.stringify({
+        transport: tr,
+        chat_id: prefChat,
+        silent_greeting: true,
+        topic_name: title,
+        provider: prov
+      })
     });
     if (!res.ok) return null;
     const created = await res.json();

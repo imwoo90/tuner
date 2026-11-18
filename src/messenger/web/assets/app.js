@@ -6,7 +6,10 @@ import { createInspectorController } from "/dashboard/assets/inspector.js";
 let csrfToken = "";
 let sessions = [];
 let activeTransport = "web";
+let lastSelectedKey = { web: null, tg: null };
 let renamingKey = "";
+let confirmingDeleteKey = "";
+let confirmDeleteTimer = null;
 let activeHitlSessions = [];
 let ws = null;
 let wsRetryMs = 1000;
@@ -30,6 +33,14 @@ function redirectToLogin() {
   window.location.replace("/dashboard/login");
 }
 
+function getPreferredTgChatId() {
+  const activeSk = chat.getActiveSessionKey();
+  const activeObj = sessions.find((s) => s.session_key === activeSk && s.transport === "tg" && s.chat_id !== 0);
+  if (activeObj) return activeObj.chat_id;
+  const recentTg = sessions.find((s) => s.transport === "tg" && s.chat_id !== 0 && s.topic_id != null);
+  return recentTg ? recentTg.chat_id : null;
+}
+
 const inspector = createInspectorController({
   apiFetch,
   getActiveSessionKey: () => chat.getActiveSessionKey(),
@@ -41,8 +52,21 @@ const chat = createChatController({
   apiFetch,
   onOpenFile: (path) => inspector.openFilePreview(path),
   onOpenInspectorTab: (tab) => inspector.openTab(tab),
-  onRefreshSessions: () => loadSessions(false)
+  onRefreshSessions: () => loadSessions(false),
+  getActiveTransport: () => activeTransport,
+  getPreferredTgChatId
 });
+
+function rememberSelection(s) {
+  if (!s) return;
+  if (s.transport === "tg") lastSelectedKey.tg = s.session_key;
+  else lastSelectedKey.web = s.session_key;
+}
+
+async function selectAndRemember(s) {
+  rememberSelection(s);
+  await chat.selectSession(s);
+}
 
 function closeDrawers() {
   document.getElementById("sidebar").classList.remove("open");
@@ -84,14 +108,33 @@ const BUCKET_ORDER = [
 ];
 
 function syncTransportTabs() {
+  const isTg = activeTransport === "tg";
   const webCnt = sessions.filter((s) => s.transport === "web").length;
   const tgCnt = sessions.filter((s) => s.transport === "tg").length;
   const webCntEl = document.getElementById("seg-web-count");
   const tgCntEl = document.getElementById("seg-tg-count");
   if (webCntEl) webCntEl.textContent = `${webCnt}`;
   if (tgCntEl) tgCntEl.textContent = `${tgCnt}`;
-  document.getElementById("seg-web")?.classList.toggle("active", activeTransport === "web");
-  document.getElementById("seg-tg")?.classList.toggle("active", activeTransport === "tg");
+  document.getElementById("seg-web")?.classList.toggle("active", !isTg);
+  document.getElementById("seg-tg")?.classList.toggle("active", isTg);
+
+  const newBtn = document.getElementById("btn-new-topic");
+  if (newBtn) {
+    newBtn.textContent = isTg ? t("newTgTopicBtn") : t("newTopicBtn");
+    newBtn.title = isTg ? t("newTgTopicTitle") : t("newTopicTitle");
+  }
+  const modeLbl = document.getElementById("new-topic-mode-label");
+  if (modeLbl) {
+    modeLbl.textContent = isTg ? t("formModeTg") : t("formModeWeb");
+  }
+  const nameInp = document.getElementById("new-topic-name");
+  if (nameInp) {
+    nameInp.placeholder = isTg ? t("tgTopicNamePh") : t("topicNamePlaceholder");
+  }
+  const subBtn = document.getElementById("btn-create-topic-submit");
+  if (subBtn && !subBtn.disabled) {
+    subBtn.textContent = isTg ? t("createTgTopicBtn") : t("create");
+  }
 }
 
 async function patchSessionMeta(sessionKey, patchBody) {
@@ -165,8 +208,9 @@ function buildSessionRow(s, activeKey) {
     </div>`;
 
   btn.addEventListener("click", () => {
+    confirmingDeleteKey = "";
     closeDrawers();
-    chat.selectSession(s);
+    selectAndRemember(s);
     renderSessionList();
     if (!inspector.isCollapsed() && (inspector.getActiveTab() === "tree" || inspector.getActiveTab() === "usage")) {
       inspector.refreshCurrentTab();
@@ -195,29 +239,50 @@ function buildSessionRow(s, activeKey) {
   renBtn.textContent = "✎";
   renBtn.addEventListener("click", (ev) => {
     ev.stopPropagation();
+    confirmingDeleteKey = "";
     renamingKey = s.session_key;
     renderSessionList();
   });
   actions.appendChild(renBtn);
 
+  const isConfirmingTgDel = s.transport === "tg" && confirmingDeleteKey === s.session_key;
   const delBtn = document.createElement("button");
   delBtn.type = "button";
-  delBtn.className = "session-del-btn";
+  delBtn.className = `session-del-btn${isConfirmingTgDel ? " confirm-del" : ""}`;
   delBtn.title = s.transport === "tg" ? t("deleteTgTopicTitle") : t("deleteTopicTitle");
-  delBtn.textContent = "×";
+  delBtn.textContent = isConfirmingTgDel ? t("confirmDeleteTgBtn") : "×";
   delBtn.addEventListener("click", async (ev) => {
     ev.stopPropagation();
+    if (s.transport === "tg" && confirmingDeleteKey !== s.session_key) {
+      confirmingDeleteKey = s.session_key;
+      if (confirmDeleteTimer) clearTimeout(confirmDeleteTimer);
+      confirmDeleteTimer = setTimeout(() => {
+        if (confirmingDeleteKey === s.session_key) {
+          confirmingDeleteKey = "";
+          renderSessionList();
+        }
+      }, 3500);
+      renderSessionList();
+      return;
+    }
+    confirmingDeleteKey = "";
     const res = await apiFetch("/dashboard/api/sessions", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_key: s.session_key })
+      body: JSON.stringify({
+        session_key: s.session_key,
+        delete_remote_topic: s.transport === "tg"
+      })
     });
     if (res.ok) {
+      if (lastSelectedKey[s.transport] === s.session_key) {
+        lastSelectedKey[s.transport] = null;
+      }
       const wasActive = s.session_key === chat.getActiveSessionKey();
       await loadSessions(false);
       if (wasActive) {
         const nextInTab = sessions.find((it) => it.transport === activeTransport) || null;
-        await chat.selectSession(nextInTab);
+        await selectAndRemember(nextInTab);
         renderSessionList();
       }
     }
@@ -250,7 +315,9 @@ function renderSessionList() {
   });
 
   if (filtered.length === 0) {
-    const msgKey = !query && activeTransport === "web" ? "emptyNoWebSessions" : "noMatchingSessions";
+    const msgKey = !query
+      ? (activeTransport === "tg" ? "emptyNoTgSessions" : "emptyNoWebSessions")
+      : "noMatchingSessions";
     const empty = document.createElement("div");
     empty.className = "muted";
     empty.style.padding = "12px 10px";
@@ -281,6 +348,15 @@ function renderSessionList() {
   }
 }
 
+function pickSessionForTransport(tr) {
+  const remembered = lastSelectedKey[tr];
+  if (remembered) {
+    const found = sessions.find((s) => s.session_key === remembered && s.transport === tr);
+    if (found) return found;
+  }
+  return sessions.find((s) => s.transport === tr) || null;
+}
+
 async function loadSessions(selectFirstIfNone = true) {
   const res = await apiFetch("/dashboard/api/sessions");
   if (!res.ok) return;
@@ -292,16 +368,12 @@ async function loadSessions(selectFirstIfNone = true) {
 
   const activeKey = chat.getActiveSessionKey();
   if (selectFirstIfNone && (!activeKey || !sessions.some((s) => s.session_key === activeKey))) {
-    const firstWeb = sessions.find((s) => s.transport === "web") || null;
-    if (firstWeb) {
-      activeTransport = "web";
-      await chat.selectSession(firstWeb);
-    } else {
-      await chat.selectSession(null);
-    }
+    const chosen = pickSessionForTransport(activeTransport);
+    await selectAndRemember(chosen);
   } else if (activeKey) {
     const fresh = sessions.find((s) => s.session_key === activeKey);
     if (fresh) {
+      rememberSelection(fresh);
       chat.handleWsEvent({
         type: "session_updated",
         session_key: fresh.session_key,
@@ -408,9 +480,17 @@ function setupUiListeners() {
   document.getElementById("session-search").addEventListener("input", renderSessionList);
 
   document.querySelectorAll("#sidebar-transport-tabs .seg-tab").forEach((tabBtn) => {
-    tabBtn.addEventListener("click", () => {
-      activeTransport = tabBtn.dataset.transport || "web";
+    tabBtn.addEventListener("click", async () => {
+      const nextTr = tabBtn.dataset.transport || "web";
+      if (nextTr === activeTransport) return;
+      activeTransport = nextTr;
       renamingKey = "";
+      confirmingDeleteKey = "";
+      document.getElementById("new-topic-error")?.classList.add("hidden");
+      const targetSess = pickSessionForTransport(activeTransport);
+      rememberSelection(targetSess);
+      renderSessionList();
+      await selectAndRemember(targetSess);
       renderSessionList();
     });
   });
@@ -424,12 +504,12 @@ function setupUiListeners() {
     });
     if (res.ok) {
       const d = await res.json();
-      const count = Number(d.removed_count || 0);
+      const count = Number(d.pruned_count ?? d.removed_count ?? 0);
       await loadSessions(false);
       const activeNow = chat.getActiveSessionKey();
       if (activeNow && !sessions.some((s) => s.session_key === activeNow)) {
-        const next = sessions.find((s) => s.transport === activeTransport) || null;
-        await chat.selectSession(next);
+        const next = pickSessionForTransport(activeTransport);
+        await selectAndRemember(next);
         renderSessionList();
       }
       pruneBtn.textContent = t("pruneDoneToast", { count });
@@ -451,36 +531,57 @@ function setupUiListeners() {
   });
 
   const newForm = document.getElementById("new-topic-form");
+  const errEl = document.getElementById("new-topic-error");
   document.getElementById("btn-new-topic").addEventListener("click", () => {
+    errEl?.classList.add("hidden");
     newForm.classList.toggle("hidden");
+    syncTransportTabs();
     if (!newForm.classList.contains("hidden")) {
       document.getElementById("new-topic-name").focus();
     }
   });
   document.getElementById("btn-create-topic-cancel").addEventListener("click", () => {
+    errEl?.classList.add("hidden");
     newForm.classList.add("hidden");
   });
   newForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const nameEl = document.getElementById("new-topic-name");
     const provEl = document.getElementById("new-topic-provider");
+    const subBtn = document.getElementById("btn-create-topic-submit");
+    errEl?.classList.add("hidden");
+    if (subBtn) {
+      subBtn.disabled = true;
+      subBtn.textContent = t("creatingBtn");
+    }
+    const targetTr = activeTransport;
     const res = await apiFetch("/dashboard/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        transport: targetTr,
+        chat_id: targetTr === "tg" ? getPreferredTgChatId() : null,
         topic_name: nameEl.value.trim() || null,
         provider: provEl.value
       })
     });
+    if (subBtn) {
+      subBtn.disabled = false;
+      syncTransportTabs();
+    }
     if (res.ok) {
       const created = await res.json();
       nameEl.value = "";
       newForm.classList.add("hidden");
-      activeTransport = "web";
+      activeTransport = created.transport || targetTr;
       await loadSessions(false);
-      await chat.selectSession(created);
+      await selectAndRemember(created);
       renderSessionList();
       closeDrawers();
+    } else if (errEl) {
+      const d = await res.json().catch(() => ({}));
+      errEl.textContent = d.error || `HTTP ${res.status}`;
+      errEl.classList.remove("hidden");
     }
   });
 

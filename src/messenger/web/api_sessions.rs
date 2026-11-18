@@ -138,6 +138,15 @@ pub async fn handle_list_sessions(
 /// Request payload for `POST /dashboard/api/sessions`.
 #[derive(Deserialize)]
 pub struct CreateSessionPayload {
+    /// Target transport (`"web"` default, or `"tg"` to create a live Telegram topic).
+    #[serde(default)]
+    pub transport: Option<String>,
+    /// Optional preferred Telegram `chat_id` when `transport == "tg"`.
+    #[serde(default)]
+    pub chat_id: Option<i64>,
+    /// Suppresses the starter greeting message when auto-creating right before a user prompt.
+    #[serde(default)]
+    pub silent_greeting: bool,
     /// Optional topic display name.
     pub topic_name: Option<String>,
     /// Optional provider (`antigravity`, `claude`, `codex`).
@@ -148,7 +157,7 @@ pub struct CreateSessionPayload {
     pub effort: Option<String>,
 }
 
-/// Creates a new Web-native `web:0:<tid>` topic session (`POST /dashboard/api/sessions`).
+/// Creates a new `web:0:<tid>` or real Telegram `tg:<cid>:<tid>` topic (`POST /dashboard/api/sessions`).
 pub async fn handle_create_session(
     ext: Option<Extension<Arc<WebAppCtx>>>,
     headers: HeaderMap,
@@ -161,27 +170,12 @@ pub async fn handle_create_session(
     if let Err(r) = require_mutation_auth(&ctx, &headers).await {
         return *r;
     }
-    let prov = payload
-        .provider
-        .as_deref()
-        .and_then(SessionData::canonical_provider)
-        .unwrap_or_else(|| SessionData::effective_provider(&ctx.config.provider, "antigravity"));
-    let model = payload
-        .model
-        .as_deref()
-        .filter(|m| !m.trim().is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| SessionData::default_model_for_provider(prov, ctx.config.model.as_deref()));
-    if !SessionData::is_model_compatible(&model, prov) {
-        return json_err(StatusCode::BAD_REQUEST, "Model incompatible with provider");
-    }
-    let name = payload.topic_name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    match ctx.sessions.create_web_session(name, prov, &model, payload.effort.as_deref()).await {
+    match super::tg_topics::create_session_from_payload(&ctx, payload).await {
         Ok(sess) => {
             emit_session_updated(&ctx, &sess, false, false).await;
             (StatusCode::CREATED, Json(build_session_summary(&ctx, &sess).await)).into_response()
         }
-        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        Err(resp) => *resp,
     }
 }
 
@@ -299,6 +293,11 @@ pub async fn handle_patch_session_config(
     }
     if let Err(msg) = apply_model_and_effort_patch(&ctx, &key, &mut sess, &payload).await {
         return json_err(StatusCode::BAD_REQUEST, &msg);
+    }
+    if key.transport == "tg"
+        && let Some(tname) = payload.topic_name.as_deref().map(str::trim).filter(|s| !s.is_empty())
+    {
+        super::tg_topics::sync_remote_topic_rename(&ctx, &key, tname).await;
     }
     let (busy, asking) = check_busy_and_asking(&ctx, &sess).await;
     emit_session_updated(&ctx, &sess, busy, asking).await;

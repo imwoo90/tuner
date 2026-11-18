@@ -44,6 +44,30 @@ impl SessionManager {
         Ok(sess)
     }
 
+    /// Persists a newly created Telegram forum / private-chat topic session (`tg:<cid>:<tid>`).
+    pub async fn create_telegram_topic_session(
+        &self,
+        chat_id: i64,
+        topic_id: i64,
+        topic_name: String,
+        provider: &str,
+        model: &str,
+        effort: Option<&str>,
+    ) -> Result<SessionData, String> {
+        let _guard = self.lock.lock().await;
+        let mut map = self.load()?;
+        let key = SessionKey::telegram(chat_id, Some(topic_id));
+        let mut sess = create_seeded_session(&key, provider, model, Some(topic_name));
+        if let Some(eff) = effort.filter(|e| !e.trim().is_empty()) {
+            sess.effort = Some(eff.trim().to_ascii_lowercase());
+            let p = sess.provider.clone();
+            sess.normalize_effort_for_provider(&p);
+        }
+        map.insert(key.storage_key(), sess.clone());
+        self.save(&map)?;
+        Ok(sess)
+    }
+
     /// Removes a persisted `web` or `tg` session entry from `sessions.json`.
     pub async fn remove_session(&self, key: &SessionKey) -> Result<bool, String> {
         let _guard = self.lock.lock().await;

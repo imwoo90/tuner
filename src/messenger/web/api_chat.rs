@@ -174,11 +174,21 @@ async fn terminate_topic_sessions_for_reset(ctx: &WebAppCtx, key: &SessionKey) -
     init_prov
 }
 
+/// Request payload for `DELETE /dashboard/api/sessions`.
+#[derive(Deserialize)]
+pub struct DeleteSessionPayload {
+    /// Target session key (`web:0:...` or `tg:...`).
+    pub session_key: String,
+    /// When `true` on a `tg` topic, also calls `deleteForumTopic` on Telegram.
+    #[serde(default)]
+    pub delete_remote_topic: bool,
+}
+
 /// Deletes a persisted `web` or `tg` session from `sessions.json` (`DELETE /dashboard/api/sessions`).
 pub async fn handle_delete_session(
     ext: Option<Extension<Arc<WebAppCtx>>>,
     headers: HeaderMap,
-    Json(payload): Json<SessionKeyPayload>,
+    Json(payload): Json<DeleteSessionPayload>,
 ) -> Response {
     let ctx = match resolve_ctx(ext) {
         Ok(c) => c,
@@ -193,6 +203,9 @@ pub async fn handle_delete_session(
     let lock = ctx.sessions.lock_pool.get((key.chat_id, key.topic_id));
     let _guard = lock.lock().await;
     let _ = terminate_topic_sessions_for_reset(&ctx, &key).await;
+    if payload.delete_remote_topic && key.transport == "tg" {
+        super::tg_topics::sync_remote_topic_delete(&ctx, &key).await;
+    }
     match ctx.sessions.remove_session(&key).await {
         Ok(removed) => Json(serde_json::json!({ "ok": true, "removed": removed })).into_response(),
         Err(e) => json_err(StatusCode::BAD_REQUEST, &e),
@@ -233,7 +246,7 @@ pub async fn handle_prune_sessions(
             for k in &keys {
                 let _ = terminate_topic_sessions_for_reset(&ctx, k).await;
             }
-            Json(serde_json::json!({ "ok": true, "pruned_count": count })).into_response()
+            Json(serde_json::json!({ "ok": true, "pruned_count": count, "removed_count": count })).into_response()
         }
         Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }

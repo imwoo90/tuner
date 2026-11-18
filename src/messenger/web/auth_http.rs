@@ -225,6 +225,7 @@ pub async fn handle_auth_me(
         Err(r) => return *r,
     };
     let has_pin = ctx.auth.has_pin().await;
+    let tg_connected = ctx.bot.read().await.is_some();
     let lang = ctx.config.language.as_deref().unwrap_or("ko");
     match require_auth(&ctx, &headers).await {
         Ok(sess) => Json(serde_json::json!({
@@ -232,7 +233,8 @@ pub async fn handle_auth_me(
             "csrf_token": sess.csrf_token,
             "has_pin": has_pin,
             "profile": ctx.profile,
-            "language": lang
+            "language": lang,
+            "telegram_connected": tg_connected
         }))
         .into_response(),
         Err(_) => (
