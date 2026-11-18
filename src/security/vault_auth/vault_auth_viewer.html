@@ -27,16 +27,17 @@
   <div class="toolbar">
     <button id="btnUser" class="btn-vault" onclick="sendAct({type:'vault_user'})">🔑 ID 입력</button>
     <button id="btnPass" class="btn-vault" onclick="sendAct({type:'vault_pass'})">🔒 PW 입력</button>
-    <button onclick="promptText()">⌨️ 직접입력</button>
+    <button id="btnType" onclick="promptText()">⌨️ 직접입력</button>
+    <button id="btnCopy" onclick="sendAct({type:'copy_out'})">📋 복사</button>
     <button onclick="sendAct({type:'key', key:'Enter'})">↵ Enter</button>
     <button onclick="sendAct({type:'key', key:'Backspace'})">⌫</button>
     <button onclick="sendAct({type:'key', key:'Tab'})">⇥ Tab</button>
-    <button onclick="sendAct({type:'back'})" title="뒤로">◀</button>
-    <button onclick="sendAct({type:'reload'})" title="새로고침">↻</button>
-    <button id="btnTab" class="btn-tab" onclick="sendAct({type:'cycle_tab'})">🗂️ 탭전환</button>
+    <button id="btnBack" onclick="sendAct({type:'back'})">◀</button>
+    <button id="btnReload" onclick="sendAct({type:'reload'})">↻</button>
+    <button id="btnTab" class="btn-tab" onclick="sendAct({type:'cycle_tab'})">🗂️ 탭</button>
     <button id="btnDone" class="btn-done" onclick="finishAuth()">✅ 완료·저장</button>
     <div class="meta">
-      <div class="status" id="st">원격 브라우저 연결 중...</div>
+      <div class="status" id="st">...</div>
       <div class="ttl" id="ttl"></div>
     </div>
   </div>
@@ -49,6 +50,49 @@
   </div>
 <script>
 const BOOT = __AUTH_BOOTSTRAP__;
+const VDICT = {
+  ko: {
+    user: "🔑 ID 입력", pass: "🔒 PW 입력", type: "⌨️ 직접입력", copy: "📋 복사",
+    copyTitle: "선택 텍스트 또는 화면의 인증 코드를 클립보드로 복사",
+    back: "뒤로", reload: "새로고침", tab: "🗂️ 탭",
+    done: "✅ 완료·저장", saving: "저장 중...", saved: "✓ 저장됨",
+    connecting: "원격 브라우저 연결 중...",
+    connected: "실시간 연결됨 — 화면을 직접 클릭하여 로그인을 진행하세요.",
+    closed: "세션이 종료되었습니다. 이제 이 창을 닫으셔도 됩니다.",
+    prompt: "현재 선택된 입력칸에 타이핑할 텍스트(인증번호·이메일 등)를 입력하세요:",
+    copiedToast: "📋 클립보드에 복사되었습니다! 바로 붙여넣을 수 있습니다.",
+    savedAlert: "세션 저장이 완료되었습니다! 이 창을 닫으셔도 됩니다."
+  },
+  en: {
+    user: "🔑 Fill ID", pass: "🔒 Fill PW", type: "⌨️ Type", copy: "📋 Copy",
+    copyTitle: "Copy selected text or authorization code to clipboard",
+    back: "Back", reload: "Reload", tab: "🗂️ Tabs",
+    done: "✅ Done & Save", saving: "Saving...", saved: "✓ Saved",
+    connecting: "Connecting to remote browser...",
+    connected: "Connected — click directly on the screen to sign in.",
+    closed: "Session ended. You may close this panel.",
+    prompt: "Enter text to type into the focused input field:",
+    copiedToast: "📋 Copied to clipboard! Ready to paste.",
+    savedAlert: "Session saved! You may close this window."
+  }
+};
+
+function detectLang() {
+  try {
+    const q = new URLSearchParams(location.search).get('lang');
+    if (q === 'ko' || q === 'en') return q;
+    const ls = (localStorage.getItem('tuner_lang') || '').toLowerCase();
+    if (ls.startsWith('ko')) return 'ko';
+    if (ls.startsWith('en')) return 'en';
+  } catch (_) {}
+  return String(navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'ko';
+}
+
+let vLang = detectLang();
+let tabCount = 1;
+let doneState = 0; // 0=open, 1=saving, 2=saved
+const vt = (k) => (VDICT[vLang] || VDICT.ko)[k] || k;
+
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
 const st = document.getElementById('st');
@@ -56,6 +100,30 @@ const ttlEl = document.getElementById('ttl');
 const btnTab = document.getElementById('btnTab');
 if (!BOOT.has_username) document.getElementById('btnUser').disabled = true;
 if (!BOOT.has_password) document.getElementById('btnPass').disabled = true;
+
+function applyViewerLang(next) {
+  if (next === 'ko' || next === 'en') vLang = next;
+  document.documentElement.lang = vLang;
+  document.getElementById('btnUser').textContent = vt('user');
+  document.getElementById('btnPass').textContent = vt('pass');
+  document.getElementById('btnType').textContent = vt('type');
+  const cp = document.getElementById('btnCopy');
+  cp.textContent = vt('copy');
+  cp.title = vt('copyTitle');
+  document.getElementById('btnBack').title = vt('back');
+  document.getElementById('btnReload').title = vt('reload');
+  if (tabCount > 1) btnTab.textContent = `${vt('tab')}(${tabCount})`;
+  const dBtn = document.getElementById('btnDone');
+  dBtn.textContent = doneState === 2 ? vt('saved') : doneState === 1 ? vt('saving') : vt('done');
+}
+applyViewerLang(vLang);
+st.textContent = vt('connecting');
+
+window.addEventListener('message', (ev) => {
+  if (ev.origin === location.origin && ev.data && ev.data.type === 'tuner_set_lang') {
+    applyViewerLang(ev.data.lang);
+  }
+});
 
 let remSecs = BOOT.ttl_secs || 0;
 function renderTtl() {
@@ -71,28 +139,41 @@ const wsUrl = proto + '//' + location.host + location.pathname.replace(/\/$/, ''
 const ws = new WebSocket(wsUrl);
 ws.binaryType = 'arraybuffer';
 
-ws.onopen = () => { st.textContent = '실시간 연결됨 — 화면을 직접 터치하여 인증을 진행하세요.'; };
-ws.onclose = () => { st.textContent = '세션이 종료되었습니다. 이제 이 창을 닫으셔도 됩니다.'; };
+ws.onopen = () => { st.textContent = vt('connected'); };
+ws.onclose = () => { st.textContent = vt('closed'); };
 ws.onmessage = (ev) => {
   if (typeof ev.data === 'string') {
     try {
       const m = JSON.parse(ev.data);
       if (typeof m.tab_count === 'number') {
-        btnTab.style.display = m.tab_count > 1 ? 'inline-block' : 'none';
-        btnTab.textContent = `🗂️ 탭(${m.tab_count})`;
+        tabCount = m.tab_count;
+        btnTab.style.display = tabCount > 1 ? 'inline-block' : 'none';
+        btnTab.textContent = `${vt('tab')}(${tabCount})`;
       }
       if (m.url) st.textContent = m.url;
       if (m.msg) st.textContent = m.msg;
+      if (m.clipboard) {
+        st.textContent = vt('copiedToast');
+        try { navigator.clipboard && navigator.clipboard.writeText(m.clipboard).catch(() => {}); } catch (_) {}
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'tuner_hitl_clipboard', site_key: BOOT.site_key, text: m.clipboard }, location.origin);
+          } else if (window.opener) {
+            window.opener.postMessage({ type: 'tuner_hitl_clipboard', site_key: BOOT.site_key, text: m.clipboard }, location.origin);
+          }
+        } catch (_) {}
+      }
       if (m.done) {
+        doneState = 2;
         const doneBtn = document.getElementById('btnDone');
         doneBtn.disabled = true;
-        doneBtn.textContent = '✓ 저장됨';
-        st.textContent = m.msg || '세션 저장이 완료되었습니다.';
+        doneBtn.textContent = vt('saved');
+        st.textContent = vt('savedAlert');
         try {
           if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'tuner_hitl_done', site_key: BOOT.site_key }, location.origin);
           } else {
-            alert(m.msg || '세션 저장이 완료되었습니다! 이 창을 닫으셔도 됩니다.');
+            alert(vt('savedAlert'));
           }
         } catch (_) {}
       }
@@ -160,12 +241,13 @@ canvas.addEventListener('wheel', (e) => {
 }, {passive: false});
 
 function promptText() {
-  const t = prompt('현재 선택된 입력칸에 타이핑할 텍스트(인증번호/ID 등)를 입력하세요:');
-  if (t) sendAct({type: 'text', text: t});
+  const txt = prompt(vt('prompt'));
+  if (txt) sendAct({type: 'text', text: txt});
 }
 
 function finishAuth() {
-  document.getElementById('btnDone').textContent = '저장 중...';
+  doneState = 1;
+  document.getElementById('btnDone').textContent = vt('saving');
   sendAct({type: 'save_and_exit'});
 }
 </script>

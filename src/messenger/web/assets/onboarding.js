@@ -153,6 +153,7 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
       const d = await r.json();
       if (openWebInWeb && d.hitl_session?.token) {
         onOpenBrowserToken?.(d.hitl_session.token);
+        if (!isWizard) return;
       } else if (!openWebInWeb && d.login?.oauth_url) {
         window.open(d.login.oauth_url, "_blank", "noopener");
       }

@@ -209,6 +209,17 @@ pub async fn list_active_auth_sessions() -> Vec<ActiveAuthSessionInfo> {
     out
 }
 
+/// Finds an active `(token, local_port)` HITL route matching `site_key` (e.g. `"cli_antigravity"`).
+pub async fn find_active_route_by_site(site_key: &str) -> Option<(String, u16)> {
+    let now = current_unix_secs();
+    let mut guard = registry().routes.lock().await;
+    guard.retain(|_, v| v.expires_at_secs > now);
+    guard
+        .iter()
+        .find(|(_, e)| e.site_key == site_key)
+        .map(|(tok, e)| (tok.clone(), e.local_port))
+}
+
 pub(crate) async fn resolve_route_port(token: &str) -> Option<u16> {
     if !is_strict_hex_token(token) {
         return None;

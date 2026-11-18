@@ -12,16 +12,17 @@ pub use super::await_session_completion;
 
 use super::cdp::CdpController;
 use super::cdp_state::{export_storage_state, ExportedStateSummary};
-use super::proxy::{constant_time_eq, is_strict_hex_token, HITL_PING_MAGIC};
+use super::proxy::{constant_time_eq, is_strict_hex_token};
+use super::server_http::{handle_auto_finish, handle_oauth_code, handle_viewer_html, handle_viewer_ping};
 use crate::security::vault::current_unix_secs;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path as AxumPath, State,
     },
-    http::{header, StatusCode},
-    response::{Html, IntoResponse, Response},
-    routing::get,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, post},
     Router,
 };
 use futures::stream::{SplitSink, SplitStream};
@@ -100,10 +101,20 @@ impl AuthServerState {
         })
     }
 
-    fn is_valid_token(&self, candidate: &str) -> bool {
+    pub(crate) fn is_valid_token(&self, candidate: &str) -> bool {
         is_strict_hex_token(candidate)
             && constant_time_eq(candidate.as_bytes(), self.token.as_bytes())
             && current_unix_secs() < self.expires_at_secs
+    }
+
+    pub(crate) fn is_saved_done(&self) -> bool {
+        self.saved_done.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn mark_auto_finished(&self) {
+        self.saved_done.store(true, Ordering::SeqCst);
+        self.viewer_evict.notify_waiters();
+        self.done_notify.notify_one();
     }
 }
 
@@ -121,57 +132,14 @@ pub async fn spawn_local_auth_server(
     let app = Router::new()
         .route("/auth/:token", get(handle_viewer_html))
         .route("/auth/:token/ping", get(handle_viewer_ping))
+        .route("/auth/:token/oauth_code", get(handle_oauth_code))
+        .route("/auth/:token/finish", post(handle_auto_finish))
         .route("/auth/:token/ws", get(handle_viewer_ws))
         .with_state(state);
     let handle = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
     Ok((port, handle))
-}
-
-async fn handle_viewer_ping(
-    AxumPath(token): AxumPath<String>,
-    State(state): State<Arc<AuthServerState>>,
-) -> Response {
-    if !state.is_valid_token(&token) || state.saved_done.load(Ordering::SeqCst) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-    let mut resp = (StatusCode::OK, HITL_PING_MAGIC).into_response();
-    if let Ok(hv) = header::HeaderValue::from_str(&state.site_key) {
-        resp.headers_mut()
-            .insert(header::HeaderName::from_static("x-tuner-site-key"), hv);
-    }
-    resp
-}
-
-async fn handle_viewer_html(
-    AxumPath(token): AxumPath<String>,
-    State(state): State<Arc<AuthServerState>>,
-) -> Response {
-    if !state.is_valid_token(&token) || state.saved_done.load(Ordering::SeqCst) {
-        return (
-            StatusCode::FORBIDDEN,
-            "Remote auth session expired or already completed.",
-        )
-            .into_response();
-    }
-    let rem_ttl = state.expires_at_secs.saturating_sub(current_unix_secs());
-    let boot = json!({
-        "site_key": state.site_key,
-        "ttl_secs": rem_ttl,
-        "has_username": state.cdp.has_username(),
-        "has_password": state.cdp.has_password(),
-    });
-    let safe_json = boot
-        .to_string()
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e");
-    let html = include_str!("vault_auth_viewer.html").replace("__AUTH_BOOTSTRAP__", &safe_json);
-    let mut resp = Html(html).into_response();
-    if let Ok(hv) = header::HeaderValue::from_str("no-store, no-cache, must-revalidate") {
-        resp.headers_mut().insert(header::CACHE_CONTROL, hv);
-    }
-    resp
 }
 
 async fn handle_viewer_ws(
@@ -244,6 +212,15 @@ async fn process_viewer_inputs(
         if val.get("type").and_then(Value::as_str) == Some("save_and_exit") {
             handle_explicit_save(&state, &tx_lock).await;
             break;
+        }
+        if val.get("type").and_then(Value::as_str) == Some("copy_out") {
+            let reply = match state.cdp.read_copyable_text().await {
+                Ok(Some(t)) => json!({ "clipboard": t, "msg": "📋 클립보드 복사 완료! 로컬에 바로 붙여넣을 수 있습니다." }),
+                Ok(None) => json!({ "msg": "복사할 선택 영역이나 인증 코드 박스가 없습니다." }),
+                Err(e) => json!({ "msg": format!("복사 실패: {e}") }),
+            };
+            let _ = tx_lock.lock().await.send(Message::Text(reply.to_string())).await;
+            continue;
         }
         let note = match state.cdp.dispatch_action(&val).await {
             Ok(n) => n,

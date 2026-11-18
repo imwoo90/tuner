@@ -1,5 +1,5 @@
 import { escapeHtml, renderMarkdown } from "/dashboard/assets/markdown.js";
-import { t, onLangChange } from "/dashboard/assets/i18n.js";
+import { t, onLangChange, getLang } from "/dashboard/assets/i18n.js";
 import { createOnboardingRenderer } from "/dashboard/assets/onboarding.js";
 
 export function createInspectorController({ apiFetch, getActiveSessionKey, onForceLogout, onViewChange }) {
@@ -468,7 +468,7 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
         <div class="card-row">
           <div class="card-row">${switcher}</div>
           <div class="card-row">
-            <a class="btn btn-sm" href="${escapeHtml(viewerUrl)}" target="_blank" rel="noopener">${escapeHtml(t("browserNewTabBtn"))} ↗</a>
+            <a id="hitl-popout-btn" class="btn btn-sm" href="${escapeHtml(viewerUrl)}" target="_blank" rel="noopener">${escapeHtml(t("browserNewTabBtn"))} ↗</a>
             <button id="btn-refresh-browser" class="btn btn-sm" type="button">${escapeHtml(t("refresh"))}</button>
           </div>
         </div>
@@ -601,9 +601,19 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
     btn.addEventListener("click", () => setTab(btn.dataset.tab));
   });
 
-  onLangChange(() => {
+  onLangChange((nextLang) => {
     if (!isCollapsed()) {
-      if (activeTab === "browser" && document.getElementById("hitl-iframe")) return;
+      const hitlFrame = document.getElementById("hitl-iframe");
+      if (activeTab === "browser" && hitlFrame) {
+        const popBtn = document.getElementById("hitl-popout-btn");
+        if (popBtn) popBtn.textContent = `${t("browserNewTabBtn")} ↗`;
+        const refBtn = document.getElementById("btn-refresh-browser");
+        if (refBtn) refBtn.textContent = t("refresh");
+        try {
+          hitlFrame.contentWindow?.postMessage({ type: "tuner_set_lang", lang: nextLang || getLang() }, window.location.origin);
+        } catch (_) {}
+        return;
+      }
       refreshCurrentTab();
     }
   });
@@ -624,9 +634,15 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
         renderBrowserTab(true);
       }
     },
-    onProviderSetupUpdated: () => {
+    onProviderSetupUpdated: async () => {
       if (!isCollapsed() && activeTab === "engines") {
         renderEnginesTab();
+      } else if (!isCollapsed() && activeTab === "browser") {
+        const r = await apiFetch("/dashboard/api/hitl").catch(() => null);
+        if (r && r.ok) {
+          const d = await r.json().catch(() => ({}));
+          if (!d.sessions || d.sessions.length === 0) closePanel();
+        }
       }
     },
     getActiveTab: () => activeTab

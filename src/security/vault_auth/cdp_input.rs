@@ -201,3 +201,83 @@ async fn dispatch_special_key(
     .await?;
     Ok(())
 }
+
+/// Reads selected text, visible code boxes (`[data-code-box]`, `code`, `input[readonly]`), or remote clipboard over CDP.
+pub async fn extract_copyable_text(
+    cdp: &CdpController,
+    target: &CdpPageTarget,
+) -> Result<Option<String>, String> {
+    let expr = r#"(async () => {
+      const sel = window.getSelection ? String(window.getSelection()).trim() : '';
+      if (sel) return sel;
+      const box = document.querySelector('[data-code-box], input[readonly], textarea[readonly], pre code, code');
+      if (box) {
+        const v = String(box.value ?? box.textContent ?? '').trim();
+        if (v) return v;
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const c = String(await navigator.clipboard.readText()).trim();
+          if (c) return c;
+        }
+      } catch (_) {}
+      return '';
+    })()"#;
+    let res = cdp
+        .call_page(
+            target,
+            "Runtime.evaluate",
+            json!({ "expression": expr, "awaitPromise": true, "returnByValue": true }),
+        )
+        .await?;
+    let val = res
+        .get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Ok(val)
+}
+
+/// Probes an active OAuth callback page (`antigravity.google/oauth-callback`, `claude.ai`, etc.) for an authorization code.
+pub async fn probe_oauth_callback_code(
+    cdp: &CdpController,
+    target: &CdpPageTarget,
+) -> Option<String> {
+    let u = target.url.as_str();
+    if !u.contains("oauth-callback") && !u.contains("/oauth/code/callback") && !u.contains("code=") {
+        return None;
+    }
+    let expr = r#"(() => {
+      try {
+        const q = new URL(location.href).searchParams.get('code');
+        if (q && q.trim().length >= 8) return q.trim();
+      } catch (_) {}
+      const agy = document.querySelector('[data-code-box]');
+      if (agy) {
+        const v = String(agy.textContent || '').replace(/\s+/g, '');
+        if (v.length >= 12) return v;
+      }
+      const el = document.querySelector('input[readonly], pre code, code');
+      if (el) {
+        const v = String(el.value ?? el.textContent ?? '').trim();
+        if (v.length >= 12 && !/\s/.test(v)) return v;
+      }
+      return '';
+    })()"#;
+    let res = cdp
+        .call_page(
+            target,
+            "Runtime.evaluate",
+            json!({ "expression": expr, "returnByValue": true }),
+        )
+        .await
+        .ok()?;
+    res.get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}

@@ -12,6 +12,7 @@
 use super::browser::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 use super::cdp_input::{
     cycle_browser_tab, dispatch_nav_or_key, dispatch_pointer_or_wheel, dispatch_text_or_credential,
+    extract_copyable_text, probe_oauth_callback_code,
 };
 use super::cdp_state::validate_http_url;
 use base64::Engine;
@@ -313,5 +314,17 @@ impl CdpController {
             }
             _ => dispatch_nav_or_key(self, &target, act, action).await,
         }
+    }
+
+    /// Extracts selected text, visible code box content, or remote clipboard from the active tab.
+    pub async fn read_copyable_text(&self) -> Result<Option<String>, String> {
+        let (target, _) = self.resolve_active_page().await?;
+        extract_copyable_text(self, &target).await
+    }
+
+    /// Probes the active tab for an OAuth callback authorization code (`[data-code-box]`, `?code=`, etc.).
+    pub async fn probe_oauth_code(&self) -> Option<String> {
+        let (target, _) = self.resolve_active_page().await.ok()?;
+        probe_oauth_callback_code(self, &target).await
     }
 }

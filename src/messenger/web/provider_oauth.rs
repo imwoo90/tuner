@@ -9,6 +9,7 @@
 //! #cli-oauth, #pty-login-bridge, #web-in-web-oauth, #onboarding-auth
 
 use super::events::WebEvent;
+use super::provider_oauth_watch::{auto_close_cli_hitl_browser, spawn_oauth_completion_watcher};
 use super::provider_status::{
     current_home_dir, ensure_agy_headless_settings, find_cli_binary, inspect_provider,
 };
@@ -54,6 +55,20 @@ pub async fn get_active_oauth_view(provider: &str) -> Option<OAuthLoginView> {
 /// Terminates and removes any active CLI OAuth PTY for `provider`.
 pub async fn cancel_oauth_login(provider: &str) {
     sessions_map().lock().await.remove(provider);
+}
+
+/// Returns whether a CLI OAuth PTY is currently active for `provider`.
+pub async fn has_active_oauth_session(provider: &str) -> bool {
+    sessions_map().lock().await.contains_key(provider)
+}
+
+/// Writes an authorization code followed by `\r` to the active `provider` OAuth PTY.
+pub async fn feed_oauth_pty_line(provider: &str, code: &str) -> Result<(), String> {
+    let guard = sessions_map().lock().await;
+    let Some(entry) = guard.get(provider) else {
+        return Err(format!("No active `{provider}` login session. Start login again."));
+    };
+    write_fd(entry.holder.master_fd, &format!("{code}\r"))
 }
 
 /// Strips ANSI CSI/OSC escape codes and carriage returns from raw PTY output bytes.
@@ -163,27 +178,6 @@ async fn poll_initial_oauth_urls(
     Err(format!("Timed out waiting for `{provider}` OAuth URL. Output: {}", tail.chars().take(240).collect::<String>()))
 }
 
-fn spawn_oauth_completion_watcher(ctx: Arc<WebAppCtx>, provider: String) {
-    tokio::spawn(async move {
-        let home = current_home_dir();
-        let deadline = Instant::now() + Duration::from_secs(600);
-        while Instant::now() < deadline {
-            if !sessions_map().lock().await.contains_key(&provider) {
-                return;
-            }
-            if inspect_provider(&home, &ctx.tuner_home, &provider).authenticated {
-                sessions_map().lock().await.remove(&provider);
-                ctx.events
-                    .publish(WebEvent::ProviderSetupUpdated { provider })
-                    .await;
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-        sessions_map().lock().await.remove(&provider);
-    });
-}
-
 /// Spawns an interactive CLI OAuth login session and returns its [`OAuthLoginView`].
 pub async fn start_provider_oauth(
     ctx: Arc<WebAppCtx>,
@@ -253,17 +247,16 @@ pub async fn submit_provider_oauth_input(
         let _ = client.get(trimmed).send().await.map_err(|e| format!("Callback relay failed: {e}"))?;
     } else {
         let code = extract_code_from_input(trimmed);
-        let guard = sessions_map().lock().await;
-        let Some(entry) = guard.get(provider) else {
-            return Err(format!("No active `{provider}` login session. Start login again."));
-        };
-        write_fd(entry.holder.master_fd, &format!("{code}\r"))?;
+        feed_oauth_pty_line(provider, &code).await?;
     }
 
     let home = current_home_dir();
     let deadline = Instant::now() + Duration::from_secs(12);
     while Instant::now() < deadline {
         if inspect_provider(&home, &ctx.tuner_home, provider).authenticated {
+            if let Ok(c) = reqwest::Client::builder().timeout(Duration::from_secs(2)).build() {
+                auto_close_cli_hitl_browser(&c, provider).await;
+            }
             cancel_oauth_login(provider).await;
             ctx.events
                 .publish(WebEvent::ProviderSetupUpdated {

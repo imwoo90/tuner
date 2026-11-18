@@ -502,6 +502,12 @@ function setupUiListeners() {
     if (ev.data && ev.data.type === "tuner_hitl_done") {
       inspector.notifyBrowserDone(ev.data.site_key || "site");
       refreshHitlBanner();
+    } else if (ev.data && ev.data.type === "tuner_hitl_clipboard" && ev.data.text) {
+      try { navigator.clipboard?.writeText(ev.data.text).catch(() => {}); } catch (_) {}
+      const codeInp = document.querySelector(".oauth-code-input");
+      if (codeInp && !codeInp.value) {
+        codeInp.value = ev.data.text;
+      }
     }
   });
 

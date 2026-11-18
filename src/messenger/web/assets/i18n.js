@@ -182,8 +182,8 @@ const DICT = {
     launchingBrowser: "원격 Chrome 브라우저 기동 중…",
     hitlBannerText: "원격 브라우저 인증 대기 중 ({site})",
     hitlBannerOpenBtn: "패널에서 열기",
-    browserLaunchTitle: "웹안웹(Web-in-Web) 원격 브라우저",
-    browserLaunchHint: "직접 로그인·2FA·본인인증이 필요할 때 원격 Chrome 화면을 띄워 인증 세션을 금고에 저장합니다.",
+    browserLaunchTitle: "내장 원격 브라우저",
+    browserLaunchHint: "직접 로그인·2FA·본인인증이 필요할 때 내장 원격 Chrome 화면을 띄워 인증 세션을 금고에 저장합니다.",
     browserTargetPh: "금고 키(예: github) 또는 https://... 주소",
     browserLaunchBtn: "원격 브라우저 열기",
     browserNewTabBtn: "새 창",
@@ -201,13 +201,13 @@ const DICT = {
     provMissingBadge: "미설치",
     provInstallingBtn: "설치 중…",
     provInstallBtn: "원클릭 설치",
-    provWebInWebLoginBtn: "🌐 웹인웹으로 로그인",
+    provWebInWebLoginBtn: "🌐 내장 브라우저로 로그인",
     provExtLoginBtn: "외부 브라우저 ↗",
-    provReloginBtn: "재로그인 (웹인웹)",
+    provReloginBtn: "재로그인",
     provCodePlaceholder: "인증 코드 또는 콜백 URL 붙여넣기...",
     provCodeSubmitBtn: "인증 완료",
-    provAgyCodeHint: "로그인 후 화면에 표시된 인증 코드를 복사해 아래에 붙여넣어 주세요.",
-    provAutoCallbackHint: "우측 웹인웹 브라우저에서 로그인하면 자동으로 완료됩니다. (외부 브라우저 이용 시 코드나 콜백 주소를 붙여넣으세요)",
+    provAgyCodeHint: "우측 내장 브라우저에서 Google 로그인을 완료하면 인증 코드가 자동으로 인식·적용됩니다. (외부 브라우저 사용 시에만 아래에 붙여넣기)",
+    provAutoCallbackHint: "우측 내장 브라우저에서 로그인하면 자동으로 완료됩니다. (외부 브라우저 이용 시 코드나 콜백 주소를 붙여넣으세요)",
     provApiKeySummary: "🔑 API Key로 연결",
     provApiKeyPh: "API Key 입력 (sk-...)",
     provApiKeySaveBtn: "키 저장"
@@ -392,8 +392,8 @@ const DICT = {
     launchingBrowser: "Launching remote Chrome browser…",
     hitlBannerText: "Remote browser auth active ({site})",
     hitlBannerOpenBtn: "Open in Panel",
-    browserLaunchTitle: "In-App Remote Browser (HITL)",
-    browserLaunchHint: "Complete login, 2FA, or human verification in an isolated remote Chrome and save session state to Vault.",
+    browserLaunchTitle: "Built-in Remote Browser",
+    browserLaunchHint: "Complete sign-in, 2FA, or verification inside an isolated remote Chrome and save session state to Vault.",
     browserTargetPh: "Vault site_key (e.g. github) or https://... URL",
     browserLaunchBtn: "Launch Remote Browser",
     browserNewTabBtn: "Pop out",
@@ -411,13 +411,13 @@ const DICT = {
     provMissingBadge: "Not installed",
     provInstallingBtn: "Installing…",
     provInstallBtn: "Install CLI",
-    provWebInWebLoginBtn: "🌐 Sign In (Web-in-Web)",
+    provWebInWebLoginBtn: "🌐 Sign In (Built-in Browser)",
     provExtLoginBtn: "External Browser ↗",
     provReloginBtn: "Re-authenticate",
     provCodePlaceholder: "Paste authorization code or callback URL...",
     provCodeSubmitBtn: "Verify",
-    provAgyCodeHint: "After signing in, copy the authorization code shown and paste it below.",
-    provAutoCallbackHint: "Signing in inside the Web-in-Web panel completes automatically (or paste code/callback URL below).",
+    provAgyCodeHint: "Signing in via the built-in browser captures & verifies the authorization code automatically! (Paste below only if using an external browser)",
+    provAutoCallbackHint: "Signing in via the built-in browser panel completes automatically (or paste code/callback URL below).",
     provApiKeySummary: "🔑 Use API Key instead",
     provApiKeyPh: "Enter API Key (sk-...)",
     provApiKeySaveBtn: "Save Key"
@@ -449,8 +449,9 @@ export function initLang(serverDefault) {
     const saved = normalizeLang(localStorage.getItem(STORAGE_KEY));
     if (saved) {
       currentLang = saved;
-    } else if (normalizeLang(serverDefault)) {
-      currentLang = normalizeLang(serverDefault);
+    } else {
+      const browserLang = normalizeLang(navigator.language);
+      currentLang = browserLang || normalizeLang(serverDefault) || "ko";
     }
   } catch (_) {}
   document.documentElement.lang = currentLang;

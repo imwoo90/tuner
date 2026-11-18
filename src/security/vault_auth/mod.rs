@@ -15,6 +15,7 @@
 //! - [`proxy`] (`proxy.rs`): Loopback `127.0.0.1` IPC registry, PID check, and SSRF ping guard.
 //! - [`proxy_relay`] (`proxy_relay.rs`): Public `:8743` HTTP/WebSocket reverse proxy routes.
 //! - [`server`] (`server.rs`): Loopback Axum UI/WebSocket server, single-viewer lock, and signal/TTL handler.
+//! - [`server_http`] (`server_http.rs`): Loopback HTTP routes and OAuth callback code probe.
 //! - [`tunnel`] (`tunnel.rs`): Warm `:8743` proxy registration with standalone `cloudflared` fallback.
 //!
 //! ## Search Tags
@@ -29,6 +30,7 @@ pub mod options;
 pub mod proxy;
 pub mod proxy_relay;
 pub mod server;
+pub mod server_http;
 pub mod tunnel;
 
 pub use options::{

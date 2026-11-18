@@ -24,6 +24,7 @@
 //! - [`events_bridge`] (`events_bridge.rs`): Telegram/Cron Web event hooks.
 //! - [`provider_install`] (`provider_install.rs`): Background CLI installer.
 //! - [`provider_oauth`] (`provider_oauth.rs`): Safe PTY CLI OAuth bridge.
+//! - [`provider_oauth_watch`] (`provider_oauth_watch.rs`): Web-in-Web OAuth auto-harvester.
 //! - [`provider_status`] (`provider_status.rs`): CLI readiness and `.env` store.
 //! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID and subagent tree.
 //! - [`tg_topics`] (`tg_topics.rs`): Telegram forum topic CRUD sync.
@@ -54,6 +55,7 @@ pub mod events;
 pub mod events_bridge;
 pub mod provider_install;
 pub mod provider_oauth;
+pub mod provider_oauth_watch;
 pub mod provider_status;
 pub mod subagent_tree;
 pub mod tg_topics;
