@@ -47,6 +47,20 @@ pub struct TunnelEndpointInfo {
 struct ProxyRouteEntry {
     local_port: u16,
     expires_at_secs: u64,
+    site_key: String,
+}
+
+/// Active HITL remote browser session descriptor exposed to authenticated Dashboard clients.
+#[derive(Clone, Debug, Serialize)]
+pub struct ActiveAuthSessionInfo {
+    /// One-time 64-hex session token.
+    pub token: String,
+    /// Canonical site key slug (`github`, `naver`, etc.).
+    pub site_key: String,
+    /// Remaining session TTL in seconds.
+    pub remaining_secs: u64,
+    /// Relative same-origin viewer path (`/auth/<token>`).
+    pub viewer_path: String,
 }
 
 /// Request payload for `POST /internal/auth/register`.
@@ -174,6 +188,24 @@ pub async fn has_active_auth_sessions() -> bool {
     !guard.is_empty()
 }
 
+/// Lists all active non-expired HITL remote browser sessions registered on `:8743`.
+pub async fn list_active_auth_sessions() -> Vec<ActiveAuthSessionInfo> {
+    let now = current_unix_secs();
+    let mut guard = registry().routes.lock().await;
+    guard.retain(|_, v| v.expires_at_secs > now);
+    let mut out: Vec<ActiveAuthSessionInfo> = guard
+        .iter()
+        .map(|(tok, e)| ActiveAuthSessionInfo {
+            token: tok.clone(),
+            site_key: e.site_key.clone(),
+            remaining_secs: e.expires_at_secs.saturating_sub(now),
+            viewer_path: format!("/auth/{tok}"),
+        })
+        .collect();
+    out.sort_by_key(|b| std::cmp::Reverse(b.remaining_secs));
+    out
+}
+
 pub(crate) async fn resolve_route_port(token: &str) -> Option<u16> {
     if !is_strict_hex_token(token) {
         return None;
@@ -192,24 +224,27 @@ async fn verify_ipc_header(headers: &HeaderMap) -> bool {
     constant_time_eq(val.as_bytes(), expected.as_bytes())
 }
 
-async fn verify_upstream_hitl_ping(local_port: u16, token: &str) -> bool {
-    let Ok(client) = reqwest::Client::builder()
+async fn verify_upstream_hitl_ping(local_port: u16, token: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(2))
         .build()
-    else {
-        return false;
-    };
+        .ok()?;
     let url = format!("http://127.0.0.1:{local_port}/auth/{token}/ping");
-    let Ok(resp) = client.get(&url).send().await else {
-        return false;
-    };
+    let resp = client.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
-        return false;
+        return None;
     }
-    resp.text()
-        .await
-        .is_ok_and(|body| body.trim() == HITL_PING_MAGIC)
+    let site_key = resp
+        .headers()
+        .get("x-tuner-site-key")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("browser")
+        .to_string();
+    let body = resp.text().await.ok()?;
+    (body.trim() == HITL_PING_MAGIC).then_some(site_key)
 }
 
 async fn handle_register(
@@ -222,13 +257,13 @@ async fn handle_register(
     if !is_strict_hex_token(&req.token) || req.local_port == 0 {
         return (StatusCode::BAD_REQUEST, "Invalid route token or port").into_response();
     }
-    if !verify_upstream_hitl_ping(req.local_port, &req.token).await {
+    let Some(site_key) = verify_upstream_hitl_ping(req.local_port, &req.token).await else {
         return (
             StatusCode::BAD_REQUEST,
             "Upstream port failed HITL ping verification",
         )
             .into_response();
-    }
+    };
     {
         let now = current_unix_secs();
         let mut guard = registry().routes.lock().await;
@@ -238,9 +273,11 @@ async fn handle_register(
             ProxyRouteEntry {
                 local_port: req.local_port,
                 expires_at_secs: req.expires_at_secs,
+                site_key,
             },
         );
     }
+    crate::messenger::web::events_bridge::hitl_updated(true).await;
     let public_url = crate::messenger::telegram::review::global_review_manager()
         .get_auth_url(&req.token)
         .await;
@@ -257,7 +294,12 @@ async fn handle_unregister(
     if !is_strict_hex_token(&req.token) {
         return (StatusCode::BAD_REQUEST, "Invalid token").into_response();
     }
-    let removed = registry().routes.lock().await.remove(&req.token).is_some();
+    let (removed, still_active) = {
+        let mut g = registry().routes.lock().await;
+        let rem = g.remove(&req.token).is_some();
+        (rem, !g.is_empty())
+    };
+    crate::messenger::web::events_bridge::hitl_updated(still_active).await;
     Json(serde_json::json!({ "removed": removed })).into_response()
 }
 

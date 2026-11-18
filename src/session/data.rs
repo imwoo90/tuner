@@ -44,6 +44,7 @@ impl Default for SessionData {
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
             last_handover_summary: None,
+            pinned: false,
         }
     }
 }
@@ -90,6 +91,9 @@ pub struct SessionData {
     #[serde(default)]
     /// Last handover summary.
     pub last_handover_summary: Option<String>,
+    #[serde(default)]
+    /// Pinned in Web Dashboard sidebar.
+    pub pinned: bool,
 }
 
 fn default_transport() -> String { "tg".to_string() }
@@ -116,6 +120,7 @@ impl SessionData {
             last_progress_msg_id: None,
             pending_attachments: Vec::new(),
             last_handover_summary: None,
+            pinned: false,
         }
     }
 

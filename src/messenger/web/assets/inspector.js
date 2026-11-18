@@ -1,7 +1,7 @@
 import { escapeHtml, renderMarkdown } from "/dashboard/assets/markdown.js";
 import { t, onLangChange } from "/dashboard/assets/i18n.js";
 
-export function createInspectorController({ apiFetch, getActiveSessionKey, onForceLogout }) {
+export function createInspectorController({ apiFetch, getActiveSessionKey, onForceLogout, onViewChange }) {
   const container = document.getElementById("inspector-content");
   const tabsNav = document.getElementById("inspector-tabs");
   const inspectorEl = document.getElementById("inspector");
@@ -10,6 +10,8 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
   let activeTab = "preview";
   let currentPreviewPath = "";
   let previewRawMode = false;
+  let activeHitlToken = "";
+  let lastDoneSiteKey = "";
   let renderSeq = 0;
 
   function showLoading(labelKey) {
@@ -24,6 +26,7 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
       ? inspectorEl.classList.contains("open")
       : !inspectorEl.classList.contains("collapsed");
     toggleBtn?.classList.toggle("active", open);
+    onViewChange?.();
   }
 
   function openPanel() {
@@ -72,9 +75,11 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
 
   function setTab(tabName) {
     activeTab = tabName;
+    inspectorEl.classList.toggle("wide-browser", tabName === "browser");
     tabsNav.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tabName);
     });
+    onViewChange?.();
     refreshCurrentTab();
   }
 
@@ -349,7 +354,10 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
     for (const e of vData.entries || []) {
       html += `<div class="card">
         <div class="card-row"><strong class="mono">${escapeHtml(e.site_key)}</strong>
-          <button class="btn btn-danger btn-sm vault-del-btn" data-key="${escapeHtml(e.site_key)}" type="button">${escapeHtml(t("vaultDeleteBtn"))}</button>
+          <div class="card-row">
+            <button class="btn btn-sm vault-auth-btn" data-key="${escapeHtml(e.site_key)}" type="button">${escapeHtml(t("vaultAuthBtn"))}</button>
+            <button class="btn btn-danger btn-sm vault-del-btn" data-key="${escapeHtml(e.site_key)}" type="button">${escapeHtml(t("vaultDeleteBtn"))}</button>
+          </div>
         </div>
         <div class="muted">${escapeHtml(e.title)} · ${escapeHtml(t("vaultAccountLabel"))}: <code>${escapeHtml(e.masked_username)}</code></div>
       </div>`;
@@ -371,12 +379,140 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
       });
       renderVaultTab();
     });
+    container.querySelectorAll(".vault-auth-btn").forEach((b) => {
+      b.addEventListener("click", () => launchBrowserAuth(b.dataset.key));
+    });
     container.querySelectorAll(".vault-del-btn").forEach((b) => {
       b.addEventListener("click", async () => {
         await apiFetch(`/dashboard/api/vault/entries/${encodeURIComponent(b.dataset.key)}`, { method: "DELETE" });
         renderVaultTab();
       });
     });
+  }
+
+  async function launchBrowserAuth(targetValue, explicitUrl = "") {
+    const cleanTarget = (targetValue || "").trim();
+    if (!cleanTarget) return;
+    lastDoneSiteKey = "";
+    openPanel();
+    activeTab = "browser";
+    inspectorEl.classList.add("wide-browser");
+    tabsNav.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === "browser");
+    });
+    onViewChange?.();
+    const seq = ++renderSeq;
+    showLoading("launchingBrowser");
+    const res = await apiFetch("/dashboard/api/hitl/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: cleanTarget, url: explicitUrl || null })
+    });
+    if (seq !== renderSeq || activeTab !== "browser") return;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      await renderBrowserTab(false, err.error || `${t("browserLaunchErr")} (${res.status})`);
+      return;
+    }
+    const data = await res.json();
+    if (data.session?.token) {
+      activeHitlToken = data.session.token;
+    }
+    await renderBrowserTab(false);
+  }
+
+  async function renderBrowserTab(preserveMounted = false, errMessage = "") {
+    if (preserveMounted && activeTab === "browser") {
+      const mounted = document.getElementById("hitl-iframe");
+      if (mounted && mounted.dataset.token) {
+        const check = await apiFetch("/dashboard/api/hitl");
+        if (check.ok) {
+          const d = await check.json();
+          if ((d.sessions || []).some((s) => s.token === mounted.dataset.token)) {
+            return;
+          }
+        }
+      }
+    }
+    const seq = ++renderSeq;
+    showLoading("loadingBrowser");
+    const res = await apiFetch("/dashboard/api/hitl");
+    if (seq !== renderSeq || activeTab !== "browser") return;
+    const data = res.ok ? await res.json() : { sessions: [] };
+    if (seq !== renderSeq || activeTab !== "browser") return;
+    const list = data.sessions || [];
+
+    if (list.length > 0 && !list.some((s) => s.token === activeHitlToken)) {
+      activeHitlToken = list[0].token;
+    } else if (list.length === 0) {
+      activeHitlToken = "";
+    }
+    const chosen = list.find((s) => s.token === activeHitlToken) || null;
+
+    let html = "";
+    if (errMessage) {
+      html += `<div class="alert alert-danger" id="hitl-launch-error">${escapeHtml(errMessage)}</div>`;
+    }
+    if (lastDoneSiteKey) {
+      html += `<div class="alert alert-ok" id="hitl-done-alert">${escapeHtml(t("browserDoneNotice", { site: lastDoneSiteKey }))}</div>`;
+    }
+
+    if (chosen) {
+      const viewerUrl = chosen.viewer_path || `/auth/${chosen.token}`;
+      const mins = Math.max(1, Math.ceil(Number(chosen.remaining_secs || 0) / 60));
+      const switcher = list.length > 1
+        ? `<select id="hitl-session-select" class="ctrl-select">${list.map((s) => `<option value="${escapeHtml(s.token)}"${s.token === chosen.token ? " selected" : ""}>${escapeHtml(s.site_key || "auth")}</option>`).join("")}</select>`
+        : `<strong>🌐 ${escapeHtml(chosen.site_key || "auth")}</strong> <span class="pill pill-ok">~${mins}m</span>`;
+      html += `<div class="card" style="padding:8px 11px;">
+        <div class="card-row">
+          <div class="card-row">${switcher}</div>
+          <div class="card-row">
+            <a class="btn btn-sm" href="${escapeHtml(viewerUrl)}" target="_blank" rel="noopener">${escapeHtml(t("browserNewTabBtn"))} ↗</a>
+            <button id="btn-refresh-browser" class="btn btn-sm" type="button">${escapeHtml(t("refresh"))}</button>
+          </div>
+        </div>
+      </div>
+      <div class="hitl-frame-wrap">
+        <iframe id="hitl-iframe" class="hitl-frame" data-token="${escapeHtml(chosen.token)}" src="${escapeHtml(viewerUrl)}" title="Remote Browser"></iframe>
+      </div>`;
+    } else {
+      html += `<form id="hitl-launch-form" class="card">
+        <div class="card-row"><strong id="browser-tab-heading">${escapeHtml(t("browserLaunchTitle"))}</strong>
+          <button id="btn-refresh-browser" class="btn btn-sm" type="button">${escapeHtml(t("refresh"))}</button>
+        </div>
+        <div class="muted">${escapeHtml(t("browserLaunchHint"))}</div>
+        <div class="ask-writein-row">
+          <input id="hitl-target-input" type="text" placeholder="${escapeHtml(t("browserTargetPh"))}" required>
+          <button id="btn-hitl-launch" class="btn btn-primary btn-sm" type="submit">${escapeHtml(t("browserLaunchBtn"))}</button>
+        </div>
+      </form>`;
+    }
+
+    container.innerHTML = html;
+    document.getElementById("btn-refresh-browser")?.addEventListener("click", () => renderBrowserTab(false));
+    document.getElementById("hitl-session-select")?.addEventListener("change", (e) => {
+      activeHitlToken = e.target.value;
+      renderBrowserTab(false);
+    });
+    document.getElementById("hitl-launch-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = document.getElementById("hitl-target-input")?.value || "";
+      launchBrowserAuth(val);
+    });
+  }
+
+  function openBrowserSession(token = "") {
+    if (token) activeHitlToken = token;
+    lastDoneSiteKey = "";
+    openTab("browser");
+  }
+
+  function notifyBrowserDone(siteKey) {
+    lastDoneSiteKey = siteKey || "site";
+    activeHitlToken = "";
+    if (!isCollapsed() && activeTab === "browser") {
+      renderBrowserTab(false);
+    }
   }
 
   async function renderSecurityTab() {
@@ -439,6 +575,7 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
   function refreshCurrentTab() {
     if (activeTab === "tree") return renderTreeTab();
     if (activeTab === "preview") return renderPreviewTab();
+    if (activeTab === "browser") return renderBrowserTab(false);
     if (activeTab === "usage") return renderUsageTab();
     if (activeTab === "cron") return renderCronTab();
     if (activeTab === "vault") return renderVaultTab();
@@ -451,6 +588,7 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
 
   onLangChange(() => {
     if (!isCollapsed()) {
+      if (activeTab === "browser" && document.getElementById("hitl-iframe")) return;
       refreshCurrentTab();
     }
   });
@@ -463,6 +601,14 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
     isCollapsed,
     refreshCurrentTab,
     openFilePreview,
+    openBrowserSession,
+    launchBrowserAuth,
+    notifyBrowserDone,
+    onHitlUpdated: () => {
+      if (!isCollapsed() && activeTab === "browser") {
+        renderBrowserTab(true);
+      }
+    },
     getActiveTab: () => activeTab
   };
 }

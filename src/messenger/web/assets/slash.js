@@ -9,6 +9,7 @@ const KO_DESC = {
   usage: "프로바이더별 쿼터 및 토큰 사용량 열기",
   cron: "스케줄 작업(Cron) 목록 및 즉시 실행",
   vault: "암호화된 사이트 자격 증명(Vault) 열기",
+  auth: "패널 내 원격 브라우저(로그인·2FA·인증 핸드오프) 열기",
   security: "PIN 비밀번호 설정 및 로그인 세션 관리",
   status: "현재 세션 및 백그라운드 에이전트 상태 보기",
   provider: "AI 엔진 변경 (예: /provider claude)",
@@ -37,7 +38,7 @@ const KO_DESC = {
 };
 
 const INSTANT_BUILTINS = new Set([
-  "new", "reset", "stop", "abort", "usage", "cron", "vault", "security", "status", "help", "lang"
+  "new", "reset", "stop", "abort", "usage", "cron", "vault", "auth", "security", "status", "help", "lang"
 ]);
 
 export function describeCommand(cmdObj) {

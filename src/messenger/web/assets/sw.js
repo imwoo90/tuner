@@ -1,4 +1,4 @@
-const CACHE_NAME = "tuner-dash-static-v3";
+const CACHE_NAME = "tuner-dash-static-v4";
 const STATIC_ASSETS = [
   "/dashboard/assets/dashboard.css",
   "/dashboard/assets/app.js",

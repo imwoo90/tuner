@@ -38,6 +38,16 @@
           </div>
 
           <input id="session-search" class="search-input" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="대화 검색..." autocomplete="off">
+          <div id="sidebar-transport-tabs" class="seg-tabs" role="tablist">
+            <button id="seg-web" class="seg-tab active" data-transport="web" type="button">
+              <span data-i18n="segWeb">웹 대화</span>
+              <span id="seg-web-count" class="seg-count">0</span>
+            </button>
+            <button id="seg-tg" class="seg-tab" data-transport="tg" type="button">
+              <span data-i18n="segTg">텔레그램</span>
+              <span id="seg-tg-count" class="seg-count">0</span>
+            </button>
+          </div>
           <span id="warm-pool-pill" class="hidden">0</span>
 
           <form id="new-topic-form" class="new-topic-form hidden">
@@ -57,6 +67,9 @@
         </div>
 
         <div id="session-list" class="session-list"></div>
+        <div class="sidebar-footer">
+          <button id="btn-prune-sessions" class="ghost-btn sidebar-prune-btn" type="button" data-i18n="pruneBtn" data-i18n-title="pruneBtnTitle">빈 대화·오래된 기록 정리</button>
+        </div>
       </aside>
 
       <main id="chat-pane" class="chat-pane">
@@ -111,6 +124,13 @@
 
         <footer class="composer-shell">
           <div class="composer-container">
+            <div id="hitl-banner" class="hitl-banner hidden" role="status">
+              <div class="hitl-banner-info">
+                <span class="pulse-dot"></span>
+                <span id="hitl-banner-label"></span>
+              </div>
+              <button id="btn-hitl-open" class="btn btn-primary btn-sm" type="button" data-i18n="hitlBannerOpenBtn">패널에서 열기</button>
+            </div>
             <div id="slash-menu" class="autocomplete-menu hidden" role="listbox"></div>
 
             <div class="composer-card">
@@ -156,6 +176,7 @@
         </div>
         <nav id="inspector-tabs" class="inspector-tabs" role="tablist">
           <button class="tab-btn active" data-tab="preview" type="button" data-i18n="tabPreview">미리보기</button>
+          <button class="tab-btn" data-tab="browser" type="button"><span data-i18n="tabBrowser">브라우저</span><span id="tab-browser-dot" class="pulse-dot hidden" style="margin-left:5px;"></span></button>
           <button class="tab-btn" data-tab="usage" type="button" data-i18n="tabUsage">사용량</button>
           <button class="tab-btn" data-tab="cron" type="button" data-i18n="tabCron">스케줄</button>
           <button class="tab-btn" data-tab="vault" type="button" data-i18n="tabVault">보안 금고</button>

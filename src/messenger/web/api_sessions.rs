@@ -58,6 +58,8 @@ pub struct SessionSummary {
     pub busy: bool,
     /// True when waiting for an interactive `AskQuestion` response.
     pub asking: bool,
+    /// True when pinned to the top of the sidebar.
+    pub pinned: bool,
 }
 
 /// Checks whether `sess` currently has an in-flight turn or active `AskQuestion` state.
@@ -101,6 +103,7 @@ pub async fn build_session_summary(ctx: &WebAppCtx, sess: &SessionData) -> Sessi
         last_active: sess.last_active.clone(),
         busy,
         asking,
+        pinned: sess.pinned,
     }
 }
 
@@ -195,6 +198,8 @@ pub struct PatchConfigPayload {
     pub model: Option<String>,
     /// Optional new reasoning effort level.
     pub effort: Option<String>,
+    /// Optional sidebar pin flag.
+    pub pinned: Option<bool>,
 }
 
 fn validate_model_and_effort(
@@ -247,6 +252,9 @@ async fn apply_model_and_effort_patch(
             }
             if let Some(tname) = name_opt {
                 cur.topic_name = Some(tname.to_string());
+            }
+            if let Some(pin) = payload.pinned {
+                cur.pinned = pin;
             }
             true
         })

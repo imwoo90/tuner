@@ -44,6 +44,11 @@ fn build_slash_catalog(prov: &str) -> Vec<serde_json::Value> {
         cmds.push(serde_json::json!({ "command": cmd, "description": desc, "kind": kind }));
     }
     cmds.push(serde_json::json!({
+        "command": "auth",
+        "description": "Open in-dashboard remote browser for login / 2FA / HITL handoff",
+        "kind": "builtin"
+    }));
+    cmds.push(serde_json::json!({
         "command": "help",
         "description": "Show available slash commands and shortcuts",
         "kind": "builtin"

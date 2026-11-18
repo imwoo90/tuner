@@ -174,7 +174,7 @@ async fn terminate_topic_sessions_for_reset(ctx: &WebAppCtx, key: &SessionKey) -
     init_prov
 }
 
-/// Deletes a Web-native (`web:0:<tid>`) topic session (`DELETE /dashboard/api/sessions`).
+/// Deletes a persisted `web` or `tg` session from `sessions.json` (`DELETE /dashboard/api/sessions`).
 pub async fn handle_delete_session(
     ext: Option<Extension<Arc<WebAppCtx>>>,
     headers: HeaderMap,
@@ -190,14 +190,51 @@ pub async fn handle_delete_session(
     let Ok(key) = payload.session_key.parse::<SessionKey>() else {
         return json_err(StatusCode::BAD_REQUEST, "Invalid session_key");
     };
-    if key.transport != "web" || key.chat_id != 0 {
-        return json_err(StatusCode::BAD_REQUEST, "Only web-native sessions can be deleted");
-    }
     let lock = ctx.sessions.lock_pool.get((key.chat_id, key.topic_id));
     let _guard = lock.lock().await;
     let _ = terminate_topic_sessions_for_reset(&ctx, &key).await;
-    match ctx.sessions.delete_web_session(&key).await {
+    match ctx.sessions.remove_session(&key).await {
         Ok(removed) => Json(serde_json::json!({ "ok": true, "removed": removed })).into_response(),
         Err(e) => json_err(StatusCode::BAD_REQUEST, &e),
+    }
+}
+
+/// Request payload for `POST /dashboard/api/sessions/prune`.
+#[derive(Deserialize)]
+pub struct PruneSessionsPayload {
+    /// Target transport (`web` or `tg`).
+    pub transport: String,
+    /// Inactive age threshold in days (default `30`).
+    #[serde(default = "default_prune_days")]
+    pub older_than_days: i64,
+}
+
+fn default_prune_days() -> i64 {
+    30
+}
+
+/// Prunes unpinned empty or stale sessions (`POST /dashboard/api/sessions/prune`).
+pub async fn handle_prune_sessions(
+    ext: Option<Extension<Arc<WebAppCtx>>>,
+    headers: HeaderMap,
+    Json(payload): Json<PruneSessionsPayload>,
+) -> Response {
+    let ctx = match resolve_ctx(ext) {
+        Ok(c) => c,
+        Err(r) => return *r,
+    };
+    if let Err(r) = require_mutation_auth(&ctx, &headers).await {
+        return *r;
+    }
+    let tr = if payload.transport == "tg" { "tg" } else { "web" };
+    match ctx.sessions.prune_inactive_sessions(tr, payload.older_than_days).await {
+        Ok(keys) => {
+            let count = keys.len();
+            for k in &keys {
+                let _ = terminate_topic_sessions_for_reset(&ctx, k).await;
+            }
+            Json(serde_json::json!({ "ok": true, "pruned_count": count })).into_response()
+        }
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }
 }

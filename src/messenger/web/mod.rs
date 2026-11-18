@@ -10,8 +10,9 @@
 //! - [`api_chat`] (`api_chat.rs`): Prompt dispatch, soft `/stop`, and `/new` resets.
 //! - [`api_files`] (`api_files.rs`): Sandboxed `/file` preview/raw and Zero-Knowledge `/vault`.
 //! - [`api_history`] (`api_history.rs`): JSONL chat history, active ask, and multipart upload.
+//! - [`api_hitl`] (`api_hitl.rs`): In-dashboard HITL remote browser status and launcher.
 //! - [`api_models`] (`api_models.rs`): Live provider model & reasoning effort catalog.
-//! - [`api_ops`] (`api_ops.rs`): Structured `/usage`, `/cron`, and `/hitl` operational APIs.
+//! - [`api_ops`] (`api_ops.rs`): Structured `/usage` and `/cron` operational APIs.
 //! - [`api_sessions`] (`api_sessions.rs`): Session CRUD and provider/model/effort config.
 //! - [`assets_http`] (`assets_http.rs`): Embedded PWA HTML, CSS, JS, manifest, and SW handlers.
 //! - [`auth`] (`auth.rs`): Persistent `0600` auth operations, Magic Links, and PBKDF2 PINs.
@@ -34,6 +35,7 @@ pub mod api_ask_helpers;
 pub mod api_chat;
 pub mod api_files;
 pub mod api_history;
+pub mod api_hitl;
 pub mod api_models;
 pub mod api_ops;
 pub mod api_sessions;
@@ -283,6 +285,7 @@ fn attach_session_routes(r: Router) -> Router {
         .route("/dashboard/api/sessions/ask", post(api_ask::handle_answer_ask))
         .route("/dashboard/api/sessions/stop", post(api_chat::handle_stop_session))
         .route("/dashboard/api/sessions/new", post(api_chat::handle_new_session))
+        .route("/dashboard/api/sessions/prune", post(api_chat::handle_prune_sessions))
         .route("/dashboard/api/models", get(api_models::handle_list_models))
 }
 
@@ -295,7 +298,8 @@ fn attach_ops_routes(r: Router) -> Router {
         .route("/dashboard/api/file", get(api_files::handle_get_file))
         .route("/dashboard/api/vault/entries", get(api_files::handle_vault_list).post(api_files::handle_vault_upsert))
         .route("/dashboard/api/vault/entries/:site_key", delete(api_files::handle_vault_delete))
-        .route("/dashboard/api/hitl", get(api_ops::handle_hitl_status))
+        .route("/dashboard/api/hitl", get(api_hitl::handle_hitl_status))
+        .route("/dashboard/api/hitl/start", post(api_hitl::handle_hitl_start))
 }
 
 /// Builds the `/dashboard` and `/dashboard/api/*` Axum router.

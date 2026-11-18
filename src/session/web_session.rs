@@ -1,16 +1,17 @@
-//! # Web-Native Session Allocation (`web_session.rs`)
+//! # Web-Native Session Allocation & History Pruning (`web_session.rs`)
 //!
 //! ## Overview
 //! Extends [`crate::session::manager::SessionManager`] with atomic monotonic `web:0:<tid>`
-//! topic creation under the persisted session mutex.
+//! topic creation, single-session removal, and unpinned inactive/empty session pruning.
 //!
 //! ## Search Tags
-//! #web-session, #topic-allocation
+//! #web-session, #topic-allocation, #session-pruning
 
 use super::create_seeded_session;
 use super::data::SessionData;
 use super::key::SessionKey;
 use super::manager::SessionManager;
+use chrono::{DateTime, Duration, Utc};
 
 impl SessionManager {
     /// Atomically allocates the next monotonic `web:0:<tid>` session and persists it.
@@ -43,11 +44,8 @@ impl SessionManager {
         Ok(sess)
     }
 
-    /// Removes a Web-native (`web:0:<tid>`) session entry from persisted storage.
-    pub async fn delete_web_session(&self, key: &SessionKey) -> Result<bool, String> {
-        if key.transport != "web" || key.chat_id != 0 {
-            return Err("Only web-native topics can be deleted from the dashboard".to_string());
-        }
+    /// Removes a persisted `web` or `tg` session entry from `sessions.json`.
+    pub async fn remove_session(&self, key: &SessionKey) -> Result<bool, String> {
         let _guard = self.lock.lock().await;
         let mut map = self.load()?;
         let removed = map.remove(&key.storage_key()).is_some();
@@ -55,5 +53,37 @@ impl SessionManager {
             self.save(&map)?;
         }
         Ok(removed)
+    }
+
+    /// Prunes unpinned empty or stale sessions matching `transport` (`web` or `tg`).
+    pub async fn prune_inactive_sessions(
+        &self,
+        transport: &str,
+        older_than_days: i64,
+    ) -> Result<Vec<SessionKey>, String> {
+        let _guard = self.lock.lock().await;
+        let mut map = self.load()?;
+        let cutoff = Utc::now() - Duration::days(older_than_days.max(1));
+        let mut pruned = Vec::new();
+        map.retain(|_, s| {
+            if s.transport != transport || s.pinned {
+                return true;
+            }
+            let total_msgs: i64 = s.provider_sessions.values().map(|p| p.message_count).sum();
+            let has_history = total_msgs > 0
+                || s.provider_sessions.values().any(|p| !p.past_session_ids.is_empty());
+            let is_stale = DateTime::parse_from_rfc3339(&s.last_active)
+                .map(|dt| dt.with_timezone(&Utc) < cutoff)
+                .unwrap_or(false);
+            if !has_history || is_stale {
+                pruned.push(s.session_key());
+                return false;
+            }
+            true
+        });
+        if !pruned.is_empty() {
+            self.save(&map)?;
+        }
+        Ok(pruned)
     }
 }

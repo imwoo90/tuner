@@ -84,8 +84,17 @@ ws.onmessage = (ev) => {
       if (m.url) st.textContent = m.url;
       if (m.msg) st.textContent = m.msg;
       if (m.done) {
-        document.getElementById('btnDone').disabled = true;
-        alert(m.msg || '세션 저장이 완료되었습니다! 이 창을 닫으셔도 됩니다.');
+        const doneBtn = document.getElementById('btnDone');
+        doneBtn.disabled = true;
+        doneBtn.textContent = '✓ 저장됨';
+        st.textContent = m.msg || '세션 저장이 완료되었습니다.';
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'tuner_hitl_done', site_key: BOOT.site_key }, location.origin);
+          } else {
+            alert(m.msg || '세션 저장이 완료되었습니다! 이 창을 닫으셔도 됩니다.');
+          }
+        } catch (_) {}
       }
     } catch (_) {}
     return;

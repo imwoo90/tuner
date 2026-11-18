@@ -1158,9 +1158,51 @@ async fn test_slash_catalog_and_web_session_delete() {
     assert!(cmds.iter().any(|c| c["command"] == "simplify" && c["kind"] == "workflow"));
     assert!(cmds.iter().any(|c| c["command"] == "usage" && c["kind"] == "builtin"));
 
-    // 3. DELETE /dashboard/api/sessions deletes web:0:* but rejects tg:*
-    let web_sess = ctx.sessions.create_web_session(Some("Temp Web".into()), "antigravity", "gemini-4-hydrogen", None).await.unwrap();
-    let web_sk = web_sess.session_key().storage_key();
+    // 3. Pin, Rename, Prune & Delete sessions (supports both web & tg)
+    let pinned_sess = ctx.sessions.create_web_session(Some("Pinned Chat".into()), "antigravity", "gemini-4-hydrogen", None).await.unwrap();
+    let pinned_sk = pinned_sess.session_key().storage_key();
+    let patch_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/dashboard/api/sessions/config")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({
+                    "session_key": pinned_sk,
+                    "pinned": true,
+                    "topic_name": "Starred Spec"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(patch_res.status(), StatusCode::OK);
+    let updated_pinned = ctx.sessions.get_active(&pinned_sess.session_key()).await.unwrap().unwrap();
+    assert!(updated_pinned.pinned);
+    assert_eq!(updated_pinned.topic_name.as_deref(), Some("Starred Spec"));
+
+    let empty_sess = ctx.sessions.create_web_session(Some("Empty Temp".into()), "antigravity", "gemini-4-hydrogen", None).await.unwrap();
+    let prune_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/dashboard/api/sessions/prune")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({ "transport": "web", "older_than_days": 30 }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(prune_res.status(), StatusCode::OK);
+    assert!(ctx.sessions.get_active(&empty_sess.session_key()).await.unwrap().is_none());
+    assert!(ctx.sessions.get_active(&pinned_sess.session_key()).await.unwrap().is_some());
+
     let del_ok = app
         .clone()
         .oneshot(
@@ -1170,26 +1212,43 @@ async fn test_slash_catalog_and_web_session_delete() {
                 .header(header::COOKIE, &cookie)
                 .header("x-tuner-csrf", &csrf)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::json!({ "session_key": web_sk }).to_string()))
+                .body(Body::from(serde_json::json!({ "session_key": pinned_sk }).to_string()))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(del_ok.status(), StatusCode::OK);
-    assert!(ctx.sessions.get_active(&web_sess.session_key()).await.unwrap().is_none());
+    assert!(ctx.sessions.get_active(&pinned_sess.session_key()).await.unwrap().is_none());
 
-    let del_tg = app
+    // 4. HITL status & validation
+    let hitl_res = app
+        .clone()
         .oneshot(
             Request::builder()
-                .method(Method::DELETE)
-                .uri("/dashboard/api/sessions")
+                .uri("/dashboard/api/hitl")
                 .header(header::COOKIE, &cookie)
-                .header("x-tuner-csrf", &csrf)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"session_key":"tg:12345"}"#))
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(del_tg.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(hitl_res.status(), StatusCode::OK);
+    let h_json: serde_json::Value =
+        serde_json::from_slice(&to_bytes(hitl_res.into_body(), 65536).await.unwrap()).unwrap();
+    assert!(h_json["sessions"].is_array());
+
+    let bad_hitl = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/dashboard/api/hitl/start")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"target":"file:///etc/passwd"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bad_hitl.status(), StatusCode::BAD_REQUEST);
 }

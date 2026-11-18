@@ -136,7 +136,12 @@ async fn handle_viewer_ping(
     if !state.is_valid_token(&token) || state.saved_done.load(Ordering::SeqCst) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    (StatusCode::OK, HITL_PING_MAGIC).into_response()
+    let mut resp = (StatusCode::OK, HITL_PING_MAGIC).into_response();
+    if let Ok(hv) = header::HeaderValue::from_str(&state.site_key) {
+        resp.headers_mut()
+            .insert(header::HeaderName::from_static("x-tuner-site-key"), hv);
+    }
+    resp
 }
 
 async fn handle_viewer_html(

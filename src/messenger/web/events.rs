@@ -34,6 +34,8 @@ pub enum WebEvent {
         effort: Option<String>,
         /// Human-readable topic title.
         topic_name: Option<String>,
+        /// True when pinned at the top of the sidebar.
+        pinned: bool,
         /// True while a foreground or background turn is active.
         busy: bool,
         /// True while waiting for an `AskQuestion` response.
@@ -106,6 +108,11 @@ pub enum WebEvent {
         enabled: bool,
         /// Latest run status string, if any.
         last_run_status: Option<String>,
+    },
+    /// Active HITL remote browser auth sessions changed.
+    HitlUpdated {
+        /// True when one or more `/auth/:token` routes are live.
+        active: bool,
     },
 }
 
@@ -222,6 +229,7 @@ pub async fn emit_session_updated(ctx: &Arc<super::WebAppCtx>, sess: &SessionDat
             model,
             effort,
             topic_name: sess.topic_name.clone(),
+            pinned: sess.pinned,
             busy,
             asking,
         })

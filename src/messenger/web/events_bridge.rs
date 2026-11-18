@@ -216,3 +216,8 @@ pub fn cron_updated(job_id: &str, enabled: bool, last_run_status: Option<String>
         });
     }
 }
+
+/// Broadcasts [`WebEvent::HitlUpdated`] when a HITL remote browser route is registered or closed.
+pub async fn hitl_updated(active: bool) {
+    publish_global(WebEvent::HitlUpdated { active }).await;
+}

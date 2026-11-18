@@ -53,6 +53,9 @@ async fn handle_proxy_page(Path(token): Path<String>) -> Response {
             if let Ok(hv) = header::HeaderValue::from_str("no-store, no-cache, must-revalidate") {
                 out.headers_mut().insert(header::CACHE_CONTROL, hv);
             }
+            if let Ok(hv) = header::HeaderValue::from_str("SAMEORIGIN") {
+                out.headers_mut().insert(header::X_FRAME_OPTIONS, hv);
+            }
             out
         }
         Ok(resp) => StatusCode::from_u16(resp.status().as_u16())

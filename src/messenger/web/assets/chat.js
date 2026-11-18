@@ -343,20 +343,21 @@ export function createChatController({
   }
 
   async function runBuiltinSlash(cmd, args) {
-    if (!state.session) return;
-    if (cmd === "new" || cmd === "reset") return resetCurrentSession();
-    if (cmd === "stop" || cmd === "abort") return stopCurrentSession();
     if (cmd === "usage") return onOpenInspectorTab?.("usage");
     if (cmd === "cron") return onOpenInspectorTab?.("cron");
     if (cmd === "vault") return onOpenInspectorTab?.("vault");
+    if (cmd === "auth") return onOpenInspectorTab?.("browser");
     if (cmd === "security") return onOpenInspectorTab?.("security");
     if (cmd === "status") return onOpenInspectorTab?.("tree");
     if (cmd === "lang") {
       if (args) setLang(args);
       else toggleLang();
-      appendLocalSystemNotice(t("langChangedNotice"));
+      if (state.session) appendLocalSystemNotice(t("langChangedNotice"));
       return;
     }
+    if (!state.session) return;
+    if (cmd === "new" || cmd === "reset") return resetCurrentSession();
+    if (cmd === "stop" || cmd === "abort") return stopCurrentSession();
     if (cmd === "provider") {
       const p = args.toLowerCase();
       if (p === "agy" || p === "antigravity") return updateConfig({ provider: "antigravity" });
@@ -392,8 +393,23 @@ export function createChatController({
     onRunBuiltin: runBuiltinSlash
   });
 
+  async function ensureActiveSession(seedText = "") {
+    if (state.session) return state.session;
+    const title = seedText.replace(/\s+/g, " ").trim().slice(0, 36) || null;
+    const prov = els.selProvider?.value || "antigravity";
+    const res = await apiFetch("/dashboard/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic_name: title, provider: prov })
+    });
+    if (!res.ok) return null;
+    const created = await res.json();
+    await selectSession(created);
+    onRefreshSessions?.();
+    return created;
+  }
+
   async function sendPrompt() {
-    if (!state.session) return;
     const text = els.input.value.trim();
     if (!text && !state.pendingFiles.length) return;
 
@@ -406,6 +422,11 @@ export function createChatController({
         await runBuiltinSlash(builtin.command, builtin.args);
         return;
       }
+    }
+
+    if (!state.session) {
+      const created = await ensureActiveSession(text);
+      if (!created) return;
     }
 
     els.input.value = "";
@@ -432,7 +453,11 @@ export function createChatController({
   }
 
   async function uploadFiles(fileList) {
-    if (!state.session || !fileList || !fileList.length) return;
+    if (!fileList || !fileList.length) return;
+    if (!state.session) {
+      const created = await ensureActiveSession(fileList[0]?.name || "");
+      if (!created) return;
+    }
     for (const file of fileList) {
       const fd = new FormData();
       fd.append("session_key", state.session.session_key);

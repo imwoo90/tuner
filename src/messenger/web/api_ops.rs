@@ -1,11 +1,11 @@
-//! # Operational Usage, Cron & HITL Control API (`api_ops.rs`)
+//! # Operational Usage & Cron Control API (`api_ops.rs`)
 //!
 //! ## Overview
-//! Exposes structured multi-provider `/usage` telemetry (`antigravity`, `claude`, `codex`),
-//! `/cron` schedule inspection, toggle, and run-now endpoints, plus HITL auth session status.
+//! Exposes structured multi-provider `/usage` telemetry (`antigravity`, `claude`, `codex`)
+//! and `/cron` schedule inspection, toggle, and run-now endpoints.
 //!
 //! ## Search Tags
-//! #web-usage, #web-cron, #hitl-status
+//! #web-usage, #web-cron
 
 use super::auth_http::{json_err, require_auth, require_mutation_auth};
 use super::events::WebEvent;
@@ -269,20 +269,4 @@ pub async fn handle_run_cron(
             .await;
     });
     (StatusCode::ACCEPTED, Json(serde_json::json!({ "ok": true, "id": id }))).into_response()
-}
-
-/// Reports whether any HITL remote browser auth session is active (`GET /dashboard/api/hitl`).
-pub async fn handle_hitl_status(
-    ext: Option<Extension<Arc<WebAppCtx>>>,
-    headers: HeaderMap,
-) -> Response {
-    let ctx = match resolve_ctx(ext) {
-        Ok(c) => c,
-        Err(r) => return *r,
-    };
-    if let Err(r) = require_auth(&ctx, &headers).await {
-        return *r;
-    }
-    let active = crate::security::vault_auth::proxy::has_active_auth_sessions().await;
-    Json(serde_json::json!({ "active": active })).into_response()
 }
