@@ -6,7 +6,6 @@ import { createInspectorController } from "/dashboard/assets/inspector.js";
 let csrfToken = "";
 let sessions = [];
 let activeTransport = "web";
-let lastSelectedKey = { web: null, tg: null };
 let renamingKey = "";
 let confirmingDeleteKey = "";
 let confirmDeleteTimer = null;
@@ -52,21 +51,10 @@ const chat = createChatController({
   apiFetch,
   onOpenFile: (path) => inspector.openFilePreview(path),
   onOpenInspectorTab: (tab) => inspector.openTab(tab),
-  onRefreshSessions: () => loadSessions(false),
+  onRefreshSessions: () => loadSessions(),
   getActiveTransport: () => activeTransport,
   getPreferredTgChatId
 });
-
-function rememberSelection(s) {
-  if (!s) return;
-  if (s.transport === "tg") lastSelectedKey.tg = s.session_key;
-  else lastSelectedKey.web = s.session_key;
-}
-
-async function selectAndRemember(s) {
-  rememberSelection(s);
-  await chat.selectSession(s);
-}
 
 function closeDrawers() {
   document.getElementById("sidebar").classList.remove("open");
@@ -109,6 +97,7 @@ const BUCKET_ORDER = [
 
 function syncTransportTabs() {
   const isTg = activeTransport === "tg";
+  const isDraft = !chat.getActiveSessionKey();
   const webCnt = sessions.filter((s) => s.transport === "web").length;
   const tgCnt = sessions.filter((s) => s.transport === "tg").length;
   const webCntEl = document.getElementById("seg-web-count");
@@ -122,18 +111,7 @@ function syncTransportTabs() {
   if (newBtn) {
     newBtn.textContent = isTg ? t("newTgTopicBtn") : t("newTopicBtn");
     newBtn.title = isTg ? t("newTgTopicTitle") : t("newTopicTitle");
-  }
-  const modeLbl = document.getElementById("new-topic-mode-label");
-  if (modeLbl) {
-    modeLbl.textContent = isTg ? t("formModeTg") : t("formModeWeb");
-  }
-  const nameInp = document.getElementById("new-topic-name");
-  if (nameInp) {
-    nameInp.placeholder = isTg ? t("tgTopicNamePh") : t("topicNamePlaceholder");
-  }
-  const subBtn = document.getElementById("btn-create-topic-submit");
-  if (subBtn && !subBtn.disabled) {
-    subBtn.textContent = isTg ? t("createTgTopicBtn") : t("create");
+    newBtn.classList.toggle("active", isDraft);
   }
 }
 
@@ -144,7 +122,7 @@ async function patchSessionMeta(sessionKey, patchBody) {
     body: JSON.stringify({ session_key: sessionKey, ...patchBody })
   });
   if (res.ok) {
-    await loadSessions(false);
+    await loadSessions();
   }
 }
 
@@ -204,13 +182,13 @@ function buildSessionRow(s, activeKey) {
     <div class="session-item-meta">
       <span>${escapeHtml(s.provider)}</span>
       <span>·</span>
-      <span>${escapeHtml(formatShortModel(s.model))}</span>
+      <span class="session-model-text">${escapeHtml(formatShortModel(s.model))}</span>
     </div>`;
 
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     confirmingDeleteKey = "";
     closeDrawers();
-    selectAndRemember(s);
+    await chat.selectSession(s);
     renderSessionList();
     if (!inspector.isCollapsed() && (inspector.getActiveTab() === "tree" || inspector.getActiveTab() === "usage")) {
       inspector.refreshCurrentTab();
@@ -275,14 +253,10 @@ function buildSessionRow(s, activeKey) {
       })
     });
     if (res.ok) {
-      if (lastSelectedKey[s.transport] === s.session_key) {
-        lastSelectedKey[s.transport] = null;
-      }
       const wasActive = s.session_key === chat.getActiveSessionKey();
-      await loadSessions(false);
+      await loadSessions();
       if (wasActive) {
-        const nextInTab = sessions.find((it) => it.transport === activeTransport) || null;
-        await selectAndRemember(nextInTab);
+        await chat.selectSession(null);
         renderSessionList();
       }
     }
@@ -348,16 +322,7 @@ function renderSessionList() {
   }
 }
 
-function pickSessionForTransport(tr) {
-  const remembered = lastSelectedKey[tr];
-  if (remembered) {
-    const found = sessions.find((s) => s.session_key === remembered && s.transport === tr);
-    if (found) return found;
-  }
-  return sessions.find((s) => s.transport === tr) || null;
-}
-
-async function loadSessions(selectFirstIfNone = true) {
+async function loadSessions() {
   const res = await apiFetch("/dashboard/api/sessions");
   if (!res.ok) return;
   const data = await res.json();
@@ -367,13 +332,9 @@ async function loadSessions(selectFirstIfNone = true) {
   if (wpEl) wpEl.textContent = `${Number(wp.total_active || 0)}`;
 
   const activeKey = chat.getActiveSessionKey();
-  if (selectFirstIfNone && (!activeKey || !sessions.some((s) => s.session_key === activeKey))) {
-    const chosen = pickSessionForTransport(activeTransport);
-    await selectAndRemember(chosen);
-  } else if (activeKey) {
+  if (activeKey) {
     const fresh = sessions.find((s) => s.session_key === activeKey);
     if (fresh) {
-      rememberSelection(fresh);
       chat.handleWsEvent({
         type: "session_updated",
         session_key: fresh.session_key,
@@ -385,6 +346,8 @@ async function loadSessions(selectFirstIfNone = true) {
         busy: fresh.busy,
         asking: fresh.asking
       });
+    } else {
+      await chat.selectSession(null);
     }
   }
   renderSessionList();
@@ -443,10 +406,10 @@ function connectWebSocket() {
           target.asking = ev.asking;
           renderSessionList();
         } else {
-          loadSessions(false);
+          loadSessions();
         }
       } else if (ev.type === "turn_result") {
-        loadSessions(false);
+        loadSessions();
         if (!inspector.isCollapsed() && inspector.getActiveTab() === "tree") {
           inspector.refreshCurrentTab();
         }
@@ -476,6 +439,15 @@ function syncThemeIcon() {
   btn.title = isDark ? t("switchToLight") : t("switchToDark");
 }
 
+async function openDraftMode() {
+  confirmingDeleteKey = "";
+  renamingKey = "";
+  closeDrawers();
+  await chat.selectSession(null);
+  renderSessionList();
+  chat.focusComposer();
+}
+
 function setupUiListeners() {
   document.getElementById("session-search").addEventListener("input", renderSessionList);
 
@@ -486,14 +458,19 @@ function setupUiListeners() {
       activeTransport = nextTr;
       renamingKey = "";
       confirmingDeleteKey = "";
-      document.getElementById("new-topic-error")?.classList.add("hidden");
-      const targetSess = pickSessionForTransport(activeTransport);
-      rememberSelection(targetSess);
       renderSessionList();
-      await selectAndRemember(targetSess);
-      renderSessionList();
+      const activeKey = chat.getActiveSessionKey();
+      const activeObj = activeKey ? sessions.find((s) => s.session_key === activeKey) : null;
+      if (!activeObj || activeObj.transport !== activeTransport) {
+        await chat.selectSession(null);
+        renderSessionList();
+      } else {
+        chat.refreshDraftTransportUi();
+      }
     });
   });
+
+  document.getElementById("btn-new-topic").addEventListener("click", openDraftMode);
 
   const pruneBtn = document.getElementById("btn-prune-sessions");
   pruneBtn?.addEventListener("click", async () => {
@@ -505,13 +482,7 @@ function setupUiListeners() {
     if (res.ok) {
       const d = await res.json();
       const count = Number(d.pruned_count ?? d.removed_count ?? 0);
-      await loadSessions(false);
-      const activeNow = chat.getActiveSessionKey();
-      if (activeNow && !sessions.some((s) => s.session_key === activeNow)) {
-        const next = pickSessionForTransport(activeTransport);
-        await selectAndRemember(next);
-        renderSessionList();
-      }
+      await loadSessions();
       pruneBtn.textContent = t("pruneDoneToast", { count });
       setTimeout(() => { pruneBtn.textContent = t("pruneBtn"); }, 1800);
     }
@@ -527,61 +498,6 @@ function setupUiListeners() {
     if (ev.data && ev.data.type === "tuner_hitl_done") {
       inspector.notifyBrowserDone(ev.data.site_key || "site");
       refreshHitlBanner();
-    }
-  });
-
-  const newForm = document.getElementById("new-topic-form");
-  const errEl = document.getElementById("new-topic-error");
-  document.getElementById("btn-new-topic").addEventListener("click", () => {
-    errEl?.classList.add("hidden");
-    newForm.classList.toggle("hidden");
-    syncTransportTabs();
-    if (!newForm.classList.contains("hidden")) {
-      document.getElementById("new-topic-name").focus();
-    }
-  });
-  document.getElementById("btn-create-topic-cancel").addEventListener("click", () => {
-    errEl?.classList.add("hidden");
-    newForm.classList.add("hidden");
-  });
-  newForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const nameEl = document.getElementById("new-topic-name");
-    const provEl = document.getElementById("new-topic-provider");
-    const subBtn = document.getElementById("btn-create-topic-submit");
-    errEl?.classList.add("hidden");
-    if (subBtn) {
-      subBtn.disabled = true;
-      subBtn.textContent = t("creatingBtn");
-    }
-    const targetTr = activeTransport;
-    const res = await apiFetch("/dashboard/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        transport: targetTr,
-        chat_id: targetTr === "tg" ? getPreferredTgChatId() : null,
-        topic_name: nameEl.value.trim() || null,
-        provider: provEl.value
-      })
-    });
-    if (subBtn) {
-      subBtn.disabled = false;
-      syncTransportTabs();
-    }
-    if (res.ok) {
-      const created = await res.json();
-      nameEl.value = "";
-      newForm.classList.add("hidden");
-      activeTransport = created.transport || targetTr;
-      await loadSessions(false);
-      await selectAndRemember(created);
-      renderSessionList();
-      closeDrawers();
-    } else if (errEl) {
-      const d = await res.json().catch(() => ({}));
-      errEl.textContent = d.error || `HTTP ${res.status}`;
-      errEl.classList.remove("hidden");
     }
   });
 
@@ -660,6 +576,8 @@ async function boot() {
   initLang(me.language);
   applyDomI18n();
 
+  chat.initDraftDefaults(me.default_provider, me.default_model);
+
   const profEl = document.getElementById("profile-badge");
   if (profEl) {
     profEl.textContent = me.profile || "default";
@@ -667,7 +585,8 @@ async function boot() {
   }
 
   setupUiListeners();
-  await Promise.all([loadSessions(true), refreshHitlBanner()]);
+  await Promise.all([loadSessions(), chat.selectSession(null), refreshHitlBanner()]);
+  renderSessionList();
   connectWebSocket();
 
   if ("serviceWorker" in navigator) {

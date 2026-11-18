@@ -50,6 +50,7 @@ export function createChatController({
 
   let state = {
     session: null,
+    draft: { provider: "antigravity", model: "", effort: "" },
     messages: [],
     liveStream: "",
     activeAsk: null,
@@ -58,6 +59,30 @@ export function createChatController({
     modelCatalog: {},
     commandCatalog: {}
   };
+
+  function activeProv() {
+    return (state.session ? state.session.provider : state.draft.provider) || "antigravity";
+  }
+
+  function deriveAutoTopicTitle(rawText = "", files = []) {
+    let cleaned = String(rawText || "")
+      .replace(/^@\S+\s+/, "")
+      .replace(/^\/[a-zA-Z0-9_-]+\s+/, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/(?:file|https?):\/\/\S+/g, (u) => u.split("/").filter(Boolean).pop() || "");
+    const firstLine = cleaned
+      .split(/\r?\n/)
+      .map((l) => l.replace(/\s+/g, " ").trim())
+      .find((l) => l.length > 0);
+    if (firstLine) {
+      return firstLine.length > 36 ? `${firstLine.slice(0, 35).trimEnd()}…` : firstLine;
+    }
+    if (files && files.length > 0) {
+      const fname = String(files[0]).split("/").pop() || "file";
+      return `📎 ${fname.slice(0, 30)}`;
+    }
+    return null;
+  }
 
   function isNearBottom() {
     const sc = els.scrollWrap || els.messages;
@@ -105,7 +130,10 @@ export function createChatController({
     const stick = forceScroll || isNearBottom();
     els.messages.innerHTML = "";
     if (!state.session) {
-      els.messages.innerHTML = `<div class="empty-state">${escapeHtml(t("emptyNoSession"))}</div>`;
+      const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
+      const hTitle = isTg ? t("draftHeroTitleTg") : t("draftHeroTitleWeb");
+      const hSub = isTg ? t("draftHeroSubTg") : t("draftHeroSubWeb");
+      els.messages.innerHTML = `<div id="draft-hero" class="draft-hero"><h2>${escapeHtml(hTitle)}</h2><p>${escapeHtml(hSub)}</p></div>`;
       return;
     }
     if (state.messages.length === 0) {
@@ -189,8 +217,8 @@ export function createChatController({
   }
 
   function populateModelAndEffortControls() {
-    if (!state.session) return;
-    const prov = state.session.provider || "antigravity";
+    const target = state.session || state.draft;
+    const prov = target.provider || "antigravity";
     els.selProvider.value = prov;
     const cat = state.modelCatalog[prov] || [];
     els.selModel.innerHTML = "";
@@ -199,16 +227,20 @@ export function createChatController({
       const opt = document.createElement("option");
       opt.value = item.model;
       opt.textContent = item.model;
-      if (item.model === state.session.model) hasCurrent = true;
+      if (item.model === target.model) hasCurrent = true;
       els.selModel.appendChild(opt);
     }
-    if (!hasCurrent && state.session.model) {
+    if (!state.session && !hasCurrent && cat.length > 0) {
+      state.draft.model = cat[0].model;
+      hasCurrent = true;
+    }
+    if (!hasCurrent && target.model) {
       const opt = document.createElement("option");
-      opt.value = state.session.model;
-      opt.textContent = state.session.model;
+      opt.value = target.model;
+      opt.textContent = target.model;
       els.selModel.appendChild(opt);
     }
-    els.selModel.value = state.session.model || "";
+    els.selModel.value = target.model || (cat[0]?.model || "");
 
     const modelEntry = cat.find((m) => m.model === els.selModel.value);
     const efforts = modelEntry ? modelEntry.efforts || [] : [];
@@ -216,6 +248,7 @@ export function createChatController({
     if (!efforts.length) {
       els.selEffort.classList.add("hidden");
       els.selEffort.disabled = true;
+      if (!state.session) state.draft.effort = "";
     } else {
       els.selEffort.classList.remove("hidden");
       els.selEffort.disabled = false;
@@ -225,7 +258,9 @@ export function createChatController({
         opt.textContent = ef;
         els.selEffort.appendChild(opt);
       }
-      els.selEffort.value = state.session.effort || efforts[0];
+      const chosenEff = target.effort && efforts.includes(target.effort) ? target.effort : efforts[0];
+      els.selEffort.value = chosenEff;
+      if (!state.session) state.draft.effort = chosenEff;
     }
   }
 
@@ -239,15 +274,22 @@ export function createChatController({
   function renderHeader() {
     const s = state.session;
     if (!s) {
-      els.topicTitle.textContent = t("selectTopic");
-      els.channelBadge?.classList.add("hidden");
+      const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
+      els.topicTitle.textContent = isTg ? t("draftTitleTg") : t("draftTitleWeb");
+      if (els.channelBadge) {
+        els.channelBadge.textContent = isTg ? t("channelBadgeTg") : t("channelBadgeWeb");
+        els.channelBadge.className = isTg ? "pill pill-info" : "pill";
+      }
       els.topicKey.textContent = "";
       els.topicState.dataset.state = "Idle";
       els.topicState.textContent = "Idle";
       els.topicState.className = "status-badge hidden";
       els.stopBtn.classList.add("hidden");
+      els.newBtn?.classList.add("hidden");
+      populateModelAndEffortControls();
       return;
     }
+    els.newBtn?.classList.remove("hidden");
     els.topicTitle.textContent = formatTopicLabel(s);
     if (els.channelBadge) {
       els.channelBadge.textContent = s.transport === "tg" ? t("channelBadgeTg") : t("channelBadgeWeb");
@@ -285,6 +327,11 @@ export function createChatController({
 
   async function selectSession(session) {
     state.session = session;
+    if (session) {
+      state.draft.provider = session.provider || state.draft.provider;
+      state.draft.model = session.model || "";
+      state.draft.effort = session.effort || "";
+    }
     state.messages = [];
     state.liveStream = "";
     state.activeAsk = null;
@@ -295,7 +342,11 @@ export function createChatController({
     renderLiveStream();
     renderAskCard();
     renderPendingFiles();
-    if (!session) return;
+    if (!session) {
+      await ensureModelsLoaded(state.draft.provider);
+      populateModelAndEffortControls();
+      return;
+    }
 
     await ensureModelsLoaded(session.provider);
     populateModelAndEffortControls();
@@ -363,9 +414,6 @@ export function createChatController({
       if (state.session) appendLocalSystemNotice(t("langChangedNotice"));
       return;
     }
-    if (!state.session) return;
-    if (cmd === "new" || cmd === "reset") return resetCurrentSession();
-    if (cmd === "stop" || cmd === "abort") return stopCurrentSession();
     if (cmd === "provider") {
       const p = args.toLowerCase();
       if (p === "agy" || p === "antigravity") return updateConfig({ provider: "antigravity" });
@@ -383,11 +431,23 @@ export function createChatController({
       if (!els.selEffort.classList.contains("hidden")) els.selEffort.focus();
       return;
     }
+    if (cmd === "new" || cmd === "reset") {
+      if (!state.session) return;
+      return resetCurrentSession();
+    }
+    if (cmd === "stop" || cmd === "abort") {
+      if (!state.session) return;
+      return stopCurrentSession();
+    }
     if (cmd === "help") {
-      const prov = state.session.provider || "antigravity";
+      const prov = activeProv();
       const cmds = state.commandCatalog[prov] || [];
       const lines = cmds.map((c) => `- \`/${c.command}\` — ${describeCommand(c)}`).join("\n");
-      appendLocalSystemNotice(`### ${t("helpHeader", { prov })}\n${lines}\n\n${t("helpTip")}`);
+      if (state.session) {
+        appendLocalSystemNotice(`### ${t("helpHeader", { prov })}\n${lines}\n\n${t("helpTip")}`);
+      } else {
+        els.messages.innerHTML = `<div class="msg-bubble msg-bot"><div class="msg-body">${renderMarkdown(`### ${t("helpHeader", { prov })}\n${lines}\n\n${t("helpTip")}`)}</div></div>`;
+      }
     }
   }
 
@@ -395,16 +455,18 @@ export function createChatController({
     inputEl: els.input,
     menuEl: els.slashMenu,
     slashBtnEl: els.slashBtn,
-    getProvider: () => state.session?.provider || "antigravity",
-    getCommands: () => state.commandCatalog[state.session?.provider || "antigravity"] || [],
-    getModels: () => state.modelCatalog[state.session?.provider || "antigravity"] || [],
+    getProvider: () => activeProv(),
+    getCommands: () => state.commandCatalog[activeProv()] || [],
+    getModels: () => state.modelCatalog[activeProv()] || [],
     onRunBuiltin: runBuiltinSlash
   });
 
   async function ensureActiveSession(seedText = "") {
     if (state.session) return state.session;
-    const title = seedText.replace(/\s+/g, " ").trim().slice(0, 36) || null;
-    const prov = els.selProvider?.value || "antigravity";
+    const title = deriveAutoTopicTitle(seedText, state.pendingFiles);
+    const prov = state.draft.provider || els.selProvider?.value || "antigravity";
+    const model = state.draft.model || els.selModel?.value || null;
+    const effort = !els.selEffort?.disabled && els.selEffort?.value ? els.selEffort.value : null;
     const tr = typeof getActiveTransport === "function" ? getActiveTransport() : "web";
     const prefChat = tr === "tg" && typeof getPreferredTgChatId === "function" ? getPreferredTgChatId() : null;
     const res = await apiFetch("/dashboard/api/sessions", {
@@ -415,13 +477,17 @@ export function createChatController({
         chat_id: prefChat,
         silent_greeting: true,
         topic_name: title,
-        provider: prov
+        provider: prov,
+        model,
+        effort
       })
     });
     if (!res.ok) return null;
     const created = await res.json();
-    await selectSession(created);
-    onRefreshSessions?.();
+    state.session = created;
+    renderHeader();
+    renderMessages(false);
+    await onRefreshSessions?.();
     return created;
   }
 
@@ -488,7 +554,19 @@ export function createChatController({
   }
 
   async function updateConfig(patch) {
-    if (!state.session) return;
+    if (!state.session) {
+      if (patch.provider) {
+        state.draft.provider = patch.provider;
+        state.draft.model = "";
+        state.draft.effort = "";
+        await ensureModelsLoaded(patch.provider);
+      }
+      if (patch.model !== undefined) state.draft.model = patch.model;
+      if (patch.effort !== undefined) state.draft.effort = patch.effort;
+      populateModelAndEffortControls();
+      slashCtrl.refresh();
+      return;
+    }
     const res = await apiFetch("/dashboard/api/sessions/config", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -497,6 +575,9 @@ export function createChatController({
     if (res.ok) {
       const updated = await res.json();
       state.session = updated;
+      state.draft.provider = updated.provider || state.draft.provider;
+      state.draft.model = updated.model || "";
+      state.draft.effort = updated.effort || "";
       await ensureModelsLoaded(updated.provider);
       renderHeader();
       onRefreshSessions();
@@ -621,6 +702,15 @@ export function createChatController({
   return {
     selectSession,
     handleWsEvent,
+    initDraftDefaults: (prov, model) => {
+      if (prov) state.draft.provider = prov;
+      if (model) state.draft.model = model;
+    },
+    refreshDraftTransportUi: () => {
+      renderHeader();
+      if (!state.session) renderMessages(false);
+    },
+    focusComposer: () => els.input?.focus(),
     getActiveSessionKey: () => state.session?.session_key || null
   };
 }

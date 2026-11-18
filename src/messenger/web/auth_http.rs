@@ -227,6 +227,7 @@ pub async fn handle_auth_me(
     let has_pin = ctx.auth.has_pin().await;
     let tg_connected = ctx.bot.read().await.is_some();
     let lang = ctx.config.language.as_deref().unwrap_or("ko");
+    let def_prov = crate::session::data::SessionData::effective_provider(&ctx.config.provider, "antigravity");
     match require_auth(&ctx, &headers).await {
         Ok(sess) => Json(serde_json::json!({
             "authenticated": true,
@@ -234,7 +235,9 @@ pub async fn handle_auth_me(
             "has_pin": has_pin,
             "profile": ctx.profile,
             "language": lang,
-            "telegram_connected": tg_connected
+            "telegram_connected": tg_connected,
+            "default_provider": def_prov,
+            "default_model": ctx.config.model
         }))
         .into_response(),
         Err(_) => (
