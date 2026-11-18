@@ -228,8 +228,8 @@ pub async fn handle_auth_me(
     let tg_connected = ctx.bot.read().await.is_some();
     let bot_username = super::api_telegram::resolve_bot_username(&ctx).await;
     let lang = ctx.config.language.as_deref().unwrap_or("ko");
-    let def_prov = crate::session::data::SessionData::effective_provider(&ctx.config.provider, "antigravity");
-    let (any_ready, _) = super::provider_status::inspect_all_providers(&ctx.tuner_home);
+    let (any_ready, def_prov, ready_providers) =
+        super::provider_status::resolve_ready_provider_summary(&ctx.tuner_home, &ctx.config.provider);
     match require_auth(&ctx, &headers).await {
         Ok(sess) => Json(serde_json::json!({
             "authenticated": true,
@@ -241,7 +241,8 @@ pub async fn handle_auth_me(
             "bot_username": bot_username,
             "default_provider": def_prov,
             "default_model": ctx.config.model,
-            "needs_onboarding": !any_ready
+            "needs_onboarding": !any_ready,
+            "ready_providers": ready_providers
         }))
         .into_response(),
         Err(_) => (
@@ -271,6 +272,15 @@ pub async fn handle_set_pin(
     }
 }
 
+fn clear_cookie_response(headers: &HeaderMap) -> Response {
+    let clear = build_session_cookie("", 0, is_https_request(headers));
+    let mut res = Json(serde_json::json!({ "ok": true })).into_response();
+    if let Ok(hv) = header::HeaderValue::from_str(&clear) {
+        res.headers_mut().insert(header::SET_COOKIE, hv);
+    }
+    res
+}
+
 /// Logs out the current session (`POST /dashboard/api/auth/logout`).
 pub async fn handle_logout(
     ext: Option<Extension<Arc<WebAppCtx>>>,
@@ -285,12 +295,7 @@ pub async fn handle_logout(
         Err(r) => return *r,
     };
     let _ = ctx.auth.revoke_session(&sess.sid).await;
-    let clear = build_session_cookie("", 0, is_https_request(&headers));
-    let mut res = Json(serde_json::json!({ "ok": true })).into_response();
-    if let Ok(hv) = header::HeaderValue::from_str(&clear) {
-        res.headers_mut().insert(header::SET_COOKIE, hv);
-    }
-    res
+    clear_cookie_response(&headers)
 }
 
 /// Revokes all active sessions and pending Magic Links (`POST /dashboard/api/auth/revoke_all`).
@@ -306,10 +311,5 @@ pub async fn handle_revoke_all(
         return *r;
     }
     let _ = ctx.auth.revoke_all().await;
-    let clear = build_session_cookie("", 0, is_https_request(&headers));
-    let mut res = Json(serde_json::json!({ "ok": true })).into_response();
-    if let Ok(hv) = header::HeaderValue::from_str(&clear) {
-        res.headers_mut().insert(header::SET_COOKIE, hv);
-    }
-    res
+    clear_cookie_response(&headers)
 }

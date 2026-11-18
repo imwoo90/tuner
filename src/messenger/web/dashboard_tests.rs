@@ -141,7 +141,9 @@ async fn login_via_magic(app: &Router, ctx: &Arc<WebAppCtx>) -> (String, String)
         .await
         .unwrap();
     assert_eq!(me.status(), StatusCode::OK);
-    let csrf = body_json(me).await["csrf_token"].as_str().unwrap().to_string();
+    let me_json = body_json(me).await;
+    assert!(me_json["ready_providers"].is_array());
+    let csrf = me_json["csrf_token"].as_str().unwrap().to_string();
     (sid_kv, csrf)
 }
 

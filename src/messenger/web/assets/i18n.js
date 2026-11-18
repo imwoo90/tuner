@@ -224,7 +224,13 @@ const DICT = {
     tgConnectBtn: "✈️ 텔레그램 봇 연결하기",
     tgConnectingBtn: "연결 확인 중…",
     tgEngineCardTitle: "Telegram Bot 연동",
-    tgDisconnectBtn: "연결 해제"
+    tgDisconnectBtn: "연결 해제",
+    provDropdownAdd: "+ 엔진 추가·관리 ({list})…",
+    provDropdownManageAll: "⚙ AI 엔진 관리…",
+    engineMgrTitle: "AI 엔진 추가 · 관리",
+    engineMgrSub: "추가 엔진을 원클릭으로 설치하고 내장 브라우저에서 바로 로그인할 수 있습니다.",
+    backToChatBtn: "← 대화로 돌아가기",
+    useThisEngineBtn: "이 엔진으로 대화하기 →"
   },
   en: {
     newTopicBtn: "+ New Chat",
@@ -448,7 +454,13 @@ const DICT = {
     tgConnectBtn: "✈️ Connect Telegram Bot",
     tgConnectingBtn: "Verifying token…",
     tgEngineCardTitle: "Telegram Bot Sync",
-    tgDisconnectBtn: "Disconnect"
+    tgDisconnectBtn: "Disconnect",
+    provDropdownAdd: "+ Add / Manage Engines ({list})…",
+    provDropdownManageAll: "⚙ Manage AI Engines…",
+    engineMgrTitle: "Add & Manage AI Engines",
+    engineMgrSub: "Install additional CLI engines in one click and sign in via the built-in browser.",
+    backToChatBtn: "← Back to Chat",
+    useThisEngineBtn: "Chat with this engine →"
   }
 };
 

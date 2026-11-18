@@ -1,7 +1,7 @@
 import { escapeHtml } from "/dashboard/assets/markdown.js";
 import { t } from "/dashboard/assets/i18n.js";
 
-export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProviderReady }) {
+export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProviderReady, onCloseManager }) {
   let pollTimer = null;
 
   function clearPoll() {
@@ -11,7 +11,7 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     }
   }
 
-  function renderSingleProviderCard(p) {
+  function renderSingleProviderCard(p, showUseBtn = false) {
     const ready = Boolean(p.installed && p.authenticated);
     const installing = Boolean(p.install_job?.running);
     const badgeHtml = ready
@@ -35,12 +35,15 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
         <button class="btn btn-sm prov-extlogin-btn" data-prov="${escapeHtml(p.id)}" type="button">${escapeHtml(t("provExtLoginBtn"))}</button>
       </div>`;
     } else {
+      const useHtml = showUseBtn
+        ? `<button class="btn btn-primary btn-sm prov-use-engine-btn" data-prov="${escapeHtml(p.id)}" type="button">${escapeHtml(t("useThisEngineBtn"))}</button>`
+        : "";
       actionsHtml += `<div class="card-row">
-        <button class="btn btn-sm prov-weblogin-btn" data-prov="${escapeHtml(p.id)}" type="button">${escapeHtml(t("provReloginBtn"))}</button>
+        <div class="card-row">${useHtml}<button class="btn btn-sm prov-weblogin-btn" data-prov="${escapeHtml(p.id)}" type="button">${escapeHtml(t("provReloginBtn"))}</button></div>
       </div>`;
     }
 
-    if (p.install_job?.log_tail) {
+    if (p.install_job?.log_tail && (installing || !p.installed)) {
       actionsHtml += `<pre class="code-pre install-log-pre">${escapeHtml(p.install_job.log_tail)}</pre>`;
     }
 
@@ -74,9 +77,10 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     </div>`;
   }
 
-  async function renderInto(rootEl, { isWizard = false } = {}) {
+  async function renderInto(rootEl, { isWizard = false, isManager = false } = {}) {
     clearPoll();
     if (!rootEl) return;
+    const isCenter = isWizard || isManager;
     const [res, tgRes] = await Promise.all([
       apiFetch("/dashboard/api/providers/status"),
       !isWizard ? apiFetch("/dashboard/api/telegram/status").catch(() => null) : Promise.resolve(null)
@@ -89,8 +93,9 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     const providers = data.providers || [];
     const anyReady = Boolean(data.any_ready);
     const firstReady = providers.find((p) => p.installed && p.authenticated)?.id || "";
+    const wrapId = isWizard ? "onboarding-card" : isManager ? "engine-manager-card" : "engines-panel";
 
-    let html = `<div id="${isWizard ? "onboarding-card" : "engines-panel"}" class="${isWizard ? "onboarding-wrap" : "engines-wrap"}">`;
+    let html = `<div id="${wrapId}" class="${isCenter ? "onboarding-wrap" : "engines-wrap"}">`;
     if (isWizard) {
       html += `<div class="onboard-header">
         <h2>🚀 ${escapeHtml(t("onboardHeroTitle"))}</h2>
@@ -104,10 +109,18 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
           </div>
         </div>`;
       }
+    } else if (isManager) {
+      html += `<div class="card-row" style="margin-bottom:4px;">
+        <div>
+          <h2 style="margin:0;font-size:18px;font-weight:650;">⚙ ${escapeHtml(t("engineMgrTitle"))}</h2>
+          <div class="muted">${escapeHtml(t("engineMgrSub"))}</div>
+        </div>
+        <button id="btn-close-engine-manager" class="btn btn-sm" type="button">${escapeHtml(t("backToChatBtn"))}</button>
+      </div>`;
     }
 
     for (const p of providers) {
-      html += renderSingleProviderCard(p);
+      html += renderSingleProviderCard(p, isManager);
     }
     if (!isWizard && tgData) {
       const tgOk = Boolean(tgData.connected);
@@ -138,10 +151,20 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
       onProviderReady?.(readyId);
     });
 
+    rootEl.querySelector("#btn-close-engine-manager")?.addEventListener("click", () => {
+      onCloseManager?.();
+    });
+
+    rootEl.querySelectorAll(".prov-use-engine-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        onProviderReady?.(btn.dataset.prov || "antigravity");
+      });
+    });
+
     rootEl.querySelector("#btn-tg-disconnect")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       await apiFetch("/dashboard/api/telegram/disconnect", { method: "POST" });
-      renderInto(rootEl, { isWizard });
+      renderInto(rootEl, { isWizard, isManager });
     });
 
     rootEl.querySelectorAll(".prov-install-btn").forEach((btn) => {
@@ -156,7 +179,7 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
           const d = await r.json().catch(() => ({}));
           showErr(d.error || `HTTP ${r.status}`);
         }
-        renderInto(rootEl, { isWizard });
+        renderInto(rootEl, { isWizard, isManager });
       });
     });
 
@@ -176,11 +199,11 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
       const d = await r.json();
       if (openWebInWeb && d.hitl_session?.token) {
         onOpenBrowserToken?.(d.hitl_session.token);
-        if (!isWizard) return;
+        if (!isCenter) return;
       } else if (!openWebInWeb && d.login?.oauth_url) {
         window.open(d.login.oauth_url, "_blank", "noopener");
       }
-      renderInto(rootEl, { isWizard });
+      renderInto(rootEl, { isWizard, isManager });
     };
 
     rootEl.querySelectorAll(".prov-weblogin-btn").forEach((btn) => {
@@ -208,7 +231,7 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
           showErr(d.error || `HTTP ${r.status}`);
           return;
         }
-        renderInto(rootEl, { isWizard });
+        renderInto(rootEl, { isWizard, isManager });
       });
     });
 
@@ -219,7 +242,7 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ provider: btn.dataset.prov })
         });
-        renderInto(rootEl, { isWizard });
+        renderInto(rootEl, { isWizard, isManager });
       });
     });
 
@@ -241,12 +264,12 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
           showErr(d.error || `HTTP ${r.status}`);
           return;
         }
-        renderInto(rootEl, { isWizard });
+        renderInto(rootEl, { isWizard, isManager });
       });
     });
 
     if (providers.some((p) => p.install_job?.running)) {
-      pollTimer = setTimeout(() => renderInto(rootEl, { isWizard }), 900);
+      pollTimer = setTimeout(() => renderInto(rootEl, { isWizard, isManager }), 900);
     }
   }
 

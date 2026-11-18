@@ -274,3 +274,23 @@ pub fn inspect_all_providers(tuner_home: &Path) -> (bool, Vec<ProviderReadiness>
     let any_ready = list.iter().any(|p| p.installed && p.authenticated);
     (any_ready, list)
 }
+
+/// Resolves `(any_ready, effective_default_provider, ready_provider_ids)` for `/auth/me`.
+pub fn resolve_ready_provider_summary(
+    tuner_home: &Path,
+    cfg_provider: &str,
+) -> (bool, String, Vec<&'static str>) {
+    let def_cfg = crate::session::data::SessionData::effective_provider(cfg_provider, "antigravity");
+    let (any_ready, list) = inspect_all_providers(tuner_home);
+    let ready: Vec<&'static str> = list
+        .iter()
+        .filter(|p| p.installed && p.authenticated)
+        .map(|p| p.id)
+        .collect();
+    let def_prov = if !ready.is_empty() && !ready.contains(&def_cfg) {
+        ready[0].to_string()
+    } else {
+        def_cfg.to_string()
+    };
+    (any_ready, def_prov, ready)
+}

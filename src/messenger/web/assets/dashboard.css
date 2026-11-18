@@ -1035,6 +1035,7 @@ html, body {
   background: var(--surface-subtle);
   color: var(--text);
 }
+#sel-provider { field-sizing: content; max-width: 128px; }
 .chip-effort { max-width: 92px; }
 
 .send-btn {

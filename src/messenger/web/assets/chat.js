@@ -52,9 +52,13 @@ export function createChatController({
     dropOverlay: document.getElementById("drop-overlay")
   };
 
+  const ALL_PROVIDERS = ["antigravity", "claude", "codex"];
+
   let state = {
     session: null,
     needsOnboarding: false,
+    managingEngines: false,
+    readyProviders: [],
     telegramConnected: true,
     telegramBotUsername: "",
     draft: { provider: "antigravity", model: "", effort: "" },
@@ -133,24 +137,71 @@ export function createChatController({
     return div;
   }
 
+  async function refreshReadyProviders() {
+    try {
+      const r = await apiFetch("/dashboard/api/providers/status");
+      if (!r.ok) return;
+      const d = await r.json();
+      state.readyProviders = (d.providers || [])
+        .filter((p) => p.installed && p.authenticated)
+        .map((p) => p.id);
+      populateModelAndEffortControls();
+    } catch (_) {}
+  }
+
+  function openEngineManager() {
+    state.managingEngines = true;
+    slashCtrl.closeMenu();
+    renderHeader();
+    renderMessages(false);
+    renderLiveStream();
+    renderAskCard();
+  }
+
+  function closeEngineManager() {
+    state.managingEngines = false;
+    renderHeader();
+    renderMessages(true);
+    renderLiveStream();
+    renderAskCard();
+    els.input?.focus();
+  }
+
   const wizardRenderer = createOnboardingRenderer({
     apiFetch,
     onOpenBrowserToken: (tok) => onOpenBrowserToken?.(tok),
+    onCloseManager: closeEngineManager,
     onProviderReady: async (readyProv) => {
       state.needsOnboarding = false;
-      state.draft.provider = readyProv || state.draft.provider;
-      state.draft.model = "";
-      delete state.modelCatalog[state.draft.provider];
-      await ensureModelsLoaded(state.draft.provider);
-      renderHeader();
-      renderMessages(false);
+      state.managingEngines = false;
+      await refreshReadyProviders();
+      const targetProv = readyProv || activeProv();
+      delete state.modelCatalog[targetProv];
+      if (state.session) {
+        if (state.session.provider !== targetProv) {
+          await updateConfig({ provider: targetProv });
+        } else {
+          await ensureModelsLoaded(targetProv);
+        }
+        renderHeader();
+        renderMessages(true);
+      } else {
+        state.draft.provider = targetProv;
+        state.draft.model = "";
+        state.draft.effort = "";
+        await ensureModelsLoaded(targetProv);
+        renderHeader();
+        renderMessages(false);
+      }
+      renderLiveStream();
+      renderAskCard();
       els.input?.focus();
     }
   });
 
   function syncComposerVisibility() {
     const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
-    const hide = !state.session && (state.needsOnboarding || (isTg && !state.telegramConnected));
+    const hide = state.managingEngines || (!state.session && (state.needsOnboarding || (isTg && !state.telegramConnected)));
     els.composerShell?.classList.toggle("hidden", hide);
   }
 
@@ -219,6 +270,10 @@ export function createChatController({
     syncComposerVisibility();
     const stick = forceScroll || isNearBottom();
     els.messages.innerHTML = "";
+    if (state.managingEngines) {
+      wizardRenderer.renderInto(els.messages, { isWizard: false, isManager: true });
+      return;
+    }
     if (!state.session) {
       if (state.needsOnboarding) {
         wizardRenderer.renderInto(els.messages, { isWizard: true });
@@ -247,9 +302,9 @@ export function createChatController({
   }
 
   function renderLiveStream() {
-    if (!state.liveStream) {
+    if (state.managingEngines || !state.liveStream) {
       els.liveBubble.classList.add("hidden");
-      els.liveBody.innerHTML = "";
+      if (!state.liveStream) els.liveBody.innerHTML = "";
       return;
     }
     const stick = isNearBottom();
@@ -260,7 +315,7 @@ export function createChatController({
 
   function renderAskCard() {
     const ask = state.activeAsk;
-    if (!ask || !Array.isArray(ask.questions) || ask.questions.length === 0) {
+    if (state.managingEngines || !ask || !Array.isArray(ask.questions) || ask.questions.length === 0) {
       els.askCard.classList.add("hidden");
       els.input.placeholder = t("composerPlaceholder");
       return;
@@ -317,9 +372,43 @@ export function createChatController({
   }
 
   function populateModelAndEffortControls() {
+    if (!state.session && state.readyProviders.length > 0 && !state.readyProviders.includes(state.draft.provider)) {
+      state.draft.provider = state.readyProviders[0];
+      state.draft.model = "";
+      state.draft.effort = "";
+    }
     const target = state.session || state.draft;
     const prov = target.provider || "antigravity";
+
+    const readySet = new Set(state.readyProviders);
+    els.selProvider.innerHTML = "";
+    for (const p of ALL_PROVIDERS) {
+      if (readySet.has(p)) {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        els.selProvider.appendChild(opt);
+      }
+    }
+    if (!readySet.has(prov)) {
+      const fallbackOpt = document.createElement("option");
+      fallbackOpt.value = prov;
+      fallbackOpt.disabled = true;
+      fallbackOpt.textContent = `${prov} (${t("provNeedAuthBadge")})`;
+      els.selProvider.appendChild(fallbackOpt);
+    }
+    if (els.selProvider.options.length > 0) {
+      els.selProvider.appendChild(document.createElement("hr"));
+    }
+    const unready = ALL_PROVIDERS.filter((p) => !readySet.has(p));
+    const mgrOpt = document.createElement("option");
+    mgrOpt.value = "__manage_engines__";
+    mgrOpt.textContent = unready.length > 0
+      ? t("provDropdownAdd", { list: unready.join(" · ") })
+      : t("provDropdownManageAll");
+    els.selProvider.appendChild(mgrOpt);
     els.selProvider.value = prov;
+
     const cat = state.modelCatalog[prov] || [];
     els.selModel.innerHTML = "";
     let hasCurrent = false;
@@ -373,6 +462,18 @@ export function createChatController({
 
   function renderHeader() {
     syncComposerVisibility();
+    if (state.managingEngines) {
+      els.topicTitle.textContent = t("engineMgrTitle");
+      if (els.channelBadge) els.channelBadge.className = "pill hidden";
+      els.topicKey.textContent = "";
+      els.topicState.dataset.state = "Idle";
+      els.topicState.textContent = "Idle";
+      els.topicState.className = "status-badge hidden";
+      els.stopBtn.classList.add("hidden");
+      els.newBtn?.classList.add("hidden");
+      populateModelAndEffortControls();
+      return;
+    }
     const s = state.session;
     if (!s) {
       const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
@@ -442,6 +543,7 @@ export function createChatController({
   }
 
   async function selectSession(session) {
+    state.managingEngines = false;
     state.session = session;
     if (session) {
       state.draft.provider = session.provider || state.draft.provider;
@@ -532,9 +634,15 @@ export function createChatController({
     }
     if (cmd === "provider") {
       const p = args.toLowerCase();
-      if (p === "agy" || p === "antigravity") return updateConfig({ provider: "antigravity" });
-      if (p === "claude" || p === "codex") return updateConfig({ provider: p });
-      els.selProvider.focus();
+      const norm = (p === "agy" || p === "antigravity") ? "antigravity" : (p === "claude" || p === "codex") ? p : "";
+      if (norm) {
+        if (state.readyProviders.length > 0 && !state.readyProviders.includes(norm)) {
+          openEngineManager();
+          return;
+        }
+        return updateConfig({ provider: norm });
+      }
+      openEngineManager();
       return;
     }
     if (cmd === "model") {
@@ -792,7 +900,14 @@ export function createChatController({
     if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files);
   });
 
-  els.selProvider.addEventListener("change", () => updateConfig({ provider: els.selProvider.value }));
+  els.selProvider.addEventListener("change", () => {
+    if (els.selProvider.value === "__manage_engines__") {
+      els.selProvider.value = activeProv();
+      openEngineManager();
+      return;
+    }
+    updateConfig({ provider: els.selProvider.value });
+  });
   els.selModel.addEventListener("change", () => updateConfig({ model: els.selModel.value }));
   els.selEffort.addEventListener("change", () => updateConfig({ effort: els.selEffort.value }));
 
@@ -819,7 +934,8 @@ export function createChatController({
   return {
     selectSession,
     handleWsEvent,
-    initDraftDefaults: (prov, model, needsOnboarding = false) => {
+    initDraftDefaults: (prov, model, needsOnboarding = false, readyProviders = []) => {
+      state.readyProviders = Array.isArray(readyProviders) ? readyProviders : [];
       if (prov) state.draft.provider = prov;
       if (model) state.draft.model = model;
       state.needsOnboarding = Boolean(needsOnboarding);
@@ -828,7 +944,7 @@ export function createChatController({
       state.telegramConnected = Boolean(connected);
       state.telegramBotUsername = botUsername || "";
       renderHeader();
-      if (!state.session) renderMessages(false);
+      if (state.managingEngines || !state.session) renderMessages(false);
     },
     markHasExistingSessions: () => {
       if (state.needsOnboarding) {
@@ -837,13 +953,17 @@ export function createChatController({
         if (!state.session) renderMessages(false);
       }
     },
-    onProviderSetupUpdated: (prov) => {
+    onProviderSetupUpdated: async (prov) => {
       if (prov) delete state.modelCatalog[prov];
-      if (!state.session && state.needsOnboarding) {
+      await refreshReadyProviders();
+      if (state.managingEngines) {
+        wizardRenderer.renderInto(els.messages, { isWizard: false, isManager: true });
+      } else if (!state.session && state.needsOnboarding) {
         wizardRenderer.renderInto(els.messages, { isWizard: true });
       }
     },
     refreshDraftTransportUi: () => {
+      state.managingEngines = false;
       renderHeader();
       if (!state.session) renderMessages(false);
     },

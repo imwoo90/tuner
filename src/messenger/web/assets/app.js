@@ -605,7 +605,7 @@ async function boot() {
   initLang(me.language);
   applyDomI18n();
 
-  chat.initDraftDefaults(me.default_provider, me.default_model, me.needs_onboarding);
+  chat.initDraftDefaults(me.default_provider, me.default_model, me.needs_onboarding, me.ready_providers);
   chat.setTelegramState(telegramConnected, telegramBotUsername);
 
   const profEl = document.getElementById("profile-badge");
