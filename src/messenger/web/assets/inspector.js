@@ -1,5 +1,6 @@
 import { escapeHtml, renderMarkdown } from "/dashboard/assets/markdown.js";
 import { t, onLangChange } from "/dashboard/assets/i18n.js";
+import { createOnboardingRenderer } from "/dashboard/assets/onboarding.js";
 
 export function createInspectorController({ apiFetch, getActiveSessionKey, onForceLogout, onViewChange }) {
   const container = document.getElementById("inspector-content");
@@ -572,10 +573,24 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
     });
   }
 
+  const enginesRenderer = createOnboardingRenderer({
+    apiFetch,
+    onOpenBrowserToken: (tok) => openBrowserSession(tok)
+  });
+
+  async function renderEnginesTab() {
+    const seq = ++renderSeq;
+    showLoading("loadingEngines");
+    if (seq !== renderSeq || activeTab !== "engines") return;
+    await enginesRenderer.renderInto(container, { isWizard: false });
+  }
+
   function refreshCurrentTab() {
+    if (activeTab !== "engines") enginesRenderer.clearPoll();
     if (activeTab === "tree") return renderTreeTab();
     if (activeTab === "preview") return renderPreviewTab();
     if (activeTab === "browser") return renderBrowserTab(false);
+    if (activeTab === "engines") return renderEnginesTab();
     if (activeTab === "usage") return renderUsageTab();
     if (activeTab === "cron") return renderCronTab();
     if (activeTab === "vault") return renderVaultTab();
@@ -607,6 +622,11 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
     onHitlUpdated: () => {
       if (!isCollapsed() && activeTab === "browser") {
         renderBrowserTab(true);
+      }
+    },
+    onProviderSetupUpdated: () => {
+      if (!isCollapsed() && activeTab === "engines") {
+        renderEnginesTab();
       }
     },
     getActiveTab: () => activeTab

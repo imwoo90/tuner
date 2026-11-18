@@ -1346,3 +1346,63 @@ async fn test_telegram_forum_topic_create_rename_and_delete() {
     assert!(recorded.iter().any(|c| c.starts_with("editForumTopic:") && c.contains("Renamed TG")));
     assert!(recorded.iter().any(|c| c.starts_with("deleteForumTopic:") && c.contains("777")));
 }
+
+#[tokio::test]
+async fn test_provider_onboarding_oauth_parser_and_dotenv() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = build_test_ctx(dir.path());
+    let app = build_router_with_ctx(ctx.clone());
+    let (cookie, csrf) = login_via_magic(&app, &ctx).await;
+
+    // 1. Reconstruct box-wrapped agy Google OAuth URL across 80-col lines
+    let raw_pty = "\x1b[32mOpen the URL below:\x1b[0m\r\n ────────────────────\r\n https://accounts.google.com/o/oauth2/auth?client_id=107100\r\n &redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&state=xyz\r\n ────────────────────\r\n";
+    let clean = super::provider_oauth::strip_ansi_codes(raw_pty.as_bytes());
+    let url = super::provider_oauth::extract_oauth_url_from_pty(&clean).unwrap();
+    assert_eq!(
+        url,
+        "https://accounts.google.com/o/oauth2/auth?client_id=107100&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&state=xyz"
+    );
+
+    // 2. Pre-seed agy headless settings.json
+    let fake_home = dir.path().join("fake_home");
+    super::provider_status::ensure_agy_headless_settings(
+        &fake_home.to_string_lossy(),
+        &ctx.working_dir,
+    );
+    let settings_raw = std::fs::read_to_string(fake_home.join(".gemini/antigravity-cli/settings.json")).unwrap();
+    assert!(settings_raw.contains("\"onboardingComplete\": true"));
+
+    // 3. POST /dashboard/api/providers/apikey writes 0600 .env & GET /providers/status works
+    let key_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/dashboard/api/providers/apikey")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"provider":"claude","api_key":"sk-ant-test-onboard"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(key_res.status(), StatusCode::OK);
+    let dotenv = super::provider_status::read_dotenv_map(&ctx.tuner_home.join(".env"));
+    assert_eq!(dotenv.get("ANTHROPIC_API_KEY").map(String::as_str), Some("sk-ant-test-onboard"));
+
+    let st_res = app
+        .oneshot(
+            Request::builder()
+                .uri("/dashboard/api/providers/status")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(st_res.status(), StatusCode::OK);
+    let st_json: serde_json::Value =
+        serde_json::from_slice(&to_bytes(st_res.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(st_json["providers"].as_array().unwrap().len(), 3);
+}

@@ -90,7 +90,7 @@ pub(crate) fn spawn_warm_claude(
     let mut cmd = Command::new(&args[0]);
     cmd.args(&args[1..])
         .current_dir(&ws)
-        .envs(cli.build_env())
+        .envs(crate::messenger::web::provider_status::build_peer_env(cli))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

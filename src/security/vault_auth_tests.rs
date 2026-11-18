@@ -161,6 +161,7 @@ async fn test_warm_tunnel_proxy_ipc_security_and_active_guard() {
         token: token.clone(),
         local_port: genuine_hitl_port,
         expires_at_secs: current_unix_secs() + 600,
+        skip_quick_tunnel: true,
     };
 
     // 0. Public :8743 router MUST NOT expose /internal/auth/register (404 Not Found)
@@ -200,6 +201,7 @@ async fn test_warm_tunnel_proxy_ipc_security_and_active_guard() {
         token: token.clone(),
         local_port: non_hitl_port,
         expires_at_secs: current_unix_secs() + 600,
+        skip_quick_tunnel: true,
     };
     let res_ssrf = ipc_app
         .clone()

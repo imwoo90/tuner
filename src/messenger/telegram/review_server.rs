@@ -32,12 +32,17 @@ pub async fn ensure_server_running(server_port: &Arc<Mutex<Option<u16>>>) -> u16
     }
 
     let bind_addr = if cfg!(test) {
-        "0.0.0.0:0"
+        "0.0.0.0:0".to_string()
+    } else if let Ok(raw_p) = std::env::var("TUNER_WEB_PORT")
+        && let Ok(p) = raw_p.trim().parse::<u16>()
+        && p > 0
+    {
+        format!("0.0.0.0:{p}")
     } else {
-        "0.0.0.0:8743"
+        "0.0.0.0:8743".to_string()
     };
 
-    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
+    let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
         Ok(l) => l,
         Err(_) => match tokio::net::TcpListener::bind("0.0.0.0:0").await {
             Ok(l) => l,

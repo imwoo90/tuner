@@ -213,7 +213,17 @@ pub async fn run_bot(mut config: CliConfig, paths: TunerPaths) -> Result<(), Str
     if let Some((bot, bot_info)) = try_init_telegram_bot(tok, paths.profile.clone()).await {
         run_telegram_dispatcher(rt, bot, bot_info).await;
     } else {
-        println!("🖥️ [tuner] Web-Standalone Dashboard active on http://127.0.0.1:8743/dashboard (run 'tuner --dashboard' for Magic Link).");
+        let port = std::env::var("TUNER_WEB_PORT")
+            .ok()
+            .and_then(|s| s.trim().parse::<u16>().ok())
+            .filter(|&p| p > 0)
+            .unwrap_or(8743);
+        if !rt.web_ctx.auth.has_pin().await
+            && let Ok(magic) = rt.web_ctx.auth.issue_magic_token().await
+        {
+            println!("🔑 [tuner] First-Run Setup Magic Link (10m TTL): http://127.0.0.1:{port}/dashboard/magic/{magic}");
+        }
+        println!("🖥️ [tuner] Web-Standalone Dashboard active on http://127.0.0.1:{port}/dashboard (run 'tuner --dashboard' for Magic Link).");
         std::future::pending::<()>().await;
     }
     Ok(())

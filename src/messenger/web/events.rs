@@ -114,6 +114,11 @@ pub enum WebEvent {
         /// True when one or more `/auth/:token` routes are live.
         active: bool,
     },
+    /// CLI provider installation or authentication readiness changed.
+    ProviderSetupUpdated {
+        /// Provider identifier (`antigravity`, `claude`, `codex`).
+        provider: String,
+    },
 }
 
 struct LiveBuffer {

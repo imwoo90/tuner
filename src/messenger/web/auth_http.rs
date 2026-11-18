@@ -228,6 +228,7 @@ pub async fn handle_auth_me(
     let tg_connected = ctx.bot.read().await.is_some();
     let lang = ctx.config.language.as_deref().unwrap_or("ko");
     let def_prov = crate::session::data::SessionData::effective_provider(&ctx.config.provider, "antigravity");
+    let (any_ready, _) = super::provider_status::inspect_all_providers(&ctx.tuner_home);
     match require_auth(&ctx, &headers).await {
         Ok(sess) => Json(serde_json::json!({
             "authenticated": true,
@@ -237,7 +238,8 @@ pub async fn handle_auth_me(
             "language": lang,
             "telegram_connected": tg_connected,
             "default_provider": def_prov,
-            "default_model": ctx.config.model
+            "default_model": ctx.config.model,
+            "needs_onboarding": !any_ready
         }))
         .into_response(),
         Err(_) => (

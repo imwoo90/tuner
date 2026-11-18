@@ -12,7 +12,7 @@ use super::auth_http::{json_err, require_auth, require_mutation_auth};
 use super::{resolve_ctx, WebAppCtx};
 use crate::security::vault_auth::cdp_state::validate_http_url;
 use crate::security::vault_auth::options::canonical_storage_slug;
-use crate::security::vault_auth::proxy::list_active_auth_sessions;
+use crate::security::vault_auth::proxy::{list_active_auth_sessions, ActiveAuthSessionInfo};
 use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -85,20 +85,21 @@ fn build_vault_auth_args(profile: &str, payload: &StartHitlPayload) -> Result<Ve
     }
     args.push("--ttl".to_string());
     args.push(ttl);
+    args.push("--no-tunnel".to_string());
     Ok(args)
 }
 
 async fn wait_for_hitl_route(
     mut child: tokio::process::Child,
     known: HashSet<String>,
-) -> Response {
+) -> Result<ActiveAuthSessionInfo, (StatusCode, String)> {
     let deadline = Instant::now() + Duration::from_secs(12);
     while Instant::now() < deadline {
         if let Ok(Some(status)) = child.try_wait() {
-            return json_err(
+            return Err((
                 StatusCode::BAD_REQUEST,
-                &format!("Remote browser exited early ({status}). Ensure URL is configured in Vault or provide https:// URL."),
-            );
+                format!("Remote browser exited early ({status}). Ensure URL is configured in Vault or provide https:// URL."),
+            ));
         }
         let now_list = list_active_auth_sessions().await;
         if let Some(found) = now_list.iter().find(|s| !known.contains(&s.token)) {
@@ -106,12 +107,41 @@ async fn wait_for_hitl_route(
             tokio::spawn(async move {
                 let _ = child.wait().await;
             });
-            return (StatusCode::CREATED, Json(serde_json::json!({ "ok": true, "session": info }))).into_response();
+            return Ok(info);
         }
         tokio::time::sleep(Duration::from_millis(180)).await;
     }
     let _ = child.kill().await;
-    json_err(StatusCode::GATEWAY_TIMEOUT, "Timed out waiting for remote Chrome display to initialize")
+    Err((
+        StatusCode::GATEWAY_TIMEOUT,
+        "Timed out waiting for remote Chrome display to initialize".to_string(),
+    ))
+}
+
+/// Spawns `tuner --vault auth` for `payload` and resolves its registered [`ActiveAuthSessionInfo`].
+pub async fn launch_hitl_session(
+    profile: &str,
+    payload: &StartHitlPayload,
+) -> Result<ActiveAuthSessionInfo, (StatusCode, String)> {
+    let before = list_active_auth_sessions().await;
+    if before.len() >= 2 {
+        return Err((
+            StatusCode::CONFLICT,
+            "Maximum concurrent remote browser sessions (2) already active".to_string(),
+        ));
+    }
+    let cli_args = build_vault_auth_args(profile, payload).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let exe = std::env::current_exe()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to resolve tuner executable".to_string()))?;
+    let known: HashSet<String> = before.into_iter().map(|s| s.token).collect();
+    let child = tokio::process::Command::new(exe)
+        .args(&cli_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to launch browser auth: {e}")))?;
+    wait_for_hitl_route(child, known).await
 }
 
 /// Spawns a background `tuner --vault auth` session and waits for its `/auth/:token` route (`POST /dashboard/api/hitl/start`).
@@ -127,27 +157,8 @@ pub async fn handle_hitl_start(
     if let Err(r) = require_mutation_auth(&ctx, &headers).await {
         return *r;
     }
-    let before = list_active_auth_sessions().await;
-    if before.len() >= 2 {
-        return json_err(StatusCode::CONFLICT, "Maximum concurrent remote browser sessions (2) already active");
+    match launch_hitl_session(&ctx.profile, &payload).await {
+        Ok(info) => (StatusCode::CREATED, Json(serde_json::json!({ "ok": true, "session": info }))).into_response(),
+        Err((code, msg)) => json_err(code, &msg),
     }
-    let cli_args = match build_vault_auth_args(&ctx.profile, &payload) {
-        Ok(a) => a,
-        Err(e) => return json_err(StatusCode::BAD_REQUEST, &e),
-    };
-    let Ok(exe) = std::env::current_exe() else {
-        return json_err(StatusCode::INTERNAL_SERVER_ERROR, "Failed to resolve tuner executable");
-    };
-    let known: HashSet<String> = before.into_iter().map(|s| s.token).collect();
-    let child = match tokio::process::Command::new(exe)
-        .args(&cli_args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => return json_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to launch browser auth: {e}")),
-    };
-    wait_for_hitl_route(child, known).await
 }

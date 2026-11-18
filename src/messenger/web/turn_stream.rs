@@ -141,7 +141,7 @@ async fn recover_missed_agy_ask(
 pub async fn stream_web_turn(ctx: &Arc<WebAppCtx>, sess: &SessionData, sid: &str, prompt: &str) {
     let cc = configure_session_cli(&ctx.cli, sess, sess.chat_id, sess.topic_id).await;
     let pre_cursor = capture_pre_transcript_cursor(&cc, sess, sid, &ctx.config.provider);
-    let stream_res = cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, ctx.working_dir.clone()).await;
+    let stream_res = cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, cc.config.working_dir.clone()).await;
     let mut stream = match stream_res {
         Ok(s) => s,
         Err(e) => {

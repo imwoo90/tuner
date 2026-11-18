@@ -1,5 +1,6 @@
 import { escapeHtml, renderMarkdown } from "/dashboard/assets/markdown.js";
 import { t, setLang, toggleLang, onLangChange } from "/dashboard/assets/i18n.js";
+import { createOnboardingRenderer } from "/dashboard/assets/onboarding.js";
 import {
   createSlashController,
   describeCommand,
@@ -10,6 +11,7 @@ export function createChatController({
   apiFetch,
   onOpenFile,
   onOpenInspectorTab,
+  onOpenBrowserToken,
   onRefreshSessions,
   getActiveTransport,
   getPreferredTgChatId
@@ -50,6 +52,7 @@ export function createChatController({
 
   let state = {
     session: null,
+    needsOnboarding: false,
     draft: { provider: "antigravity", model: "", effort: "" },
     messages: [],
     liveStream: "",
@@ -126,16 +129,37 @@ export function createChatController({
     return div;
   }
 
+  const wizardRenderer = createOnboardingRenderer({
+    apiFetch,
+    onOpenBrowserToken: (tok) => onOpenBrowserToken?.(tok),
+    onProviderReady: async (readyProv) => {
+      state.needsOnboarding = false;
+      state.draft.provider = readyProv || state.draft.provider;
+      state.draft.model = "";
+      delete state.modelCatalog[state.draft.provider];
+      await ensureModelsLoaded(state.draft.provider);
+      renderHeader();
+      renderMessages(false);
+      els.input?.focus();
+    }
+  });
+
   function renderMessages(forceScroll = false) {
     const stick = forceScroll || isNearBottom();
     els.messages.innerHTML = "";
     if (!state.session) {
+      if (state.needsOnboarding) {
+        wizardRenderer.renderInto(els.messages, { isWizard: true });
+        return;
+      }
+      wizardRenderer.clearPoll();
       const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
       const hTitle = isTg ? t("draftHeroTitleTg") : t("draftHeroTitleWeb");
       const hSub = isTg ? t("draftHeroSubTg") : t("draftHeroSubWeb");
       els.messages.innerHTML = `<div id="draft-hero" class="draft-hero"><h2>${escapeHtml(hTitle)}</h2><p>${escapeHtml(hSub)}</p></div>`;
       return;
     }
+    wizardRenderer.clearPoll();
     if (state.messages.length === 0) {
       els.messages.innerHTML = `<div class="empty-state">${escapeHtml(t("emptyNoMessages"))}</div>`;
       return;
@@ -702,9 +726,16 @@ export function createChatController({
   return {
     selectSession,
     handleWsEvent,
-    initDraftDefaults: (prov, model) => {
+    initDraftDefaults: (prov, model, needsOnboarding = false) => {
       if (prov) state.draft.provider = prov;
       if (model) state.draft.model = model;
+      state.needsOnboarding = Boolean(needsOnboarding);
+    },
+    onProviderSetupUpdated: (prov) => {
+      if (prov) delete state.modelCatalog[prov];
+      if (!state.session && state.needsOnboarding) {
+        wizardRenderer.renderInto(els.messages, { isWizard: true });
+      }
     },
     refreshDraftTransportUi: () => {
       renderHeader();

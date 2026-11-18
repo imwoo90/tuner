@@ -51,6 +51,7 @@ const chat = createChatController({
   apiFetch,
   onOpenFile: (path) => inspector.openFilePreview(path),
   onOpenInspectorTab: (tab) => inspector.openTab(tab),
+  onOpenBrowserToken: (tok) => inspector.openBrowserSession(tok),
   onRefreshSessions: () => loadSessions(),
   getActiveTransport: () => activeTransport,
   getPreferredTgChatId
@@ -418,6 +419,9 @@ function connectWebSocket() {
       } else if (ev.type === "hitl_updated") {
         refreshHitlBanner();
         inspector.onHitlUpdated();
+      } else if (ev.type === "provider_setup_updated") {
+        inspector.onProviderSetupUpdated();
+        chat.onProviderSetupUpdated(ev.provider);
       }
     } catch (_) {}
   });
@@ -576,7 +580,7 @@ async function boot() {
   initLang(me.language);
   applyDomI18n();
 
-  chat.initDraftDefaults(me.default_provider, me.default_model);
+  chat.initDraftDefaults(me.default_provider, me.default_model, me.needs_onboarding);
 
   const profEl = document.getElementById("profile-badge");
   if (profEl) {

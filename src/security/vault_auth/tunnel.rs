@@ -56,14 +56,11 @@ pub async fn establish_auth_tunnel(
     no_tunnel: bool,
 ) -> Result<(String, ActiveTunnel), String> {
     let loopback_url = format!("http://127.0.0.1:{local_port}/auth/{token}");
-    if no_tunnel {
-        return Ok((loopback_url, ActiveTunnel::LoopbackOnly));
-    }
-
     if let Some(ep) = load_tunnel_endpoint(vault_dir)
-        && let Some(pub_url) = try_register_warm_proxy(&ep, local_port, token, ttl_secs).await
+        && let Some(pub_url) =
+            try_register_warm_proxy(&ep, local_port, token, ttl_secs, no_tunnel).await
     {
-        if pub_url.starts_with("https://") {
+        if !no_tunnel && pub_url.starts_with("https://") {
             wait_for_http_ready(&pub_url, Duration::from_secs(12)).await;
         }
         return Ok((
@@ -74,6 +71,9 @@ pub async fn establish_auth_tunnel(
             },
         ));
     }
+    if no_tunnel {
+        return Ok((loopback_url, ActiveTunnel::LoopbackOnly));
+    }
 
     spawn_standalone_tunnel(local_port, token).await
 }
@@ -83,6 +83,7 @@ async fn try_register_warm_proxy(
     local_port: u16,
     token: &str,
     ttl_secs: u64,
+    skip_quick_tunnel: bool,
 ) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(12))
@@ -92,6 +93,7 @@ async fn try_register_warm_proxy(
         token: token.to_string(),
         local_port,
         expires_at_secs: current_unix_secs().saturating_add(ttl_secs),
+        skip_quick_tunnel,
     };
     let resp = client
         .post(format!(
@@ -108,7 +110,9 @@ async fn try_register_warm_proxy(
     }
     let body: Value = resp.json().await.ok()?;
     let url = body.get("public_url")?.as_str()?.trim().to_string();
-    if url.starts_with("https://") {
+    if url.starts_with("https://")
+        || (url.starts_with("http://") && (skip_quick_tunnel || find_cloudflared().is_err()))
+    {
         Some(url)
     } else {
         let _ = unregister_warm_proxy(ep, token).await;

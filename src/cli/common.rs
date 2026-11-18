@@ -68,9 +68,11 @@ pub fn resolve_cli_bin(name: &str) -> String {
         return name.to_string();
     }
     if let Ok(home) = std::env::var("HOME") {
-        let local_bin = PathBuf::from(home).join(".local/bin").join(name);
-        if local_bin.is_file() {
-            return local_bin.to_string_lossy().to_string();
+        for rel in [".local/bin", ".claude/local", ".local/node-lts/bin"] {
+            let p = PathBuf::from(&home).join(rel).join(name);
+            if p.is_file() {
+                return p.to_string_lossy().to_string();
+            }
         }
     }
     let fb = PathBuf::from("/home/wimvm/.local/bin").join(name);

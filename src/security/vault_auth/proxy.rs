@@ -72,6 +72,9 @@ pub struct RegisterAuthRouteReq {
     pub local_port: u16,
     /// Expiration Unix timestamp in seconds.
     pub expires_at_secs: u64,
+    /// Skip spawning a new Quick Tunnel when called from an active `:8743` Dashboard session.
+    #[serde(default)]
+    pub skip_quick_tunnel: bool,
 }
 
 /// Request payload for `POST /internal/auth/unregister`.
@@ -278,9 +281,16 @@ async fn handle_register(
         );
     }
     crate::messenger::web::events_bridge::hitl_updated(true).await;
-    let public_url = crate::messenger::telegram::review::global_review_manager()
-        .get_auth_url(&req.token)
-        .await;
+    let mgr = crate::messenger::telegram::review::global_review_manager();
+    let public_url = if req.skip_quick_tunnel {
+        let port = mgr.ensure_server_running().await;
+        match mgr.current_tunnel_url().await {
+            Some(base) => format!("{base}/auth/{}", req.token),
+            None => format!("http://127.0.0.1:{port}/auth/{}", req.token),
+        }
+    } else {
+        mgr.get_auth_url(&req.token).await
+    };
     Json(serde_json::json!({ "public_url": public_url })).into_response()
 }
 

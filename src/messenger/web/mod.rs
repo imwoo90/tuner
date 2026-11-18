@@ -5,28 +5,32 @@
 //! REST/WebSocket APIs, PBKDF2 + Magic Link auth, subagent tree, and operational panels.
 //!
 //! ## Submodules
-//! - [`api_ask`] (`api_ask.rs`): Interactive `AskQuestion` card answers and resume.
-//! - [`api_ask_helpers`] (`api_ask_helpers.rs`): PTY keystroke and step helpers for AskQuestion.
-//! - [`api_chat`] (`api_chat.rs`): Prompt dispatch, soft `/stop`, and `/new` resets.
-//! - [`api_files`] (`api_files.rs`): Sandboxed `/file` preview/raw and Zero-Knowledge `/vault`.
-//! - [`api_history`] (`api_history.rs`): JSONL chat history, active ask, and multipart upload.
-//! - [`api_hitl`] (`api_hitl.rs`): In-dashboard HITL remote browser status and launcher.
-//! - [`api_models`] (`api_models.rs`): Live provider model & reasoning effort catalog.
-//! - [`api_ops`] (`api_ops.rs`): Structured `/usage` and `/cron` operational APIs.
-//! - [`api_sessions`] (`api_sessions.rs`): Session CRUD and provider/model/effort config.
-//! - [`assets_http`] (`assets_http.rs`): Embedded PWA HTML, CSS, JS, manifest, and SW handlers.
-//! - [`auth`] (`auth.rs`): Persistent `0600` auth operations, Magic Links, and PBKDF2 PINs.
-//! - [`auth_http`] (`auth_http.rs`): Auth HTTP endpoints, cookie parsing, and CSRF checks.
-//! - [`auth_store`] (`auth_store.rs`): `flock`-guarded `dashboard_auth.json` I/O and `429` lockouts.
-//! - [`cli_dash`] (`cli_dash.rs`): `tuner --dashboard` CLI and Telegram `/dashboard` command.
-//! - [`events`] (`events.rs`): Real-time `WebEventHub` broadcast channel and stream cache.
-//! - [`events_bridge`] (`events_bridge.rs`): Compact Telegram & Cron hooks emitting Web events.
-//! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID and recursive `.system_generated/` inspector.
-//! - [`tg_topics`] (`tg_topics.rs`): Live Telegram `createForumTopic` / `editForumTopic` / `deleteForumTopic` sync.
-//! - [`turn_boot`] (`turn_boot.rs`): Session init, auto-handover, and observer attach.
-//! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled Web turn dispatch and Telegram mirror.
-//! - [`turn_stream`] (`turn_stream.rs`): Live `StreamEvent` pump and result persistence.
-//! - [`ws`] (`ws.rs`): Cookie/CSRF/Origin-verified `/dashboard/api/ws` WebSocket handler.
+//! - [`api_ask`] (`api_ask.rs`): Interactive `AskQuestion` answers.
+//! - [`api_ask_helpers`] (`api_ask_helpers.rs`): PTY helpers for `AskQuestion`.
+//! - [`api_chat`] (`api_chat.rs`): Prompt send, `/stop`, `/new`, and prune.
+//! - [`api_files`] (`api_files.rs`): Sandboxed `/file` preview and `/vault`.
+//! - [`api_history`] (`api_history.rs`): Chat history and multipart upload.
+//! - [`api_hitl`] (`api_hitl.rs`): HITL remote browser status and launcher.
+//! - [`api_models`] (`api_models.rs`): Model, effort, and slash catalog.
+//! - [`api_ops`] (`api_ops.rs`): `/usage` and `/cron` endpoints.
+//! - [`api_providers`] (`api_providers.rs`): CLI install and OAuth login API.
+//! - [`api_sessions`] (`api_sessions.rs`): Session CRUD and config patch.
+//! - [`assets_http`] (`assets_http.rs`): Embedded static PWA assets.
+//! - [`auth`] (`auth.rs`): Magic Links and PBKDF2 PIN logic.
+//! - [`auth_http`] (`auth_http.rs`): Auth endpoints and CSRF guards.
+//! - [`auth_store`] (`auth_store.rs`): `0600` auth persistence and lockouts.
+//! - [`cli_dash`] (`cli_dash.rs`): `--dashboard` CLI and `/dashboard` command.
+//! - [`events`] (`events.rs`): `WebEventHub` broadcast and stream buffer.
+//! - [`events_bridge`] (`events_bridge.rs`): Telegram/Cron Web event hooks.
+//! - [`provider_install`] (`provider_install.rs`): Background CLI installer.
+//! - [`provider_oauth`] (`provider_oauth.rs`): Safe PTY CLI OAuth bridge.
+//! - [`provider_status`] (`provider_status.rs`): CLI readiness and `.env` store.
+//! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID and subagent tree.
+//! - [`tg_topics`] (`tg_topics.rs`): Telegram forum topic CRUD sync.
+//! - [`turn_boot`] (`turn_boot.rs`): Session init and handover boot.
+//! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled Web turn runner.
+//! - [`turn_stream`] (`turn_stream.rs`): Live `StreamEvent` pump.
+//! - [`ws`] (`ws.rs`): `/dashboard/api/ws` WebSocket handler.
 //!
 //! ## Search Tags
 //! #web-dashboard, #pwa-ui, #control-plane, #axum-router
@@ -39,6 +43,7 @@ pub mod api_history;
 pub mod api_hitl;
 pub mod api_models;
 pub mod api_ops;
+pub mod api_providers;
 pub mod api_sessions;
 pub mod assets_http;
 pub mod auth;
@@ -47,6 +52,9 @@ pub mod auth_store;
 pub mod cli_dash;
 pub mod events;
 pub mod events_bridge;
+pub mod provider_install;
+pub mod provider_oauth;
+pub mod provider_status;
 pub mod subagent_tree;
 pub mod tg_topics;
 pub mod turn_boot;
@@ -302,6 +310,7 @@ fn attach_ops_routes(r: Router) -> Router {
         .route("/dashboard/api/vault/entries/:site_key", delete(api_files::handle_vault_delete))
         .route("/dashboard/api/hitl", get(api_hitl::handle_hitl_status))
         .route("/dashboard/api/hitl/start", post(api_hitl::handle_hitl_start))
+        .merge(api_providers::provider_routes())
 }
 
 /// Builds the `/dashboard` and `/dashboard/api/*` Axum router.
