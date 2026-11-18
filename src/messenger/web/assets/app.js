@@ -6,6 +6,8 @@ import { createInspectorController } from "/dashboard/assets/inspector.js";
 let csrfToken = "";
 let sessions = [];
 let activeTransport = "web";
+let telegramConnected = true;
+let telegramBotUsername = "";
 let renamingKey = "";
 let confirmingDeleteKey = "";
 let confirmDeleteTimer = null;
@@ -53,6 +55,11 @@ const chat = createChatController({
   onOpenInspectorTab: (tab) => inspector.openTab(tab),
   onOpenBrowserToken: (tok) => inspector.openBrowserSession(tok),
   onRefreshSessions: () => loadSessions(),
+  onTelegramConnected: (uname) => {
+    telegramConnected = true;
+    telegramBotUsername = uname || "";
+    renderSessionList();
+  },
   getActiveTransport: () => activeTransport,
   getPreferredTgChatId
 });
@@ -113,6 +120,7 @@ function syncTransportTabs() {
     newBtn.textContent = isTg ? t("newTgTopicBtn") : t("newTopicBtn");
     newBtn.title = isTg ? t("newTgTopicTitle") : t("newTopicTitle");
     newBtn.classList.toggle("active", isDraft);
+    newBtn.classList.toggle("hidden", isTg && !telegramConnected);
   }
 }
 
@@ -278,7 +286,7 @@ function renderSessionList() {
   if (activeTransport === "tg") {
     const hint = document.createElement("div");
     hint.className = "sidebar-hint";
-    hint.textContent = t("tgTabHint");
+    hint.textContent = telegramConnected ? t("tgTabHint") : t("tgDisconnectedHint");
     listEl.appendChild(hint);
   }
 
@@ -328,6 +336,9 @@ async function loadSessions() {
   if (!res.ok) return;
   const data = await res.json();
   sessions = data.sessions || [];
+  if (sessions.length > 0) {
+    chat.markHasExistingSessions();
+  }
   const wp = data.warm_pools || {};
   const wpEl = document.getElementById("warm-pool-pill");
   if (wpEl) wpEl.textContent = `${Number(wp.total_active || 0)}`;
@@ -422,6 +433,12 @@ function connectWebSocket() {
       } else if (ev.type === "provider_setup_updated") {
         inspector.onProviderSetupUpdated();
         chat.onProviderSetupUpdated(ev.provider);
+      } else if (ev.type === "telegram_status_updated") {
+        telegramConnected = Boolean(ev.connected);
+        telegramBotUsername = ev.bot_username || "";
+        chat.setTelegramState(telegramConnected, telegramBotUsername);
+        renderSessionList();
+        inspector.onProviderSetupUpdated();
       }
     } catch (_) {}
   });
@@ -583,10 +600,13 @@ async function boot() {
     return;
   }
   csrfToken = me.csrf_token || "";
+  telegramConnected = Boolean(me.telegram_connected);
+  telegramBotUsername = me.bot_username || "";
   initLang(me.language);
   applyDomI18n();
 
   chat.initDraftDefaults(me.default_provider, me.default_model, me.needs_onboarding);
+  chat.setTelegramState(telegramConnected, telegramBotUsername);
 
   const profEl = document.getElementById("profile-badge");
   if (profEl) {

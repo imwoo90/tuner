@@ -210,7 +210,21 @@ const DICT = {
     provAutoCallbackHint: "우측 내장 브라우저에서 로그인하면 자동으로 완료됩니다. (외부 브라우저 이용 시 코드나 콜백 주소를 붙여넣으세요)",
     provApiKeySummary: "🔑 API Key로 연결",
     provApiKeyPh: "API Key 입력 (sk-...)",
-    provApiKeySaveBtn: "키 저장"
+    provApiKeySaveBtn: "키 저장",
+    tgDisconnectedHint: "텔레그램 봇이 연결되어 있지 않습니다.",
+    tgSetupHeaderTitle: "텔레그램 연동",
+    tgNotConnectedBadge: "미연결",
+    tgSetupHeroTitle: "텔레그램 봇 연동하기",
+    tgSetupHeroSub: "@BotFather에서 발급받은 봇 토큰을 연결하면 대시보드와 텔레그램 토픽이 실시간 양방향으로 동기화됩니다.",
+    tgTokenLabel: "텔레그램 Bot Token (필수)",
+    tgTokenPh: "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ",
+    tgAllowedLabel: "허용 사용자 / 포럼 그룹 ID (선택)",
+    tgAllowedPh: "예: 12345678, -100987654321 (비워두면 텔레그램 첫 메시지 전송 시 자동 등록)",
+    tgAllowedHelp: "숫자 ID를 함께 입력하면 대시보드에서도 즉시 새 텔레그램 토픽을 만들 수 있습니다.",
+    tgConnectBtn: "✈️ 텔레그램 봇 연결하기",
+    tgConnectingBtn: "연결 확인 중…",
+    tgEngineCardTitle: "Telegram Bot 연동",
+    tgDisconnectBtn: "연결 해제"
   },
   en: {
     newTopicBtn: "+ New Chat",
@@ -420,7 +434,21 @@ const DICT = {
     provAutoCallbackHint: "Signing in via the built-in browser panel completes automatically (or paste code/callback URL below).",
     provApiKeySummary: "🔑 Use API Key instead",
     provApiKeyPh: "Enter API Key (sk-...)",
-    provApiKeySaveBtn: "Save Key"
+    provApiKeySaveBtn: "Save Key",
+    tgDisconnectedHint: "Telegram bot is not connected.",
+    tgSetupHeaderTitle: "Telegram Integration",
+    tgNotConnectedBadge: "Not connected",
+    tgSetupHeroTitle: "Connect Telegram Bot",
+    tgSetupHeroSub: "Enter a Bot Token from @BotFather to sync topics and messages between this dashboard and Telegram in real time.",
+    tgTokenLabel: "Telegram Bot Token (Required)",
+    tgTokenPh: "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ",
+    tgAllowedLabel: "Allowed User / Forum Group IDs (Optional)",
+    tgAllowedPh: "e.g. 12345678, -100987654321 (if blank, auto-registers on first Telegram message)",
+    tgAllowedHelp: "Providing your numeric User or Group ID lets you create new Telegram topics directly from this dashboard right away.",
+    tgConnectBtn: "✈️ Connect Telegram Bot",
+    tgConnectingBtn: "Verifying token…",
+    tgEngineCardTitle: "Telegram Bot Sync",
+    tgDisconnectBtn: "Disconnect"
   }
 };
 

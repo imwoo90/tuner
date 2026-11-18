@@ -42,7 +42,6 @@ pub(crate) fn build_sessions(
 
 struct CoreRuntime {
     cfg: Arc<CliConfig>,
-    topic_cache: Arc<TopicNameCache>,
     sessions: Arc<SessionManager>,
     cli: Arc<AntigravityCli>,
     bus: Arc<MessageBus>,
@@ -78,7 +77,7 @@ async fn init_core_runtime(config: CliConfig, paths: &TunerPaths) -> CoreRuntime
     });
     init_global_web_ctx(web_ctx.clone());
     bus.register_transport(Arc::new(WebTransport::new(web_ctx.clone())));
-    CoreRuntime { cfg, topic_cache, sessions, cli, bus, cron, web_ctx }
+    CoreRuntime { cfg, sessions, cli, bus, cron, web_ctx }
 }
 
 fn start_background_schedulers(rt: &CoreRuntime, paths: &TunerPaths) {
@@ -163,43 +162,57 @@ fn spawn_web_warmup(paths: &TunerPaths) {
     });
 }
 
+/// Spawns the live Telegram long-polling dispatcher and attaches `bot` to `web_ctx`.
+pub fn spawn_telegram_dispatcher(
+    web_ctx: Arc<WebAppCtx>,
+    cfg: Arc<CliConfig>,
+    bot: Bot,
+    bot_info: Arc<BotInfo>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        web_ctx.set_bot(bot.clone()).await;
+        let targets = if !cfg.allowed_group_ids.is_empty() {
+            cfg.allowed_group_ids.clone()
+        } else {
+            cfg.allowed_user_ids.clone()
+        };
+        web_ctx.bus.register_transport(Arc::new(
+            super::transport::TelegramTransport::with_targets(bot.clone(), targets)
+                .with_context(cfg.clone(), web_ctx.sessions.clone()),
+        ));
+        let _ = commands::register_commands(&bot).await;
+        let (b, s) = (bot.clone(), web_ctx.sessions.clone());
+        tokio::spawn(async move {
+            reply::send_startup_notification(b, s).await;
+        });
+
+        let media_group_manager = Arc::new(super::media_group::MediaGroupManager::new());
+        let handler = dptree::entry()
+            .branch(Update::filter_message().endpoint(handle_message))
+            .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
+
+        let aux_deps = (web_ctx.cron_manager.clone(), web_ctx.topic_cache.clone());
+        let meta_deps = (bot_info.clone(), media_group_manager.clone());
+        Dispatcher::builder(bot, handler)
+            .dependencies(dptree::deps![
+                cfg,
+                web_ctx.sessions.clone(),
+                web_ctx.cli.clone(),
+                web_ctx.cron_manager.clone(),
+                web_ctx.topic_cache.clone(),
+                bot_info,
+                media_group_manager,
+                aux_deps,
+                meta_deps
+            ])
+            .build()
+            .dispatch()
+            .await;
+    })
+}
+
 async fn run_telegram_dispatcher(rt: CoreRuntime, bot: Bot, bot_info: Arc<BotInfo>) {
-    rt.web_ctx.set_bot(bot.clone()).await;
-    let targets = if !rt.cfg.allowed_group_ids.is_empty() {
-        rt.cfg.allowed_group_ids.clone()
-    } else {
-        rt.cfg.allowed_user_ids.clone()
-    };
-    rt.bus.register_transport(Arc::new(
-        super::transport::TelegramTransport::with_targets(bot.clone(), targets)
-            .with_context(rt.cfg.clone(), rt.sessions.clone()),
-    ));
-    let _ = commands::register_commands(&bot).await;
-    let (b, s) = (bot.clone(), rt.sessions.clone());
-    tokio::spawn(async move { reply::send_startup_notification(b, s).await; });
-
-    let media_group_manager = Arc::new(super::media_group::MediaGroupManager::new());
-    let handler = dptree::entry()
-        .branch(Update::filter_message().endpoint(handle_message))
-        .branch(Update::filter_callback_query().endpoint(callbacks::handle_callback_query));
-
-    let aux_deps = (rt.cron.clone(), rt.topic_cache.clone());
-    let meta_deps = (bot_info.clone(), media_group_manager.clone());
-    Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![
-            rt.cfg,
-            rt.sessions,
-            rt.cli,
-            rt.cron,
-            rt.topic_cache,
-            bot_info,
-            media_group_manager,
-            aux_deps,
-            meta_deps
-        ])
-        .build()
-        .dispatch()
-        .await;
+    let _ = spawn_telegram_dispatcher(rt.web_ctx, rt.cfg, bot, bot_info).await;
 }
 
 /// Executes `run_bot` (starting Web/control-plane services and optional Telegram dispatcher).

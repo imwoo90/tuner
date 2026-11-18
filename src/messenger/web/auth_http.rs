@@ -226,6 +226,7 @@ pub async fn handle_auth_me(
     };
     let has_pin = ctx.auth.has_pin().await;
     let tg_connected = ctx.bot.read().await.is_some();
+    let bot_username = super::api_telegram::resolve_bot_username(&ctx).await;
     let lang = ctx.config.language.as_deref().unwrap_or("ko");
     let def_prov = crate::session::data::SessionData::effective_provider(&ctx.config.provider, "antigravity");
     let (any_ready, _) = super::provider_status::inspect_all_providers(&ctx.tuner_home);
@@ -237,6 +238,7 @@ pub async fn handle_auth_me(
             "profile": ctx.profile,
             "language": lang,
             "telegram_connected": tg_connected,
+            "bot_username": bot_username,
             "default_provider": def_prov,
             "default_model": ctx.config.model,
             "needs_onboarding": !any_ready

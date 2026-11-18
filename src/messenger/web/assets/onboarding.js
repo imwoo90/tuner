@@ -77,9 +77,13 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
   async function renderInto(rootEl, { isWizard = false } = {}) {
     clearPoll();
     if (!rootEl) return;
-    const res = await apiFetch("/dashboard/api/providers/status");
+    const [res, tgRes] = await Promise.all([
+      apiFetch("/dashboard/api/providers/status"),
+      !isWizard ? apiFetch("/dashboard/api/telegram/status").catch(() => null) : Promise.resolve(null)
+    ]);
     if (!res.ok || !rootEl.isConnected) return;
     const data = await res.json();
+    const tgData = tgRes && tgRes.ok ? await tgRes.json().catch(() => null) : null;
     if (!rootEl.isConnected) return;
 
     const providers = data.providers || [];
@@ -105,6 +109,19 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     for (const p of providers) {
       html += renderSingleProviderCard(p);
     }
+    if (!isWizard && tgData) {
+      const tgOk = Boolean(tgData.connected);
+      const tgBadge = tgOk
+        ? `<span class="pill pill-ok">✓ ${escapeHtml(tgData.bot_username ? `@${tgData.bot_username}` : t("provReadyBadge"))}</span>`
+        : `<span class="pill">${escapeHtml(t("tgNotConnectedBadge"))}</span>`;
+      const tgAction = tgOk
+        ? `<div class="card-row"><button id="btn-tg-disconnect" class="btn btn-danger btn-sm" type="button">${escapeHtml(t("tgDisconnectBtn"))}</button></div>`
+        : `<div class="muted">${escapeHtml(t("tgDisconnectedHint"))}</div>`;
+      html += `<div class="card onboard-prov-card">
+        <div class="card-row"><strong>✈️ ${escapeHtml(t("tgEngineCardTitle"))}</strong>${tgBadge}</div>
+        ${tgAction}
+      </div>`;
+    }
     html += `<div id="onboard-err-msg" class="alert alert-danger hidden"></div></div>`;
     rootEl.innerHTML = html;
 
@@ -119,6 +136,12 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     rootEl.querySelector("#btn-finish-onboarding")?.addEventListener("click", (e) => {
       const readyId = e.currentTarget.dataset.readyProv || "antigravity";
       onProviderReady?.(readyId);
+    });
+
+    rootEl.querySelector("#btn-tg-disconnect")?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      await apiFetch("/dashboard/api/telegram/disconnect", { method: "POST" });
+      renderInto(rootEl, { isWizard });
     });
 
     rootEl.querySelectorAll(".prov-install-btn").forEach((btn) => {

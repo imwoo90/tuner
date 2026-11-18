@@ -367,6 +367,19 @@ html, body {
   background: var(--surface-subtle);
   border: 1px solid var(--border-strong);
 }
+.tg-setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.tg-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+  display: block;
+}
 .install-log-pre {
   max-height: 150px;
   overflow-y: auto;
@@ -638,6 +651,7 @@ html, body {
 
 .chat-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 22px 20px 10px;

@@ -13,11 +13,13 @@ export function createChatController({
   onOpenInspectorTab,
   onOpenBrowserToken,
   onRefreshSessions,
+  onTelegramConnected,
   getActiveTransport,
   getPreferredTgChatId
 }) {
   const els = {
     scrollWrap: document.getElementById("chat-scroll"),
+    composerShell: document.querySelector(".composer-shell"),
     messages: document.getElementById("chat-messages"),
     liveBubble: document.getElementById("live-stream-bubble"),
     liveBody: document.getElementById("live-stream-body"),
@@ -53,6 +55,8 @@ export function createChatController({
   let state = {
     session: null,
     needsOnboarding: false,
+    telegramConnected: true,
+    telegramBotUsername: "",
     draft: { provider: "antigravity", model: "", effort: "" },
     messages: [],
     liveStream: "",
@@ -144,7 +148,75 @@ export function createChatController({
     }
   });
 
+  function syncComposerVisibility() {
+    const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
+    const hide = !state.session && (state.needsOnboarding || (isTg && !state.telegramConnected));
+    els.composerShell?.classList.toggle("hidden", hide);
+  }
+
+  function renderTelegramConnectCard() {
+    els.messages.innerHTML = `<div id="tg-connect-card" class="onboarding-wrap">
+      <div class="onboard-header">
+        <h2>✈️ ${escapeHtml(t("tgSetupHeroTitle"))}</h2>
+        <p>${escapeHtml(t("tgSetupHeroSub"))}</p>
+      </div>
+      <form id="tg-connect-form" class="card tg-setup-form">
+        <div>
+          <label class="tg-field-label" for="tg-token-input">${escapeHtml(t("tgTokenLabel"))}</label>
+          <input id="tg-token-input" type="password" placeholder="${escapeHtml(t("tgTokenPh"))}" autocomplete="off" required>
+        </div>
+        <div>
+          <label class="tg-field-label" for="tg-allowed-input">${escapeHtml(t("tgAllowedLabel"))}</label>
+          <input id="tg-allowed-input" type="text" placeholder="${escapeHtml(t("tgAllowedPh"))}" autocomplete="off">
+          <div class="muted" style="margin-top:4px;font-size:11.5px;">${escapeHtml(t("tgAllowedHelp"))}</div>
+        </div>
+        <div id="tg-connect-err" class="alert alert-danger hidden"></div>
+        <div class="card-row" style="justify-content:flex-end;">
+          <button id="btn-tg-connect" class="btn btn-primary" type="submit">${escapeHtml(t("tgConnectBtn"))}</button>
+        </div>
+      </form>
+    </div>`;
+
+    const form = els.messages.querySelector("#tg-connect-form");
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = els.messages.querySelector("#btn-tg-connect");
+      const errEl = els.messages.querySelector("#tg-connect-err");
+      const token = (els.messages.querySelector("#tg-token-input")?.value || "").trim();
+      const allowed = (els.messages.querySelector("#tg-allowed-input")?.value || "").trim();
+      if (!token) return;
+      errEl?.classList.add("hidden");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = t("tgConnectingBtn");
+      }
+      const r = await apiFetch("/dashboard/api/telegram/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, allowed_ids: allowed || null })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = t("tgConnectBtn");
+        }
+        if (errEl) {
+          errEl.textContent = d.error || `HTTP ${r.status}`;
+          errEl.classList.remove("hidden");
+        }
+        return;
+      }
+      state.telegramConnected = true;
+      state.telegramBotUsername = d.bot_username || "";
+      onTelegramConnected?.(state.telegramBotUsername);
+      renderHeader();
+      renderMessages(false);
+    });
+  }
+
   function renderMessages(forceScroll = false) {
+    syncComposerVisibility();
     const stick = forceScroll || isNearBottom();
     els.messages.innerHTML = "";
     if (!state.session) {
@@ -154,6 +226,10 @@ export function createChatController({
       }
       wizardRenderer.clearPoll();
       const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
+      if (isTg && !state.telegramConnected) {
+        renderTelegramConnectCard();
+        return;
+      }
       const hTitle = isTg ? t("draftHeroTitleTg") : t("draftHeroTitleWeb");
       const hSub = isTg ? t("draftHeroSubTg") : t("draftHeroSubWeb");
       els.messages.innerHTML = `<div id="draft-hero" class="draft-hero"><h2>${escapeHtml(hTitle)}</h2><p>${escapeHtml(hSub)}</p></div>`;
@@ -296,13 +372,27 @@ export function createChatController({
   }
 
   function renderHeader() {
+    syncComposerVisibility();
     const s = state.session;
     if (!s) {
       const isTg = (typeof getActiveTransport === "function" ? getActiveTransport() : "web") === "tg";
-      els.topicTitle.textContent = isTg ? t("draftTitleTg") : t("draftTitleWeb");
-      if (els.channelBadge) {
-        els.channelBadge.textContent = isTg ? t("channelBadgeTg") : t("channelBadgeWeb");
-        els.channelBadge.className = isTg ? "pill pill-info" : "pill";
+      if (state.needsOnboarding) {
+        els.topicTitle.textContent = t("onboardHeroTitle");
+        if (els.channelBadge) els.channelBadge.className = "pill hidden";
+      } else if (isTg && !state.telegramConnected) {
+        els.topicTitle.textContent = t("tgSetupHeaderTitle");
+        if (els.channelBadge) {
+          els.channelBadge.textContent = t("tgNotConnectedBadge");
+          els.channelBadge.className = "pill";
+        }
+      } else {
+        els.topicTitle.textContent = isTg ? t("draftTitleTg") : t("draftTitleWeb");
+        if (els.channelBadge) {
+          els.channelBadge.textContent = isTg
+            ? (state.telegramBotUsername ? `✈️ @${state.telegramBotUsername}` : t("channelBadgeTg"))
+            : t("channelBadgeWeb");
+          els.channelBadge.className = isTg ? "pill pill-info" : "pill";
+        }
       }
       els.topicKey.textContent = "";
       els.topicState.dataset.state = "Idle";
@@ -316,7 +406,9 @@ export function createChatController({
     els.newBtn?.classList.remove("hidden");
     els.topicTitle.textContent = formatTopicLabel(s);
     if (els.channelBadge) {
-      els.channelBadge.textContent = s.transport === "tg" ? t("channelBadgeTg") : t("channelBadgeWeb");
+      els.channelBadge.textContent = s.transport === "tg"
+        ? (state.telegramBotUsername ? `✈️ @${state.telegramBotUsername}` : t("channelBadgeTg"))
+        : t("channelBadgeWeb");
       els.channelBadge.className = s.transport === "tg" ? "pill pill-info" : "pill";
     }
     els.topicKey.textContent = s.session_key;
@@ -508,6 +600,7 @@ export function createChatController({
     });
     if (!res.ok) return null;
     const created = await res.json();
+    state.needsOnboarding = false;
     state.session = created;
     renderHeader();
     renderMessages(false);
@@ -730,6 +823,19 @@ export function createChatController({
       if (prov) state.draft.provider = prov;
       if (model) state.draft.model = model;
       state.needsOnboarding = Boolean(needsOnboarding);
+    },
+    setTelegramState: (connected, botUsername = "") => {
+      state.telegramConnected = Boolean(connected);
+      state.telegramBotUsername = botUsername || "";
+      renderHeader();
+      if (!state.session) renderMessages(false);
+    },
+    markHasExistingSessions: () => {
+      if (state.needsOnboarding) {
+        state.needsOnboarding = false;
+        renderHeader();
+        if (!state.session) renderMessages(false);
+      }
     },
     onProviderSetupUpdated: (prov) => {
       if (prov) delete state.modelCatalog[prov];

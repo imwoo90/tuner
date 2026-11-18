@@ -15,6 +15,7 @@
 //! - [`api_ops`] (`api_ops.rs`): `/usage` and `/cron` endpoints.
 //! - [`api_providers`] (`api_providers.rs`): CLI install and OAuth login API.
 //! - [`api_sessions`] (`api_sessions.rs`): Session CRUD and config patch.
+//! - [`api_telegram`] (`api_telegram.rs`): Telegram bot setup and hot-connect API.
 //! - [`assets_http`] (`assets_http.rs`): Embedded static PWA assets.
 //! - [`auth`] (`auth.rs`): Magic Links and PBKDF2 PIN logic.
 //! - [`auth_http`] (`auth_http.rs`): Auth endpoints and CSRF guards.
@@ -46,6 +47,7 @@ pub mod api_models;
 pub mod api_ops;
 pub mod api_providers;
 pub mod api_sessions;
+pub mod api_telegram;
 pub mod assets_http;
 pub mod auth;
 pub mod auth_http;
@@ -313,6 +315,7 @@ fn attach_ops_routes(r: Router) -> Router {
         .route("/dashboard/api/hitl", get(api_hitl::handle_hitl_status))
         .route("/dashboard/api/hitl/start", post(api_hitl::handle_hitl_start))
         .merge(api_providers::provider_routes())
+        .merge(api_telegram::telegram_routes())
 }
 
 /// Builds the `/dashboard` and `/dashboard/api/*` Axum router.

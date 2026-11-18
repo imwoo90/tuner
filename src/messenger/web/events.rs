@@ -24,21 +24,21 @@ use tokio::sync::{broadcast, Mutex};
 pub enum WebEvent {
     /// Topic metadata, provider/model/effort, or busy/asking state changed.
     SessionUpdated {
-        /// Storage key (`tg:<cid>[:<tid>]` or `web:0:<tid>`).
+        /// Storage key.
         session_key: String,
-        /// Active provider (`antigravity`, `claude`, `codex`).
+        /// Active provider.
         provider: String,
-        /// Active canonical model identifier.
+        /// Active model.
         model: String,
-        /// Active reasoning effort level, if applicable.
+        /// Active effort.
         effort: Option<String>,
-        /// Human-readable topic title.
+        /// Topic title.
         topic_name: Option<String>,
-        /// True when pinned at the top of the sidebar.
+        /// Pinned flag.
         pinned: bool,
-        /// True while a foreground or background turn is active.
+        /// Busy flag.
         busy: bool,
-        /// True while waiting for an `AskQuestion` response.
+        /// Asking flag.
         asking: bool,
     },
     /// User prompt accepted from Telegram or Web UI.
@@ -118,6 +118,13 @@ pub enum WebEvent {
     ProviderSetupUpdated {
         /// Provider identifier (`antigravity`, `claude`, `codex`).
         provider: String,
+    },
+    /// Telegram bot connection state changed from the Web Dashboard.
+    TelegramStatusUpdated {
+        /// True when a validated Telegram `Bot` is active.
+        connected: bool,
+        /// Connected bot `@username` without leading `@`, if available.
+        bot_username: Option<String>,
     },
 }
 

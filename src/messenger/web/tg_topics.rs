@@ -57,8 +57,9 @@ async fn collect_candidate_chat_ids(ctx: &WebAppCtx, preferred: Option<i64>) -> 
     all.sort_by(|a, b| b.last_active.cmp(&a.last_active));
 
     if let Some(pref) = preferred.filter(|&c| c != 0) {
-        let allowed = ctx.config.allowed_group_ids.contains(&pref)
-            || ctx.config.allowed_user_ids.contains(&pref)
+        let (lu, lg) = super::api_telegram::read_live_allowed_ids(ctx);
+        let allowed = lg.contains(&pref)
+            || lu.contains(&pref)
             || all.iter().any(|s| s.transport == "tg" && s.chat_id == pref);
         if allowed {
             push_unique(pref);
@@ -70,10 +71,11 @@ async fn collect_candidate_chat_ids(ctx: &WebAppCtx, preferred: Option<i64>) -> 
             push_unique(s.chat_id);
         }
     }
-    for &gid in &ctx.config.allowed_group_ids {
+    let (live_users, live_groups) = super::api_telegram::read_live_allowed_ids(ctx);
+    for gid in live_groups {
         push_unique(gid);
     }
-    for &uid in &ctx.config.allowed_user_ids {
+    for uid in live_users {
         push_unique(uid);
     }
     out
