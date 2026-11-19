@@ -4,13 +4,14 @@
 [![Releases](https://img.shields.io/github/v/release/imwoo90/tuner?label=release&color=brightgreen)](https://github.com/imwoo90/tuner/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**Put your local AI coding CLIs (`Antigravity` · `Claude Code` · `OpenAI Codex`) in your pocket via Telegram.**
+**Put your local AI coding CLIs (`Antigravity` · `Claude Code` · `OpenAI Codex`) in your pocket via a Responsive Web / PWA Dashboard & Telegram.**
 
-`tuner` is a single-binary, pure-Rust agent orchestrator that turns your workstation or home server into a persistent 24/7 engineering studio accessible from your phone or desktop. Instead of paying extra per-token API bills on stateless cloud wrappers, `tuner` drives your **existing authenticated CLI subscriptions** directly against your local Git repositories, toolchains, and hardware.
+`tuner` is a single-binary, pure-Rust agent orchestrator that turns your workstation, home server, or Docker container into a persistent 24/7 engineering studio accessible from your phone or desktop. Instead of paying extra per-token API bills on stateless cloud wrappers, `tuner` drives your **existing authenticated CLI subscriptions** directly against your local Git repositories, toolchains, and hardware.
 
 ```mermaid
 graph LR
-    TG["📱 Telegram (Phone / Desktop)"] <-->|"Live CoT · Inline Buttons · Web Viewer"| T["⚡ tuner (Pure Rust Daemon)"]
+    WEB["🖥️ Web UI / PWA Dashboard"] <-->|"Real-Time WS · Built-in Browser"| T["⚡ tuner (Pure Rust Daemon)"]
+    TG["📱 Telegram (Mirrored Topics)"] <-->|"Live CoT · Inline Buttons · Web Viewer"| T
     T <-->|"Virtual PTY + JSONL"| AGY["🚀 Google Antigravity (agy)"]
     T <-->|"Warm stream-json"| CL["🧠 Claude Code (claude)"]
     T <-->|"Warm JSON-RPC 2.0"| CX["⚙️ OpenAI Codex (codex)"]
@@ -20,6 +21,8 @@ graph LR
 
 ## ✨ Why `tuner`?
 
+- 🖥️ **Responsive Web UI / PWA Dashboard & Zero-State Onboarding (`/dashboard`)**
+  Launch a full desktop & mobile PWA workspace on `:8743/dashboard` (with or without Telegram!). On a fresh Docker container, `tuner` automatically prints a First-Run Magic Link, installs `agy` / `claude` / `codex` in one click, completes OAuth sign-in inside an embedded **Built-in Browser** (auto-harvesting callback codes via CDP), syncs Telegram topics bidirectionally, and lets you connect a Telegram bot live with zero restart.
 - 🔄 **3 Engines, 1 Workspace (`/provider`)**
   Switch seamlessly between **Google Antigravity (`agy`)**, **Claude Code (`claude`)**, and **OpenAI Codex (`codex`)** per Telegram forum topic—or prefix a single message with `@opus`, `@sonnet`, `@astra`, `@sol`, or `@argon`. `tuner` automatically bridges your `AGENTS.md`, rules, and skills across all three CLIs.
 - ⚡ **`0ms` Warm-Process Pool & Soft `/stop`**
@@ -37,9 +40,9 @@ graph LR
 
 ## 🚀 Quick Start (60 Seconds)
 
-### 1. Install at least one supported Agent CLI
-Authenticate any (or all) of the supported agent CLIs on your Linux machine:
-- **Google Antigravity**: `agy` (verified with `v1.5.9`)
+### 1. Install at least one supported Agent CLI (or use the Web Dashboard 1-Click Installer)
+Authenticate any (or all) of the supported agent CLIs on your Linux machine or via `:8743/dashboard`:
+- **Google Antigravity**: `agy` (verified with `v1.5.12`)
 - **Anthropic Claude Code**: `claude` (verified with `v2.1.197`)
 - **OpenAI Codex**: `codex` (verified with `v0.167.0`)
 
@@ -69,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bas
 | `/model` | Live-query the active CLI and switch models via inline buttons (or type `@opus`, `@sonnet`, `@astra`, `@argon`). |
 | `/effort` | Adjust reasoning effort (`minimal` · `low` · `medium` · `high` · `xhigh` · `max`). |
 | `/stop` | Soft-interrupt the current turn while keeping the warm CLI process alive. |
-| `/new` \| `/reset` | Archive a handover summary of the current conversation and start a fresh session. |
+| `/new` | Archive a handover summary of the current conversation and start a fresh session. |
 | `/compact` | Compact conversation history to free up the context window. |
 | `/status` · `/usage` | Inspect active provider/model/PID state, pending attachments, and remaining model quotas. |
 
@@ -86,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bas
 ### Native CLI Workflow Commands (Auto-switched per `/provider`)
 | Active Provider | Available Workflow Slash Commands |
 |---|---|
-| **Antigravity (`agy`)** | `/plan` · `/grill_me` · `/goal` · `/teamwork` · `/boost` · `/learn` · `/browser` · `/schedule` |
+| **Antigravity (`agy`)** | `/plan` · `/grill_me` · `/goal` · `/teamwork` · `/boost` · `/learn` |
 | **Claude Code (`claude`)** | `/review` · `/security_review` · `/verify` · `/debug` · `/simplify` · `/deep_research` · `/code_review` · `/goal` · `/init` |
 | **OpenAI Codex (`codex`)** | `/review` · `/init` |
 
