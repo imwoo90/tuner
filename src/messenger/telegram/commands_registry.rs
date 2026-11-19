@@ -11,9 +11,7 @@ use teloxide::prelude::*;
 
 pub(crate) const COMMON_COMMANDS: &[(&str, &str)] = &[
     ("new", "Start a fresh conversation session"),
-    ("reset", "Alias for /new"),
     ("stop", "Cancel active CLI processes in chat"),
-    ("abort", "Forcefully stop all running workers"),
     ("provider", "Select or change active CLI provider (agy|claude|codex)"),
     ("model", "Select or change active AI model"),
     ("effort", "Select or change reasoning effort (minimal|low|medium|high|xhigh|max)"),
@@ -37,8 +35,6 @@ const ANTIGRAVITY_WORKFLOW_COMMANDS: &[(&str, &str)] = &[
     ("teamwork", "Launch collaborative multi-agent teamwork"),
     ("boost", "Launch deep reasoning & multi-perspective pipeline"),
     ("learn", "Record learning or behavior correction"),
-    ("browser", "Launch browser automation workflow"),
-    ("schedule", "Schedule recurring or one-shot task"),
 ];
 
 const CLAUDE_WORKFLOW_COMMANDS: &[(&str, &str)] = &[

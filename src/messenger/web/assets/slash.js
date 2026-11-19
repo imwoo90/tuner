@@ -255,7 +255,7 @@ export function parseBuiltinSlashInput(rawText) {
   const token = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).split("@")[0].toLowerCase();
   const args = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1).trim();
   const builtins = new Set([
-    "new", "reset", "stop", "abort", "usage", "cron", "vault", "security",
+    "new", "reset", "stop", "abort", "usage", "cron", "vault", "auth", "security",
     "status", "help", "provider", "model", "effort", "lang"
   ]);
   if (!builtins.has(token)) return null;

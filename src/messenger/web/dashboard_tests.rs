@@ -1158,7 +1158,12 @@ async fn test_slash_catalog_and_web_session_delete() {
         serde_json::from_slice(&to_bytes(models_res.into_body(), 65536).await.unwrap()).unwrap();
     let cmds = m_json["commands"].as_array().unwrap();
     assert!(cmds.iter().any(|c| c["command"] == "simplify" && c["kind"] == "workflow"));
-    assert!(cmds.iter().any(|c| c["command"] == "usage" && c["kind"] == "builtin"));
+    assert!(cmds.iter().any(|c| c["command"] == "new" && c["kind"] == "builtin"));
+    assert!(cmds.iter().any(|c| c["command"] == "compact" && c["kind"] == "workflow"));
+    assert!(cmds.iter().any(|c| c["command"] == "stop" && c["kind"] == "builtin"));
+    for excluded in &["browser", "schedule", "reset", "abort", "usage"] {
+        assert!(!cmds.iter().any(|c| c["command"] == *excluded));
+    }
 
     // 3. Pin, Rename, Prune & Delete sessions (supports both web & tg)
     let pinned_sess = ctx.sessions.create_web_session(Some("Pinned Chat".into()), "antigravity", "gemini-4-hydrogen", None).await.unwrap();

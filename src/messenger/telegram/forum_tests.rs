@@ -71,11 +71,12 @@ mod tests {
             assert!(!cmd.description.is_empty() && cmd.description.len() <= 256);
         }
         let names: Vec<_> = commands.iter().map(|c| c.command.as_str()).collect();
-        for n in &["new", "reset", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork", "boost"] {
+        for n in &["new", "stop", "model", "plan", "grill_me", "goal", "learn", "teamwork", "boost"] {
             assert!(names.contains(n));
         }
-        assert!(!names.contains(&"teamwork_preview"));
-        assert!(!names.contains(&"diagnose"));
+        for excluded in &["reset", "abort", "browser", "schedule", "teamwork_preview", "diagnose"] {
+            assert!(!names.contains(excluded));
+        }
 
         let claude_cmds = crate::telegram::commands_registry::get_bot_commands_for_provider("claude");
         let claude_names: Vec<_> = claude_cmds.iter().map(|c| c.command.as_str()).collect();

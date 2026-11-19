@@ -12,9 +12,7 @@ use super::{resolve_ctx, WebAppCtx};
 use crate::messenger::telegram::callbacks_effort::{
     discover_models_with_default, group_discovered_models,
 };
-use crate::messenger::telegram::commands_registry::{
-    workflow_commands_for_provider, COMMON_COMMANDS,
-};
+use crate::messenger::telegram::commands_registry::workflow_commands_for_provider;
 use crate::messenger::telegram::reply_directives::session_supports_effort;
 use crate::session::data::SessionData;
 use axum::{
@@ -33,26 +31,17 @@ pub struct ModelsQuery {
     pub provider: Option<String>,
 }
 
+const WEB_CORE_SESSION_COMMANDS: &[(&str, &str, &str)] = &[
+    ("new", "Start a fresh conversation session", "builtin"),
+    ("compact", "Condense conversation history to free context", "workflow"),
+    ("stop", "Cancel active CLI processes in chat", "builtin"),
+];
+
 fn build_slash_catalog(prov: &str) -> Vec<serde_json::Value> {
     let mut cmds = Vec::new();
-    let skip_web = ["dashboard", "remote", "upgrade", "restart"];
-    for &(cmd, desc) in COMMON_COMMANDS {
-        if skip_web.contains(&cmd) {
-            continue;
-        }
-        let kind = if cmd == "compact" { "workflow" } else { "builtin" };
+    for &(cmd, desc, kind) in WEB_CORE_SESSION_COMMANDS {
         cmds.push(serde_json::json!({ "command": cmd, "description": desc, "kind": kind }));
     }
-    cmds.push(serde_json::json!({
-        "command": "auth",
-        "description": "Open in-dashboard remote browser for login / 2FA / HITL handoff",
-        "kind": "builtin"
-    }));
-    cmds.push(serde_json::json!({
-        "command": "help",
-        "description": "Show available slash commands and shortcuts",
-        "kind": "builtin"
-    }));
     for &(cmd, desc) in workflow_commands_for_provider(prov) {
         if !cmds.iter().any(|c| c.get("command").and_then(|v| v.as_str()) == Some(cmd)) {
             cmds.push(serde_json::json!({ "command": cmd, "description": desc, "kind": "workflow" }));
