@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["WebEvent"],"fn":["emit_session_updated","emit_tg_ask_question","emit_tg_ask_resolved","emit_tg_turn_result","emit_tg_user_message","publish_global","publish_global_delta","publish_session_snapshot","spawn_cron_updated"],"struct":["LiveBuffer","WebEventHub"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["answer_open_ask_under_lock","default_ask_action","emit_ask_step_update","finish_ask_and_resume","handle_answer_ask","log_and_mirror_ask_answer","mark_ask_resolved","process_validated_ask"],"struct":["AskAnswerPayload"]};

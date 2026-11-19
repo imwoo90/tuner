@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_provider_apikey","handle_provider_install","handle_provider_login_cancel","handle_provider_login_start","handle_provider_login_submit","handle_providers_status","provider_routes"],"struct":["ApiKeyPayload","ProviderTargetPayload","StartLoginPayload","SubmitLoginPayload"]};

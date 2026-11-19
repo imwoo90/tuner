@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cycle_browser_tab","dispatch_nav_or_key","dispatch_pointer_or_wheel","dispatch_special_key","dispatch_text_or_credential"]};
+window.SIDEBAR_ITEMS = {"fn":["cycle_browser_tab","dispatch_nav_or_key","dispatch_pointer_or_wheel","dispatch_special_key","dispatch_text_or_credential","extract_copyable_text","probe_oauth_callback_code"]};

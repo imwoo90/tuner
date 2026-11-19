@@ -131,8 +131,8 @@
 <a href=#131 id=131 data-nosnippet>131</a>    topic_id: <span class="prelude-ty">Option</span>&lt;i64&gt;,
 <a href=#132 id=132 data-nosnippet>132</a>    session_id: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
 <a href=#133 id=133 data-nosnippet>133</a>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;WarmClaudeSession&gt;&gt; {
-<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">if </span>chat_id != <span class="number">0
-<a href=#135 id=135 data-nosnippet>135</a>        </span>&amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(w) = map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)).cloned()
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">if </span>(chat_id != <span class="number">0 </span>|| topic_id.is_some())
+<a href=#135 id=135 data-nosnippet>135</a>        &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(w) = map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)).cloned()
 <a href=#136 id=136 data-nosnippet>136</a>    {
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(w);
 <a href=#138 id=138 data-nosnippet>138</a>    }
@@ -210,14 +210,18 @@
 <a href=#210 id=210 data-nosnippet>210</a></span><span class="kw">pub async fn </span>has_pending_ask(chat_id: i64, topic_id: <span class="prelude-ty">Option</span>&lt;i64&gt;, session_id: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; bool {
 <a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">let </span>warm = {
 <a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span>map = global_pool().sessions.lock().<span class="kw">await</span>;
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">if </span>chat_id != <span class="number">0 </span>{ map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)).cloned() } <span class="kw">else </span>{ find_warm(<span class="kw-2">&amp;</span>map, <span class="number">0</span>, <span class="prelude-val">None</span>, session_id).<span class="kw">await </span>}
-<a href=#214 id=214 data-nosnippet>214</a>    };
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(w) = warm <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
-<a href=#216 id=216 data-nosnippet>216</a>    !w.activity.is_expired() &amp;&amp; w.is_alive().<span class="kw">await </span>&amp;&amp; w.pending_ask.lock().<span class="kw">await</span>.is_some()
-<a href=#217 id=217 data-nosnippet>217</a>}
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a><span class="doccomment">/// Returns the number of warm `claude` processes currently registered in the pool.
-<a href=#220 id=220 data-nosnippet>220</a></span><span class="kw">pub async fn </span>active_count() -&gt; usize {
-<a href=#221 id=221 data-nosnippet>221</a>    global_pool().sessions.lock().<span class="kw">await</span>.len()
-<a href=#222 id=222 data-nosnippet>222</a>}
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">if </span>chat_id != <span class="number">0 </span>|| topic_id.is_some() {
+<a href=#214 id=214 data-nosnippet>214</a>            map.get(<span class="kw-2">&amp;</span>(chat_id, topic_id)).cloned()
+<a href=#215 id=215 data-nosnippet>215</a>        } <span class="kw">else </span>{
+<a href=#216 id=216 data-nosnippet>216</a>            find_warm(<span class="kw-2">&amp;</span>map, <span class="number">0</span>, <span class="prelude-val">None</span>, session_id).<span class="kw">await
+<a href=#217 id=217 data-nosnippet>217</a>        </span>}
+<a href=#218 id=218 data-nosnippet>218</a>    };
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(w) = warm <span class="kw">else </span>{ <span class="kw">return </span><span class="bool-val">false</span>; };
+<a href=#220 id=220 data-nosnippet>220</a>    !w.activity.is_expired() &amp;&amp; w.is_alive().<span class="kw">await </span>&amp;&amp; w.pending_ask.lock().<span class="kw">await</span>.is_some()
+<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a><span class="doccomment">/// Returns the number of warm `claude` processes currently registered in the pool.
+<a href=#224 id=224 data-nosnippet>224</a></span><span class="kw">pub async fn </span>active_count() -&gt; usize {
+<a href=#225 id=225 data-nosnippet>225</a>    global_pool().sessions.lock().<span class="kw">await</span>.len()
+<a href=#226 id=226 data-nosnippet>226</a>}
 </code></pre></div></section></main></body></html>

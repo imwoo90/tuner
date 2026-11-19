@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_sessions","init_telegram_bot","run_bot","spawn_restart_watcher","spawn_web_warmup","start_schedulers"]};
+window.SIDEBAR_ITEMS = {"fn":["build_sessions","init_core_runtime","run_bot","run_telegram_dispatcher","spawn_restart_watcher","spawn_telegram_dispatcher","spawn_web_warmup","start_background_schedulers","try_init_telegram_bot"],"struct":["CoreRuntime"]};

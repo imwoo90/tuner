@@ -77,7 +77,7 @@
 <a href=#77 id=77 data-nosnippet>77</a>    (weekly.is_some() || five_hour.is_some()).then_some(ModelQuotaGroup { weekly, five_hour })
 <a href=#78 id=78 data-nosnippet>78</a>}
 <a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a><span class="kw">fn </span>read_claude_session_stats(session_id: <span class="kw-2">&amp;</span>str) -&gt; (u64, u64, u64, u64, usize) {
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>read_claude_session_stats(session_id: <span class="kw-2">&amp;</span>str) -&gt; (u64, u64, u64, u64, usize) {
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">if </span>session_id.is_empty() {
 <a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">return </span>(<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);
 <a href=#83 id=83 data-nosnippet>83</a>    }
@@ -109,7 +109,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>    (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)
 <a href=#110 id=110 data-nosnippet>110</a>}
 <a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a><span class="kw">async fn </span>fetch_claude_oauth_quota(creds_path: <span class="kw-2">&amp;</span>Path, base_url: <span class="kw-2">&amp;</span>str) -&gt; (<span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;ModelQuotaGroup&gt;) {
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>fetch_claude_oauth_quota(creds_path: <span class="kw-2">&amp;</span>Path, base_url: <span class="kw-2">&amp;</span>str) -&gt; (<span class="prelude-ty">Option</span>&lt;String&gt;, <span class="prelude-ty">Option</span>&lt;ModelQuotaGroup&gt;) {
 <a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(raw) = tokio::fs::read_to_string(creds_path).<span class="kw">await else </span>{ <span class="kw">return </span>(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) };
 <a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(doc) = serde_json::from_str::&lt;Value&gt;(<span class="kw-2">&amp;</span>raw) <span class="kw">else </span>{ <span class="kw">return </span>(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) };
 <a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(oauth) = doc.get(<span class="string">"claudeAiOauth"</span>) <span class="kw">else </span>{ <span class="kw">return </span>(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) };

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["default_prune_days","handle_delete_session","handle_new_session","handle_prune_sessions","handle_send_prompt","handle_stop_session","terminate_topic_sessions_for_reset"],"struct":["DeleteSessionPayload","PruneSessionsPayload","SendPromptPayload","SessionKeyPayload"]};

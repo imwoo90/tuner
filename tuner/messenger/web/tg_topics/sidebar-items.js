@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bot_method_url","call_create_forum_topic","clamp_topic_title","collect_candidate_chat_ids","create_remote_telegram_topic","create_session_from_payload","spawn_starter_notice","sync_remote_topic_delete","sync_remote_topic_rename"],"struct":["CreatedTopicResult","TgApiEnvelope"]};

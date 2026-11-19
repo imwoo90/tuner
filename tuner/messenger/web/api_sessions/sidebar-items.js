@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_model_and_effort_patch","build_session_summary","check_busy_and_asking","handle_create_session","handle_list_sessions","handle_patch_session_config","validate_model_and_effort"],"struct":["CreateSessionPayload","PatchConfigPayload","SessionSummary"]};

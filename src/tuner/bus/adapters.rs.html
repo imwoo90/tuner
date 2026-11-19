@@ -23,7 +23,7 @@
 <a href=#23 id=23 data-nosnippet>23</a>    env.result_text = result_text.to_string();
 <a href=#24 id=24 data-nosnippet>24</a>    env.status = status.to_string();
 <a href=#25 id=25 data-nosnippet>25</a>    env.is_error = status.to_lowercase().contains(<span class="string">"error"</span>);
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">if </span>chat_id.is_some() {
+<a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">if </span>chat_id.is_some() || (transport == <span class="prelude-val">Some</span>(<span class="string">"web"</span>) &amp;&amp; topic_id.is_some()) {
 <a href=#27 id=27 data-nosnippet>27</a>        env.delivery = DeliveryMode::Unicast;
 <a href=#28 id=28 data-nosnippet>28</a>    } <span class="kw">else </span>{
 <a href=#29 id=29 data-nosnippet>29</a>        env.delivery = DeliveryMode::Broadcast;

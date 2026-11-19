@@ -234,38 +234,39 @@
 <a href=#234 id=234 data-nosnippet>234</a>            .<span class="kw">await</span>;
 <a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">if </span>active {
 <a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">crate</span>::upgrade::record_user_activity();
-<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = <span class="kw">crate</span>::bus::adapters::from_heartbeat(cur.chat_id, <span class="kw-2">&amp;</span>resp.result, cur.topic_id, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>cur.transport));
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="self">self</span>.bus.submit(<span class="kw-2">&amp;mut </span>env).<span class="kw">await</span>;
-<a href=#239 id=239 data-nosnippet>239</a>        }
-<a href=#240 id=240 data-nosnippet>240</a>    }
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">async fn </span>run_heartbeat_for_chat(<span class="kw-2">&amp;</span><span class="self">self</span>, session: <span class="kw-2">&amp;</span>SessionData) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>lock = <span class="self">self</span>.sessions.lock_pool.get((session.chat_id, session.topic_id));
-<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span><span class="prelude-val">Ok</span>(_topic_guard) = lock.try_lock() <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); };
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">if </span><span class="self">self</span>.is_session_busy(session.chat_id, session.topic_id).<span class="kw">await </span>{
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#247 id=247 data-nosnippet>247</a>        }
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cur) = <span class="self">self</span>.sessions.get_active(<span class="kw-2">&amp;</span>session.session_key()).<span class="kw">await</span>.ok().flatten() <span class="kw">else </span>{
-<a href=#249 id=249 data-nosnippet>249</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#250 id=250 data-nosnippet>250</a>        };
-<a href=#251 id=251 data-nosnippet>251</a>        <span class="kw">if </span>!<span class="self">self</span>.has_fresh_active_session(<span class="kw-2">&amp;</span>cur) || <span class="self">self</span>.is_cooling_down(<span class="kw-2">&amp;</span>cur) {
-<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#253 id=253 data-nosnippet>253</a>        }
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="self">self</span>.record_heartbeat_timestamp(<span class="kw-2">&amp;</span>cur);
-<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span>_bg_guard = <span class="kw">crate</span>::upgrade::begin_background_run();
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>_turn_guard = <span class="self">self</span>.cli.begin_topic_turn(cur.chat_id, cur.topic_id);
-<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">let </span>prompt = <span class="string">"System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly."</span>;
-<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span>eff_prov = <span class="self">self</span>.effective_provider(<span class="kw-2">&amp;</span>cur);
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(eff_prov, <span class="string">"claude" </span>| <span class="string">"codex"</span>) {
-<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">crate</span>::cli::antigravity::model_spec::ensure_live_catalog_fresh().<span class="kw">await</span>;
-<a href=#261 id=261 data-nosnippet>261</a>        }
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>sid = cur.get_session_id(eff_prov);
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>cli = AntigravityCli::new_oneshot(<span class="self">self</span>.build_heartbeat_cli_config(<span class="kw-2">&amp;</span>cur));
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">match </span>cli.send(prompt, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>sid), <span class="bool-val">false</span>, <span class="self">self</span>.config.working_dir.clone()).<span class="kw">await </span>{
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="prelude-val">Ok</span>(resp) =&gt; <span class="self">self</span>.finish_heartbeat_turn(<span class="kw-2">&amp;</span>cur, eff_prov, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>resp).<span class="kw">await</span>,
-<a href=#266 id=266 data-nosnippet>266</a>            <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">eprintln!</span>(<span class="string">"⚠️ [tuner] Heartbeat send failed for chat {} topic {:?}: {e}"</span>, cur.chat_id, cur.topic_id),
-<a href=#267 id=267 data-nosnippet>267</a>        }
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="prelude-val">Ok</span>(())
-<a href=#269 id=269 data-nosnippet>269</a>    }
-<a href=#270 id=270 data-nosnippet>270</a>}
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span>eff_transport = <span class="kw">if </span><span class="self">self</span>.config.transport == <span class="string">"web" </span>{ <span class="string">"web" </span>} <span class="kw">else </span>{ cur.transport.as_str() };
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">let </span><span class="kw-2">mut </span>env = <span class="kw">crate</span>::bus::adapters::from_heartbeat(cur.chat_id, <span class="kw-2">&amp;</span>resp.result, cur.topic_id, <span class="prelude-val">Some</span>(eff_transport));
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="self">self</span>.bus.submit(<span class="kw-2">&amp;mut </span>env).<span class="kw">await</span>;
+<a href=#240 id=240 data-nosnippet>240</a>        }
+<a href=#241 id=241 data-nosnippet>241</a>    }
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">async fn </span>run_heartbeat_for_chat(<span class="kw-2">&amp;</span><span class="self">self</span>, session: <span class="kw-2">&amp;</span>SessionData) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span>lock = <span class="self">self</span>.sessions.lock_pool.get((session.chat_id, session.topic_id));
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span><span class="prelude-val">Ok</span>(_topic_guard) = lock.try_lock() <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()); };
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">if </span><span class="self">self</span>.is_session_busy(session.chat_id, session.topic_id).<span class="kw">await </span>{
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#248 id=248 data-nosnippet>248</a>        }
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cur) = <span class="self">self</span>.sessions.get_active(<span class="kw-2">&amp;</span>session.session_key()).<span class="kw">await</span>.ok().flatten() <span class="kw">else </span>{
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#251 id=251 data-nosnippet>251</a>        };
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">if </span>!<span class="self">self</span>.has_fresh_active_session(<span class="kw-2">&amp;</span>cur) || <span class="self">self</span>.is_cooling_down(<span class="kw-2">&amp;</span>cur) {
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#254 id=254 data-nosnippet>254</a>        }
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="self">self</span>.record_heartbeat_timestamp(<span class="kw-2">&amp;</span>cur);
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>_bg_guard = <span class="kw">crate</span>::upgrade::begin_background_run();
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">let </span>_turn_guard = <span class="self">self</span>.cli.begin_topic_turn(cur.chat_id, cur.topic_id);
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span>prompt = <span class="string">"System self-check: are there any outstanding issues or background alerts to report? Answer 'HEARTBEAT_OK' if everything is running smoothly."</span>;
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span>eff_prov = <span class="self">self</span>.effective_provider(<span class="kw-2">&amp;</span>cur);
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if </span>!<span class="macro">matches!</span>(eff_prov, <span class="string">"claude" </span>| <span class="string">"codex"</span>) {
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">crate</span>::cli::antigravity::model_spec::ensure_live_catalog_fresh().<span class="kw">await</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        }
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>sid = cur.get_session_id(eff_prov);
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>cli = AntigravityCli::new_oneshot(<span class="self">self</span>.build_heartbeat_cli_config(<span class="kw-2">&amp;</span>cur));
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">match </span>cli.send(prompt, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>sid), <span class="bool-val">false</span>, <span class="self">self</span>.config.working_dir.clone()).<span class="kw">await </span>{
+<a href=#266 id=266 data-nosnippet>266</a>            <span class="prelude-val">Ok</span>(resp) =&gt; <span class="self">self</span>.finish_heartbeat_turn(<span class="kw-2">&amp;</span>cur, eff_prov, <span class="kw-2">&amp;</span>sid, <span class="kw-2">&amp;</span>resp).<span class="kw">await</span>,
+<a href=#267 id=267 data-nosnippet>267</a>            <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">eprintln!</span>(<span class="string">"⚠️ [tuner] Heartbeat send failed for chat {} topic {:?}: {e}"</span>, cur.chat_id, cur.topic_id),
+<a href=#268 id=268 data-nosnippet>268</a>        }
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="prelude-val">Ok</span>(())
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>}
 </code></pre></div></section></main></body></html>

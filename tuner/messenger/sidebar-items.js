@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["telegram"]};
+window.SIDEBAR_ITEMS = {"mod":["telegram","web"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAGIC_TTL_SECS","PBKDF2_ROUNDS","SLIDING_WRITE_INTERVAL_SECS"],"fn":["pbkdf2_iterations"],"struct":["AuthSession","DashboardAuthFile","MagicTokenRecord","PinRecord","WebAuthStore"]};

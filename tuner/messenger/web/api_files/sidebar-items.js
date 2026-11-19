@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PREVIEW_BYTES"],"fn":["build_file_allowed_roots","build_file_preview_json","filter_safe_preview_paths","handle_get_file","handle_vault_delete","handle_vault_list","handle_vault_upsert","is_blocked_filename","is_sensitive_path","preview_json_response","serve_raw_file","validate_preview_file"],"struct":["FileQuery"]};

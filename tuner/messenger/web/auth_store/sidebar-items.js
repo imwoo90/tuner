@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AUTH_FILE","FAIL_WINDOW_SECS","LOCKOUT_SECS","LOCK_FILE","MAX_FAILS","MAX_FAIL_MAP_ENTRIES","MAX_GLOBAL_FAILS","SESSION_TTL_SECS"],"fn":["build_new_session","check_fail_map","load_auth_file","prune_expired","record_fail_map","save_auth_file"],"struct":["FailEntry","FileFlockGuard","LoginRateState"]};

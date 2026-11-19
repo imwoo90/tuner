@@ -90,7 +90,7 @@
 <a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span><span class="kw-2">mut </span>cmd = Command::new(<span class="kw-2">&amp;</span>args[<span class="number">0</span>]);
 <a href=#91 id=91 data-nosnippet>91</a>    cmd.args(<span class="kw-2">&amp;</span>args[<span class="number">1</span>..])
 <a href=#92 id=92 data-nosnippet>92</a>        .current_dir(<span class="kw-2">&amp;</span>ws)
-<a href=#93 id=93 data-nosnippet>93</a>        .envs(cli.build_env())
+<a href=#93 id=93 data-nosnippet>93</a>        .envs(<span class="kw">crate</span>::messenger::web::provider_status::build_peer_env(cli))
 <a href=#94 id=94 data-nosnippet>94</a>        .stdin(Stdio::piped())
 <a href=#95 id=95 data-nosnippet>95</a>        .stdout(Stdio::piped())
 <a href=#96 id=96 data-nosnippet>96</a>        .stderr(Stdio::null())

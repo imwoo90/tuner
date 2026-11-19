@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["auto_close_cli_hitl_browser","spawn_oauth_completion_watcher","try_auto_harvest_hitl_code"]};

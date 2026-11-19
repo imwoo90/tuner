@@ -107,21 +107,30 @@
 <a href=#107 id=107 data-nosnippet>107</a>                <span class="self">self</span>.log_to_topic_history(cfg, sessions, envelope, sent_id, status).<span class="kw">await</span>;
 <a href=#108 id=108 data-nosnippet>108</a>            }
 <a href=#109 id=109 data-nosnippet>109</a>        }
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(())
-<a href=#111 id=111 data-nosnippet>111</a>    }
-<a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">async fn </span>deliver_broadcast(<span class="kw-2">&amp;</span><span class="self">self</span>, envelope: <span class="kw-2">&amp;</span>Envelope) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">if </span>envelope.chat_id != <span class="number">0 </span>{
-<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">return </span><span class="self">self</span>.deliver(envelope).<span class="kw">await</span>;
-<a href=#116 id=116 data-nosnippet>116</a>        }
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>target_id <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.broadcast_targets {
-<a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">if </span>target_id != <span class="number">0 </span>{
-<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">let </span><span class="kw-2">mut </span>target_env = envelope.clone();
-<a href=#120 id=120 data-nosnippet>120</a>                target_env.chat_id = target_id;
-<a href=#121 id=121 data-nosnippet>121</a>                <span class="kw">let _ </span>= <span class="self">self</span>.deliver(<span class="kw-2">&amp;</span>target_env).<span class="kw">await</span>;
-<a href=#122 id=122 data-nosnippet>122</a>            }
-<a href=#123 id=123 data-nosnippet>123</a>        }
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="prelude-val">Ok</span>(())
-<a href=#125 id=125 data-nosnippet>125</a>    }
-<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">crate</span>::messenger::web::events_bridge::emit_turn_res(
+<a href=#111 id=111 data-nosnippet>111</a>            <span class="string">"tg"</span>,
+<a href=#112 id=112 data-nosnippet>112</a>            envelope.chat_id,
+<a href=#113 id=113 data-nosnippet>113</a>            envelope.topic_id,
+<a href=#114 id=114 data-nosnippet>114</a>            <span class="prelude-val">None</span>,
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw-2">&amp;</span>envelope.result_text,
+<a href=#116 id=116 data-nosnippet>116</a>            envelope.is_error,
+<a href=#117 id=117 data-nosnippet>117</a>        )
+<a href=#118 id=118 data-nosnippet>118</a>        .<span class="kw">await</span>;
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="prelude-val">Ok</span>(())
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">async fn </span>deliver_broadcast(<span class="kw-2">&amp;</span><span class="self">self</span>, envelope: <span class="kw-2">&amp;</span>Envelope) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if </span>envelope.chat_id != <span class="number">0 </span>{
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">return </span><span class="self">self</span>.deliver(envelope).<span class="kw">await</span>;
+<a href=#125 id=125 data-nosnippet>125</a>        }
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>target_id <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.broadcast_targets {
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">if </span>target_id != <span class="number">0 </span>{
+<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">let </span><span class="kw-2">mut </span>target_env = envelope.clone();
+<a href=#129 id=129 data-nosnippet>129</a>                target_env.chat_id = target_id;
+<a href=#130 id=130 data-nosnippet>130</a>                <span class="kw">let _ </span>= <span class="self">self</span>.deliver(<span class="kw-2">&amp;</span>target_env).<span class="kw">await</span>;
+<a href=#131 id=131 data-nosnippet>131</a>            }
+<a href=#132 id=132 data-nosnippet>132</a>        }
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="prelude-val">Ok</span>(())
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>}
 </code></pre></div></section></main></body></html>

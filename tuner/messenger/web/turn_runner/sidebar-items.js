@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_web_directive","drain_web_attachments","emit_web_error","execute_web_turn","live_open_ask_sid","log_and_mirror_web_prompt","mirror_ask_message_to_telegram","mirror_text_to_telegram","persist_web_directive","queue_web_attachments","try_route_open_ask_turn"]};

@@ -19,14 +19,14 @@
 <a href=#19 id=19 data-nosnippet>19</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
 <a href=#20 id=20 data-nosnippet>20</a>    chat_id: i64,
 <a href=#21 id=21 data-nosnippet>21</a>    topic_id: <span class="prelude-ty">Option</span>&lt;i64&gt;,
-<a href=#22 id=22 data-nosnippet>22</a>) -&gt; bool {
+<a href=#22 id=22 data-nosnippet>22</a>) -&gt; Vec&lt;String&gt; {
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(chat_id, topic_id);
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span><span class="kw-2">mut </span>cleared = <span class="bool-val">false</span>;
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span><span class="kw-2">mut </span>cleared = Vec::new();
 <a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(sess)) = sessions.get_active(<span class="kw-2">&amp;</span>key).<span class="kw">await </span>{
 <a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">for </span>ps <span class="kw">in </span>sess.provider_sessions.values() {
 <a href=#27 id=27 data-nosnippet>27</a>            <span class="kw">if </span>!ps.session_id.is_empty() &amp;&amp; cli.sessions.is_ask_active(<span class="kw-2">&amp;</span>ps.session_id).<span class="kw">await </span>{
 <a href=#28 id=28 data-nosnippet>28</a>                cli.sessions.set_ask_active(<span class="kw-2">&amp;</span>ps.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
-<a href=#29 id=29 data-nosnippet>29</a>                cleared = <span class="bool-val">true</span>;
+<a href=#29 id=29 data-nosnippet>29</a>                cleared.push(ps.session_id.clone());
 <a href=#30 id=30 data-nosnippet>30</a>            }
 <a href=#31 id=31 data-nosnippet>31</a>        }
 <a href=#32 id=32 data-nosnippet>32</a>    }
@@ -112,124 +112,127 @@
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let _ </span>= <span class="kw">crate</span>::telegram::session_init::ensure_session_ready_for_turn(
 <a href=#113 id=113 data-nosnippet>113</a>        bot, <span class="kw-2">&amp;</span>target_msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config,
 <a href=#114 id=114 data-nosnippet>114</a>    ).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#116 id=116 data-nosnippet>116</a>}
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_session_control_commands(
-<a href=#119 id=119 data-nosnippet>119</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#120 id=120 data-nosnippet>120</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#121 id=121 data-nosnippet>121</a>    text: <span class="kw-2">&amp;</span>str,
-<a href=#122 id=122 data-nosnippet>122</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#123 id=123 data-nosnippet>123</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
-<a href=#124 id=124 data-nosnippet>124</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#125 id=125 data-nosnippet>125</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">super</span>::TopicNameCache,
-<a href=#126 id=126 data-nosnippet>126</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>args = text.trim();
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>raw_cmd = args.split_whitespace().next().unwrap_or(<span class="string">""</span>);
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>cmd = raw_cmd.split(<span class="string">'@'</span>).next().unwrap_or(raw_cmd);
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span>topic_id = <span class="kw">crate</span>::telegram::get_topic_id(msg);
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">if </span>cmd == <span class="string">"/new" </span>|| cmd == <span class="string">"/reset" </span>{
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">return </span>handle_new_command(bot, msg, args, config, sessions, cli, topic_cache).<span class="kw">await</span>;
-<a href=#134 id=134 data-nosnippet>134</a>    }
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">if </span>cmd == <span class="string">"/stop" </span>{
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">let </span>agy_int = cli.sessions.interrupt(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>claude_int = <span class="kw">crate</span>::cli::claude::interrupt_session(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>codex_int = <span class="kw">crate</span>::cli::codex::interrupt_session(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>ask_int = clear_topic_asks(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span>interrupted = agy_int || claude_int || codex_int || ask_int;
-<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">let </span>reply_text = <span class="kw">if </span>interrupted {
-<a href=#142 id=142 data-nosnippet>142</a>            <span class="macro">t!</span>(<span class="string">"bot.stop_interrupted"</span>)
-<a href=#143 id=143 data-nosnippet>143</a>        } <span class="kw">else </span>{
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="macro">t!</span>(<span class="string">"bot.stop_none"</span>)
-<a href=#145 id=145 data-nosnippet>145</a>        };
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">let _ </span>= send_reply(bot, msg, reply_text).<span class="kw">await</span>;
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#148 id=148 data-nosnippet>148</a>    }
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">if </span>cmd == <span class="string">"/stop_all" </span>|| cmd == <span class="string">"/abort" </span>{
-<a href=#150 id=150 data-nosnippet>150</a>        cli.sessions.terminate_all().<span class="kw">await</span>;
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">crate</span>::cli::claude::terminate_all().<span class="kw">await</span>;
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">crate</span>::cli::codex::terminate_all().<span class="kw">await</span>;
-<a href=#153 id=153 data-nosnippet>153</a>        cli.sessions.active_asks.lock().<span class="kw">await</span>.clear();
-<a href=#154 id=154 data-nosnippet>154</a>        cli.clear_all_pty_applied().<span class="kw">await</span>;
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let _ </span>= send_reply(bot, msg, <span class="macro">t!</span>(<span class="string">"bot.stop_all_success"</span>)).<span class="kw">await</span>;
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
-<a href=#157 id=157 data-nosnippet>157</a>    }
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
-<a href=#159 id=159 data-nosnippet>159</a>}
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>try_query_live_memory(
-<a href=#162 id=162 data-nosnippet>162</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#163 id=163 data-nosnippet>163</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#164 id=164 data-nosnippet>164</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#165 id=165 data-nosnippet>165</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
-<a href=#166 id=166 data-nosnippet>166</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#167 id=167 data-nosnippet>167</a>) -&gt; bool {
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>topic_id = <span class="kw">crate</span>::telegram::get_topic_id(msg);
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">let </span>lock = sessions.lock_pool.get((msg.chat.id.<span class="number">0</span>, topic_id));
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(_topic_guard) = lock.try_lock() <span class="kw">else </span>{
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#172 id=172 data-nosnippet>172</a>    };
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">if </span>is_topic_busy_or_asking(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await </span>{
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">crate</span>::messenger::web::events_bridge::emit_s(<span class="kw-2">&amp;</span>sess).<span class="kw">await</span>;
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#117 id=117 data-nosnippet>117</a>}
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_session_control_commands(
+<a href=#120 id=120 data-nosnippet>120</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#121 id=121 data-nosnippet>121</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#122 id=122 data-nosnippet>122</a>    text: <span class="kw-2">&amp;</span>str,
+<a href=#123 id=123 data-nosnippet>123</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#124 id=124 data-nosnippet>124</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
+<a href=#125 id=125 data-nosnippet>125</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#126 id=126 data-nosnippet>126</a>    topic_cache: <span class="kw-2">&amp;</span><span class="kw">super</span>::TopicNameCache,
+<a href=#127 id=127 data-nosnippet>127</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>args = text.trim();
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>raw_cmd = args.split_whitespace().next().unwrap_or(<span class="string">""</span>);
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span>cmd = raw_cmd.split(<span class="string">'@'</span>).next().unwrap_or(raw_cmd);
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>topic_id = <span class="kw">crate</span>::telegram::get_topic_id(msg);
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">if </span>cmd == <span class="string">"/new" </span>|| cmd == <span class="string">"/reset" </span>{
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">return </span>handle_new_command(bot, msg, args, config, sessions, cli, topic_cache).<span class="kw">await</span>;
+<a href=#135 id=135 data-nosnippet>135</a>    }
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">if </span>cmd == <span class="string">"/stop" </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>agy_int = cli.sessions.interrupt(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>claude_int = <span class="kw">crate</span>::cli::claude::interrupt_session(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>codex_int = <span class="kw">crate</span>::cli::codex::interrupt_session(msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span>cleared_asks = clear_topic_asks(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await</span>;
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">crate</span>::messenger::web::events_bridge::tg_stop(msg.chat.id.<span class="number">0</span>, topic_id, <span class="kw-2">&amp;</span>cleared_asks).<span class="kw">await</span>;
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>interrupted = agy_int || claude_int || codex_int || !cleared_asks.is_empty();
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">let </span>reply_text = <span class="kw">if </span>interrupted {
+<a href=#144 id=144 data-nosnippet>144</a>            <span class="macro">t!</span>(<span class="string">"bot.stop_interrupted"</span>)
+<a href=#145 id=145 data-nosnippet>145</a>        } <span class="kw">else </span>{
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="macro">t!</span>(<span class="string">"bot.stop_none"</span>)
+<a href=#147 id=147 data-nosnippet>147</a>        };
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let _ </span>= send_reply(bot, msg, reply_text).<span class="kw">await</span>;
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>cmd == <span class="string">"/stop_all" </span>|| cmd == <span class="string">"/abort" </span>{
+<a href=#152 id=152 data-nosnippet>152</a>        cli.sessions.terminate_all().<span class="kw">await</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">crate</span>::cli::claude::terminate_all().<span class="kw">await</span>;
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">crate</span>::cli::codex::terminate_all().<span class="kw">await</span>;
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>cleared_asks: Vec&lt;String&gt; = cli.sessions.active_asks.lock().<span class="kw">await</span>.drain().map(|(k, <span class="kw">_</span>)| k).collect();
+<a href=#156 id=156 data-nosnippet>156</a>        cli.clear_all_pty_applied().<span class="kw">await</span>;
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">crate</span>::messenger::web::events_bridge::tg_stop_all(<span class="kw-2">&amp;</span>cleared_asks).<span class="kw">await</span>;
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let _ </span>= send_reply(bot, msg, <span class="macro">t!</span>(<span class="string">"bot.stop_all_success"</span>)).<span class="kw">await</span>;
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#160 id=160 data-nosnippet>160</a>    }
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#162 id=162 data-nosnippet>162</a>}
+<a href=#163 id=163 data-nosnippet>163</a>
+<a href=#164 id=164 data-nosnippet>164</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>try_query_live_memory(
+<a href=#165 id=165 data-nosnippet>165</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#166 id=166 data-nosnippet>166</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#167 id=167 data-nosnippet>167</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#168 id=168 data-nosnippet>168</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
+<a href=#169 id=169 data-nosnippet>169</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#170 id=170 data-nosnippet>170</a>) -&gt; bool {
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span>topic_id = <span class="kw">crate</span>::telegram::get_topic_id(msg);
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>lock = sessions.lock_pool.get((msg.chat.id.<span class="number">0</span>, topic_id));
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(_topic_guard) = lock.try_lock() <span class="kw">else </span>{
 <a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(msg.chat.id.<span class="number">0</span>, topic_id);
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>model = config.model.as_deref().unwrap_or(<span class="string">""</span>);
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>sess, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, model).<span class="kw">await else </span>{
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#180 id=180 data-nosnippet>180</a>    };
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>sid) = <span class="kw">super</span>::session_init::ensure_session_ready_for_turn(
-<a href=#182 id=182 data-nosnippet>182</a>        bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config,
-<a href=#183 id=183 data-nosnippet>183</a>    ).<span class="kw">await else </span>{
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#185 id=185 data-nosnippet>185</a>    };
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(latest)) = sessions.get_active(<span class="kw-2">&amp;</span>key).<span class="kw">await </span>{
-<a href=#187 id=187 data-nosnippet>187</a>        sess = latest;
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>cp = <span class="kw">crate</span>::session::data::SessionData::effective_provider(<span class="kw-2">&amp;</span>sess.provider, <span class="kw-2">&amp;</span>config.provider);
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">if </span>sess.get_session_id(cp) != sid {
-<a href=#190 id=190 data-nosnippet>190</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(re_sid) = <span class="kw">super</span>::session_init::ensure_session_ready_for_turn(
-<a href=#191 id=191 data-nosnippet>191</a>                bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config,
-<a href=#192 id=192 data-nosnippet>192</a>            ).<span class="kw">await else </span>{
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#194 id=194 data-nosnippet>194</a>            };
-<a href=#195 id=195 data-nosnippet>195</a>            sid = re_sid;
-<a href=#196 id=196 data-nosnippet>196</a>        }
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">if </span>sid.is_empty()
-<a href=#199 id=199 data-nosnippet>199</a>        || sid.starts_with(<span class="string">"mock-"</span>)
-<a href=#200 id=200 data-nosnippet>200</a>        || is_topic_busy_or_asking(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await
-<a href=#201 id=201 data-nosnippet>201</a>    </span>{
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#203 id=203 data-nosnippet>203</a>    }
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span>prompt = <span class="string">"현재 세션의 시스템 프롬프트 `&lt;user_rules&gt;`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture &amp; Roles, Decisions &amp; Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘."</span>;
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let _ </span>= <span class="kw">super</span>::run_cli_stream(bot, msg, prompt, <span class="kw-2">&amp;</span>sid, cli, (sessions, sess), config).<span class="kw">await</span>;
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="bool-val">true
-<a href=#207 id=207 data-nosnippet>207</a></span>}
-<a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a><span class="kw">async fn </span>send_static_memory_fallback(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message, config: <span class="kw-2">&amp;</span>CliConfig) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">let </span>p1 = config.working_dir.join(<span class="string">".agents/rules/mainmemory.md"</span>);
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">let </span>path = <span class="kw">if </span>p1.is_file() { p1 } <span class="kw">else </span>{ config.working_dir.join(<span class="string">"memory_system/MAINMEMORY.md"</span>) };
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>raw = std::fs::read_to_string(path).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">t!</span>(<span class="string">"bot.memory_empty"</span>));
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">let </span>content = raw.strip_prefix(<span class="string">"---"</span>).and_then(|s| s.find(<span class="string">"---"</span>).map(|i| s[i + <span class="number">3</span>..].trim_start())).unwrap_or(<span class="kw-2">&amp;</span>raw);
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">let </span>html = <span class="kw">crate</span>::telegram::formatting::markdown_to_telegram_html(content);
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">for </span>chunk <span class="kw">in </span><span class="kw">crate</span>::telegram::formatting::split_html_message(<span class="kw-2">&amp;</span>html, <span class="number">4000</span>) {
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">let _ </span>= req.<span class="kw">await</span>;
-<a href=#219 id=219 data-nosnippet>219</a>    }
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="prelude-val">Ok</span>(())
-<a href=#221 id=221 data-nosnippet>221</a>}
-<a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_memory_command(
-<a href=#224 id=224 data-nosnippet>224</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#225 id=225 data-nosnippet>225</a>    msg: <span class="kw-2">&amp;</span>Message,
-<a href=#226 id=226 data-nosnippet>226</a>    config: <span class="kw-2">&amp;</span>CliConfig,
-<a href=#227 id=227 data-nosnippet>227</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
-<a href=#228 id=228 data-nosnippet>228</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#229 id=229 data-nosnippet>229</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">if </span>try_query_live_memory(bot, msg, config, sessions, cli).<span class="kw">await </span>{
-<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#232 id=232 data-nosnippet>232</a>    }
-<a href=#233 id=233 data-nosnippet>233</a>    send_static_memory_fallback(bot, msg, config).<span class="kw">await
-<a href=#234 id=234 data-nosnippet>234</a></span>}
+<a href=#175 id=175 data-nosnippet>175</a>    };
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>is_topic_busy_or_asking(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await </span>{
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#178 id=178 data-nosnippet>178</a>    }
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>key = <span class="kw">crate</span>::session::key::SessionKey::telegram(msg.chat.id.<span class="number">0</span>, topic_id);
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>model = config.model.as_deref().unwrap_or(<span class="string">""</span>);
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>((<span class="kw-2">mut </span>sess, <span class="kw">_</span>)) = sessions.resolve_session(<span class="kw-2">&amp;</span>key, <span class="kw-2">&amp;</span>config.provider, model).<span class="kw">await else </span>{
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#183 id=183 data-nosnippet>183</a>    };
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>sid) = <span class="kw">super</span>::session_init::ensure_session_ready_for_turn(
+<a href=#185 id=185 data-nosnippet>185</a>        bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config,
+<a href=#186 id=186 data-nosnippet>186</a>    ).<span class="kw">await else </span>{
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#188 id=188 data-nosnippet>188</a>    };
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(latest)) = sessions.get_active(<span class="kw-2">&amp;</span>key).<span class="kw">await </span>{
+<a href=#190 id=190 data-nosnippet>190</a>        sess = latest;
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>cp = <span class="kw">crate</span>::session::data::SessionData::effective_provider(<span class="kw-2">&amp;</span>sess.provider, <span class="kw-2">&amp;</span>config.provider);
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if </span>sess.get_session_id(cp) != sid {
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(re_sid) = <span class="kw">super</span>::session_init::ensure_session_ready_for_turn(
+<a href=#194 id=194 data-nosnippet>194</a>                bot, msg, sessions, <span class="kw-2">&amp;mut </span>sess, cli, config,
+<a href=#195 id=195 data-nosnippet>195</a>            ).<span class="kw">await else </span>{
+<a href=#196 id=196 data-nosnippet>196</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#197 id=197 data-nosnippet>197</a>            };
+<a href=#198 id=198 data-nosnippet>198</a>            sid = re_sid;
+<a href=#199 id=199 data-nosnippet>199</a>        }
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if </span>sid.is_empty()
+<a href=#202 id=202 data-nosnippet>202</a>        || sid.starts_with(<span class="string">"mock-"</span>)
+<a href=#203 id=203 data-nosnippet>203</a>        || is_topic_busy_or_asking(sessions, cli, msg.chat.id.<span class="number">0</span>, topic_id).<span class="kw">await
+<a href=#204 id=204 data-nosnippet>204</a>    </span>{
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#206 id=206 data-nosnippet>206</a>    }
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>prompt = <span class="string">"현재 세션의 시스템 프롬프트 `&lt;user_rules&gt;`(Rules Context)에 주입되어 있는 `mainmemory.md` 내용(About the User, Core System Architecture &amp; Roles, Decisions &amp; Preferences)과 적용된 룰 상태를 요약 없이 있는 그대로 출력해줘."</span>;
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">let _ </span>= <span class="kw">super</span>::run_cli_stream(bot, msg, prompt, <span class="kw-2">&amp;</span>sid, cli, (sessions, sess), config).<span class="kw">await</span>;
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="bool-val">true
+<a href=#210 id=210 data-nosnippet>210</a></span>}
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a><span class="kw">async fn </span>send_static_memory_fallback(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message, config: <span class="kw-2">&amp;</span>CliConfig) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">let </span>p1 = config.working_dir.join(<span class="string">".agents/rules/mainmemory.md"</span>);
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">let </span>path = <span class="kw">if </span>p1.is_file() { p1 } <span class="kw">else </span>{ config.working_dir.join(<span class="string">"memory_system/MAINMEMORY.md"</span>) };
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span>raw = std::fs::read_to_string(path).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">t!</span>(<span class="string">"bot.memory_empty"</span>));
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>content = raw.strip_prefix(<span class="string">"---"</span>).and_then(|s| s.find(<span class="string">"---"</span>).map(|i| s[i + <span class="number">3</span>..].trim_start())).unwrap_or(<span class="kw-2">&amp;</span>raw);
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">let </span>html = <span class="kw">crate</span>::telegram::formatting::markdown_to_telegram_html(content);
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">for </span>chunk <span class="kw">in </span><span class="kw">crate</span>::telegram::formatting::split_html_message(<span class="kw-2">&amp;</span>html, <span class="number">4000</span>) {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, chunk).parse_mode(teloxide::types::ParseMode::Html);
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id { req = req.message_thread_id(tid); }
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let _ </span>= req.<span class="kw">await</span>;
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="prelude-val">Ok</span>(())
+<a href=#224 id=224 data-nosnippet>224</a>}
+<a href=#225 id=225 data-nosnippet>225</a>
+<a href=#226 id=226 data-nosnippet>226</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_memory_command(
+<a href=#227 id=227 data-nosnippet>227</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#228 id=228 data-nosnippet>228</a>    msg: <span class="kw-2">&amp;</span>Message,
+<a href=#229 id=229 data-nosnippet>229</a>    config: <span class="kw-2">&amp;</span>CliConfig,
+<a href=#230 id=230 data-nosnippet>230</a>    sessions: <span class="kw-2">&amp;</span>std::sync::Arc&lt;<span class="kw">crate</span>::session::manager::SessionManager&gt;,
+<a href=#231 id=231 data-nosnippet>231</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#232 id=232 data-nosnippet>232</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">if </span>try_query_live_memory(bot, msg, config, sessions, cli).<span class="kw">await </span>{
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>    send_static_memory_fallback(bot, msg, config).<span class="kw">await
+<a href=#237 id=237 data-nosnippet>237</a></span>}
 </code></pre></div></section></main></body></html>

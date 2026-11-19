@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TUNNEL_STATE_FILE"],"fn":["format_dashboard_html_and_kb","handle_telegram_dashboard_command","load_dashboard_tunnel_url","parse_dashboard_cli_args","publish_dashboard_tunnel_url","publish_global_tunnel_url","resolve_dashboard_target","run_dashboard_cli","send_dashboard_card"],"struct":["TunnelStateFile"]};

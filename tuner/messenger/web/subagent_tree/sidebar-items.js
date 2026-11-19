@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_agent_tree_nodes","collect_session_tree","handle_get_subagents","is_safe_cid","read_latest_step","read_subagents","read_swarm_members","read_tasks"],"struct":["AgentTreeNode","LatestStepView","SubagentDescriptorView","SubagentsQuery","SwarmMemberView","TaskLogView"]};

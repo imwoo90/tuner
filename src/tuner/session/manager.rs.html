@@ -29,7 +29,7 @@
 <a href=#29 id=29 data-nosnippet>29</a>    reset_enabled: bool,
 <a href=#30 id=30 data-nosnippet>30</a>    tz: String,
 <a href=#31 id=31 data-nosnippet>31</a>    max_msgs: <span class="prelude-ty">Option</span>&lt;i64&gt;,
-<a href=#32 id=32 data-nosnippet>32</a>    lock: Mutex&lt;()&gt;,
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) lock: Mutex&lt;()&gt;,
 <a href=#33 id=33 data-nosnippet>33</a>    resolver: <span class="prelude-ty">Option</span>&lt;TopicNameResolver&gt;,
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Lock pool.
 <a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">pub </span>lock_pool: std::sync::Arc&lt;<span class="kw">crate</span>::bus::lock_pool::LockPool&gt;,

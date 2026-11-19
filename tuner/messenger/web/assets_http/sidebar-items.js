@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_asset","handle_dashboard_page","handle_icon","handle_login_page","handle_manifest","handle_sw","typed_asset"]};
