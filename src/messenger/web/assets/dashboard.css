@@ -640,6 +640,7 @@ html, body {
   gap: 6px;
   min-width: 0;
 }
+.chat-header-right { flex-shrink: 0; }
 .topic-title {
   margin: 0;
   font-size: 14px;
@@ -989,12 +990,20 @@ html, body {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
+.composer-tools-left {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.composer-tools-left::-webkit-scrollbar { display: none; }
+.composer-tools-right { flex-shrink: 0; }
 
 .tool-icon-btn {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
   border-radius: 7px;
   border: none;
   background: transparent;
@@ -1026,6 +1035,7 @@ html, body {
   font-family: inherit;
   cursor: pointer;
   max-width: 175px;
+  flex-shrink: 0;
 }
 .chip-select option, .ctrl-select option {
   background: var(--surface);
@@ -1318,4 +1328,15 @@ html, body {
     background: rgba(0, 0, 0, 0.42);
     z-index: 60;
   }
+}
+
+@media (max-width: 640px) {
+  .toolbar-divider { display: none; }
+  .composer-toolbar { gap: 4px; }
+  .composer-tools-left { gap: 2px; }
+  .tool-icon-btn { width: 26px; height: 26px; }
+  .chip-select { padding: 3px 4px; font-size: 11.5px; }
+  #sel-provider { max-width: 72px; }
+  .chip-model { max-width: 116px; }
+  .chip-effort { max-width: 66px; }
 }

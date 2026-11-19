@@ -53,6 +53,25 @@ export function createChatController({
   };
 
   const ALL_PROVIDERS = ["antigravity", "claude", "codex"];
+  const mobileMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 640px)") : null;
+
+  function isCompactMobile() {
+    return Boolean(mobileMq?.matches);
+  }
+
+  function formatProviderChipLabel(prov) {
+    return isCompactMobile() && prov === "antigravity" ? "agy" : prov;
+  }
+
+  function syncComposerPlaceholder() {
+    const ask = state.activeAsk;
+    const hasAsk = !state.managingEngines && ask && Array.isArray(ask.questions) && ask.questions.length > 0;
+    if (hasAsk) {
+      els.input.placeholder = t("composerAskPlaceholder");
+    } else {
+      els.input.placeholder = t(isCompactMobile() ? "composerPlaceholderMobile" : "composerPlaceholder");
+    }
+  }
 
   let state = {
     session: null,
@@ -315,12 +334,11 @@ export function createChatController({
 
   function renderAskCard() {
     const ask = state.activeAsk;
+    syncComposerPlaceholder();
     if (state.managingEngines || !ask || !Array.isArray(ask.questions) || ask.questions.length === 0) {
       els.askCard.classList.add("hidden");
-      els.input.placeholder = t("composerPlaceholder");
       return;
     }
-    els.input.placeholder = t("composerAskPlaceholder");
     const idx = Math.min(ask.current_index || 0, ask.questions.length - 1);
     const q = ask.questions[idx];
     state.selectedIndices.clear();
@@ -386,7 +404,7 @@ export function createChatController({
       if (readySet.has(p)) {
         const opt = document.createElement("option");
         opt.value = p;
-        opt.textContent = p;
+        opt.textContent = formatProviderChipLabel(p);
         els.selProvider.appendChild(opt);
       }
     }
@@ -394,7 +412,7 @@ export function createChatController({
       const fallbackOpt = document.createElement("option");
       fallbackOpt.value = prov;
       fallbackOpt.disabled = true;
-      fallbackOpt.textContent = `${prov} (${t("provNeedAuthBadge")})`;
+      fallbackOpt.textContent = `${formatProviderChipLabel(prov)} (${t("provNeedAuthBadge")})`;
       els.selProvider.appendChild(fallbackOpt);
     }
     if (els.selProvider.options.length > 0) {
@@ -866,6 +884,11 @@ export function createChatController({
     renderLiveStream();
     renderAskCard();
     slashCtrl.refresh();
+  });
+
+  mobileMq?.addEventListener?.("change", () => {
+    populateModelAndEffortControls();
+    syncComposerPlaceholder();
   });
 
   els.sendBtn.addEventListener("click", sendPrompt);
