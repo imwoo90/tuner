@@ -71,6 +71,7 @@ const voice = createVoiceController({
   getCsrfToken: () => csrfToken,
   getLang,
   getActiveSessionKey: () => chat.getActiveSessionKey(),
+  getSessions: () => sessions,
   onFocusTopic: async (sk) => {
     await loadSessions();
     const target = sessions.find((s) => s.session_key === sk);
@@ -387,6 +388,7 @@ async function loadSessions() {
     }
   }
   renderSessionList();
+  voice.refreshDeck();
 }
 
 async function refreshHitlBanner() {
@@ -430,6 +432,7 @@ function connectWebSocket() {
     try {
       const ev = JSON.parse(msgEv.data);
       chat.handleWsEvent(ev);
+      voice.handleWsEvent(ev);
       if (ev.type === "session_updated") {
         const target = sessions.find((s) => s.session_key === ev.session_key);
         if (target) {

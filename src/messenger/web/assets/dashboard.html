@@ -78,24 +78,69 @@
           </div>
         </header>
 
-        <div id="voice-bar" class="voice-bar hidden" role="region" aria-label="Voice Desk Assistant">
-          <div class="voice-bar-left">
-            <div id="voice-wave" class="voice-wave" data-mode="listening">
-              <span></span><span></span><span></span><span></span>
+        <section id="voice-bar" class="voice-stage hidden" role="region" aria-label="Voice Desk Stage">
+          <header class="voice-stage-header">
+            <div class="voice-stage-title-wrap">
+              <span class="voice-stage-logo">🎙️</span>
+              <strong class="voice-stage-title" data-i18n="voiceStageTitle">우튜너 음성 데스크</strong>
+              <span id="voice-status-badge" class="pill pill-ok voice-status-pill" data-i18n="voiceListening">듣는 중</span>
             </div>
-            <span id="voice-status-badge" class="pill pill-ok voice-status-pill" data-i18n="voiceListening">듣는 중</span>
-            <div id="voice-subtitle" class="voice-subtitle muted"></div>
-          </div>
-          <div class="voice-bar-right">
-            <input id="voice-quick-input" class="voice-quick-input" type="text" data-i18n-placeholder="voiceQuickInputPh" placeholder="음성 통화 중 텍스트 전달...">
             <label class="voice-vol-wrap" title="출력 음량 증폭 (0%~200%)">
               <span class="voice-vol-icon">🔊</span>
               <input id="voice-volume" class="voice-vol-slider" type="range" min="0" max="200" step="5" value="100" aria-label="Voice Volume">
             </label>
-            <button id="btn-voice-mute" class="ghost-icon-btn" type="button" title="마이크 음소거">🎤</button>
-            <button id="btn-voice-hangup" class="btn btn-danger btn-sm" type="button" data-i18n="voiceHangupBtn">종료</button>
+          </header>
+
+          <div id="voice-stage-body" class="voice-stage-body">
+            <div id="voice-orb-wrap" class="voice-orb-wrap">
+              <div id="voice-wave" class="voice-orb" data-mode="listening">
+                <div class="voice-orb-bars">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <div id="voice-subtitle" class="voice-stage-hint muted" data-i18n="voiceReadyHint">편하게 말씀하세요 — 여러 토픽 현황 브리핑과 작업 지시를 총괄합니다.</div>
+            </div>
+
+            <div id="voice-transcript" class="voice-transcript" aria-live="polite"></div>
           </div>
-        </div>
+
+          <div id="voice-topic-deck" class="voice-topic-deck hidden"></div>
+
+          <div class="voice-dock-shell">
+            <div id="voice-text-drawer" class="voice-text-drawer hidden">
+              <input id="voice-quick-input" class="voice-quick-input" type="text" data-i18n-placeholder="voiceQuickInputPh" placeholder="조용히 텍스트로 지시 전달...">
+              <button id="btn-voice-send-text" class="btn btn-primary btn-sm" type="button" data-i18n="voiceSendTextBtn">전달</button>
+            </div>
+            <div class="voice-dock">
+              <button id="btn-voice-mute" class="voice-dock-btn" type="button" title="마이크 음소거">
+                <span id="voice-mute-icon" class="voice-dock-icon">🎤</span>
+                <span id="voice-mute-label" data-i18n="voiceMicOnBtn">마이크</span>
+              </button>
+              <button id="btn-voice-kbd" class="voice-dock-btn" type="button" data-i18n-title="voiceKbdTitle">
+                <span class="voice-dock-icon">⌨️</span>
+                <span data-i18n="voiceKbdBtn">텍스트</span>
+              </button>
+              <button id="btn-voice-hangup" class="voice-dock-btn voice-dock-hangup" type="button">
+                <span class="voice-dock-icon">📞</span>
+                <span data-i18n="voiceHangupBtn">종료</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="voice-peek-sheet" class="voice-peek-sheet hidden" role="dialog" aria-modal="false">
+            <div class="voice-peek-header">
+              <div class="voice-peek-title-row">
+                <strong id="voice-peek-title"></strong>
+                <span id="voice-peek-state" class="pill"></span>
+              </div>
+              <div class="card-row">
+                <button id="btn-voice-peek-jump" class="btn btn-sm" type="button" data-i18n="voicePeekJumpBtn">대시보드에서 열기</button>
+                <button id="btn-voice-peek-close" class="ghost-icon-btn" type="button" aria-label="Close">✕</button>
+              </div>
+            </div>
+            <div id="voice-peek-body" class="voice-peek-body"></div>
+          </div>
+        </section>
 
         <div id="drop-overlay" class="drop-overlay hidden">
           <div class="drop-overlay-box" data-i18n="dropFiles">파일을 놓아 첨부하기</div>
