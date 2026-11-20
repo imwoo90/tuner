@@ -203,7 +203,7 @@ pub(crate) async fn settle_before_pty_prompt(
     tp: &Path,
     prompt: &str,
 ) -> Result<Option<String>, String> {
-    if prompt.is_empty() {
+    if prompt.is_empty() || sessions.was_recently_interrupted(sid, Duration::from_secs(120)).await {
         return Ok(None);
     }
     let t0 = Instant::now();
@@ -217,13 +217,22 @@ pub(crate) async fn settle_before_pty_prompt(
     let Some(bg_start) = has_unsettled_turn_on_disk(tp) else {
         return Ok(None);
     };
-    let w0 = Instant::now();
+    let (w0, mut quiet_since) = (Instant::now(), Instant::now());
+    let mut prev_tp = std::fs::metadata(tp).map(|m| m.len()).unwrap_or(0);
+    let mut prev_pty = sessions.get_output_len(sid).await.unwrap_or(0);
     while has_unsettled_turn_on_disk(tp).is_some() && w0.elapsed() < Duration::from_secs(60) {
         if sessions.is_interrupted(sid).await {
             sessions.clear_interrupted(sid).await;
             return Err("Interrupted by user (/stop)".into());
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
+        let cur_tp = std::fs::metadata(tp).map(|m| m.len()).unwrap_or(prev_tp);
+        let cur_pty = sessions.get_output_len(sid).await.unwrap_or(prev_pty);
+        if cur_tp != prev_tp || cur_pty != prev_pty {
+            (prev_tp, prev_pty, quiet_since) = (cur_tp, cur_pty, Instant::now());
+        } else if quiet_since.elapsed() >= Duration::from_millis(1500) {
+            return Ok(None);
+        }
     }
     tokio::time::sleep(Duration::from_millis(120)).await;
     let (sys_a, usr_a) = read_slice_answers(tp, bg_start);

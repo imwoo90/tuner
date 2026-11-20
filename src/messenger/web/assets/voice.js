@@ -62,6 +62,7 @@ export function createVoiceController({
     badge: document.getElementById("voice-status-badge"),
     sub: document.getElementById("voice-subtitle"),
     input: document.getElementById("voice-quick-input"),
+    volSlider: document.getElementById("voice-volume"),
     muteBtn: document.getElementById("btn-voice-mute"),
     hangupBtn: document.getElementById("btn-voice-hangup")
   };
@@ -70,11 +71,22 @@ export function createVoiceController({
   let active = false;
   let muted = false;
   let audioCtx = null;
+  let outGain = null;
+  let directConnected = false;
+  let pcSender = null;
+  let pcReceiver = null;
+  let callAudioEl = null;
   let mediaStream = null;
   let workletNode = null;
   let nextPlayTime = 0;
   let botTranscriptBuf = "";
   const playingSources = new Set();
+
+  const savedVol = Number(localStorage.getItem("tuner_voice_vol"));
+  let currentGain = Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 200 ? savedVol / 100 : 1.0;
+  if (els.volSlider) {
+    els.volSlider.value = `${Math.round(currentGain * 100)}`;
+  }
 
   window.__voiceAudioChunksReceived = 0;
 
@@ -94,7 +106,13 @@ export function createVoiceController({
   function ensureAudioCtx() {
     if (!audioCtx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) audioCtx = new Ctx();
+      if (Ctx) {
+        audioCtx = new Ctx();
+        outGain = audioCtx.createGain();
+        outGain.gain.value = currentGain;
+        outGain.connect(audioCtx.destination);
+        directConnected = true;
+      }
     }
     if (audioCtx && audioCtx.state === "suspended") {
       audioCtx.resume().catch(() => {});
@@ -102,10 +120,77 @@ export function createVoiceController({
     return audioCtx;
   }
 
+  function teardownCallStreamBridge() {
+    if (callAudioEl) {
+      try { callAudioEl.pause(); } catch (_) {}
+      callAudioEl.srcObject = null;
+    }
+    if (pcSender) {
+      try { pcSender.close(); } catch (_) {}
+      pcSender = null;
+    }
+    if (pcReceiver) {
+      try { pcReceiver.close(); } catch (_) {}
+      pcReceiver = null;
+    }
+    if (audioCtx && outGain && !directConnected) {
+      try {
+        outGain.connect(audioCtx.destination);
+        directConnected = true;
+      } catch (_) {}
+    }
+  }
+
+  async function attachCallStreamBridge(ctx) {
+    if (!window.RTCPeerConnection || !outGain || !ctx.createMediaStreamDestination) return;
+    teardownCallStreamBridge();
+    try {
+      const destNode = ctx.createMediaStreamDestination();
+      outGain.connect(destNode);
+      const pc1 = new RTCPeerConnection({ iceServers: [] });
+      const pc2 = new RTCPeerConnection({ iceServers: [] });
+      pcSender = pc1;
+      pcReceiver = pc2;
+      pc1.onicecandidate = (e) => { if (e.candidate) pc2.addIceCandidate(e.candidate).catch(() => {}); };
+      pc2.onicecandidate = (e) => { if (e.candidate) pc1.addIceCandidate(e.candidate).catch(() => {}); };
+
+      const trackReady = new Promise((resolve) => {
+        pc2.ontrack = (ev) => resolve(ev.streams[0] || new MediaStream([ev.track]));
+      });
+      destNode.stream.getAudioTracks().forEach((tr) => pc1.addTrack(tr, destNode.stream));
+      const offer = await pc1.createOffer();
+      await pc1.setLocalDescription(offer);
+      await pc2.setRemoteDescription(offer);
+      const answer = await pc2.createAnswer();
+      await pc2.setLocalDescription(answer);
+      await pc1.setRemoteDescription(answer);
+
+      const remoteStream = await trackReady;
+      if (!active || pcReceiver !== pc2) return;
+      if (!callAudioEl) {
+        callAudioEl = document.createElement("audio");
+        callAudioEl.autoplay = true;
+        callAudioEl.playsInline = true;
+        callAudioEl.style.display = "none";
+        document.body.appendChild(callAudioEl);
+      }
+      callAudioEl.srcObject = remoteStream;
+      await callAudioEl.play();
+      if (active && directConnected && outGain) {
+        try {
+          outGain.disconnect(ctx.destination);
+          directConnected = false;
+        } catch (_) {}
+      }
+    } catch (_) {
+      teardownCallStreamBridge();
+    }
+  }
+
   function enqueuePcm24(b64) {
     window.__voiceAudioChunksReceived = (window.__voiceAudioChunksReceived || 0) + 1;
     const ctx = ensureAudioCtx();
-    if (!ctx) return;
+    if (!ctx || !outGain) return;
     let pcm;
     try {
       pcm = base64ToInt16(b64);
@@ -120,7 +205,7 @@ export function createVoiceController({
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.connect(ctx.destination);
+    src.connect(outGain);
     const startAt = Math.max(ctx.currentTime + 0.015, nextPlayTime);
     nextPlayTime = startAt + buf.duration;
     playingSources.add(src);
@@ -163,6 +248,7 @@ export function createVoiceController({
         vws.send(JSON.stringify({ type: "audio", data: b64 }));
       };
       source.connect(workletNode);
+      await attachCallStreamBridge(ctx);
     } catch (_) {
       // Headless browser or denied mic permission: voice session remains active for spoken playback & quick input.
     }
@@ -170,6 +256,7 @@ export function createVoiceController({
 
   function stopHardware() {
     flushPlayback();
+    teardownCallStreamBridge();
     if (workletNode) {
       try { workletNode.disconnect(); } catch (_) {}
       workletNode = null;
@@ -292,6 +379,13 @@ export function createVoiceController({
   });
 
   els.hangupBtn?.addEventListener("click", stopCall);
+
+  els.volSlider?.addEventListener("input", () => {
+    const v = Math.max(0, Math.min(200, Number(els.volSlider.value) || 0));
+    currentGain = v / 100;
+    localStorage.setItem("tuner_voice_vol", `${v}`);
+    if (outGain) outGain.gain.value = currentGain;
+  });
 
   els.input?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {

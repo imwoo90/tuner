@@ -88,6 +88,10 @@
           </div>
           <div class="voice-bar-right">
             <input id="voice-quick-input" class="voice-quick-input" type="text" data-i18n-placeholder="voiceQuickInputPh" placeholder="음성 통화 중 텍스트 전달...">
+            <label class="voice-vol-wrap" title="출력 음량 증폭 (0%~200%)">
+              <span class="voice-vol-icon">🔊</span>
+              <input id="voice-volume" class="voice-vol-slider" type="range" min="0" max="200" step="5" value="100" aria-label="Voice Volume">
+            </label>
             <button id="btn-voice-mute" class="ghost-icon-btn" type="button" title="마이크 음소거">🎤</button>
             <button id="btn-voice-hangup" class="btn btn-danger btn-sm" type="button" data-i18n="voiceHangupBtn">종료</button>
           </div>
