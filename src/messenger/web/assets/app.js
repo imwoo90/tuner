@@ -15,6 +15,7 @@ let confirmDeleteTimer = null;
 let activeHitlSessions = [];
 let ws = null;
 let wsRetryMs = 1000;
+let lastTreeRefreshAt = 0;
 
 async function apiFetch(url, options = {}) {
   const opts = { credentials: "same-origin", ...options };
@@ -442,6 +443,14 @@ function connectWebSocket() {
           renderSessionList();
         } else {
           loadSessions();
+        }
+      } else if (ev.type === "stream_delta") {
+        if (!inspector.isCollapsed() && inspector.getActiveTab() === "tree" && ev.session_key === chat.getActiveSessionKey()) {
+          const nowMs = Date.now();
+          if (nowMs - lastTreeRefreshAt >= 1500) {
+            lastTreeRefreshAt = nowMs;
+            inspector.refreshCurrentTab();
+          }
         }
       } else if (ev.type === "turn_result") {
         loadSessions();

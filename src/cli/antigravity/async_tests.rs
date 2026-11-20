@@ -293,5 +293,191 @@ done
         assert!(res_idx.is_some(), "Expected Result event");
         assert!(ask_idx.unwrap() < res_idx.unwrap(), "AskQuestion must be emitted before Result");
     }
+
+    #[test]
+    fn test_subagent_and_swarm_child_transcript_live_progress_tracker() {
+        use crate::cli::antigravity::subagent_progress::{count_active_descendants, SubagentProgressTracker};
+        use crate::messenger::web::subagent_tree::collect_agent_tree_nodes;
+
+        let root = tempdir().unwrap();
+        let brain = root.path().join("brain");
+        let parent = "parent-conv-001";
+        let child_sub = "childsub12345678";
+        let child_sw = "childswm87654321";
+
+        let p_gen = brain.join(parent).join(".system_generated");
+        std::fs::create_dir_all(p_gen.join("subagents")).unwrap();
+        std::fs::create_dir_all(p_gen.join("swarm")).unwrap();
+        std::fs::create_dir_all(p_gen.join("logs")).unwrap();
+        std::fs::write(p_gen.join("logs/transcript_full.jsonl"), "").unwrap();
+
+        let sub_json = p_gen.join("subagents/sub1.json");
+        std::fs::write(
+            &sub_json,
+            serde_json::json!({
+                "conversationId": child_sub,
+                "subagentDescriptor": {
+                    "typeName": "research",
+                    "role": "Codebase Researcher"
+                },
+                "state": "SUBAGENT_STATE_ALIVE"
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        std::fs::write(
+            p_gen.join("swarm/members.json"),
+            serde_json::json!({
+                "members": {
+                    "worker-1": {
+                        "name": "worker-1",
+                        "model": "gemini-4-hydrogen",
+                        "state": "working",
+                        "conversation_id": child_sw
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(count_active_descendants(&brain, parent), 2);
+
+        let sub_logs = brain.join(child_sub).join(".system_generated/logs");
+        let sw_logs = brain.join(child_sw).join(".system_generated/logs");
+        std::fs::create_dir_all(&sub_logs).unwrap();
+        std::fs::create_dir_all(&sw_logs).unwrap();
+
+        let sub_step = serde_json::json!({
+            "step_index": 3,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "RUNNING",
+            "thinking": "Inspecting module tree",
+            "tool_calls": [{"name": "read_file", "args": {"Path": "/workspace/src/main.rs"}}]
+        });
+        std::fs::write(sub_logs.join("transcript_full.jsonl"), format!("{sub_step}\n")).unwrap();
+
+        let sw_step = serde_json::json!({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "RUNNING",
+            "tool_calls": [{"name": "run_command", "args": {"CommandLine": "cargo check"}}]
+        });
+        std::fs::write(sw_logs.join("transcript_full.jsonl"), format!("{sw_step}\n")).unwrap();
+
+        let mut tracker = SubagentProgressTracker::new();
+        let preview = tracker.poll_delta(&brain, parent).expect("Expected live child progress");
+        assert!(preview.contains("Codebase Researcher `#childsub`"));
+        assert!(preview.contains("read_file"));
+        assert!(preview.contains("🐝 worker-1 `#childswm`"));
+        assert!(preview.contains("cargo check"));
+        assert!(tracker.poll_delta(&brain, parent).is_none(), "Unchanged transcripts must not re-emit");
+
+        let nodes = collect_agent_tree_nodes(&brain, parent, 16);
+        assert_eq!(nodes.len(), 3);
+        let sub_node = nodes.iter().find(|n| n.conversation_id == child_sub).unwrap();
+        assert_eq!(sub_node.label.as_deref(), Some("Codebase Researcher"));
+        assert_eq!(sub_node.latest_step.as_ref().unwrap().step_index, Some(3));
+        assert_eq!(sub_node.latest_step.as_ref().unwrap().tools, vec!["read_file".to_string()]);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn test_async_post_turn_vs_user_input_contention_no_blank_drop() {
+        use crate::cli::antigravity::turn_settle::scan_turn_slice;
+        use crate::cli::antigravity::AntigravityCli;
+        use crate::cli::AgentProvider;
+        use crate::config::CliConfig;
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = crate::messenger::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempdir().unwrap();
+        let sid = "sid-race-no-drop";
+        let logs = dir.path().join(".gemini/antigravity-cli/brain").join(sid).join(".system_generated/logs");
+        std::fs::create_dir_all(&logs).unwrap();
+        let tp = logs.join("transcript_full.jsonl");
+
+        // 1. Verify trailing-line slice scanner rejects premature completion when USER_INPUT follows async DONE
+        let race_lines = [
+            serde_json::json!({"source":"SYSTEM","type":"SYSTEM_MESSAGE","content":"[Message] subagent finished"}),
+            serde_json::json!({"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":"Async subagent report: 42"}),
+            serde_json::json!({"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"Summarize report"}),
+        ];
+        let raw_race = race_lines.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("\n") + "\n";
+        std::fs::write(&tp, &raw_race).unwrap();
+        let scan_mid = scan_turn_slice(&tp, 0);
+        assert!(!scan_mid.is_turn_complete(), "Must NOT complete while trailing USER_INPUT has no answer yet!");
+
+        // 1b. Verify inline SYSTEM_MESSAGE injected AFTER USER_INPUT (e.g. restart notice / tool reminder) completes immediately
+        let inline_sys_lines = [
+            serde_json::json!({"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"Print TG_DRAFT_OK"}),
+            serde_json::json!({"source":"SYSTEM","type":"SYSTEM_MESSAGE","status":"DONE","content":"[Notice] subagents stopped due to server restart"}),
+            serde_json::json!({"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":"TG_DRAFT_OK"}),
+        ];
+        std::fs::write(&tp, inline_sys_lines.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("\n") + "\n").unwrap();
+        let scan_inline = scan_turn_slice(&tp, 0);
+        assert!(scan_inline.is_turn_complete(), "Inline SYSTEM_MESSAGE inside USER_INPUT turn must complete immediately!");
+
+        // 2. End-to-end PTY contention test: mock `agy` simulates swallowing the first stdin write while
+        //    completing a SYSTEM_MESSAGE async turn, then answering the re-injected user prompt!
+        std::fs::write(&tp, "").unwrap();
+        let agy_bin = dir.path().join("agy");
+        let script = format!(
+            r#"#!/bin/sh
+printf '%s\n' "? for shortcuts  ctrl+p commands"
+count=0
+while IFS= read -r line; do
+  case "$line" in
+    /model*|"") continue ;;
+  esac
+  count=$((count + 1))
+  if [ "$count" -eq 1 ]; then
+    printf '%s\n' '{{"source":"SYSTEM","type":"SYSTEM_MESSAGE","content":"[Message] subagent done"}}' >> "{tp}"
+    printf '%s\n' '{{"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":"Background wakeup output"}}' >> "{tp}"
+  else
+    printf '%s\n' '{{"source":"USER_EXPLICIT","type":"USER_INPUT","status":"DONE","content":"Summarize now"}}' >> "{tp}"
+    printf '%s\n' '{{"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":"Foreground summary output"}}' >> "{tp}"
+  fi
+done
+"#,
+            tp = tp.display()
+        );
+        std::fs::write(&agy_bin, script).unwrap();
+        let mut perms = std::fs::metadata(&agy_bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&agy_bin, perms).unwrap();
+
+        let prev_home = std::env::var("HOME").unwrap_or_default();
+        let prev_path = std::env::var("PATH").unwrap_or_default();
+        unsafe {
+            std::env::set_var("HOME", dir.path());
+            std::env::set_var("PATH", format!("{}:{}", dir.path().display(), prev_path));
+        }
+
+        let cfg = CliConfig {
+            provider: "antigravity".into(),
+            working_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let cli = AntigravityCli::new(cfg);
+        let env = cli.build_env();
+        cli.ensure_interactive_session(sid, dir.path(), &env).await.unwrap();
+
+        let resp = cli.send("Summarize now", Some(sid), false, dir.path().to_path_buf()).await.unwrap();
+        let recorded_fg_end = cli.pty_sync.take_fg_end(sid).await;
+        cli.terminate_session_clean(sid).await;
+        unsafe {
+            std::env::set_var("HOME", prev_home);
+            std::env::set_var("PATH", prev_path);
+        }
+
+        assert!(!resp.is_error);
+        assert!(resp.result.contains("Background wakeup output"), "Must preserve async output: {}", resp.result);
+        assert!(resp.result.contains("Foreground summary output"), "Must preserve user output: {}", resp.result);
+        assert!(recorded_fg_end.unwrap_or(0) > 0, "Must record exact foreground end offset");
+    }
 }
 

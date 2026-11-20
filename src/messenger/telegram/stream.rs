@@ -103,6 +103,16 @@ struct StreamLoopState {
     ask_opened: bool,
 }
 
+impl StreamLoopState {
+    fn normalize_result(&mut self, resp: &mut crate::cli::CliResponse) {
+        if !resp.result.is_empty() {
+            self.last_text = resp.result.clone();
+        } else if !self.ask_opened && !resp.is_error && resp.stderr != "Interrupted by user (/stop)" && self.pub_id.is_some() && !self.last_text.trim().is_empty() {
+            resp.result = self.last_text.clone();
+        }
+    }
+}
+
 type StreamCtx<'a> = (
     &'a CliConfig,
     &'a crate::cli::antigravity::AntigravityCli,
@@ -133,9 +143,9 @@ async fn process_stream_events(
                     st.ask_opened = true;
                     super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sd, ctx).await?
                 }
-                Some(StreamEvent::Result(resp)) => {
+                Some(StreamEvent::Result(mut resp)) => {
                     pending = false;
-                    if !resp.result.is_empty() { st.last_text = resp.result.clone(); }
+                    st.normalize_result(&mut resp);
                     if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, st.pub_id, tid, (sd.topic_id, sd.topic_name.as_deref()), resp, ctx.0).await {
                         st.last_sid = Some(sid);
                     }
@@ -208,21 +218,7 @@ pub(crate) async fn persist_async_antigravity_turn(
     topic_name
 }
 
-pub(crate) fn build_observer_ask_session(
-    active: Option<SessionData>,
-    chat_id: i64,
-    topic_id: Option<i64>,
-    agy_sid: &str,
-) -> SessionData {
-    let mut sess_data = active.unwrap_or_else(|| SessionData {
-        chat_id,
-        topic_id,
-        ..Default::default()
-    });
-    sess_data.provider = "antigravity".to_string();
-    sess_data.set_session_id("antigravity", agy_sid);
-    sess_data
-}
+pub(crate) use super::observer_subagents::build_observer_ask_session;
 
 pub(crate) async fn consume_stream(
     bot: &Bot,

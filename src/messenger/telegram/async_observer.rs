@@ -21,6 +21,7 @@ use crate::messenger::web::events_bridge as wev;
 use crate::session::data::SessionData;
 use crate::session::key::SessionKey;
 use crate::session::manager::SessionManager;
+use super::observer_subagents::ObserverSubagentState;
 pub(crate) use crate::cli::antigravity::polling::create_brain_dir_watcher;
 
 static WATCHED_SESSIONS: LazyLock<Arc<Mutex<HashSet<String>>>> = LazyLock::new(|| Arc::new(Mutex::new(HashSet::new())));
@@ -130,13 +131,18 @@ async fn dispatch_terminal_event(ctx: &ObserverCtx, delta: ParsedLogDelta, activ
     }
 }
 
-async fn ensure_active_turn(ctx: &ObserverCtx, active_turn: &mut Option<ActiveAsyncTurn>) {
+async fn ensure_active_turn(
+    ctx: &ObserverCtx,
+    active_turn: &mut Option<ActiveAsyncTurn>,
+    sub_state: &mut ObserverSubagentState,
+) {
     if active_turn.is_none() {
         let lock = ctx.sessions.lock_pool.get((ctx.chat_id.0, ctx.tid()));
         if let Ok(guard) = lock.try_lock_owned() {
             ctx.cli.sessions.set_async_running(&ctx.session_id, true).await;
             let typing = ctx.bot.as_ref().map(|b| super::typing::AsyncTypingHandle::new(b.clone(), ctx.chat_id, ctx.thread_id));
-            *active_turn = Some(ActiveAsyncTurn { _guard: guard, typing, last_activity: Instant::now(), pub_msg_id: None, last_edit: Instant::now(), last_text: String::new() });
+            let adopt_id = sub_state.take_adoptable_msg_id();
+            *active_turn = Some(ActiveAsyncTurn { _guard: guard, typing, last_activity: Instant::now(), pub_msg_id: adopt_id, last_edit: Instant::now(), last_text: String::new() });
         }
     } else if let Some(turn) = active_turn {
         turn.last_activity = Instant::now();
@@ -149,6 +155,7 @@ async fn check_and_dispatch_delta(
     last_size: &mut u64,
     parser: &mut AntigravityLogParser,
     active_turn: &mut Option<ActiveAsyncTurn>,
+    sub_state: &mut ObserverSubagentState,
 ) {
     let Ok(meta) = std::fs::metadata(transcript_path) else { return };
     if meta.len() <= *last_size { return; }
@@ -157,7 +164,7 @@ async fn check_and_dispatch_delta(
     *parser = AntigravityLogParser::new();
     if !delta.has_activity { return; }
     crate::upgrade::record_user_activity();
-    ensure_active_turn(ctx, active_turn).await;
+    ensure_active_turn(ctx, active_turn, sub_state).await;
     if delta.final_content.is_some() || delta.ask_question.is_some() {
         ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
         dispatch_terminal_event(ctx, delta, active_turn).await;
@@ -169,53 +176,40 @@ async fn check_and_dispatch_delta(
     }
 }
 
-async fn handle_running_state_check(
-    cli: &AntigravityCli,
-    session_id: &str,
-    transcript_path: &Path,
-    was_running: &mut bool,
-    last_size: &mut u64,
-    parser: &mut AntigravityLogParser,
-) -> bool {
-    let is_running = cli.sessions.is_running(session_id).await;
-    let recent_int = cli.sessions.was_recently_interrupted(session_id, Duration::from_secs(6)).await;
-    if is_running || recent_int || *was_running {
-        *was_running = is_running;
-        cli.sessions.set_async_running(session_id, false).await;
-        *last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(*last_size);
-        *parser = AntigravityLogParser::new();
-        return true;
-    }
-    false
+async fn should_exit_observer(ctx: &ObserverCtx, tp: &Path) -> bool {
+    let cur = get_active_session(ctx).await.is_some_and(|s| s.get_session_id("antigravity") == ctx.session_id);
+    !ctx.cli.sessions.is_active(&ctx.session_id).await && (!cur || !tp.exists())
 }
 
 async fn run_observer_loop(ctx: ObserverCtx) {
-    let bd = crate::cli::antigravity::events::agy_state_root(Some(&ctx.cli.build_env())).join("brain").join(&ctx.session_id);
-    let tp = bd.join(".system_generated").join("logs").join("transcript_full.jsonl");
+    let br = crate::cli::antigravity::events::agy_state_root(Some(&ctx.cli.build_env())).join("brain");
+    let tp = br.join(&ctx.session_id).join(".system_generated/logs/transcript_full.jsonl");
     let mut last_size = std::fs::metadata(&tp).map(|m| m.len()).unwrap_or(0);
-    let mut parser = AntigravityLogParser::new();
+    let (mut parser, mut sub) = (AntigravityLogParser::new(), ObserverSubagentState::new());
     let (fs_tx, mut fs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let watcher = create_brain_dir_watcher(&bd, fs_tx);
-    let mut fs_closed = watcher.is_none();
-    let mut tick = tokio::time::interval(Duration::from_secs(2));
-    let (mut was_running, mut active_turn) = (false, None::<ActiveAsyncTurn>);
+    let watcher = create_brain_dir_watcher(&br.join(&ctx.session_id), fs_tx);
+    let (mut fs_closed, mut tick) = (watcher.is_none(), tokio::time::interval(Duration::from_secs(2)));
+    let (mut was_running, mut active) = (false, None::<ActiveAsyncTurn>);
     loop {
         tokio::select! {
             _ = ctx.cli.sessions.interrupt_notify.notified() => {}
+            _ = ctx.cli.pty_sync.observer_notify.notified() => {}
             _ = tick.tick() => {}
-            res = fs_rx.recv(), if !fs_closed => if res.is_none() { fs_closed = true; },
+            r = fs_rx.recv(), if !fs_closed => if r.is_none() { fs_closed = true; },
         }
-        let still_current = get_active_session(&ctx).await.is_some_and(|s| s.get_session_id("antigravity") == ctx.session_id);
-        if !ctx.cli.sessions.is_active(&ctx.session_id).await && (!still_current || !tp.exists()) { break; }
-        if handle_running_state_check(&ctx.cli, &ctx.session_id, &tp, &mut was_running, &mut last_size, &mut parser).await {
-            active_turn = None;
+        if should_exit_observer(&ctx, &tp).await { break; }
+        if sub.sync_running_state(&ctx.cli, &ctx.session_id, &tp, &mut was_running, &mut last_size, &mut parser).await {
+            active = None;
             continue;
         }
-        if active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() > Duration::from_secs(300)) {
+        if active.as_ref().is_some_and(|t| t.last_activity.elapsed() > Duration::from_secs(300)) {
             ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
-            active_turn = None;
+            active = None;
         }
-        check_and_dispatch_delta(&ctx, &tp, &mut last_size, &mut parser, &mut active_turn).await;
+        check_and_dispatch_delta(&ctx, &tp, &mut last_size, &mut parser, &mut active, &mut sub).await;
+        if active.is_none() {
+            sub.poll_and_stream(ctx.bot.as_ref(), &ctx.transport, ctx.chat_id, ctx.thread_id, &ctx.session_id, &br).await;
+        }
     }
     ctx.cli.sessions.set_async_running(&ctx.session_id, false).await;
     drop(watcher);

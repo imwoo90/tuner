@@ -136,10 +136,19 @@ export function createInspectorController({ apiFetch, getActiveSessionKey, onFor
         const tasks = (n.tasks || [])
           .map((tk) => `<details class="cot-block"><summary>${escapeHtml(t("bgTaskPrefix"))}: ${escapeHtml(tk.task_id)}</summary><pre class="code-pre">${escapeHtml(tk.tail || "")}</pre></details>`)
           .join("");
+        let stepHtml = "";
+        if (n.latest_step) {
+          const ls = n.latest_step;
+          const stCls = ls.status === "RUNNING" ? "pill-ok" : (ls.status === "ERROR" ? "pill-warn" : "");
+          const toolsTxt = (ls.tools || []).length > 0 ? ` · 🛠 ${escapeHtml(ls.tools.join(", "))}` : "";
+          const idxTxt = ls.step_index != null ? `#${Number(ls.step_index)} ` : "";
+          stepHtml = `<div class="muted mono" style="margin-top:4px;"><span class="pill ${stCls}">${escapeHtml(ls.status || ls.type || "-")}</span> ${escapeHtml(idxTxt)}${escapeHtml(ls.type || "")}${toolsTxt}</div>`;
+        }
         const shortId = (n.conversation_id || "").slice(0, 8);
+        const titleTxt = n.is_root ? t("rootSession") : (n.label || t("childSession"));
         html += `<div class="card">
-          <div class="card-row"><strong>${escapeHtml(n.is_root ? t("rootSession") : t("childSession"))} <span class="muted mono">#${escapeHtml(shortId)}</span></strong></div>
-          ${subs}${swarm}${tasks}
+          <div class="card-row"><strong>${escapeHtml(titleTxt)} <span class="muted mono">#${escapeHtml(shortId)}</span></strong></div>
+          ${stepHtml}${subs}${swarm}${tasks}
         </div>`;
       }
     }

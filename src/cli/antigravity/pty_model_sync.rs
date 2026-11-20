@@ -74,9 +74,7 @@ impl AntigravityCli {
 
     pub(crate) async fn ensure_pty_turn_idle(&self, sid: &str, prompt: &str) -> Result<(), String> {
         if !prompt.is_empty()
-            && (self.sessions.is_running(sid).await
-                || self.sessions.is_async_running(sid).await
-                || self.sessions.is_ask_active(sid).await)
+            && (self.sessions.is_running(sid).await || self.sessions.is_ask_active(sid).await)
         {
             return Err("AGY_ERROR: Session already has an active turn or open question.".to_string());
         }
@@ -129,10 +127,14 @@ impl AntigravityCli {
     ) -> Result<(), String> {
         let lock = self.pty_sync.lock_for(sid).await;
         let _guard = lock.lock().await;
-        if !prompt.is_empty()
-            && (self.sessions.is_async_running(sid).await || self.sessions.is_ask_active(sid).await)
-        {
-            return Err("AGY_ERROR: Session already has an open prompt or async turn.".to_string());
+        if !prompt.is_empty() {
+            let t0 = std::time::Instant::now();
+            while self.sessions.is_async_running(sid).await && t0.elapsed() < Duration::from_secs(30) {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            if self.sessions.is_async_running(sid).await || self.sessions.is_ask_active(sid).await {
+                return Err("AGY_ERROR: Session already has an open prompt or async turn.".to_string());
+            }
         }
         let desired = self.desired_pty_target();
         if !prompt.is_empty() && desired.is_none() && self.can_reset_pty_to_default(sid).await {
@@ -192,5 +194,46 @@ impl AntigravityCli {
             tokio::time::sleep(Duration::from_millis(300)).await;
             self.pty_sync.set_applied(sid, pid, Some(target)).await;
         }
+    }
+
+    pub(crate) async fn exec_pty_turn_inner(
+        &self,
+        sid: &str,
+        prompt: &str,
+        env: &HashMap<String, String>,
+        agy_ws: &Path,
+        p_tp: &Path,
+    ) -> Result<(String, String, std::process::ExitStatus), String> {
+        if !self.sessions.is_active(sid).await && !sid.starts_with("mock-") && !self.is_session_alive(sid) {
+            return Err(format!("Session {} is expired or not found in Antigravity storage", sid));
+        }
+        self.prepare_pty_for_turn(sid, prompt, agy_ws, env).await?;
+        let pre_bg = super::turn_settle::settle_before_pty_prompt(&self.sessions, sid, p_tp, prompt).await?;
+        let sz = std::fs::metadata(p_tp).map(|m| m.len()).unwrap_or(0);
+        self.pty_sync.set_turn_ctx(sid, sz, pre_bg).await;
+        if let Some(h) = self.sessions.holders.lock().await.get_mut(sid) {
+            h.turn_start_offset = h.output.lock().await.len();
+        }
+        self.sessions.write_to_session(sid, &format!("{}\r", prompt)).await?;
+        let p_opt = (!prompt.is_empty()).then_some(prompt);
+        super::polling::wait_for_log_completion_with_prompt(&self.sessions, sid, Some(p_tp.to_path_buf()), sz, p_opt).await?;
+        use std::os::unix::process::ExitStatusExt;
+        Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))
+    }
+
+    pub(crate) async fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, final_sid: Option<&str>, ok: bool) -> String {
+        if !ok { return super::events::parse_antigravity_json(stdout); }
+        let b = final_sid.map(|s| super::events::agy_state_root(Some(env)).join("brain").join(s))
+            .or_else(|| super::events::resolve_brain_dir(ws, Some(env)));
+        let base = super::events::read_transcript_answer(ws, Some(env), b.as_deref());
+        if let (Some(sid), Some(bd)) = (final_sid, b.as_deref())
+            && let Some((t_start, pre_bg)) = self.pty_sync.take_turn_ctx(sid).await
+        {
+            let tp = bd.join(".system_generated/logs/transcript_full.jsonl");
+            if let Some(combined) = super::turn_settle::combine_turn_answers(&tp, t_start, pre_bg, base.clone()) {
+                return combined;
+            }
+        }
+        base.unwrap_or_else(|| super::events::parse_antigravity_json(stdout))
     }
 }

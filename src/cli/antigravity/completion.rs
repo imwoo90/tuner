@@ -109,30 +109,13 @@ pub(crate) fn is_completion_entry(line: &str) -> bool {
     }
 }
 
-pub(crate) fn check_log_completion_in_file(path: &std::path::Path, current_size: u64) -> Result<Option<u64>, String> {
-    if let Ok(metadata) = std::fs::metadata(path) {
-        let file_size = metadata.len();
-        let start_pos = if file_size < current_size { 0 } else { current_size };
-        if file_size > start_pos {
-            use std::io::{Read, Seek, SeekFrom};
-            if let Ok(mut file) = std::fs::File::open(path)
-                && file.seek(SeekFrom::Start(start_pos)).is_ok() {
-                    let mut buffer = Vec::new();
-                    if file.read_to_end(&mut buffer).is_ok()
-                        && let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
-                            let text = String::from_utf8_lossy(&buffer[..=last_nl]);
-                            for line in text.lines() {
-                                if is_completion_entry(line) {
-                                    return Ok(None);
-                                }
-                            }
-                            return Ok(Some(start_pos + last_nl as u64 + 1));
-                        }
-                }
-            return Ok(Some(start_pos));
-        }
+pub(crate) fn check_log_completion_in_file(path: &std::path::Path, turn_start_pos: u64) -> Result<Option<u64>, String> {
+    let scan = super::turn_settle::scan_turn_slice(path, turn_start_pos);
+    if scan.is_turn_complete() {
+        Ok(None)
+    } else {
+        Ok(Some(scan.next_pos))
     }
-    Ok(Some(current_size))
 }
 
 pub(crate) fn extract_pty_turn_error(raw: &[u8], offset: usize) -> Option<String> {
@@ -167,6 +150,7 @@ pub(crate) async fn check_completion_step(
     sessions: &super::session::SessionManager,
     session_id: &str,
     path: Option<&PathBuf>,
+    turn_start: u64,
     size: &mut u64,
 ) -> Result<Option<()>, String> {
     let mut holders = sessions.holders.lock().await;
@@ -182,7 +166,7 @@ pub(crate) async fn check_completion_step(
             Ok(Some(s)) => {
                 if s.success() {
                     if let Some(p) = path
-                        && check_log_completion_in_file(p, *size)?.is_none() {
+                        && check_log_completion_in_file(p, turn_start)?.is_none() {
                             return Ok(Some(()));
                         }
                     return Ok(Some(()));
@@ -199,7 +183,7 @@ pub(crate) async fn check_completion_step(
         return Err("Process exited prematurely".to_string());
     }
     if let Some(p) = path {
-        match check_log_completion_in_file(p, *size)? {
+        match check_log_completion_in_file(p, turn_start)? {
             None => return Ok(Some(())),
             Some(ns) => *size = ns,
         }

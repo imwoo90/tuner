@@ -43,6 +43,32 @@ pub(crate) async fn send_reply(
     res
 }
 
+async fn resolve_session_state_label(
+    cli: &AntigravityCli,
+    chat_id: i64,
+    topic_id: Option<i64>,
+    active_prov: &str,
+    sid: &str,
+) -> String {
+    let is_turn_running = cli.sessions.is_running(sid).await
+        || crate::cli::claude::is_running(chat_id, topic_id, Some(sid)).await
+        || crate::cli::codex::is_running(chat_id, topic_id, Some(sid)).await;
+    if is_turn_running {
+        return "⚡ running".to_string();
+    }
+    if cli.sessions.is_async_running(sid).await {
+        return "⏳ async task".to_string();
+    }
+    if active_prov == "antigravity" {
+        let br = crate::cli::antigravity::events::agy_state_root(Some(&cli.build_env())).join("brain");
+        let subs = crate::cli::antigravity::subagent_progress::count_active_descendants(&br, sid);
+        if subs > 0 {
+            return format!("🤖 {subs} subagent(s) active");
+        }
+    }
+    "idle".to_string()
+}
+
 async fn append_topic_status(
     report: &mut String,
     msg: &Message,
@@ -65,16 +91,7 @@ async fn append_topic_status(
         if !sid.is_empty() {
             let short_sid: String = sid.chars().take(8).collect();
             let turns = s.get_message_count(active_prov);
-            let is_turn_running = cli.sessions.is_running(&sid).await
-                || crate::cli::claude::is_running(msg.chat.id.0, topic_id, Some(&sid)).await
-                || crate::cli::codex::is_running(msg.chat.id.0, topic_id, Some(&sid)).await;
-            let state_str = if is_turn_running {
-                "⚡ running"
-            } else if cli.sessions.is_async_running(&sid).await {
-                "⏳ async task"
-            } else {
-                "idle"
-            };
+            let state_str = resolve_session_state_label(cli, msg.chat.id.0, topic_id, active_prov, &sid).await;
             report.push_str(&format!("\n- Topic Session: `{}` ({} turns, {})", short_sid, turns, state_str));
         }
         if !s.pending_attachments.is_empty() {

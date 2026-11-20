@@ -31,6 +31,7 @@
 //! - [`review_callback`] (`review_callback.rs`): Review preview callbacks.
 //! - [`media_group`] (`media_group.rs`): Album upload aggregator.
 //! - [`upgrade`] (`upgrade.rs`): Self-upgrade command workflow.
+//! - [`observer_subagents`] (`observer_subagents.rs`): Live descendant subagent progress streaming.
 //! - [`async_observer`] (`async_observer.rs`): Async turn completion watcher.
 //! - [`commands_usage`] (`commands_usage.rs`): `/usage` dispatcher.
 //! - [`commands_usage_agy`] (`commands_usage_agy.rs`): CloudCode quota for `agy`.
@@ -136,6 +137,7 @@ pub mod review_callback;
 pub mod review_tests;
 pub mod media_group;
 pub mod upgrade;
+pub mod observer_subagents;
 pub mod async_observer;
 pub mod commands_usage;
 pub mod commands_usage_agy;

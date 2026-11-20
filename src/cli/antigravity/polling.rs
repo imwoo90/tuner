@@ -173,16 +173,48 @@ async fn check_interruption(sessions: &super::session::SessionManager, session_i
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) async fn wait_for_log_completion(
     sessions: &super::session::SessionManager,
     sid: &str,
     tp: Option<PathBuf>,
+    sz: u64,
+) -> Result<(), String> {
+    wait_for_log_completion_with_prompt(sessions, sid, tp, sz, None).await
+}
+
+async fn maybe_reinject_prompt(
+    sessions: &super::session::SessionManager,
+    sid: &str,
+    tp: Option<&PathBuf>,
+    t0: u64,
+    elapsed: std::time::Duration,
+    prompt: Option<&str>,
+    reinjected: &mut bool,
+) -> Result<bool, String> {
+    if !*reinjected
+        && elapsed >= std::time::Duration::from_millis(800)
+        && let (Some(p_txt), Some(p_path)) = (prompt, tp)
+        && super::turn_settle::scan_turn_slice(p_path, t0).needs_prompt_reinject()
+    {
+        *reinjected = true;
+        sessions.write_to_session(sid, &format!("{p_txt}\r")).await?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+pub(crate) async fn wait_for_log_completion_with_prompt(
+    sessions: &super::session::SessionManager,
+    sid: &str,
+    tp: Option<PathBuf>,
     mut sz: u64,
+    prompt: Option<&str>,
 ) -> Result<(), String> {
     use std::time::{Duration, Instant};
     let (inact, max_t, start, mut last_act) = (Duration::from_secs(300), Duration::from_secs(3600), Instant::now(), Instant::now());
     let mut last_pty = sessions.get_output_len(sid).await.unwrap_or(0);
-    let (mut t0, mut retried, mut closed) = (sz, false, false);
+    let (mut t0, mut retried, mut reinj, mut closed) = (sz, false, false, false);
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let _w = setup_path_watcher(tp.as_ref(), tx);
     let mut tick = tokio::time::interval(Duration::from_millis(500));
@@ -190,12 +222,13 @@ pub(crate) async fn wait_for_log_completion(
     while last_act.elapsed() < inact && start.elapsed() < max_t {
         check_interruption(sessions, sid).await?;
         let prev = sz;
-        if super::completion::check_completion_step(sessions, sid, tp.as_ref(), &mut sz).await?.is_some() { return Ok(()); }
+        if super::completion::check_completion_step(sessions, sid, tp.as_ref(), t0, &mut sz).await?.is_some() { return Ok(()); }
         let pty = sessions.get_output_len(sid).await.unwrap_or(last_pty);
         if sz > prev || pty > last_pty {
             (last_pty, last_act) = (pty, Instant::now());
-        } else if last_act.elapsed() >= Duration::from_secs(3)
-            && super::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), &mut t0, sz, &mut retried).await?
+        } else if maybe_reinject_prompt(sessions, sid, tp.as_ref(), t0, last_act.elapsed(), prompt, &mut reinj).await?
+            || (last_act.elapsed() >= Duration::from_secs(3)
+                && super::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), &mut t0, sz, &mut retried).await?)
         {
             last_act = Instant::now();
         }

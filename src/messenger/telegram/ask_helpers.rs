@@ -222,7 +222,8 @@ pub(crate) async fn feed_active_session_if_running(
     }
 
     let start = std::time::Instant::now();
-    while ((cli.sessions.is_active(session_id).await && cli.sessions.is_running(session_id).await)
+    while ((cli.sessions.is_active(session_id).await
+            && (cli.sessions.is_running(session_id).await || cli.sessions.is_async_running(session_id).await))
         || crate::cli::claude::is_running(cid, tid, Some(session_id)).await
         || crate::cli::codex::is_running(cid, tid, Some(session_id)).await)
         && start.elapsed().as_secs() < 60

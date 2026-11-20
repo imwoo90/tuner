@@ -12,6 +12,7 @@
 use super::auth_http::{json_err, require_auth};
 use super::{resolve_ctx, WebAppCtx};
 use crate::cli::antigravity::events::agy_state_root;
+use crate::cli::antigravity::subagent_progress::read_tail_utf8;
 use crate::session::key::SessionKey;
 use axum::{
     extract::Query,
@@ -81,6 +82,8 @@ pub struct AgentTreeNode {
     pub conversation_id: String,
     /// True for the session's root conversation.
     pub is_root: bool,
+    /// Optional role or swarm roster name for child conversations.
+    pub label: Option<String>,
     /// Child subagent descriptors.
     pub subagents: Vec<SubagentDescriptorView>,
     /// Native Swarm roster members.
@@ -119,7 +122,16 @@ fn read_subagents(gen_dir: &Path) -> Vec<SubagentDescriptorView> {
         if !is_safe_cid(&cid) {
             continue;
         }
-        let role = val.get("role").or_else(|| val.get("type")).or_else(|| val.get("name")).and_then(|v| v.as_str()).unwrap_or("subagent").to_string();
+        let role = val
+            .pointer("/subagentDescriptor/role")
+            .or_else(|| val.get("role"))
+            .or_else(|| val.pointer("/subagentDescriptor/typeName"))
+            .or_else(|| val.get("type"))
+            .or_else(|| val.get("name"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("subagent")
+            .to_string();
         let state = val.get("state").and_then(|v| v.as_str()).unwrap_or("UNKNOWN").to_string();
         let modified_epoch = std::fs::metadata(&p).ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
         out.push(SubagentDescriptorView { conversation_id: cid, role, state, modified_epoch });
@@ -155,7 +167,7 @@ fn read_tasks(gen_dir: &Path) -> Vec<TaskLogView> {
             continue;
         }
         let task_id = p.file_stem().and_then(|s| s.to_str()).unwrap_or("task").to_string();
-        let raw = std::fs::read_to_string(&p).unwrap_or_default();
+        let raw = read_tail_utf8(&p, 8192).unwrap_or_default();
         let lines: Vec<&str> = raw.lines().collect();
         let tail = lines[lines.len().saturating_sub(6)..].join("\n");
         let clipped: String = tail.chars().rev().take(600).collect::<Vec<_>>().into_iter().rev().collect();
@@ -168,7 +180,7 @@ fn read_latest_step(gen_dir: &Path) -> Option<LatestStepView> {
     let logs = gen_dir.join("logs");
     let compact = logs.join("transcript.jsonl");
     let path = if compact.is_file() { compact } else { logs.join("transcript_full.jsonl") };
-    let raw = std::fs::read_to_string(path).ok()?;
+    let raw = read_tail_utf8(&path, 32 * 1024)?;
     let last_line = raw.lines().rev().find(|l| !l.trim().is_empty())?;
     let val: serde_json::Value = serde_json::from_str(last_line).ok()?;
     let tools = val
@@ -191,9 +203,9 @@ pub fn collect_agent_tree_nodes(brain_root: &Path, root_cid: &str, max_nodes: us
         return Vec::new();
     }
     let mut visited = HashSet::new();
-    let mut queue = vec![(root_cid.to_string(), true)];
+    let mut queue = vec![(root_cid.to_string(), true, None::<String>)];
     let mut nodes = Vec::new();
-    while let Some((cid, is_root)) = queue.pop() {
+    while let Some((cid, is_root, label)) = queue.pop() {
         if nodes.len() >= max_nodes || !is_safe_cid(&cid) || !visited.insert(cid.clone()) {
             continue;
         }
@@ -204,16 +216,17 @@ pub fn collect_agent_tree_nodes(brain_root: &Path, root_cid: &str, max_nodes: us
         let subagents = read_subagents(&gen_dir);
         let swarm_members = read_swarm_members(&gen_dir);
         for s in &subagents {
-            queue.push((s.conversation_id.clone(), false));
+            queue.push((s.conversation_id.clone(), false, Some(s.role.clone())));
         }
         for m in &swarm_members {
             if let Some(ref child_cid) = m.conversation_id {
-                queue.push((child_cid.clone(), false));
+                queue.push((child_cid.clone(), false, Some(format!("🐝 {}", m.name))));
             }
         }
         nodes.push(AgentTreeNode {
             conversation_id: cid,
             is_root,
+            label,
             subagents,
             swarm_members,
             tasks: read_tasks(&gen_dir),

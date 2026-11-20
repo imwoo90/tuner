@@ -59,25 +59,16 @@ impl AntigravityCli {
         self.ensure_pty_turn_idle(sid, prompt).await?;
         let sessions = self.sessions.clone();
         sessions.set_running(sid, true).await;
-
-        let res = async {
-            if !self.sessions.is_active(sid).await && !sid.starts_with("mock-") && !self.is_session_alive(sid) {
-                return Err(format!("Session {} is expired or not found in Antigravity storage", sid));
-            }
-            self.prepare_pty_for_turn(sid, prompt, agy_ws, env).await?;
-            let p = events::agy_state_root(Some(env)).join("brain").join(sid)
-                .join(".system_generated/logs/transcript_full.jsonl");
-            let sz = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-            if let Some(h) = self.sessions.holders.lock().await.get_mut(sid) {
-                h.turn_start_offset = h.output.lock().await.len();
-            }
-            self.sessions.write_to_session(sid, &format!("{}\r", prompt)).await?;
-            super::polling::wait_for_log_completion(&self.sessions, sid, Some(p), sz).await?;
-            use std::os::unix::process::ExitStatusExt;
-            Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))
-        }.await;
-
+        let p_tp = events::agy_state_root(Some(env)).join("brain").join(sid)
+            .join(".system_generated/logs/transcript_full.jsonl");
+        let res = self.exec_pty_turn_inner(sid, prompt, env, agy_ws, &p_tp).await;
+        let end_sz = std::fs::metadata(&p_tp).map(|m| m.len()).unwrap_or(0);
         sessions.set_running(sid, false).await;
+        if res.is_ok() {
+            self.pty_sync.record_fg_end(sid, end_sz).await;
+        } else {
+            let _ = self.pty_sync.take_turn_ctx(sid).await;
+        }
         if let Err(ref e) = res
             && e != "Interrupted by user (/stop)" && !e.starts_with("AGY_ERROR:")
         {
@@ -115,13 +106,6 @@ impl AntigravityCli {
                 Err(format!("Command timed out after {} seconds", label))
             }
         }
-    }
-
-    fn resolve_result_text(&self, ws: &Path, env: &HashMap<String, String>, stdout: &str, final_sid: Option<&str>, ok: bool) -> String {
-        if !ok { return events::parse_antigravity_json(stdout); }
-        let b = final_sid.map(|s| events::agy_state_root(Some(env)).join("brain").join(s))
-            .or_else(|| events::resolve_brain_dir(ws, Some(env)));
-        events::read_transcript_answer(ws, Some(env), b.as_deref()).unwrap_or_else(|| events::parse_antigravity_json(stdout))
     }
 
     async fn maybe_seed_warm_pty(&self, ok: bool, resume: Option<&str>, fid: Option<&str>, ws: &Path, env: &HashMap<String, String>) -> Result<(), String> {
@@ -162,7 +146,7 @@ impl AgentProvider for AntigravityCli {
                 ok.then(|| events::resolve_brain_dir(&agy_ws, Some(&env))?.file_name().map(|n| n.to_string_lossy().into()))?
             })
         });
-        let result = self.resolve_result_text(&agy_ws, &env, &out, final_sid.as_deref(), ok);
+        let result = self.resolve_result_text(&agy_ws, &env, &out, final_sid.as_deref(), ok).await;
         self.maybe_seed_warm_pty(ok, resume_session, final_sid.as_deref(), &agy_ws, &env).await?;
         let returncode = if early && status.success() { Some(1) } else { super::completion::exit_status_code(&status) };
         Ok(CliResponse { session_id: final_sid, result, is_error: !ok, returncode, stderr: err })

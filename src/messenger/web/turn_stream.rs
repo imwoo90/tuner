@@ -12,7 +12,6 @@ use super::api_files::filter_safe_preview_paths;
 use super::events::{emit_session_updated, WebEvent};
 use super::turn_runner::emit_web_error;
 use super::WebAppCtx;
-use crate::cli::antigravity::events::agy_state_root;
 use crate::cli::antigravity::log_parser::AntigravityLogParser;
 use crate::cli::antigravity::session::AskState;
 use crate::cli::{AgentProvider, AskQuestionData, CliResponse, StreamEvent};
@@ -21,7 +20,7 @@ use crate::messenger::telegram::commands_provider::{
     cancel_abandoned_provider_ask, is_stale_ask_session,
 };
 use crate::messenger::telegram::formatting::{markdown_to_telegram_html, split_html_message};
-use crate::messenger::telegram::history::log_telegram_message;
+use crate::messenger::telegram::history::{capture_pre_transcript_cursor, log_telegram_message};
 use crate::messenger::telegram::message_session::sync_live_peer_ask_session;
 use crate::messenger::telegram::session_init::configure_session_cli;
 use crate::messenger::telegram::stream::{
@@ -97,26 +96,14 @@ async fn handle_single_stream_event(
             st.ask_opened = true;
             handle_web_ask_event(ctx, sess, bot_opt, ask).await;
         }
-        StreamEvent::Result(resp) => {
+        StreamEvent::Result(mut resp) => {
             st.pending_tg = false;
+            if resp.result.trim().is_empty() && !st.ask_opened && !resp.is_error && resp.stderr != "Interrupted by user (/stop)" && !st.last_text.trim().is_empty() {
+                resp.result = st.last_text.clone();
+            }
             st.last_sid = finalize_web_result(ctx, sess, bot_opt, st.pub_id, resp).await;
         }
     }
-}
-
-fn capture_pre_transcript_cursor(
-    cc: &crate::cli::antigravity::AntigravityCli,
-    sess: &SessionData,
-    sid: &str,
-    default_prov: &str,
-) -> Option<(std::path::PathBuf, u64)> {
-    let prov = SessionData::effective_provider(&sess.provider, default_prov);
-    if prov != "antigravity" || sid.is_empty() {
-        return None;
-    }
-    let tp = agy_state_root(Some(&cc.build_env())).join("brain").join(sid).join(".system_generated/logs/transcript_full.jsonl");
-    let pre_len = std::fs::metadata(&tp).map(|m| m.len()).unwrap_or(0);
-    Some((tp, pre_len))
 }
 
 async fn recover_missed_agy_ask(

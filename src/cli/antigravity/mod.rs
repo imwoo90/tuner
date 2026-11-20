@@ -12,6 +12,8 @@
 //! - [`log_helpers`] (`log_helpers.rs`): Byte-offset file tailing and collapsible Markdown formatting helpers.
 //! - [`log_parser`] (`log_parser.rs`): Incremental structured log delta parser for CoT and tool calls.
 //! - [`log_watcher`] (`log_watcher.rs`): Single-directory non-recursive transcript filesystem watchers.
+//! - [`subagent_progress`] (`subagent_progress.rs`): Descendant subagent and Native Swarm live transcript tracker.
+//! - [`turn_settle`] (`turn_settle.rs`): Async post-turn stdin contention guard and slice scanner.
 //! - [`polling`] (`polling.rs`): File-watcher-driven transcript polling and completion loops.
 //! - [`completion`] (`completion.rs`): Turn completion detection and PTY output stability checks.
 //! - [`trust`] (`trust.rs`): Automatic workspace trust registration and dynamic model discovery.
@@ -53,6 +55,10 @@ pub mod log_helpers;
 pub mod log_parser;
 /// Non-recursive transcript directory watchers.
 pub mod log_watcher;
+/// Descendant subagent and Native Swarm live transcript progress tracker.
+pub mod subagent_progress;
+/// Async post-turn stdin contention guard and transcript slice scanner.
+pub mod turn_settle;
 pub mod polling;
 pub mod completion;
 /// Dynamic model discovery re-exports.
