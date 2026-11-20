@@ -7,11 +7,41 @@
 //! ## Search Tags
 //! #gemini-live-protocol, #bidi-audio, #session-resumption, #voice-codec
 
+use super::auth_http::require_auth;
 use super::events::WebEvent;
 use super::provider_status::read_dotenv_map;
 use super::voice_schema::voice_tool_declarations;
+use super::{resolve_ctx, WebAppCtx};
+use axum::{
+    http::HeaderMap,
+    response::{IntoResponse, Response},
+    Extension, Json,
+};
 use serde_json::{json, Value};
 use std::path::Path;
+use std::sync::Arc;
+
+/// Returns Voice Desk Assistant readiness (`GET /dashboard/api/voice/status`).
+pub async fn handle_voice_status(
+    ext: Option<Extension<Arc<WebAppCtx>>>,
+    headers: HeaderMap,
+) -> Response {
+    let ctx = match resolve_ctx(ext) {
+        Ok(c) => c,
+        Err(r) => return *r,
+    };
+    let sess = match require_auth(&ctx, &headers).await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let ready = resolve_gemini_api_key(&ctx.tuner_home).is_some();
+    Json(json!({
+        "ready": ready,
+        "model": resolve_voice_model().trim_start_matches("models/"),
+        "csrf_token": sess.csrf_token
+    }))
+    .into_response()
+}
 
 /// Resolves the configured `GEMINI_API_KEY` from `$TUNER_HOME/.env` or process environment.
 pub fn resolve_gemini_api_key(tuner_home: &Path) -> Option<String> {
@@ -160,6 +190,8 @@ pub enum UpstreamAction {
     ResumeHandle(String),
     /// Upstream `goAway` rotation warning; reconnect using stored `ResumeHandle`.
     GoAway,
+    /// Upstream error message reported by Gemini Live.
+    Error(String),
 }
 
 /// Maps a simple [`UpstreamAction`] directly to a browser WebSocket JSON payload when applicable.
@@ -174,6 +206,7 @@ pub fn action_to_client_frame(act: &UpstreamAction) -> Option<Value> {
         UpstreamAction::UserTranscript(t) => Some(json!({ "type": "user_transcript", "text": t })),
         UpstreamAction::BotTranscript(t) => Some(json!({ "type": "bot_transcript", "text": t })),
         UpstreamAction::TurnComplete => Some(json!({ "type": "turn_complete" })),
+        UpstreamAction::Error(e) => Some(json!({ "type": "error", "error": e })),
         _ => None,
     }
 }
@@ -231,6 +264,10 @@ pub fn parse_gemini_server_frame(raw: &str) -> Vec<UpstreamAction> {
         && let Some(h) = sru.get("newHandle").and_then(Value::as_str).filter(|s| !s.is_empty())
     {
         out.push(UpstreamAction::ResumeHandle(h.to_string()));
+    }
+    if let Some(err_obj) = v.get("error") {
+        let msg = err_obj.get("message").and_then(Value::as_str).unwrap_or("Gemini Live error");
+        out.push(UpstreamAction::Error(msg.to_string()));
     }
     if v.get("goAway").is_some() {
         out.push(UpstreamAction::GoAway);

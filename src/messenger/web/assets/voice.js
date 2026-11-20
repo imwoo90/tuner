@@ -5,30 +5,44 @@ const WORKLET_CODE = `
 class Pcm16CaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.buf = new Int16Array(1024);
+    this.buf = new Int16Array(960);
     this.off = 0;
+    this.readPos = 0;
+    this.sumSq = 0;
   }
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
     if (!ch || !ch.length) return true;
     const ratio = sampleRate / 16000;
-    let i = 0;
-    while (i < ch.length) {
-      const idx = Math.min(ch.length - 1, Math.floor(i));
-      const s = Math.max(-1, Math.min(1, ch[idx]));
+    while (this.readPos < ch.length) {
+      const start = Math.floor(this.readPos);
+      const end = Math.min(ch.length, Math.max(start + 1, Math.floor(this.readPos + ratio)));
+      let acc = 0;
+      for (let k = start; k < end; k++) acc += ch[k];
+      const s = Math.max(-1, Math.min(1, acc / (end - start)));
+      this.sumSq += s * s;
       this.buf[this.off++] = s < 0 ? s * 0x8000 : s * 0x7fff;
       if (this.off >= this.buf.length) {
+        const rms = Math.sqrt(this.sumSq / this.buf.length);
         const copy = this.buf.slice(0);
-        this.port.postMessage(copy.buffer, [copy.buffer]);
+        this.port.postMessage({ pcm: copy.buffer, rms }, [copy.buffer]);
         this.off = 0;
+        this.sumSq = 0;
       }
-      i += ratio;
+      this.readPos += ratio;
     }
+    this.readPos -= ch.length;
     return true;
   }
 }
 registerProcessor("pcm16-capture", Pcm16CaptureProcessor);
 `;
+
+const SILENT_PCM960_B64 = (() => {
+  let bin = "";
+  for (let i = 0; i < 1920; i++) bin += "\x00";
+  return btoa(bin);
+})();
 
 function bytesToBase64(bytes) {
   let bin = "";
@@ -99,15 +113,23 @@ export function createVoiceController({
   let muted = false;
   let kbdOpen = false;
   let peekSessionKey = "";
+  let cachedCsrf = "";
+  let reconnectTimer = null;
+  let reconnectAttempts = 0;
+  let listenDebounceTimer = null;
+  let wakeLockSentinel = null;
   let audioCtx = null;
   let outGain = null;
-  let directConnected = false;
-  let pcSender = null;
-  let pcReceiver = null;
-  let callAudioEl = null;
   let mediaStream = null;
+  let micSourceNode = null;
   let workletNode = null;
+  let zeroGainNode = null;
+  let workletLoaded = false;
   let nextPlayTime = 0;
+  let aiSpeakingUntilMs = 0;
+  let bargeHoldUntil = 0;
+  let bargeStreak = 0;
+  let pendingBargeFrame = null;
   const playingSources = new Set();
 
   let turns = [];
@@ -130,7 +152,12 @@ export function createVoiceController({
       els.badge.textContent = t(stateKey);
       els.badge.className = `pill voice-status-pill ${mode === "thinking" ? "pill-warn" : (muted ? "" : "pill-ok")}`;
     }
-    if (els.wave) els.wave.dataset.mode = muted ? "muted" : mode;
+    if (els.wave) {
+      els.wave.dataset.mode = muted ? "muted" : mode;
+      if (muted || mode !== "listening") {
+        els.wave.style.setProperty("--mic-scale", "1");
+      }
+    }
   }
 
   function closeOpenTurns() {
@@ -343,100 +370,66 @@ export function createVoiceController({
   }
 
   function flushPlayback() {
+    if (listenDebounceTimer) {
+      clearTimeout(listenDebounceTimer);
+      listenDebounceTimer = null;
+    }
     for (const src of playingSources) {
       try { src.stop(); } catch (_) {}
     }
     playingSources.clear();
+    aiSpeakingUntilMs = 0;
+    bargeStreak = 0;
+    pendingBargeFrame = null;
     if (audioCtx) nextPlayTime = audioCtx.currentTime;
   }
 
-  function ensureAudioCtx() {
+  async function acquireWakeLock() {
+    if (!active || wakeLockSentinel || !navigator.wakeLock?.request) return;
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request("screen");
+      wakeLockSentinel.addEventListener("release", () => {
+        wakeLockSentinel = null;
+      });
+    } catch (_) {}
+  }
+
+  function releaseWakeLock() {
+    if (!wakeLockSentinel) return;
+    try { wakeLockSentinel.release(); } catch (_) {}
+    wakeLockSentinel = null;
+  }
+
+  function unlockAudioGestureSync() {
     if (!audioCtx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) {
-        audioCtx = new Ctx();
+        audioCtx = new Ctx({ latencyHint: "interactive" });
         outGain = audioCtx.createGain();
         outGain.gain.value = currentGain;
         outGain.connect(audioCtx.destination);
-        directConnected = true;
+        workletLoaded = false;
       }
     }
     if (audioCtx && audioCtx.state === "suspended") {
       audioCtx.resume().catch(() => {});
     }
-    return audioCtx;
-  }
-
-  function teardownCallStreamBridge() {
-    if (callAudioEl) {
-      try { callAudioEl.pause(); } catch (_) {}
-      callAudioEl.srcObject = null;
-    }
-    if (pcSender) {
-      try { pcSender.close(); } catch (_) {}
-      pcSender = null;
-    }
-    if (pcReceiver) {
-      try { pcReceiver.close(); } catch (_) {}
-      pcReceiver = null;
-    }
-    if (audioCtx && outGain && !directConnected) {
+    // Fire a 1-frame silent buffer inside the synchronous click handler to unlock mobile iOS/Android playback!
+    if (audioCtx && outGain) {
       try {
-        outGain.connect(audioCtx.destination);
-        directConnected = true;
+        const silent = audioCtx.createBuffer(1, 1, 24000);
+        const s = audioCtx.createBufferSource();
+        s.buffer = silent;
+        s.connect(outGain);
+        s.start(0);
       } catch (_) {}
     }
-  }
-
-  async function attachCallStreamBridge(ctx) {
-    if (!window.RTCPeerConnection || !outGain || !ctx.createMediaStreamDestination) return;
-    teardownCallStreamBridge();
-    try {
-      const destNode = ctx.createMediaStreamDestination();
-      outGain.connect(destNode);
-      const pc1 = new RTCPeerConnection({ iceServers: [] });
-      const pc2 = new RTCPeerConnection({ iceServers: [] });
-      pcSender = pc1;
-      pcReceiver = pc2;
-      pc1.onicecandidate = (e) => { if (e.candidate) pc2.addIceCandidate(e.candidate).catch(() => {}); };
-      pc2.onicecandidate = (e) => { if (e.candidate) pc1.addIceCandidate(e.candidate).catch(() => {}); };
-
-      const trackReady = new Promise((resolve) => {
-        pc2.ontrack = (ev) => resolve(ev.streams[0] || new MediaStream([ev.track]));
-      });
-      destNode.stream.getAudioTracks().forEach((tr) => pc1.addTrack(tr, destNode.stream));
-      const offer = await pc1.createOffer();
-      await pc1.setLocalDescription(offer);
-      await pc2.setRemoteDescription(offer);
-      const answer = await pc2.createAnswer();
-      await pc2.setLocalDescription(answer);
-      await pc1.setRemoteDescription(answer);
-
-      const remoteStream = await trackReady;
-      if (!active || pcReceiver !== pc2) return;
-      if (!callAudioEl) {
-        callAudioEl = document.createElement("audio");
-        callAudioEl.autoplay = true;
-        callAudioEl.playsInline = true;
-        callAudioEl.style.display = "none";
-        document.body.appendChild(callAudioEl);
-      }
-      callAudioEl.srcObject = remoteStream;
-      await callAudioEl.play();
-      if (active && directConnected && outGain) {
-        try {
-          outGain.disconnect(ctx.destination);
-          directConnected = false;
-        } catch (_) {}
-      }
-    } catch (_) {
-      teardownCallStreamBridge();
-    }
+    return audioCtx;
   }
 
   function enqueuePcm24(b64) {
     window.__voiceAudioChunksReceived = (window.__voiceAudioChunksReceived || 0) + 1;
-    const ctx = ensureAudioCtx();
+    const ctx = unlockAudioGestureSync();
     if (!ctx || !outGain) return;
     let pcm;
     try {
@@ -445,6 +438,10 @@ export function createVoiceController({
       return;
     }
     if (!pcm.length) return;
+    if (listenDebounceTimer) {
+      clearTimeout(listenDebounceTimer);
+      listenDebounceTimer = null;
+    }
     const buf = ctx.createBuffer(1, pcm.length, 24000);
     const ch = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) {
@@ -453,60 +450,149 @@ export function createVoiceController({
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(outGain);
-    const startAt = Math.max(ctx.currentTime + 0.015, nextPlayTime);
+    // Use a 90ms initial jitter cushion when starting a fresh utterance so LTE/Tunnel packet bursts play gaplessly!
+    const isFreshUtterance = playingSources.size === 0 || nextPlayTime <= ctx.currentTime + 0.005;
+    const startAt = isFreshUtterance ? ctx.currentTime + 0.09 : nextPlayTime;
     nextPlayTime = startAt + buf.duration;
+    const remMs = Math.max(0, (nextPlayTime - ctx.currentTime) * 1000);
+    aiSpeakingUntilMs = Math.max(aiSpeakingUntilMs, performance.now() + remMs + 340);
     playingSources.add(src);
     setStatus("voiceSpeaking", "speaking");
     src.onended = () => {
       playingSources.delete(src);
       if (playingSources.size === 0 && active) {
-        setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+        if (listenDebounceTimer) clearTimeout(listenDebounceTimer);
+        listenDebounceTimer = setTimeout(() => {
+          listenDebounceTimer = null;
+          if (playingSources.size === 0 && active) {
+            setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+          }
+        }, 180);
       }
     };
     try { src.start(startAt); } catch (_) { playingSources.delete(src); }
   }
 
-  async function startMicCapture() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
+  async function startMicCapture(initialStream) {
+    if (mediaStream && workletNode) return;
+    if (!window.isSecureContext && !navigator.mediaDevices?.getUserMedia) {
+      if (active) appendCaption("tool", `⚠️ ${t("voiceInsecureOriginWarn")}`, true);
+      return;
+    }
+    const stream = initialStream || (navigator.mediaDevices?.getUserMedia
+      ? await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1
+          }
+        }).catch(() => null)
+      : null);
+    if (!stream) {
+      const warnKey = window.isSecureContext ? "voiceMicDeniedWarn" : "voiceInsecureOriginWarn";
+      if (active) appendCaption("tool", `⚠️ ${t(warnKey)}`, true);
+      return;
+    }
+    if (!active) {
+      stream.getTracks().forEach((tr) => tr.stop());
+      return;
+    }
+    mediaStream = stream;
+    const ctx = unlockAudioGestureSync();
+    if (!ctx || !ctx.audioWorklet) return;
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1
+      if (!workletLoaded) {
+        const blob = new Blob([WORKLET_CODE], { type: "application/javascript" });
+        const modUrl = URL.createObjectURL(blob);
+        try {
+          await ctx.audioWorklet.addModule(modUrl);
+          workletLoaded = true;
+        } finally {
+          URL.revokeObjectURL(modUrl);
         }
-      });
-      const ctx = ensureAudioCtx();
-      if (!ctx || !ctx.audioWorklet) return;
-      const blob = new Blob([WORKLET_CODE], { type: "application/javascript" });
-      const modUrl = URL.createObjectURL(blob);
-      try {
-        await ctx.audioWorklet.addModule(modUrl);
-      } finally {
-        URL.revokeObjectURL(modUrl);
       }
       if (!active) return;
-      const source = ctx.createMediaStreamSource(mediaStream);
-      workletNode = new AudioWorkletNode(ctx, "pcm16-capture");
+      if (ctx.state === "suspended") {
+        await ctx.resume().catch(() => {});
+      }
+      // Keep micSourceNode -> workletNode -> zeroGainNode -> ctx.destination referenced in closure
+      // so V8 GC never collects MediaStreamAudioSourceNode and Blink continuously pulls process()!
+      micSourceNode = ctx.createMediaStreamSource(mediaStream);
+      workletNode = new AudioWorkletNode(ctx, "pcm16-capture", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
+      });
+      zeroGainNode = ctx.createGain();
+      zeroGainNode.gain.value = 0;
+
       workletNode.port.onmessage = (ev) => {
         if (!active || muted || !vws || vws.readyState !== WebSocket.OPEN) return;
-        const b64 = bytesToBase64(new Uint8Array(ev.data));
+        const { pcm, rms } = ev.data || {};
+        if (!pcm) return;
+        const nowMs = performance.now();
+        const b64 = bytesToBase64(new Uint8Array(pcm));
+        const inSpeakerWindow = playingSources.size > 0 || nowMs < aiSpeakingUntilMs;
+        if (!inSpeakerWindow && els.wave) {
+          const scale = (1 + Math.min(0.26, (rms || 0) * 2.8)).toFixed(3);
+          els.wave.style.setProperty("--mic-scale", scale);
+        }
+        // Speakerphone residual-echo & transient-pop guard: while AI audio is playing (plus 340ms acoustic room tail),
+        // require 2 consecutive 60ms frames (120ms) >= 0.045 RMS before opening a 1.4s barge-in pass-through window,
+        // flushing the buffered 1st syllable frame so genuine human interruption never clips!
+        if (inSpeakerWindow) {
+          if (nowMs <= bargeHoldUntil) {
+            if ((rms || 0) >= 0.045) bargeHoldUntil = nowMs + 1400;
+            vws.send(JSON.stringify({ type: "audio", data: b64 }));
+            return;
+          }
+          if ((rms || 0) >= 0.045) {
+            bargeStreak += 1;
+            if (bargeStreak >= 2) {
+              bargeHoldUntil = nowMs + 1400;
+              bargeStreak = 0;
+              if (pendingBargeFrame) {
+                vws.send(JSON.stringify({ type: "audio", data: pendingBargeFrame }));
+                pendingBargeFrame = null;
+              }
+              vws.send(JSON.stringify({ type: "audio", data: b64 }));
+              return;
+            }
+            pendingBargeFrame = b64;
+          } else {
+            bargeStreak = 0;
+            pendingBargeFrame = null;
+          }
+          vws.send(JSON.stringify({ type: "audio", data: SILENT_PCM960_B64 }));
+          return;
+        }
+        bargeStreak = 0;
+        pendingBargeFrame = null;
         vws.send(JSON.stringify({ type: "audio", data: b64 }));
       };
-      source.connect(workletNode);
-      await attachCallStreamBridge(ctx);
-    } catch (_) {
-      // Headless browser or denied mic permission: voice session remains active for spoken playback & text drawer.
+
+      micSourceNode.connect(workletNode);
+      workletNode.connect(zeroGainNode);
+      zeroGainNode.connect(ctx.destination);
+    } catch (err) {
+      if (active) appendCaption("tool", `⚠️ Mic error: ${err?.message || err}`, true);
     }
   }
 
   function stopHardware() {
     flushPlayback();
-    teardownCallStreamBridge();
+    if (micSourceNode) {
+      try { micSourceNode.disconnect(); } catch (_) {}
+      micSourceNode = null;
+    }
     if (workletNode) {
       try { workletNode.disconnect(); } catch (_) {}
       workletNode = null;
+    }
+    if (zeroGainNode) {
+      try { zeroGainNode.disconnect(); } catch (_) {}
+      zeroGainNode = null;
     }
     if (mediaStream) {
       mediaStream.getTracks().forEach((tr) => tr.stop());
@@ -532,60 +618,49 @@ export function createVoiceController({
     active = false;
     muted = false;
     kbdOpen = false;
+    reconnectAttempts = 0;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    releaseWakeLock();
     closePeek();
     if (vws) {
-      try { vws.close(); } catch (_) {}
+      const sock = vws;
       vws = null;
+      try { sock.close(); } catch (_) {}
     }
     stopHardware();
     syncButtons();
   }
 
-  async function startCall() {
-    const stRes = await apiFetch("/dashboard/api/voice/status");
-    if (!stRes.ok) return;
-    const st = await stRes.json();
-    if (!st.ready) {
-      onNeedGeminiSetup?.();
-      return;
-    }
-    ensureAudioCtx();
-    active = true;
-    muted = false;
-    kbdOpen = false;
-    turns = [];
-    touchedKeys.clear();
-    liveDeltas.clear();
-    openAsks.clear();
-    recentResults.clear();
-    closePeek();
-    window.__voiceAudioChunksReceived = 0;
-    renderTranscript();
-    syncButtons();
-    renderDeck();
-    setStatus("voiceConnecting", "thinking");
-    if (els.sub) els.sub.textContent = t("voiceConnectingHint");
-
+  function openVoiceSocket(pendingMicPromise) {
+    if (!active) return;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const sk = encodeURIComponent(getActiveSessionKey() || "");
     const lang = encodeURIComponent(getLang() || "ko");
-    const csrf = encodeURIComponent(getCsrfToken() || "");
-    vws = new WebSocket(`${proto}//${window.location.host}/dashboard/api/voice/ws?csrf=${csrf}&lang=${lang}&topic=${sk}`);
+    const csrf = encodeURIComponent(getCsrfToken() || cachedCsrf || "");
+    const sock = new WebSocket(`${proto}//${window.location.host}/dashboard/api/voice/ws?csrf=${csrf}&lang=${lang}&topic=${sk}`);
+    vws = sock;
 
-    vws.addEventListener("open", () => {
-      startMicCapture();
+    sock.addEventListener("open", async () => {
+      if (vws !== sock || !active) return;
+      const mic = pendingMicPromise ? await pendingMicPromise : null;
+      await startMicCapture(mic);
     });
 
-    vws.addEventListener("message", (ev) => {
+    sock.addEventListener("message", (ev) => {
+      if (vws !== sock || !active) return;
       let msg;
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
       if (msg.type === "ready") {
+        reconnectAttempts = 0;
         setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
         if (turns.length === 0 && els.sub) els.sub.textContent = t("voiceReadyHint");
       } else if (msg.type === "interrupted") {
         flushPlayback();
         closeOpenTurns();
-        setStatus("voiceListening", "listening");
+        setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
       } else if (msg.type === "audio" && msg.data) {
         enqueuePcm24(msg.data);
       } else if (msg.type === "user_transcript" && msg.text) {
@@ -609,9 +684,68 @@ export function createVoiceController({
       }
     });
 
-    vws.addEventListener("close", () => {
-      if (active) stopCall();
+    sock.addEventListener("close", () => {
+      if (vws !== sock || !active) return;
+      vws = null;
+      if (reconnectAttempts < 4) {
+        reconnectAttempts += 1;
+        setStatus("voiceReconnecting", "thinking");
+        const delay = Math.min(3500, 650 * reconnectAttempts);
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          openVoiceSocket(null);
+        }, delay);
+      } else {
+        stopCall();
+      }
     });
+  }
+
+  async function startCall() {
+    // 1. Unlock AudioContext + request getUserMedia IMMEDIATELY inside the synchronous user click gesture!
+    unlockAudioGestureSync();
+    const pendingMicPromise = navigator.mediaDevices?.getUserMedia
+      ? navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1
+          }
+        }).catch(() => null)
+      : Promise.resolve(null);
+
+    const stRes = await apiFetch("/dashboard/api/voice/status");
+    if (!stRes.ok) {
+      pendingMicPromise.then((s) => s?.getTracks().forEach((tr) => tr.stop()));
+      return;
+    }
+    const st = await stRes.json();
+    if (st.csrf_token) cachedCsrf = st.csrf_token;
+    if (!st.ready) {
+      pendingMicPromise.then((s) => s?.getTracks().forEach((tr) => tr.stop()));
+      onNeedGeminiSetup?.();
+      return;
+    }
+
+    active = true;
+    muted = false;
+    kbdOpen = false;
+    reconnectAttempts = 0;
+    turns = [];
+    touchedKeys.clear();
+    liveDeltas.clear();
+    openAsks.clear();
+    recentResults.clear();
+    closePeek();
+    window.__voiceAudioChunksReceived = 0;
+    acquireWakeLock();
+    renderTranscript();
+    syncButtons();
+    renderDeck();
+    setStatus("voiceConnecting", "thinking");
+    if (els.sub) els.sub.textContent = t("voiceConnectingHint");
+    openVoiceSocket(pendingMicPromise);
   }
 
   function sendText(text) {
@@ -634,6 +768,15 @@ export function createVoiceController({
   els.btn?.addEventListener("click", () => {
     if (active) stopCall();
     else startCall();
+  });
+
+  // Tap Audio Orb while assistant is speaking to instantly interrupt playback (manual 0ms Barge-In)!
+  els.wave?.addEventListener("click", () => {
+    if (active && playingSources.size > 0) {
+      flushPlayback();
+      closeOpenTurns();
+      setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+    }
   });
 
   els.muteBtn?.addEventListener("click", () => {
@@ -667,6 +810,15 @@ export function createVoiceController({
     if (e.key === "Enter") {
       e.preventDefault();
       submitTextDrawer();
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (active && document.visibilityState === "visible") {
+      acquireWakeLock();
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
     }
   });
 

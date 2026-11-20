@@ -1505,6 +1505,22 @@ async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
     let app = build_router_with_ctx(ctx.clone());
     let (cookie, csrf) = login_via_magic(&app, &ctx).await;
 
+    let vst_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/dashboard/api/voice/status")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(vst_res.status(), StatusCode::OK);
+    let vst_json = body_json(vst_res).await;
+    assert_eq!(vst_json["ready"], true);
+    assert_eq!(vst_json["csrf_token"], csrf);
+
     let app_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let app_addr = app_listener.local_addr().unwrap();
     let app_srv = tokio::spawn(async move {

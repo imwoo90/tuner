@@ -10,9 +10,10 @@
 
 use super::auth_http::{json_err, require_auth};
 use super::events::WebEvent;
+pub use super::voice_protocol::handle_voice_status;
 use super::voice_protocol::{
     action_to_client_frame, build_live_setup_frame, format_background_web_event,
-    parse_gemini_server_frame, resolve_gemini_api_key, resolve_voice_model, UpstreamAction,
+    parse_gemini_server_frame, resolve_gemini_api_key, UpstreamAction,
 };
 use super::voice_schema::{build_upstream_url, translate_browser_msg};
 use super::voice_tools::execute_voice_tool;
@@ -25,14 +26,18 @@ use axum::{
         Query,
     },
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    Extension, Json,
+    response::Response,
+    Extension,
 };
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio_tungstenite::tungstenite::Message as TungMsg;
+use tokio_tungstenite::tungstenite::{Error as TungErr, Message as TungMsg};
+
+type ClientSink = futures::stream::SplitSink<WebSocket, AxumWsMsg>;
+type ClientStream = futures::stream::SplitStream<WebSocket>;
+type LegState<'a> = (&'a mut Option<String>, &'a mut Option<String>, &'a mut bool);
 
 /// Query parameters for `GET /dashboard/api/voice/ws`.
 #[derive(Deserialize)]
@@ -46,26 +51,6 @@ pub struct VoiceWsQuery {
     /// Optional currently viewed session key.
     #[serde(default)]
     pub topic: String,
-}
-
-/// Returns Voice Desk Assistant readiness (`GET /dashboard/api/voice/status`).
-pub async fn handle_voice_status(
-    ext: Option<Extension<Arc<WebAppCtx>>>,
-    headers: HeaderMap,
-) -> Response {
-    let ctx = match resolve_ctx(ext) {
-        Ok(c) => c,
-        Err(r) => return *r,
-    };
-    if let Err(r) = require_auth(&ctx, &headers).await {
-        return *r;
-    }
-    let ready = resolve_gemini_api_key(&ctx.tuner_home).is_some();
-    Json(json!({
-        "ready": ready,
-        "model": resolve_voice_model().trim_start_matches("models/")
-    }))
-    .into_response()
 }
 
 /// Upgrades `/dashboard/api/voice/ws` to a real-time bidirectional Gemini Live session.
@@ -96,23 +81,17 @@ pub async fn handle_voice_ws(
     ws.on_upgrade(move |socket| run_voice_bridge(socket, ctx, sid, api_key, q))
 }
 
-async fn send_client_json(
-    client_tx: &mut futures::stream::SplitSink<WebSocket, AxumWsMsg>,
-    payload: Value,
-) -> bool {
+async fn send_client_json(client_tx: &mut ClientSink, payload: Value) -> bool {
     client_tx.send(AxumWsMsg::Text(payload.to_string())).await.is_ok()
 }
 
-async fn run_tool_calls_and_respond<S>(
+async fn run_tool_calls_and_respond<S: futures::Sink<TungMsg> + Unpin>(
     calls: Vec<(String, String, Value)>,
     ctx: &Arc<WebAppCtx>,
     current_topic: &mut Option<String>,
-    client_tx: &mut futures::stream::SplitSink<WebSocket, AxumWsMsg>,
+    client_tx: &mut ClientSink,
     up_tx: &mut S,
-) -> bool
-where
-    S: futures::Sink<TungMsg> + Unpin,
-{
+) -> bool {
     let mut responses = Vec::with_capacity(calls.len());
     for (id, name, args) in calls {
         let _ = send_client_json(client_tx, json!({ "type": "tool_call", "name": name })).await;
@@ -126,18 +105,18 @@ where
     up_tx.send(TungMsg::Text(tr)).await.is_err()
 }
 
-async fn handle_upstream_actions<S>(
+async fn handle_upstream_actions<S: futures::Sink<TungMsg> + Unpin>(
     actions: Vec<UpstreamAction>,
     ctx: &Arc<WebAppCtx>,
-    current_topic: &mut Option<String>,
-    resume_handle: &mut Option<String>,
-    client_tx: &mut futures::stream::SplitSink<WebSocket, AxumWsMsg>,
+    state: LegState<'_>,
+    client_tx: &mut ClientSink,
     up_tx: &mut S,
-) -> Result<bool, ()>
-where
-    S: futures::Sink<TungMsg> + Unpin,
-{
+) -> Result<bool, ()> {
+    let (current_topic, resume_handle, got_ready) = state;
     for act in actions {
+        if matches!(act, UpstreamAction::Ready) {
+            *got_ready = true;
+        }
         if let Some(frame) = action_to_client_frame(&act) {
             if !send_client_json(client_tx, frame).await {
                 return Err(());
@@ -160,21 +139,21 @@ where
 
 enum BridgeExit {
     ClientClosed,
-    Reconnect,
+    Reconnect(bool),
     Stop,
 }
 
-async fn dispatch_raw_upstream<S>(
-    umsg: Option<Result<TungMsg, tokio_tungstenite::tungstenite::Error>>,
+fn exit_for_drop(state: &LegState<'_>) -> BridgeExit {
+    if state.1.is_some() { BridgeExit::Reconnect(*state.2) } else { BridgeExit::Stop }
+}
+
+async fn dispatch_raw_upstream<S: futures::Sink<TungMsg> + Unpin>(
+    umsg: Option<Result<TungMsg, TungErr>>,
     ctx: &Arc<WebAppCtx>,
-    current_topic: &mut Option<String>,
-    resume_handle: &mut Option<String>,
-    client_tx: &mut futures::stream::SplitSink<WebSocket, AxumWsMsg>,
+    state: LegState<'_>,
+    client_tx: &mut ClientSink,
     up_tx: &mut S,
-) -> Option<BridgeExit>
-where
-    S: futures::Sink<TungMsg> + Unpin,
-{
+) -> Option<BridgeExit> {
     let raw = match umsg {
         Some(Ok(TungMsg::Text(s))) => s,
         Some(Ok(TungMsg::Binary(b))) => String::from_utf8(b).ok()?,
@@ -182,22 +161,46 @@ where
             let _ = up_tx.send(TungMsg::Pong(p)).await;
             return None;
         }
-        Some(Ok(TungMsg::Close(_))) | None => {
-            return Some(if resume_handle.is_some() { BridgeExit::Reconnect } else { BridgeExit::Stop });
-        }
+        Some(Ok(TungMsg::Close(_))) | Some(Err(_)) | None => return Some(exit_for_drop(&state)),
         _ => return None,
     };
-    match handle_upstream_actions(parse_gemini_server_frame(&raw), ctx, current_topic, resume_handle, client_tx, up_tx).await {
-        Ok(true) => Some(if resume_handle.is_some() { BridgeExit::Reconnect } else { BridgeExit::Stop }),
+    let has_res = state.1.is_some();
+    match handle_upstream_actions(parse_gemini_server_frame(&raw), ctx, state, client_tx, up_tx).await {
+        Ok(true) => Some(if has_res { BridgeExit::Reconnect(true) } else { BridgeExit::Stop }),
         Ok(false) => None,
         Err(()) => Some(BridgeExit::ClientClosed),
     }
 }
 
+async fn dispatch_client_frame<S: futures::Sink<TungMsg> + Unpin>(
+    cmsg: Option<Result<AxumWsMsg, axum::Error>>,
+    current_topic: &mut Option<String>,
+    reconn: (bool, bool),
+    client_tx: &mut ClientSink,
+    up_tx: &mut S,
+) -> Option<BridgeExit> {
+    match cmsg {
+        Some(Ok(AxumWsMsg::Text(raw))) => {
+            if let Some(fwd) = translate_browser_msg(&raw, current_topic)
+                && up_tx.send(TungMsg::Text(fwd)).await.is_err()
+            {
+                return Some(if reconn.0 { BridgeExit::Reconnect(reconn.1) } else { BridgeExit::Stop });
+            }
+            None
+        }
+        Some(Ok(AxumWsMsg::Ping(p))) => {
+            let _ = client_tx.send(AxumWsMsg::Pong(p)).await;
+            None
+        }
+        Some(Ok(AxumWsMsg::Close(_))) | None => Some(BridgeExit::ClientClosed),
+        _ => None,
+    }
+}
+
 async fn pump_single_upstream<S, R>(
     ctx: &Arc<WebAppCtx>,
-    client_tx: &mut futures::stream::SplitSink<WebSocket, AxumWsMsg>,
-    client_rx: &mut futures::stream::SplitStream<WebSocket>,
+    client_tx: &mut ClientSink,
+    client_rx: &mut ClientStream,
     events_rx: &mut tokio::sync::broadcast::Receiver<WebEvent>,
     up_tx: &mut S,
     up_rx: &mut R,
@@ -205,25 +208,27 @@ async fn pump_single_upstream<S, R>(
 ) -> BridgeExit
 where
     S: futures::Sink<TungMsg> + Unpin,
-    R: futures::Stream<Item = Result<TungMsg, tokio_tungstenite::tungstenite::Error>> + Unpin,
+    R: futures::Stream<Item = Result<TungMsg, TungErr>> + Unpin,
 {
     let (current_topic, resume_handle) = state;
+    let mut got_ready = false;
+    let mut ka = tokio::time::interval(std::time::Duration::from_secs(20));
+    ka.tick().await;
     loop {
         tokio::select! {
-            cmsg = client_rx.next() => match cmsg {
-                Some(Ok(AxumWsMsg::Text(raw))) => {
-                    if let Some(fwd) = translate_browser_msg(&raw, current_topic)
-                        && up_tx.send(TungMsg::Text(fwd)).await.is_err()
-                    {
-                        return if resume_handle.is_some() { BridgeExit::Reconnect } else { BridgeExit::Stop };
-                    }
+            _ = ka.tick() => {
+                let _ = client_tx.send(AxumWsMsg::Ping(Vec::new())).await;
+                let _ = up_tx.send(TungMsg::Ping(Vec::new())).await;
+            }
+            cmsg = client_rx.next() => {
+                let rc = (resume_handle.is_some(), got_ready);
+                if let Some(ex) = dispatch_client_frame(cmsg, current_topic, rc, client_tx, up_tx).await {
+                    return ex;
                 }
-                Some(Ok(AxumWsMsg::Ping(p))) => { let _ = client_tx.send(AxumWsMsg::Pong(p)).await; }
-                Some(Ok(AxumWsMsg::Close(_))) | None => return BridgeExit::ClientClosed,
-                _ => {}
             },
             umsg = up_rx.next() => {
-                if let Some(ex) = dispatch_raw_upstream(umsg, ctx, current_topic, resume_handle, client_tx, up_tx).await {
+                let ls = (&mut *current_topic, &mut *resume_handle, &mut got_ready);
+                if let Some(ex) = dispatch_raw_upstream(umsg, ctx, ls, client_tx, up_tx).await {
                     return ex;
                 }
             },
@@ -248,12 +253,10 @@ async fn run_voice_bridge(
     let mut events_rx = ctx.events.subscribe();
     let mut current_topic = (!q.topic.trim().is_empty()).then(|| q.topic.trim().to_string());
     let mut resume_handle: Option<String> = None;
+    let mut bad_legs = 0u8;
     let lang = if q.lang.trim().is_empty() { "ko".to_string() } else { q.lang };
 
-    loop {
-        if ctx.auth.verify_session(&sid).await.is_none() {
-            break;
-        }
+    while ctx.auth.verify_session(&sid).await.is_some() {
         let Ok((up_ws, _)) = tokio_tungstenite::connect_async(build_upstream_url(&api_key)).await else {
             let _ = send_client_json(&mut client_tx, json!({ "type": "error", "error": "Failed to connect to Gemini Live API" })).await;
             break;
@@ -264,8 +267,13 @@ async fn run_voice_bridge(
             break;
         }
         match pump_single_upstream(&ctx, &mut client_tx, &mut client_rx, &mut events_rx, &mut up_tx, &mut up_rx, (&mut current_topic, &mut resume_handle)).await {
-            BridgeExit::Reconnect => continue,
-            BridgeExit::ClientClosed | BridgeExit::Stop => break,
+            BridgeExit::Reconnect(true) => bad_legs = 0,
+            BridgeExit::Reconnect(false) if bad_legs < 2 => {
+                bad_legs += 1;
+                resume_handle = None;
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+            _ => break,
         }
     }
     let _ = client_tx.send(AxumWsMsg::Close(None)).await;

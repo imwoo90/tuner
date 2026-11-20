@@ -242,6 +242,7 @@ const DICT = {
     voiceBtnTitle: "실시간 양방향 총괄 음성 비서 (gemini-3.8-live)",
     voiceStageTitle: "우튜너 음성 데스크",
     voiceConnecting: "연결 중…",
+    voiceReconnecting: "재연결 중…",
     voiceConnectingHint: "총괄 음성 비서(gemini-3.8-live) 연결 중…",
     voiceListening: "듣는 중",
     voiceSpeaking: "응답 중",
@@ -266,7 +267,9 @@ const DICT = {
     voiceRunningBadge: "실행 중",
     voiceAskingBadge: "질문 대기",
     voicePeekJumpBtn: "대시보드에서 열기",
-    voicePeekEmpty: "아직 표시할 메시지가 없습니다."
+    voicePeekEmpty: "아직 표시할 메시지가 없습니다.",
+    voiceMicDeniedWarn: "마이크 권한이 차단되었거나 사용할 수 없습니다. 브라우저 주소창 자물쇠 아이콘에서 마이크를 허용해 주세요.",
+    voiceInsecureOriginWarn: "브라우저 보안 정책상 마이크는 HTTPS(Tunnel 버튼 링크) 또는 localhost 접속에서만 활성화됩니다. 현재 주소에서는 하단 [텍스트] 버튼으로 지시할 수 있습니다."
   },
   en: {
     newTopicBtn: "+ New Chat",
@@ -508,6 +511,7 @@ const DICT = {
     voiceBtnTitle: "Real-time Front-Desk Voice Secretary (gemini-3.8-live)",
     voiceStageTitle: "Woo-Tuner Voice Desk",
     voiceConnecting: "Connecting…",
+    voiceReconnecting: "Reconnecting…",
     voiceConnectingHint: "Connecting to Voice Desk Secretary (gemini-3.8-live)…",
     voiceListening: "Listening",
     voiceSpeaking: "Speaking",
@@ -532,7 +536,9 @@ const DICT = {
     voiceRunningBadge: "Running",
     voiceAskingBadge: "Question",
     voicePeekJumpBtn: "Open in Dashboard",
-    voicePeekEmpty: "No messages in this topic yet."
+    voicePeekEmpty: "No messages in this topic yet.",
+    voiceMicDeniedWarn: "Microphone access is blocked or unavailable. Please allow microphone access in your browser.",
+    voiceInsecureOriginWarn: "Microphone requires HTTPS (use the Tunnel link) or localhost. You can still type via [Type] below."
   }
 };
 

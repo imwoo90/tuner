@@ -1360,6 +1360,7 @@ html, body {
 }
 
 .voice-orb {
+  --mic-scale: 1;
   width: 78px;
   height: 78px;
   border-radius: 50%;
@@ -1370,15 +1371,14 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: width 0.22s ease, height 0.22s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  transform: scale(var(--mic-scale));
+  transition: width 0.22s ease, height 0.22s ease, transform 0.08s linear, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .voice-stage-body.has-turns .voice-orb {
   width: 40px;
   height: 40px;
   box-shadow: 0 0 0 4px var(--ok-soft);
-}
-.voice-orb[data-mode="listening"] {
-  animation: orbPulse 2.4s infinite ease-in-out;
 }
 .voice-orb[data-mode="thinking"] {
   border-color: var(--warn);
