@@ -167,7 +167,7 @@ async fn handle_upgrade_confirm(bot: &Bot, msg: &Message, tag: &str) -> Result<(
     let ver = tag.trim_start_matches('v');
     let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("upgrade_handler.in_progress", version = ver)).await;
     match crate::upgrade::get_latest_release().await {
-        Ok(rel) => if let Some(a) = rel.assets.iter().find(|a| a.name.ends_with(".tar.gz")) {
+        Ok(rel) => if let Some(a) = crate::upgrade::select_arch_tarball_asset(&rel.assets, std::env::consts::ARCH) {
             match crate::upgrade::perform_upgrade(&a.browser_download_url).await {
                 Ok(()) => {
                     let _ = bot.edit_message_text(msg.chat.id, msg.id, crate::t!("upgrade_handler.restarting")).await;

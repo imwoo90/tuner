@@ -122,6 +122,27 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     for (const p of providers) {
       html += renderSingleProviderCard(p, isManager);
     }
+    const gem = data.gemini_api || {};
+    if (!isWizard || anyReady) {
+      const gemOk = Boolean(gem.configured);
+      const gemBadge = gemOk
+        ? `<span class="pill pill-ok">${escapeHtml(t("provReadyBadge"))}${gem.masked_key ? ` (${escapeHtml(gem.masked_key)})` : ""}</span>`
+        : `<span class="pill">${escapeHtml(t("geminiOptionalBadge"))}</span>`;
+      html += `<div class="card onboard-prov-card" data-prov-card="gemini">
+        <div class="card-row"><strong>${escapeHtml(t("geminiCardTitle"))}</strong>${gemBadge}</div>
+        <div class="muted">${escapeHtml(t("geminiSubHint"))}</div>
+        <div class="card-row">
+          <button id="btn-gemini-browser" class="btn ${gemOk ? "" : "btn-primary "}btn-sm" type="button">${escapeHtml(t("geminiBrowserBtn"))}</button>
+        </div>
+        <details class="cot-block">
+          <summary>${escapeHtml(t("geminiManualSummary"))}</summary>
+          <div class="ask-writein-row" style="margin-top:6px;">
+            <input class="prov-apikey-input" data-prov="gemini" type="password" placeholder="${escapeHtml(t("geminiKeyPh"))}">
+            <button class="btn btn-sm prov-save-apikey-btn" data-prov="gemini" type="button">${escapeHtml(t("provApiKeySaveBtn"))}</button>
+          </div>
+        </details>
+      </div>`;
+    }
     if (!isWizard && tgData) {
       const tgOk = Boolean(tgData.connected);
       const tgBadge = tgOk
@@ -164,6 +185,24 @@ export function createOnboardingRenderer({ apiFetch, onOpenBrowserToken, onProvi
     rootEl.querySelector("#btn-tg-disconnect")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       await apiFetch("/dashboard/api/telegram/disconnect", { method: "POST" });
+      renderInto(rootEl, { isWizard, isManager });
+    });
+
+    rootEl.querySelector("#btn-gemini-browser")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const r = await apiFetch("/dashboard/api/providers/gemini/browser", { method: "POST" });
+      btn.disabled = false;
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showErr(d.error || `HTTP ${r.status}`);
+        return;
+      }
+      const d = await r.json();
+      if (d.hitl_session?.token) {
+        onOpenBrowserToken?.(d.hitl_session.token);
+        if (!isCenter) return;
+      }
       renderInto(rootEl, { isWizard, isManager });
     });
 

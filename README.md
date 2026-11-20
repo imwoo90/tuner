@@ -40,13 +40,26 @@ graph LR
 
 ## 🚀 Quick Start (60 Seconds)
 
-### 1. Install at least one supported Agent CLI (or use the Web Dashboard 1-Click Installer)
-Authenticate any (or all) of the supported agent CLIs on your Linux machine or via `:8743/dashboard`:
-- **Google Antigravity**: `agy` (verified with `v1.5.12`)
-- **Anthropic Claude Code**: `claude` (verified with `v2.1.197`)
-- **OpenAI Codex**: `codex` (verified with `v0.167.0`)
+### Option A — 1-Command Official Docker (`linux/amd64` & `linux/arm64`)
+Run on any x86_64 server, Apple Silicon Mac, or ARM64 mini-PC with zero host dependencies:
+```bash
+docker run -d --name tuner --restart unless-stopped \
+  -p 8743:8743 \
+  -v ./tuner-data:/home/tuner/.tuner \
+  -v ./gemini-data:/home/tuner/.gemini \
+  ghcr.io/imwoo90/tuner:latest
 
-### 2. Install `tuner`
+# Open the First-Run Setup Magic Link printed in the container logs:
+docker logs tuner | grep "/dashboard/magic/"
+```
+Inside `:8743/dashboard`, install `agy` / `claude` / `codex` in one click, sign in via the **Built-in Browser**, grab a free `GEMINI_API_KEY`, and optionally hot-connect a Telegram Bot Token.
+
+### Option B — Native Linux Host (`systemd`)
+1. Authenticate at least one supported Agent CLI (or install later via `:8743/dashboard`):
+   - **Google Antigravity**: `agy` (verified with `v1.5.12`)
+   - **Anthropic Claude Code**: `claude` (verified with `v2.1.197`)
+   - **OpenAI Codex**: `codex` (verified with `v0.167.0`)
+2. Install `tuner` (`x86_64` & `arm64`):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/imwoo90/tuner/main/install.sh | bash
 ```

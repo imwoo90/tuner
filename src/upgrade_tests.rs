@@ -626,3 +626,35 @@ fn test_github_release_deserialization() {
         "https://example.com/download/tuner-linux-amd64"
     );
 }
+
+#[test]
+fn test_select_arch_tarball_asset_prevents_cross_arch_mismatch() {
+    use crate::upgrade::{arch_package_stem_for, GithubAsset, select_arch_tarball_asset};
+
+    assert_eq!(arch_package_stem_for("x86_64"), "tuner-linux-amd64");
+    assert_eq!(arch_package_stem_for("amd64"), "tuner-linux-amd64");
+    assert_eq!(arch_package_stem_for("aarch64"), "tuner-linux-arm64");
+    assert_eq!(arch_package_stem_for("arm64"), "tuner-linux-arm64");
+
+    // Deliberately place arm64 tarball FIRST to verify x86_64 never picks arm64 by mistake!
+    let assets = vec![
+        GithubAsset {
+            name: "tuner-linux-arm64.tar.gz".into(),
+            browser_download_url: "https://example.com/arm64.tar.gz".into(),
+        },
+        GithubAsset {
+            name: "tuner-linux-amd64.tar.gz".into(),
+            browser_download_url: "https://example.com/amd64.tar.gz".into(),
+        },
+    ];
+    assert_eq!(
+        select_arch_tarball_asset(&assets, "x86_64").map(|a| a.name.as_str()),
+        Some("tuner-linux-amd64.tar.gz")
+    );
+    assert_eq!(
+        select_arch_tarball_asset(&assets, "aarch64").map(|a| a.name.as_str()),
+        Some("tuner-linux-arm64.tar.gz")
+    );
+    let amd_only = vec![assets[1].clone()];
+    assert!(select_arch_tarball_asset(&amd_only, "aarch64").is_none());
+}

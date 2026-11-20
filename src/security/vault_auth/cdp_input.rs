@@ -240,32 +240,49 @@ pub async fn extract_copyable_text(
     Ok(val)
 }
 
-/// Probes an active OAuth callback page (`antigravity.google/oauth-callback`, `claude.ai`, etc.) for an authorization code.
+const AISTUDIO_KEY_EXPR: &str = r#"(() => {
+  const el = document.querySelector('[data-gemini-key]');
+  if (el) {
+    const k = String(el.textContent || el.value || '').trim();
+    if (/^AIza[0-9A-Za-z_-]{35}$/.test(k)) return k;
+  }
+  for (const inp of document.querySelectorAll('input')) {
+    const m = String(inp.value || '').trim().match(/\b(AIza[0-9A-Za-z_-]{35})\b/);
+    if (m) return m[1];
+  }
+  const m = String(document.body?.innerText || '').match(/\b(AIza[0-9A-Za-z_-]{35})\b/);
+  return m ? m[1] : '';
+})()"#;
+
+const OAUTH_CODE_EXPR: &str = r#"(() => {
+  try {
+    const q = new URL(location.href).searchParams.get('code');
+    if (q && q.trim().length >= 8) return q.trim();
+  } catch (_) {}
+  const agy = document.querySelector('[data-code-box]');
+  if (agy) {
+    const v = String(agy.textContent || '').replace(/\s+/g, '');
+    if (v.length >= 12) return v;
+  }
+  const el = document.querySelector('input[readonly], pre code, code');
+  if (el) {
+    const v = String(el.value ?? el.textContent ?? '').trim();
+    if (v.length >= 12 && !/\s/.test(v)) return v;
+  }
+  return '';
+})()"#;
+
+/// Probes an active OAuth callback or AI Studio key page for an authorization code or `AIza...` API key.
 pub async fn probe_oauth_callback_code(
     cdp: &CdpController,
     target: &CdpPageTarget,
 ) -> Option<String> {
     let u = target.url.as_str();
-    if !u.contains("oauth-callback") && !u.contains("/oauth/code/callback") && !u.contains("code=") {
+    let is_aistudio = u.contains("aistudio.google.com") || u.contains("ai.google.dev") || u.contains("apikey");
+    if !is_aistudio && !u.contains("oauth-callback") && !u.contains("/oauth/code/callback") && !u.contains("code=") {
         return None;
     }
-    let expr = r#"(() => {
-      try {
-        const q = new URL(location.href).searchParams.get('code');
-        if (q && q.trim().length >= 8) return q.trim();
-      } catch (_) {}
-      const agy = document.querySelector('[data-code-box]');
-      if (agy) {
-        const v = String(agy.textContent || '').replace(/\s+/g, '');
-        if (v.length >= 12) return v;
-      }
-      const el = document.querySelector('input[readonly], pre code, code');
-      if (el) {
-        const v = String(el.value ?? el.textContent ?? '').trim();
-        if (v.length >= 12 && !/\s/.test(v)) return v;
-      }
-      return '';
-    })()"#;
+    let expr = if is_aistudio { AISTUDIO_KEY_EXPR } else { OAUTH_CODE_EXPR };
     let res = cdp
         .call_page(
             target,

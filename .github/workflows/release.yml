@@ -7,11 +7,16 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
-  build-release:
-    name: Auto Tag and Build Release
+  check-release:
+    name: Check Release Version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      agy_version: ${{ steps.get_version.outputs.agy_version }}
+      exists: ${{ steps.check_tag.outputs.exists }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,62 +28,167 @@ jobs:
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n 1 | awk -F '"' '{print $2}')
           AGY_VERSION=$(grep '^verified_version =' Cargo.toml | head -n 1 | awk -F '"' '{print $2}')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "agy_version=$AGY_VERSION" >> $GITHUB_OUTPUT
-          echo "Detected version: $VERSION (verified agy: $AGY_VERSION)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "agy_version=$AGY_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check if Tag Exists
         id: check_tag
         run: |
           TAG_NAME="v${{ steps.get_version.outputs.version }}"
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag $TAG_NAME already exists. Skipping release creation."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag $TAG_NAME does not exist. Proceeding with release."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+  build-arch:
+    name: Build Native (${{ matrix.arch }})
+    needs: check-release
+    if: needs.check-release.outputs.exists == 'false'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    outputs:
+      digest-amd64: ${{ steps.export_digest.outputs.amd64 }}
+      digest-arm64: ${{ steps.export_digest.outputs.arm64 }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
-        if: steps.check_tag.outputs.exists == 'false'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install system dependencies
-        if: steps.check_tag.outputs.exists == 'false'
         run: |
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
 
       - name: Rust Cache
-        if: steps.check_tag.outputs.exists == 'false'
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.arch }}
 
       - name: Build release binary
-        if: steps.check_tag.outputs.exists == 'false'
-        run: cargo build --release
+        run: cargo build --release --locked
 
-      - name: Prepare distribution files
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Package release archive (${{ matrix.arch }})
         run: |
-          cp target/release/tuner target/release/tuner-linux-amd64
-          mkdir -p dist/tuner-linux-amd64
-          cp target/release/tuner dist/tuner-linux-amd64/
-          cp -r _home_defaults dist/tuner-linux-amd64/
-          tar -czf dist/tuner-linux-amd64.tar.gz -C dist tuner-linux-amd64
+          PKG="tuner-linux-${{ matrix.arch }}"
+          mkdir -p "dist/${PKG}"
+          cp target/release/tuner "dist/${PKG}"
+          cp -r _home_defaults "dist/${PKG}/"
+          cp target/release/tuner "dist/tuner-linux-${{ matrix.arch }}-bin"
+          mv "dist/tuner-linux-${{ matrix.arch }}-bin" "dist/${PKG}/tuner"
+          cp target/release/tuner "dist/tuner-linux-${{ matrix.arch }}-raw"
+          tar -czf "dist/${PKG}.tar.gz" -C dist "${PKG}"
+          mv "dist/tuner-linux-${{ matrix.arch }}-raw" "dist/tuner-linux-${{ matrix.arch }}.bin"
+
+      - name: Upload binary artifacts (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bin-${{ matrix.arch }}
+          path: |
+            dist/tuner-linux-${{ matrix.arch }}.bin
+            dist/tuner-linux-${{ matrix.arch }}.tar.gz
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push native Docker image by digest (${{ matrix.arch }})
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_SOURCE=prebuilt
+            TARGETARCH=${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/imwoo90/tuner,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export image digest artifact
+        id: export_digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.docker_build.outputs.digest }}"
+          printf '%s' "$DIGEST" > "/tmp/digests/${{ matrix.arch }}"
+
+      - name: Upload digest (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digest-${{ matrix.arch }}
+          path: /tmp/digests/${{ matrix.arch }}
+
+  publish:
+    name: Publish GitHub Release & Multi-Arch GHCR Manifest
+    needs: [check-release, build-arch]
+    if: needs.check-release.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage release binaries
+        run: |
+          mkdir -p release-files
+          cp artifacts/release-bin-amd64/tuner-linux-amd64.bin release-files/tuner-linux-amd64
+          cp artifacts/release-bin-amd64/tuner-linux-amd64.tar.gz release-files/tuner-linux-amd64.tar.gz
+          cp artifacts/release-bin-arm64/tuner-linux-arm64.bin release-files/tuner-linux-arm64
+          cp artifacts/release-bin-arm64/tuner-linux-arm64.tar.gz release-files/tuner-linux-arm64.tar.gz
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch GHCR manifest
+        run: |
+          VER="${{ needs.check-release.outputs.version }}"
+          DIGEST_AMD64=$(cat artifacts/image-digest-amd64/amd64)
+          DIGEST_ARM64=$(cat artifacts/image-digest-arm64/arm64)
+          docker buildx imagetools create \
+            -t "ghcr.io/imwoo90/tuner:latest" \
+            -t "ghcr.io/imwoo90/tuner:${VER}" \
+            -t "ghcr.io/imwoo90/tuner:v${VER}" \
+            "ghcr.io/imwoo90/tuner@${DIGEST_AMD64}" \
+            "ghcr.io/imwoo90/tuner@${DIGEST_ARM64}"
 
       - name: Create GitHub Release and Upload Assets
-        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: Release v${{ steps.get_version.outputs.version }} (agy v${{ steps.get_version.outputs.agy_version }})
+          tag_name: v${{ needs.check-release.outputs.version }}
+          name: Release v${{ needs.check-release.outputs.version }} (agy v${{ needs.check-release.outputs.agy_version }})
           body: |
-            **Verified Antigravity CLI (`agy`) Version**: `v${{ steps.get_version.outputs.agy_version }}`
+            **Verified Antigravity CLI (`agy`) Version**: `v${{ needs.check-release.outputs.agy_version }}`
+            **Official Multi-Arch Docker Image (`linux/amd64`, `linux/arm64`)**: `ghcr.io/imwoo90/tuner:v${{ needs.check-release.outputs.version }}` (`ghcr.io/imwoo90/tuner:latest`)
           generate_release_notes: true
           draft: false
           prerelease: false
           files: |
-            target/release/tuner-linux-amd64
-            dist/tuner-linux-amd64.tar.gz
+            release-files/tuner-linux-amd64
+            release-files/tuner-linux-amd64.tar.gz
+            release-files/tuner-linux-arm64
+            release-files/tuner-linux-arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

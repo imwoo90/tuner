@@ -16,6 +16,7 @@ use super::provider_install::{get_install_job, start_provider_install};
 use super::provider_oauth::{
     cancel_oauth_login, get_active_oauth_view, start_provider_oauth, submit_provider_oauth_input,
 };
+use super::provider_oauth_watch::{handle_gemini_browser_start, inspect_gemini_api_status};
 use super::provider_status::{
     current_home_dir, find_cli_binary, inspect_all_providers, upsert_dotenv_secret,
 };
@@ -95,9 +96,11 @@ pub async fn handle_providers_status(
             "oauth_login": oauth_login
         }));
     }
+    let gemini_api = inspect_gemini_api_status(&ctx.tuner_home).await;
     Json(serde_json::json!({
         "any_ready": any_ready,
-        "providers": enriched
+        "providers": enriched,
+        "gemini_api": gemini_api
     }))
     .into_response()
 }
@@ -222,7 +225,8 @@ pub async fn handle_provider_apikey(
     let env_name = match prov.as_str() {
         "claude" => "ANTHROPIC_API_KEY",
         "codex" => "OPENAI_API_KEY",
-        _ => return json_err(StatusCode::BAD_REQUEST, "API key setup is supported for `claude` and `codex`"),
+        "gemini" => "GEMINI_API_KEY",
+        _ => return json_err(StatusCode::BAD_REQUEST, "API key setup is supported for `claude`, `codex`, and `gemini`"),
     };
     if let Err(e) = upsert_dotenv_secret(&ctx.tuner_home.join(".env"), env_name, key_val) {
         return json_err(StatusCode::INTERNAL_SERVER_ERROR, &e);
@@ -256,4 +260,5 @@ pub fn provider_routes() -> Router {
         .route("/dashboard/api/providers/login/submit", post(handle_provider_login_submit))
         .route("/dashboard/api/providers/login/cancel", post(handle_provider_login_cancel))
         .route("/dashboard/api/providers/apikey", post(handle_provider_apikey))
+        .route("/dashboard/api/providers/gemini/browser", post(handle_gemini_browser_start))
 }

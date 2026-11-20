@@ -42,6 +42,26 @@ pub async fn has_any_active_work(cli: &crate::cli::antigravity::AntigravityCli) 
     activity::detect_any_active_work(cli).await
 }
 
+/// Returns the canonical release package stem for `arch` (`tuner-linux-arm64` or `tuner-linux-amd64`).
+pub fn arch_package_stem_for(arch: &str) -> &'static str {
+    if matches!(arch, "aarch64" | "arm64") {
+        "tuner-linux-arm64"
+    } else {
+        "tuner-linux-amd64"
+    }
+}
+
+/// Returns the canonical release package stem for the compiled target CPU architecture.
+pub fn current_arch_package_stem() -> &'static str {
+    arch_package_stem_for(std::env::consts::ARCH)
+}
+
+/// Selects the `.tar.gz` asset matching `arch`, preventing cross-architecture binary mismatches.
+pub fn select_arch_tarball_asset<'a>(assets: &'a [GithubAsset], arch: &str) -> Option<&'a GithubAsset> {
+    let expected = format!("{}.tar.gz", arch_package_stem_for(arch));
+    assets.iter().find(|a| a.name == expected)
+}
+
 async fn run_auto_upgrade_tick(
     config: &crate::config::CliConfig,
     cli: &crate::cli::antigravity::AntigravityCli,
@@ -65,7 +85,7 @@ async fn run_auto_upgrade_tick(
     if let Ok(rel) = get_latest_release().await {
         let latest = rel.tag_name.trim_start_matches('v');
         if is_newer_version(env!("CARGO_PKG_VERSION"), latest)
-            && let Some(asset) = rel.assets.iter().find(|a| a.name.ends_with(".tar.gz"))
+            && let Some(asset) = select_arch_tarball_asset(&rel.assets, std::env::consts::ARCH)
             && is_idle_upgrade_window(local_hour, user_idle_secs(), has_any_active_work(cli).await)
             && perform_upgrade(&asset.browser_download_url).await.is_ok()
             && is_idle_upgrade_window(local_hour, user_idle_secs(), has_any_active_work(cli).await)
@@ -231,7 +251,7 @@ pub async fn perform_upgrade(url: &str) -> Result<(), String> {
         return Err(e);
     }
 
-    let ext_root = tmp_unpack_dir.join("tuner-linux-amd64");
+    let ext_root = tmp_unpack_dir.join(current_arch_package_stem());
     let new_binary = ext_root.join("tuner");
     let new_defaults = ext_root.join("_home_defaults");
 
@@ -270,11 +290,8 @@ pub async fn run_cli_upgrade() -> Result<(), String> {
 
     if is_newer_version(current, latest) {
         println!("New version available: {} (current: {})", latest, current);
-        let asset = release
-            .assets
-            .iter()
-            .find(|a| a.name.ends_with(".tar.gz"))
-            .ok_or("Could not find a valid release package (.tar.gz) for Linux.")?;
+        let asset = select_arch_tarball_asset(&release.assets, std::env::consts::ARCH)
+            .ok_or("Could not find a valid release package (.tar.gz) for this CPU architecture.")?;
 
         println!("Downloading update from {}...", asset.browser_download_url);
         perform_upgrade(&asset.browser_download_url).await?;

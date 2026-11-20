@@ -135,6 +135,9 @@ impl AntigravityCli {
         let th = std::env::var("TUNER_HOME").ok().map(PathBuf::from).unwrap_or_else(|| {
             PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join(".tuner")
         });
+        for (k, v) in crate::messenger::web::provider_status::read_dotenv_map(&th.join(".env")) {
+            if !v.is_empty() { env.insert(k, v); }
+        }
         env.extend([
             ("TUNER_AGENT_NAME".into(), "main".into()),
             ("TUNER_CHAT_ID".into(), self.config.chat_id.to_string()),

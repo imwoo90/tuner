@@ -231,7 +231,13 @@ const DICT = {
     engineMgrTitle: "AI 엔진 추가 · 관리",
     engineMgrSub: "추가 엔진을 원클릭으로 설치하고 내장 브라우저에서 바로 로그인할 수 있습니다.",
     backToChatBtn: "← 대화로 돌아가기",
-    useThisEngineBtn: "이 엔진으로 대화하기 →"
+    useThisEngineBtn: "이 엔진으로 대화하기 →",
+    geminiCardTitle: "✨ Google AI Studio · Workspace (GEMINI_API_KEY)",
+    geminiOptionalBadge: "선택 · $0 무료 티어",
+    geminiSubHint: "실시간 음성 비서 및 기본 google-workspace 스킬에서 사용하는 무료 Gemini API 키입니다. 내장 브라우저에서 Create API key를 누르면 자동 인식·저장됩니다.",
+    geminiBrowserBtn: "🌐 내장 브라우저에서 무료 키 원클릭 발급",
+    geminiManualSummary: "🔑 직접 GEMINI_API_KEY 입력 · 변경",
+    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)"
   },
   en: {
     newTopicBtn: "+ New Chat",
@@ -462,7 +468,13 @@ const DICT = {
     engineMgrTitle: "Add & Manage AI Engines",
     engineMgrSub: "Install additional CLI engines in one click and sign in via the built-in browser.",
     backToChatBtn: "← Back to Chat",
-    useThisEngineBtn: "Chat with this engine →"
+    useThisEngineBtn: "Chat with this engine →",
+    geminiCardTitle: "✨ Google AI Studio · Workspace (GEMINI_API_KEY)",
+    geminiOptionalBadge: "Optional · $0 Free Tier",
+    geminiSubHint: "Free-tier Gemini API key powering the real-time Voice Assistant and bundled google-workspace skill. Click Create API key in the built-in browser to auto-save.",
+    geminiBrowserBtn: "🌐 Get Free Key (Built-in Browser)",
+    geminiManualSummary: "🔑 Enter or Update GEMINI_API_KEY Manually",
+    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)"
   }
 };
 

@@ -1398,6 +1398,27 @@ async fn test_provider_onboarding_oauth_parser_and_dotenv() {
     let dotenv = super::provider_status::read_dotenv_map(&ctx.tuner_home.join(".env"));
     assert_eq!(dotenv.get("ANTHROPIC_API_KEY").map(String::as_str), Some("sk-ant-test-onboard"));
 
+    let gem_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/dashboard/api/providers/apikey")
+                .header(header::COOKIE, &cookie)
+                .header("x-tuner-csrf", &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"provider":"gemini","api_key":"AIzaSyTestGeminiKey1234567890123456789"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(gem_res.status(), StatusCode::OK);
+    let dotenv2 = super::provider_status::read_dotenv_map(&ctx.tuner_home.join(".env"));
+    assert_eq!(
+        dotenv2.get("GEMINI_API_KEY").map(String::as_str),
+        Some("AIzaSyTestGeminiKey1234567890123456789")
+    );
+
     let st_res = app
         .oneshot(
             Request::builder()
@@ -1412,4 +1433,6 @@ async fn test_provider_onboarding_oauth_parser_and_dotenv() {
     let st_json: serde_json::Value =
         serde_json::from_slice(&to_bytes(st_res.into_body(), 65536).await.unwrap()).unwrap();
     assert_eq!(st_json["providers"].as_array().unwrap().len(), 3);
+    assert_eq!(st_json["gemini_api"]["configured"], true);
+    assert_eq!(st_json["gemini_api"]["masked_key"], "AIza…6789");
 }
