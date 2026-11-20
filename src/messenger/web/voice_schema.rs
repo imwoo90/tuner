@@ -9,7 +9,32 @@
 //! #voice-schema, #gemini-function-declarations, #realtime-input
 
 use super::events::WebEvent;
+use super::provider_status::read_dotenv_map;
 use serde_json::{json, Value};
+use std::path::Path;
+
+/// Resolves the configured `GEMINI_API_KEY` from `$TUNER_HOME/.env` or process environment.
+pub fn resolve_gemini_api_key(tuner_home: &Path) -> Option<String> {
+    let dotenv = read_dotenv_map(&tuner_home.join(".env"));
+    dotenv
+        .get("GEMINI_API_KEY")
+        .cloned()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| std::env::var("GEMINI_API_KEY").ok().filter(|s| !s.trim().is_empty()))
+}
+
+/// Returns the configured Gemini Live model identifier (defaults to `models/gemini-3.8-live`).
+pub fn resolve_voice_model() -> String {
+    let raw = std::env::var("TUNER_VOICE_MODEL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "models/gemini-3.8-live".to_string());
+    if raw.starts_with("models/") {
+        raw
+    } else {
+        format!("models/{raw}")
+    }
+}
 
 /// Formats background `WebEvent` completions and `AskQuestion` prompts into live voice triggers.
 pub fn format_background_web_event(ev: &WebEvent) -> Option<String> {

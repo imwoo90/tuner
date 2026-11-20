@@ -98,6 +98,7 @@ export function createVoiceController({
     cfgSummary: document.getElementById("voice-cfg-summary"),
     cfgPanel: document.getElementById("voice-cfg-panel"),
     volPresets: document.getElementById("voice-vol-presets"),
+    langModes: document.getElementById("voice-lang-modes"),
     micModes: document.getElementById("voice-mic-modes"),
     micModeDesc: document.getElementById("voice-mic-mode-desc"),
     muteBtn: document.getElementById("btn-voice-mute"),
@@ -161,6 +162,16 @@ export function createVoiceController({
 
   const savedMicMode = localStorage.getItem("tuner_voice_mic_mode");
   let micMode = savedMicMode === "strict" || savedMicMode === "ptt" ? savedMicMode : "near";
+
+  const savedVoiceLang = localStorage.getItem("tuner_voice_lang");
+  let voiceLang = savedVoiceLang === "ko" || savedVoiceLang === "en" || savedVoiceLang === "auto"
+    ? savedVoiceLang
+    : "";
+
+  function effectiveVoiceLang() {
+    if (voiceLang === "ko" || voiceLang === "en" || voiceLang === "auto") return voiceLang;
+    return String(getLang?.() || "ko").startsWith("en") ? "en" : "ko";
+  }
 
   window.__voiceAudioChunksReceived = 0;
 
@@ -695,17 +706,19 @@ export function createVoiceController({
   }
 
   function renderCfgUi() {
-    const modeShortKey = micMode === "strict"
-      ? "voiceModeShortStrict"
-      : (micMode === "ptt" ? "voiceModeShortPtt" : "voiceModeShortNear");
-    const volIcon = currentVolPct <= 60 ? "🔈" : (currentVolPct >= 170 ? "📢" : "🔊");
+    const effLang = effectiveVoiceLang();
+    const langTag = effLang === "auto" ? "AUTO" : effLang.toUpperCase();
+    const modeIcon = micMode === "strict" ? "🛡️" : (micMode === "ptt" ? "🎙️" : (currentVolPct <= 60 ? "🔈" : (currentVolPct >= 170 ? "📢" : "🔊")));
     if (els.cfgSummary) {
-      els.cfgSummary.textContent = `${volIcon} ${currentVolPct}% · ${t(modeShortKey)}`;
+      els.cfgSummary.textContent = `${modeIcon} ${currentVolPct}% · ${langTag}`;
     }
     els.cfgBtn?.classList.toggle("active", cfgOpen);
     els.cfgPanel?.classList.toggle("hidden", !active || !cfgOpen);
     els.volPresets?.querySelectorAll(".voice-seg-btn").forEach((b) => {
       b.classList.toggle("active", Number(b.dataset.vol) === currentVolPct);
+    });
+    els.langModes?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.vlang === effLang);
     });
     els.micModes?.querySelectorAll(".voice-seg-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.micMode === micMode);
@@ -769,7 +782,7 @@ export function createVoiceController({
     if (!active) return;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const sk = encodeURIComponent(getActiveSessionKey() || "");
-    const lang = encodeURIComponent(getLang() || "ko");
+    const lang = encodeURIComponent(effectiveVoiceLang());
     const csrf = encodeURIComponent(getCsrfToken() || cachedCsrf || "");
     const sock = new WebSocket(`${proto}//${window.location.host}/dashboard/api/voice/ws?csrf=${csrf}&lang=${lang}&topic=${sk}`);
     vws = sock;
@@ -933,6 +946,33 @@ export function createVoiceController({
       try { localStorage.setItem("tuner_voice_vol", `${v}`); } catch (_) {}
       if (outGain) outGain.gain.value = currentGain;
       renderCfgUi();
+    });
+  });
+
+  els.langModes?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const next = b.dataset.vlang || "ko";
+      const normalized = next === "en" || next === "auto" ? next : "ko";
+      if (normalized === effectiveVoiceLang() && voiceLang === normalized) return;
+      voiceLang = normalized;
+      try { localStorage.setItem("tuner_voice_lang", voiceLang); } catch (_) {}
+      renderCfgUi();
+      if (active) {
+        flushPlayback();
+        closeOpenTurns();
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+        if (vws) {
+          const old = vws;
+          vws = null;
+          try { old.close(); } catch (_) {}
+        }
+        setStatus("voiceConnecting", "thinking");
+        openVoiceSocket(null);
+      }
     });
   });
 

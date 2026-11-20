@@ -8,8 +8,9 @@
 //! #gemini-live-protocol, #bidi-audio, #session-resumption, #voice-codec
 
 use super::auth_http::require_auth;
-use super::provider_status::read_dotenv_map;
-pub use super::voice_schema::format_background_web_event;
+pub use super::voice_schema::{
+    format_background_web_event, resolve_gemini_api_key, resolve_voice_model,
+};
 use super::voice_schema::voice_tool_declarations;
 use super::{resolve_ctx, WebAppCtx};
 use axum::{
@@ -18,7 +19,6 @@ use axum::{
     Extension, Json,
 };
 use serde_json::{json, Value};
-use std::path::Path;
 use std::sync::Arc;
 
 /// Returns Voice Desk Assistant readiness (`GET /dashboard/api/voice/status`).
@@ -41,29 +41,6 @@ pub async fn handle_voice_status(
         "csrf_token": sess.csrf_token
     }))
     .into_response()
-}
-
-/// Resolves the configured `GEMINI_API_KEY` from `$TUNER_HOME/.env` or process environment.
-pub fn resolve_gemini_api_key(tuner_home: &Path) -> Option<String> {
-    let dotenv = read_dotenv_map(&tuner_home.join(".env"));
-    dotenv
-        .get("GEMINI_API_KEY")
-        .cloned()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| std::env::var("GEMINI_API_KEY").ok().filter(|s| !s.trim().is_empty()))
-}
-
-/// Returns the configured Gemini Live model identifier (defaults to `models/gemini-3.8-live`).
-pub fn resolve_voice_model() -> String {
-    let raw = std::env::var("TUNER_VOICE_MODEL")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "models/gemini-3.8-live".to_string());
-    if raw.starts_with("models/") {
-        raw
-    } else {
-        format!("models/{raw}")
-    }
 }
 
 fn en_secretary_prompt(topic_hint: &str) -> String {
@@ -90,12 +67,29 @@ fn ko_secretary_prompt(topic_hint: &str) -> String {
     )
 }
 
+fn auto_secretary_prompt(topic_hint: &str) -> String {
+    format!(
+        "You are Woo-Tuner ([우튜너]), the user's real-time Front-Desk Voice Secretary in front of the Tuner multi-agent workspace. {topic_hint}\n\
+         Rules:\n\
+         1. Automatically reply in whichever language the user just spoke (e.g. Korean or English), naturally and concisely (1-3 short sentences). Never read Markdown symbols like `**` or backticks aloud.\n\
+         2. Answer quick status checks directly (`list_topics`, `get_topic_context`) and delegate coding, builds, or research to CLI topics via `delegate_to_topic`.\n\
+         3. On `[BACKGROUND_EVENT]` completions or `AskQuestion` prompts, brief the user aloud and submit spoken answers via `answer_topic_question`.\n\
+         4. Ignore unintelligible ambient noise or distant background chatter not addressed to you."
+    )
+}
+
 fn build_secretary_prompt(lang: &str, active_topic: Option<&str>) -> String {
     let topic_hint = active_topic
         .filter(|s| !s.is_empty())
         .map(|s| format!("Currently open topic on user's screen: `{s}`."))
         .unwrap_or_else(|| "User is currently on a blank Draft screen (no topic selected yet).".to_string());
-    if lang.starts_with("en") { en_secretary_prompt(&topic_hint) } else { ko_secretary_prompt(&topic_hint) }
+    if lang.eq_ignore_ascii_case("auto") {
+        auto_secretary_prompt(&topic_hint)
+    } else if lang.starts_with("en") {
+        en_secretary_prompt(&topic_hint)
+    } else {
+        ko_secretary_prompt(&topic_hint)
+    }
 }
 
 fn realtime_vad_config() -> Value {
@@ -109,6 +103,18 @@ fn realtime_vad_config() -> Value {
     })
 }
 
+fn build_speech_config(lang: &str) -> Value {
+    if lang.eq_ignore_ascii_case("auto") {
+        json!({ "voiceConfig": { "prebuiltVoiceConfig": { "voiceName": "Kore" } } })
+    } else {
+        let code = if lang.starts_with("en") { "en-US" } else { "ko-KR" };
+        json!({
+            "languageCode": code,
+            "voiceConfig": { "prebuiltVoiceConfig": { "voiceName": "Kore" } }
+        })
+    }
+}
+
 /// Builds the initial `BidiGenerateContent` `setup` JSON message.
 pub fn build_live_setup_frame(
     lang: &str,
@@ -119,18 +125,12 @@ pub fn build_live_setup_frame(
         Some(h) => json!({ "handle": h }),
         None => json!({}),
     };
-    let speech_lang = if lang.starts_with("en") { "en-US" } else { "ko-KR" };
     json!({
         "setup": {
             "model": resolve_voice_model(),
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "languageCode": speech_lang,
-                    "voiceConfig": {
-                        "prebuiltVoiceConfig": { "voiceName": "Kore" }
-                    }
-                }
+                "speechConfig": build_speech_config(lang)
             },
             "realtimeInputConfig": realtime_vad_config(),
             "inputAudioTranscription": {},

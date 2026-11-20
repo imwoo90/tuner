@@ -1444,6 +1444,16 @@ async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
     use tokio_tungstenite::tungstenite::Message as TMsg;
 
     let _guard = crate::messenger::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let en_setup: serde_json::Value =
+        serde_json::from_str(&super::voice_protocol::build_live_setup_frame("en", None, None)).unwrap();
+    assert_eq!(en_setup["setup"]["generationConfig"]["speechConfig"]["languageCode"], "en-US");
+    let auto_setup: serde_json::Value =
+        serde_json::from_str(&super::voice_protocol::build_live_setup_frame("auto", None, None)).unwrap();
+    assert!(auto_setup["setup"]["generationConfig"]["speechConfig"].get("languageCode").is_none());
+    assert!(auto_setup["setup"]["systemInstruction"]["parts"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("whichever language"));
     let dir = tempfile::tempdir().unwrap();
     let ctx = build_test_ctx(dir.path());
     super::provider_status::upsert_dotenv_secret(
