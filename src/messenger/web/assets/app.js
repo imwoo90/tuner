@@ -1,7 +1,8 @@
 import { escapeHtml, base64ToUtf8 } from "/dashboard/assets/markdown.js";
-import { initLang, toggleLang, applyDomI18n, onLangChange, t } from "/dashboard/assets/i18n.js";
+import { initLang, getLang, toggleLang, applyDomI18n, onLangChange, t } from "/dashboard/assets/i18n.js";
 import { createChatController } from "/dashboard/assets/chat.js";
 import { createInspectorController } from "/dashboard/assets/inspector.js";
+import { createVoiceController } from "/dashboard/assets/voice.js";
 
 let csrfToken = "";
 let sessions = [];
@@ -63,6 +64,27 @@ const chat = createChatController({
   getActiveTransport: () => activeTransport,
   getPreferredTgChatId
 });
+
+const voice = createVoiceController({
+  apiFetch,
+  getCsrfToken: () => csrfToken,
+  getLang,
+  getActiveSessionKey: () => chat.getActiveSessionKey(),
+  onFocusTopic: async (sk) => {
+    await loadSessions();
+    const target = sessions.find((s) => s.session_key === sk);
+    if (target) {
+      if (target.transport !== activeTransport) {
+        activeTransport = target.transport;
+      }
+      await chat.selectSession(target);
+      voice.notifyActiveTopic(sk);
+      renderSessionList();
+    }
+  },
+  onNeedGeminiSetup: () => chat.openEngineManager()
+});
+window.__tunerVoice = voice;
 
 function closeDrawers() {
   document.getElementById("sidebar").classList.remove("open");
@@ -198,6 +220,7 @@ function buildSessionRow(s, activeKey) {
     confirmingDeleteKey = "";
     closeDrawers();
     await chat.selectSession(s);
+    voice.notifyActiveTopic(s.session_key);
     renderSessionList();
     if (!inspector.isCollapsed() && (inspector.getActiveTab() === "tree" || inspector.getActiveTab() === "usage")) {
       inspector.refreshCurrentTab();
@@ -553,6 +576,7 @@ function setupUiListeners() {
     renderSessionList();
     renderHitlBannerDom();
     syncThemeIcon();
+    voice.refreshI18n();
     const dot = document.getElementById("ws-status");
     if (dot) {
       dot.title = dot.classList.contains("online") ? t("wsConnected") : t("wsReconnecting");

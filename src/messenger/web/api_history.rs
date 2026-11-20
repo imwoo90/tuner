@@ -76,7 +76,7 @@ pub(crate) async fn build_active_ask_view(
     })
 }
 
-fn collect_history_messages(
+pub(crate) fn collect_history_messages(
     ctx: &WebAppCtx,
     sess: &SessionData,
     prov: &str,

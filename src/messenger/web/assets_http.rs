@@ -74,6 +74,7 @@ pub(crate) async fn handle_asset(Path(file): Path<String>) -> Response {
         "slash.js" => typed_asset("application/javascript; charset=utf-8", include_str!("assets/slash.js")),
         "inspector.js" => typed_asset("application/javascript; charset=utf-8", include_str!("assets/inspector.js")),
         "onboarding.js" => typed_asset("application/javascript; charset=utf-8", include_str!("assets/onboarding.js")),
+        "voice.js" => typed_asset("application/javascript; charset=utf-8", include_str!("assets/voice.js")),
         "markdown.js" => typed_asset("application/javascript; charset=utf-8", include_str!("assets/markdown.js")),
         _ => (StatusCode::NOT_FOUND, "Asset not found").into_response(),
     }

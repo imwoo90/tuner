@@ -70,7 +70,7 @@ async fn emit_ask_step_update(
     Json(serde_json::json!({ "resolved": false, "ask": ev })).into_response()
 }
 
-async fn process_validated_ask(
+pub(crate) async fn process_validated_ask(
     ctx: Arc<WebAppCtx>,
     key: SessionKey,
     payload: AskAnswerPayload,

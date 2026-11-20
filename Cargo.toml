@@ -25,7 +25,8 @@ flate2 = "1.0"
 tar = "0.4"
 
 axum = { version = "0.7", features = ["ws", "multipart"] }
-tokio-tungstenite = "0.24"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tower = { version = "0.4", features = ["util"] }
 crypto_box = { version = "0.9", features = ["serde"] }

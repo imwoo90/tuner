@@ -1436,3 +1436,140 @@ async fn test_provider_onboarding_oauth_parser_and_dotenv() {
     assert_eq!(st_json["gemini_api"]["configured"], true);
     assert_eq!(st_json["gemini_api"]["masked_key"], "AIza…6789");
 }
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
+    use futures::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message as TMsg;
+
+    let _guard = crate::messenger::telegram::TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = build_test_ctx(dir.path());
+    super::provider_status::upsert_dotenv_secret(
+        &ctx.tuner_home.join(".env"),
+        "GEMINI_API_KEY",
+        "AIzaSyMockVoiceBridgeTestKey1234567890123",
+    )
+    .unwrap();
+
+    // 1. Mock upstream Gemini Live server supporting toolCall, audio, interrupted, goAway & sessionResumption!
+    let up_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let up_addr = up_listener.local_addr().unwrap();
+    let prev_url = std::env::var("TUNER_GEMINI_LIVE_WS_URL").ok();
+    unsafe {
+        std::env::set_var("TUNER_GEMINI_LIVE_WS_URL", format!("ws://{up_addr}/bidi"));
+    }
+
+    let up_task = tokio::spawn(async move {
+        // First connection: verify setup -> emit setupComplete + resume handle -> toolCall -> audio + interrupted -> goAway!
+        let (tcp1, _) = up_listener.accept().await.unwrap();
+        let mut ws1 = tokio_tungstenite::accept_async(tcp1).await.unwrap();
+        let setup1: serde_json::Value =
+            serde_json::from_str(&ws1.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(setup1["setup"]["model"], "models/gemini-3.8-live");
+        assert!(setup1["setup"]["contextWindowCompression"]["slidingWindow"].is_object());
+        let decls = setup1["setup"]["tools"][0]["functionDeclarations"].as_array().unwrap();
+        assert_eq!(decls.len(), 6);
+
+        ws1.send(TMsg::Text(r#"{"setupComplete":{}}"#.into())).await.unwrap();
+        ws1.send(TMsg::Text(r#"{"sessionResumptionUpdate":{"resumable":true,"newHandle":"res-handle-777"}}"#.into())).await.unwrap();
+
+        // Wait for user text frame
+        let u1: serde_json::Value =
+            serde_json::from_str(&ws1.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(u1["realtimeInput"]["text"], "새 토픽 열고 확인해줘");
+
+        // Request list_topics tool call
+        ws1.send(TMsg::Text(r#"{"toolCall":{"functionCalls":[{"id":"c1","name":"list_topics","args":{}}]}}"#.into())).await.unwrap();
+        let tr1: serde_json::Value =
+            serde_json::from_str(&ws1.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(tr1["toolResponse"]["functionResponses"][0]["name"], "list_topics");
+
+        // Emit PCM24 audio + transcript + barge-in interrupted + goAway!
+        ws1.send(TMsg::Text(r#"{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AAAA"}}]},"outputTranscription":{"text":"브리핑 완료"},"turnComplete":true}}"#.into())).await.unwrap();
+        ws1.send(TMsg::Text(r#"{"serverContent":{"interrupted":true}}"#.into())).await.unwrap();
+        ws1.send(TMsg::Text(r#"{"goAway":{"timeLeft":"5s"}}"#.into())).await.unwrap();
+
+        // Second connection: verify seamless sessionResumption reconnect with stored handle!
+        let (tcp2, _) = up_listener.accept().await.unwrap();
+        let mut ws2 = tokio_tungstenite::accept_async(tcp2).await.unwrap();
+        let setup2: serde_json::Value =
+            serde_json::from_str(&ws2.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(setup2["setup"]["sessionResumption"]["handle"], "res-handle-777");
+        ws2.send(TMsg::Text(r#"{"setupComplete":{}}"#.into())).await.unwrap();
+        let _ = ws2.next().await;
+    });
+
+    // 2. Bind real Axum server and connect client WebSocket to `/dashboard/api/voice/ws`
+    let app = build_router_with_ctx(ctx.clone());
+    let (cookie, csrf) = login_via_magic(&app, &ctx).await;
+
+    let app_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let app_addr = app_listener.local_addr().unwrap();
+    let app_srv = tokio::spawn(async move {
+        let _ = axum::serve(app_listener, app).await;
+    });
+
+    // Missing CSRF on WebSocket upgrade must be rejected with 403 Forbidden
+    let mut bad_req = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
+        format!("ws://{app_addr}/dashboard/api/voice/ws?lang=ko"),
+    )
+    .unwrap();
+    bad_req.headers_mut().insert("Cookie", cookie.parse().unwrap());
+    bad_req.headers_mut().insert("Origin", format!("http://{app_addr}").parse().unwrap());
+    match tokio_tungstenite::connect_async(bad_req).await {
+        Err(tokio_tungstenite::tungstenite::Error::Http(resp)) => {
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        }
+        other => panic!("Expected HTTP 403 rejection, got {other:?}"),
+    }
+
+    let mut req = tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(
+        format!("ws://{app_addr}/dashboard/api/voice/ws?csrf={csrf}&lang=ko"),
+    )
+    .unwrap();
+    req.headers_mut().insert("Cookie", cookie.parse().unwrap());
+    req.headers_mut().insert("Origin", format!("http://{app_addr}").parse().unwrap());
+
+    let (mut cws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
+
+    // Receive first `ready`
+    let f1: serde_json::Value =
+        serde_json::from_str(&cws.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+    assert_eq!(f1["type"], "ready");
+
+    // Send text query through voice WS
+    cws.send(TMsg::Text(r#"{"type":"text","text":"새 토픽 열고 확인해줘"}"#.into())).await.unwrap();
+
+    let mut saw_tool = false;
+    let mut saw_audio = false;
+    let mut saw_tx = false;
+    let mut saw_interrupted = false;
+    let mut saw_resumed_ready = false;
+    for _ in 0..10 {
+        let Some(Ok(TMsg::Text(raw))) = cws.next().await else { break };
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        match v["type"].as_str().unwrap_or("") {
+            "tool_call" if v["name"] == "list_topics" => saw_tool = true,
+            "audio" if v["data"] == "AAAA" => saw_audio = true,
+            "bot_transcript" if v["text"] == "브리핑 완료" => saw_tx = true,
+            "interrupted" => saw_interrupted = true,
+            "ready" => {
+                saw_resumed_ready = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(saw_tool && saw_audio && saw_tx && saw_interrupted && saw_resumed_ready);
+    let _ = cws.close(None).await;
+    let _ = up_task.await;
+    app_srv.abort();
+    unsafe {
+        match prev_url {
+            Some(v) => std::env::set_var("TUNER_GEMINI_LIVE_WS_URL", v),
+            None => std::env::remove_var("TUNER_GEMINI_LIVE_WS_URL"),
+        }
+    }
+}

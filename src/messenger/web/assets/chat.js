@@ -956,6 +956,7 @@ export function createChatController({
 
   return {
     selectSession,
+    openEngineManager,
     handleWsEvent,
     initDraftDefaults: (prov, model, needsOnboarding = false, readyProviders = []) => {
       state.readyProviders = Array.isArray(readyProviders) ? readyProviders : [];

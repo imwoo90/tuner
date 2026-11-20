@@ -13,25 +13,29 @@
 //! - [`api_hitl`] (`api_hitl.rs`): HITL remote browser status and launcher.
 //! - [`api_models`] (`api_models.rs`): Model, effort, and slash catalog.
 //! - [`api_ops`] (`api_ops.rs`): `/usage` and `/cron` endpoints.
-//! - [`api_providers`] (`api_providers.rs`): CLI install and OAuth login API.
-//! - [`api_sessions`] (`api_sessions.rs`): Session CRUD and config patch.
-//! - [`api_telegram`] (`api_telegram.rs`): Telegram bot setup and hot-connect API.
-//! - [`assets_http`] (`assets_http.rs`): Embedded static PWA assets.
-//! - [`auth`] (`auth.rs`): Magic Links and PBKDF2 PIN logic.
-//! - [`auth_http`] (`auth_http.rs`): Auth endpoints and CSRF guards.
-//! - [`auth_store`] (`auth_store.rs`): `0600` auth persistence and lockouts.
-//! - [`cli_dash`] (`cli_dash.rs`): `--dashboard` CLI and `/dashboard` command.
-//! - [`events`] (`events.rs`): `WebEventHub` broadcast and stream buffer.
-//! - [`events_bridge`] (`events_bridge.rs`): Telegram/Cron Web event hooks.
-//! - [`provider_install`] (`provider_install.rs`): Background CLI installer.
-//! - [`provider_oauth`] (`provider_oauth.rs`): Safe PTY CLI OAuth bridge.
-//! - [`provider_oauth_watch`] (`provider_oauth_watch.rs`): Web-in-Web OAuth auto-harvester.
-//! - [`provider_status`] (`provider_status.rs`): CLI readiness and `.env` store.
-//! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID and subagent tree.
-//! - [`tg_topics`] (`tg_topics.rs`): Telegram forum topic CRUD sync.
-//! - [`turn_boot`] (`turn_boot.rs`): Session init and handover boot.
-//! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled Web turn runner.
+//! - [`api_providers`] (`api_providers.rs`): CLI install & OAuth API.
+//! - [`api_sessions`] (`api_sessions.rs`): Session CRUD & config.
+//! - [`api_telegram`] (`api_telegram.rs`): Telegram hot-connect API.
+//! - [`assets_http`] (`assets_http.rs`): Embedded PWA assets.
+//! - [`auth`] (`auth.rs`): Magic Links & PBKDF2 PIN.
+//! - [`auth_http`] (`auth_http.rs`): Auth & CSRF guards.
+//! - [`auth_store`] (`auth_store.rs`): `0600` auth store.
+//! - [`cli_dash`] (`cli_dash.rs`): `--dashboard` & `/dashboard`.
+//! - [`events`] (`events.rs`): `WebEventHub` broadcast.
+//! - [`events_bridge`] (`events_bridge.rs`): Telegram/Cron hooks.
+//! - [`provider_install`] (`provider_install.rs`): CLI installer.
+//! - [`provider_oauth`] (`provider_oauth.rs`): PTY OAuth bridge.
+//! - [`provider_oauth_watch`] (`provider_oauth_watch.rs`): OAuth harvester.
+//! - [`provider_status`] (`provider_status.rs`): CLI & `.env` store.
+//! - [`subagent_tree`] (`subagent_tree.rs`): Warm PID & subagent tree.
+//! - [`tg_topics`] (`tg_topics.rs`): Forum topic sync.
+//! - [`turn_boot`] (`turn_boot.rs`): Session init & boot.
+//! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled turn runner.
 //! - [`turn_stream`] (`turn_stream.rs`): Live `StreamEvent` pump.
+//! - [`voice_protocol`] (`voice_protocol.rs`): `gemini-3.8-live` codec.
+//! - [`voice_schema`] (`voice_schema.rs`): Voice tool schemas.
+//! - [`voice_tools`] (`voice_tools.rs`): Voice secretary tools.
+//! - [`voice_ws`] (`voice_ws.rs`): `/dashboard/api/voice/ws` bridge.
 //! - [`ws`] (`ws.rs`): `/dashboard/api/ws` WebSocket handler.
 //!
 //! ## Search Tags
@@ -64,6 +68,10 @@ pub mod tg_topics;
 pub mod turn_boot;
 pub mod turn_runner;
 pub mod turn_stream;
+pub mod voice_protocol;
+pub mod voice_schema;
+pub mod voice_tools;
+pub mod voice_ws;
 pub mod ws;
 
 #[cfg(test)]
@@ -283,6 +291,8 @@ fn attach_auth_routes(r: Router) -> Router {
         .route("/dashboard/api/auth/logout", post(auth_http::handle_logout))
         .route("/dashboard/api/auth/revoke_all", post(auth_http::handle_revoke_all))
         .route("/dashboard/api/ws", get(ws::handle_ws))
+        .route("/dashboard/api/voice/status", get(voice_ws::handle_voice_status))
+        .route("/dashboard/api/voice/ws", get(voice_ws::handle_voice_ws))
 }
 
 fn attach_session_routes(r: Router) -> Router {

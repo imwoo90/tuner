@@ -237,7 +237,20 @@ const DICT = {
     geminiSubHint: "실시간 음성 비서 및 기본 google-workspace 스킬에서 사용하는 무료 Gemini API 키입니다. 내장 브라우저에서 Create API key를 누르면 자동 인식·저장됩니다.",
     geminiBrowserBtn: "🌐 내장 브라우저에서 무료 키 원클릭 발급",
     geminiManualSummary: "🔑 직접 GEMINI_API_KEY 입력 · 변경",
-    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)"
+    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)",
+    voiceBtn: "음성 비서",
+    voiceBtnTitle: "실시간 양방향 총괄 음성 비서 (gemini-3.8-live)",
+    voiceConnecting: "연결 중…",
+    voiceConnectingHint: "총괄 음성 비서(gemini-3.8-live) 연결 중…",
+    voiceListening: "듣는 중",
+    voiceSpeaking: "응답 중",
+    voiceThinking: "처리 중",
+    voiceMuted: "음소거",
+    voiceReadyHint: "편하게 말씀하세요 — 현황 브리핑과 하위 토픽 작업 지시를 처리합니다.",
+    voiceQuickInputPh: "통화 중 텍스트 전달...",
+    voiceMuteTitle: "마이크 음소거",
+    voiceUnmuteTitle: "마이크 켜기",
+    voiceHangupBtn: "종료"
   },
   en: {
     newTopicBtn: "+ New Chat",
@@ -474,7 +487,20 @@ const DICT = {
     geminiSubHint: "Free-tier Gemini API key powering the real-time Voice Assistant and bundled google-workspace skill. Click Create API key in the built-in browser to auto-save.",
     geminiBrowserBtn: "🌐 Get Free Key (Built-in Browser)",
     geminiManualSummary: "🔑 Enter or Update GEMINI_API_KEY Manually",
-    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)"
+    geminiKeyPh: "AIzaSy... (Google AI Studio API Key)",
+    voiceBtn: "Voice",
+    voiceBtnTitle: "Real-time Front-Desk Voice Secretary (gemini-3.8-live)",
+    voiceConnecting: "Connecting…",
+    voiceConnectingHint: "Connecting to Voice Desk Secretary (gemini-3.8-live)…",
+    voiceListening: "Listening",
+    voiceSpeaking: "Speaking",
+    voiceThinking: "Working",
+    voiceMuted: "Muted",
+    voiceReadyHint: "Speak naturally — ask for status briefings or delegate tasks to topics.",
+    voiceQuickInputPh: "Type to voice assistant...",
+    voiceMuteTitle: "Mute microphone",
+    voiceUnmuteTitle: "Unmute microphone",
+    voiceHangupBtn: "End"
   }
 };
 

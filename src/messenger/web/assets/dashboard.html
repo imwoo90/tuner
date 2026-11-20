@@ -68,12 +68,30 @@
           </div>
 
           <div class="chat-header-right">
+            <button id="btn-voice" class="ghost-btn voice-btn" type="button" data-i18n-title="voiceBtnTitle">
+              <span class="voice-mic-icon">🎙️</span><span class="voice-btn-label" data-i18n="voiceBtn">음성 비서</span>
+            </button>
             <button id="btn-new" class="ghost-btn" type="button" data-i18n="newSession" data-i18n-title="newSessionTitle">새 세션</button>
             <button id="btn-toggle-inspector" class="ghost-btn" type="button" data-i18n="toolsPanel" data-i18n-title="toolsPanelTitle">도구 패널</button>
             <button id="btn-lang" class="ghost-btn lang-btn" type="button" data-i18n-title="langToggleTitle">KO</button>
             <button id="btn-theme" class="ghost-icon-btn" type="button" aria-label="Theme">◐</button>
           </div>
         </header>
+
+        <div id="voice-bar" class="voice-bar hidden" role="region" aria-label="Voice Desk Assistant">
+          <div class="voice-bar-left">
+            <div id="voice-wave" class="voice-wave" data-mode="listening">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <span id="voice-status-badge" class="pill pill-ok voice-status-pill" data-i18n="voiceListening">듣는 중</span>
+            <div id="voice-subtitle" class="voice-subtitle muted"></div>
+          </div>
+          <div class="voice-bar-right">
+            <input id="voice-quick-input" class="voice-quick-input" type="text" data-i18n-placeholder="voiceQuickInputPh" placeholder="음성 통화 중 텍스트 전달...">
+            <button id="btn-voice-mute" class="ghost-icon-btn" type="button" title="마이크 음소거">🎤</button>
+            <button id="btn-voice-hangup" class="btn btn-danger btn-sm" type="button" data-i18n="voiceHangupBtn">종료</button>
+          </div>
+        </div>
 
         <div id="drop-overlay" class="drop-overlay hidden">
           <div class="drop-overlay-box" data-i18n="dropFiles">파일을 놓아 첨부하기</div>
