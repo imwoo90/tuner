@@ -104,3 +104,42 @@ pub fn log_telegram_message(
         let _ = writeln!(file, "{}", serialized);
     }
 }
+
+pub(crate) fn capture_pre_transcript_cursor(
+    cc: &crate::cli::antigravity::AntigravityCli,
+    sess: &crate::session::data::SessionData,
+    sid: &str,
+    default_prov: &str,
+) -> Option<(std::path::PathBuf, u64)> {
+    let prov = crate::session::data::SessionData::effective_provider(&sess.provider, default_prov);
+    if prov != "antigravity" || sid.is_empty() {
+        return None;
+    }
+    let tp = crate::cli::antigravity::events::agy_state_root(Some(&cc.build_env()))
+        .join("brain")
+        .join(sid)
+        .join(".system_generated/logs/transcript_full.jsonl");
+    let pre_len = std::fs::metadata(&tp).map(|m| m.len()).unwrap_or(0);
+    Some((tp, pre_len))
+}
+
+pub(crate) async fn recover_missed_agy_ask(
+    bot: &teloxide::Bot,
+    msg: &teloxide::types::Message,
+    pre: Option<&(std::path::PathBuf, u64)>,
+    sessions: &crate::session::manager::SessionManager,
+    sess: &crate::session::data::SessionData,
+    config: &crate::config::CliConfig,
+    cli: &crate::cli::antigravity::AntigravityCli,
+) -> Result<(), teloxide::RequestError> {
+    let Some((tp, pre_len)) = pre else { return Ok(()) };
+    let delta = crate::cli::antigravity::log_parser::AntigravityLogParser::new()
+        .parse_log_delta_structured(tp, Some(*pre_len));
+    if let Some(ask) = delta.ask_question {
+        let latest = sessions.get_active(&sess.session_key()).await.ok().flatten().unwrap_or_else(|| sess.clone());
+        super::ask_process::handle_ask_question_event(
+            bot, msg.chat.id, msg.thread_id.map(|t| t.0.0), ask, &latest, (config, cli, sessions),
+        ).await?;
+    }
+    Ok(())
+}

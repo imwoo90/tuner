@@ -138,7 +138,7 @@ pub(crate) async fn process_submit(
     Ok(())
 }
 
-fn log_ask_question_result(
+pub(crate) fn log_ask_question_result(
     config: &CliConfig,
     sess_id: &str,
     topic: (Option<i64>, Option<&str>),

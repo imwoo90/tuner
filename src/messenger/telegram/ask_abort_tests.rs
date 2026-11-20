@@ -751,4 +751,96 @@ mod tests {
         assert!(blocked.is_err(), "cross-topic /new must wait on target_topic lock");
         drop(target_guard);
     }
+
+    #[tokio::test]
+    async fn test_multi_question_plain_text_reply_posts_q2_below_without_overwriting_q1() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let _guard = TEST_ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let temp_dir = tempfile::tempdir().unwrap();
+        let sid = "ask-multi-writein";
+        mock_brain_dir(&temp_dir, sid);
+        write_mock_agy(temp_dir.path());
+        let _env = EnvGuard::new(&temp_dir);
+        let mut ctx = init_test_context(&temp_dir);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let recorded = Arc::new(std::sync::Mutex::new(Vec::<(String, serde_json::Value)>::new()));
+        let rec_bg = recorded.clone();
+        let srv = tokio::spawn(async move {
+            let mut next_mid = 500i32;
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 16384];
+                let Ok(n) = sock.read(&mut buf).await else { continue };
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let first = req.lines().next().unwrap_or("");
+                let path = first.split_whitespace().nth(1).unwrap_or("");
+                let method = path.rsplit('/').next().unwrap_or("").to_lowercase();
+                let body_str = req.split("\r\n\r\n").nth(1).unwrap_or("{}");
+                let val: serde_json::Value = serde_json::from_str(body_str).unwrap_or_default();
+                rec_bg.lock().unwrap().push((method.clone(), val.clone()));
+                next_mid += 1;
+                let mid = val.get("message_id").and_then(|v| v.as_i64()).unwrap_or(next_mid as i64);
+                let resp_json = if method == "sendmessage" || method == "editmessagetext" {
+                    serde_json::json!({
+                        "ok": true,
+                        "result": {
+                            "message_id": mid,
+                            "date": 1700000000,
+                            "chat": {"id": 999, "type": "private", "first_name": "U"},
+                            "from": {"id": 123, "is_bot": true, "first_name": "B", "username": "b"},
+                            "text": val.get("text").and_then(|t| t.as_str()).unwrap_or("ok")
+                        }
+                    })
+                } else {
+                    serde_json::json!({"ok": true, "result": true})
+                };
+                let s = resp_json.to_string();
+                let http = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", s.len(), s);
+                let _ = sock.write_all(http.as_bytes()).await;
+            }
+        });
+
+        ctx.bot = Bot::new("123:abc").set_api_url(reqwest::Url::parse(&format!("http://{}", addr)).unwrap());
+        let chat_id = 999;
+        let key = SessionKey::telegram(chat_id, None);
+        let (mut sess, _) = ctx.mgr.resolve_session(&key, "antigravity", "gemini-4-argon").await.unwrap();
+        sess.set_session_id("antigravity", sid);
+        ctx.mgr.update_session(&sess).await.unwrap();
+
+        let mut env = std::collections::HashMap::new();
+        env.insert("TUNER_CHAT_ID".to_string(), chat_id.to_string());
+        ctx.cli.sessions.ensure_session(sid, temp_dir.path(), "cat", &[], &env).await.unwrap();
+        ctx.cli.sessions.set_ask_state(sid, crate::cli::antigravity::session::AskState {
+            msg_id: 500,
+            questions: vec![
+                crate::cli::AskQuestionData { question: "Q1: First?".into(), options: vec!["OptA".into(), "OptB".into()], is_multi_select: false },
+                crate::cli::AskQuestionData { question: "Q2: Second?".into(), options: vec!["OptC".into(), "OptD".into()], is_multi_select: false },
+            ],
+            current_index: 0,
+            answers: vec![String::new(), String::new()],
+            current_bitmap: String::new(),
+            waiting_for_write_in: false,
+        }).await;
+
+        let msg = make_message_json(chat_id, 100, "Custom Write-In For Q1");
+        let mgm = Arc::new(crate::telegram::media_group::MediaGroupManager::new());
+        handle_message(ctx.bot.clone(), msg, ctx.cfg.clone(), ctx.mgr.clone(), ctx.cli.clone(), (ctx.cron_mgr, ctx.topic_cache), (ctx.bot_info, mgm)).await.unwrap();
+
+        let calls = recorded.lock().unwrap().clone();
+        let edits: Vec<_> = calls.iter().filter(|(m, _)| m == "editmessagetext").collect();
+        let sends: Vec<_> = calls.iter().filter(|(m, _)| m == "sendmessage").collect();
+        assert_eq!(edits.len(), 1, "Q1 bubble (500) must be edited exactly once to record Selected, never overwritten by Q2");
+        assert!(edits[0].1["text"].as_str().unwrap_or("").contains("Custom Write-In For Q1"));
+        assert_eq!(sends.len(), 1, "Q2 must be sent as a new message below the user's plain-text message");
+        assert!(sends[0].1["text"].as_str().unwrap_or("").contains("Q2: Second?"));
+        assert!(sends[0].1.get("reply_markup").is_some(), "New Q2 message must carry inline keyboard buttons");
+
+        let st = ctx.cli.sessions.get_ask_state(sid).await.unwrap();
+        assert_eq!(st.current_index, 1);
+        assert!(st.msg_id > 500, "AskState.msg_id must advance to new bottom Q2 message id");
+
+        ctx.cli.sessions.terminate_all().await;
+        srv.abort();
+    }
 }

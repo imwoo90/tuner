@@ -11,6 +11,7 @@
 //! - [`pty_spawner`] (`pty_spawner.rs`): Low-level non-echoing PTY allocation and child process spawning.
 //! - [`log_helpers`] (`log_helpers.rs`): Byte-offset file tailing and collapsible Markdown formatting helpers.
 //! - [`log_parser`] (`log_parser.rs`): Incremental structured log delta parser for CoT and tool calls.
+//! - [`log_watcher`] (`log_watcher.rs`): Single-directory non-recursive transcript filesystem watchers.
 //! - [`polling`] (`polling.rs`): File-watcher-driven transcript polling and completion loops.
 //! - [`completion`] (`completion.rs`): Turn completion detection and PTY output stability checks.
 //! - [`trust`] (`trust.rs`): Automatic workspace trust registration and dynamic model discovery.
@@ -50,6 +51,8 @@ pub mod provider_tests;
 pub mod pty_spawner;
 pub mod log_helpers;
 pub mod log_parser;
+/// Non-recursive transcript directory watchers.
+pub mod log_watcher;
 pub mod polling;
 pub mod completion;
 /// Dynamic model discovery re-exports.

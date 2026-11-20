@@ -6,7 +6,7 @@
 //! ## Search Tags
 //! #pty-descriptor, #process-fork, #unix-io
 
-use nix::fcntl::{fcntl, FcntlArg, OFlag};
+use nix::fcntl::{fcntl, FcntlArg, FdFlag, OFlag};
 use nix::pty::openpty;
 use nix::sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg};
 use std::collections::HashMap;
@@ -89,6 +89,12 @@ fn set_non_blocking<Fd: AsFd>(fd: Fd) -> Result<(), String> {
     Ok(())
 }
 
+fn set_cloexec<Fd: AsFd>(fd: Fd) -> Result<(), String> {
+    fcntl(fd.as_fd().as_raw_fd(), FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 fn build_pty_command(
     workspace: &Path,
     cmd_name: &str,
@@ -109,8 +115,18 @@ fn build_pty_command(
         .stderr(stderr_redirect)
         .kill_on_drop(true);
 
+    #[cfg(target_os = "linux")]
+    let parent_pid = nix::unistd::getpid();
+
     unsafe {
         cmd.pre_exec(move || {
+            #[cfg(target_os = "linux")]
+            {
+                let _ = nix::libc::prctl(nix::libc::PR_SET_PDEATHSIG, nix::libc::SIGKILL);
+                if nix::unistd::getppid() != parent_pid {
+                    nix::libc::_exit(1);
+                }
+            }
             let _ = nix::unistd::setsid();
             let _ = nix::libc::ioctl(0, nix::libc::TIOCSCTTY as _, 0);
             Ok(())
@@ -134,11 +150,13 @@ pub fn spawn_session(
     };
     let pty = openpty(Some(&winsize), None).map_err(|e| e.to_string())?;
 
+    set_cloexec(&pty.master)?;
+    set_cloexec(&pty.slave)?;
     disable_echo(&pty.slave)?;
     set_non_blocking(&pty.master)?;
 
     let master_raw = pty.master.as_raw_fd();
-    let master_dup = nix::unistd::dup(master_raw).map_err(|e| e.to_string())?;
+    let master_dup = fcntl(master_raw, FcntlArg::F_DUPFD_CLOEXEC(0)).map_err(|e| e.to_string())?;
 
     let mut cmd = build_pty_command(workspace, cmd_name, args, env, pty.slave)?;
     let child = cmd.spawn().map_err(|e| e.to_string())?;

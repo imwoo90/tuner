@@ -118,18 +118,23 @@ async fn determine_and_send_input(
     (ip, is_write_in)
 }
 
-async fn update_question_ui(
+async fn send_next_question_below(
     bot: &teloxide::Bot,
-    chat_id: teloxide::types::ChatId,
-    mid: i32,
+    msg: &Message,
     q: &crate::cli::AskQuestionData,
     markup: teloxide::types::InlineKeyboardMarkup,
-) {
+) -> (Option<i32>, bool, Option<String>) {
     let html = super::formatting::markdown_to_telegram_html(&q.question);
-    let _ = bot.edit_message_text(chat_id, teloxide::types::MessageId(mid), html)
+    let mut req = bot.send_message(msg.chat.id, html)
         .parse_mode(teloxide::types::ParseMode::Html)
-        .reply_markup(markup)
-        .await;
+        .reply_markup(markup);
+    if let Some(tid) = msg.thread_id {
+        req = req.message_thread_id(tid);
+    }
+    match req.await {
+        Ok(sent) => (Some(sent.id.0), true, None),
+        Err(e) => (None, false, Some(e.to_string())),
+    }
 }
 
 async fn advance_ask_state(
@@ -142,29 +147,26 @@ async fn advance_ask_state(
     config: &CliConfig,
 ) -> Result<(), teloxide::RequestError> {
     let (sessions, sess) = sess_ctx;
-    let chat_id = msg.chat.id;
-    let mid = state.msg_id;
+    let cid = msg.chat.id.0;
     if state.current_index + 1 < state.questions.len() {
         state.current_index += 1;
         let nq = state.questions[state.current_index].clone();
-        let bitmap = super::multi_select::get_bitmap_for_question(&nq, &state.answers, state.current_index);
-        state.current_bitmap = bitmap.clone();
+        let bmp = super::multi_select::get_bitmap_for_question(&nq, &state.answers, state.current_index);
+        state.current_bitmap = bmp.clone();
         state.waiting_for_write_in = false;
+        let (sent_id, ok, err) = send_next_question_below(bot, msg, &nq, build_ask_keyboard_helper(sid, &nq, &bmp, true)).await;
+        if let Some(new_mid) = sent_id { state.msg_id = new_mid; }
+        super::ask_process::log_ask_question_result(config, sid, (sess.topic_id, sess.topic_name.as_deref()), sent_id, &nq, (ok, err.as_deref()));
         cli.sessions.set_ask_state(sid, state).await;
-        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, false, "").await;
-        let markup = build_ask_keyboard_helper(sid, &nq, &bitmap, true);
-        update_question_ui(bot, chat_id, mid, &nq, markup).await;
+        crate::messenger::web::events_bridge::tg_ask_by_sid(cid, sid, false, "").await;
     } else {
-        let turn_guard = cli.begin_topic_turn(chat_id.0, sess.topic_id.or_else(|| super::get_topic_id(msg)));
+        let turn_guard = cli.begin_topic_turn(cid, sess.topic_id.or_else(|| super::get_topic_id(msg)));
         let summary = state.answers.last().cloned().unwrap_or_default();
-        super::ask_callbacks::submit_peer_ask_answers_if_needed(chat_id.0, &sess, config, &state.answers).await;
-        cli.sessions.set_ask_state(sid, state.clone()).await;
+        super::ask_callbacks::submit_peer_ask_answers_if_needed(cid, &sess, config, &state.answers).await;
+        cli.sessions.set_ask_state(sid, state).await;
         cli.sessions.set_ask_active(sid, false).await;
-        crate::messenger::web::events_bridge::tg_ask_by_sid(chat_id.0, sid, true, &summary).await;
-        let _ = bot.edit_message_reply_markup(chat_id, teloxide::types::MessageId(mid)).await;
-        super::ask_callbacks::spawn_cli_stream_in_background(
-            bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard,
-        );
+        crate::messenger::web::events_bridge::tg_ask_by_sid(cid, sid, true, &summary).await;
+        super::ask_callbacks::spawn_cli_stream_in_background(bot, msg, sid.to_string(), cli.clone(), (sessions.clone(), sess), config.clone(), turn_guard);
     }
     Ok(())
 }

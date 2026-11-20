@@ -178,8 +178,14 @@ pub(crate) async fn run_cli_stream(
     let _g = typing::TelegramTypingGuard::new(bot.clone(), tok, msg).await;
     let tid = sess.topic_id.or_else(|| get_topic_id(msg));
     let cc = session_init::configure_session_cli(cli, &sess, msg.chat.id.0, tid).await;
+    let pre_cursor = history::capture_pre_transcript_cursor(&cc, &sess, sid, &config.provider);
     match cc.send_streaming(prompt, (!sid.is_empty()).then_some(sid), false, config.working_dir.clone()).await {
-        Ok(s) => stream::consume_stream(bot, (msg.chat.id, msg.thread_id.map(|t| t.0.0)), s, sessions, sess, &cc.config, cli).await?,
+        Ok(s) => {
+            let ask_opened = stream::consume_stream(bot, (msg.chat.id, msg.thread_id.map(|t| t.0.0)), s, sessions, sess.clone(), &cc.config, cli).await?;
+            if !ask_opened {
+                history::recover_missed_agy_ask(bot, msg, pre_cursor.as_ref(), sessions, &sess, &cc.config, cli).await?;
+            }
+        }
         Err(e) => {
             eprintln!("CLI ERROR: {:?}", e);
             let err_msg = crate::cli::antigravity::error_parser::parse_cli_error(&e, 1, cc.config.model.as_deref());

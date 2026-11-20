@@ -298,3 +298,108 @@ fn test_extract_pty_turn_error_ignores_prior_and_stale_errors() {
     buf.extend_from_slice(b"> next prompt\r\n");
     assert!(extract_pty_turn_error(&buf, offset).is_none());
 }
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_pty_master_fds_have_cloexec_and_do_not_leak_to_siblings() {
+    use nix::fcntl::{fcntl, FcntlArg, FdFlag};
+    use super::session::SessionManager;
+    use std::collections::HashSet;
+
+    let inherited_ptmx: HashSet<String> = std::fs::read_dir("/proc/self/fd")
+        .unwrap()
+        .filter_map(|e| {
+            let e = e.ok()?;
+            let link = std::fs::read_link(e.path()).ok()?;
+            link.to_string_lossy().contains("ptmx").then(|| e.file_name().to_string_lossy().into_owned())
+        })
+        .collect();
+
+    let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mgr = SessionManager::new();
+    let env = HashMap::new();
+
+    mgr.ensure_session("cloexec-sibling-a", &ws, "cat", &[], &env).await.unwrap();
+    let master_a = mgr.holders.lock().await.get("cloexec-sibling-a").unwrap().master_fd;
+    let flags_a = FdFlag::from_bits_truncate(fcntl(master_a, FcntlArg::F_GETFD).unwrap());
+    assert!(flags_a.contains(FdFlag::FD_CLOEXEC), "Session A master_fd must have FD_CLOEXEC set");
+
+    let dump_args = vec![
+        "-c".to_string(),
+        "for f in /proc/self/fd/*; do printf '%s -> %s\\n' \"$(basename \"$f\")\" \"$(readlink \"$f\" 2>/dev/null)\"; done; echo FD_DUMP_DONE".to_string(),
+    ];
+    mgr.ensure_session("cloexec-sibling-b", &ws, "sh", &dump_args, &env).await.unwrap();
+
+    let mut dump = String::new();
+    for _ in 0..30 {
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        if let Some(h) = mgr.holders.lock().await.get("cloexec-sibling-b") {
+            dump = String::from_utf8_lossy(&h.output.lock().await).to_string();
+            if dump.contains("FD_DUMP_DONE") {
+                break;
+            }
+        }
+    }
+    assert!(dump.contains("FD_DUMP_DONE"), "Expected FD_DUMP_DONE, got: {}", dump);
+    let child_new_ptmx: Vec<&str> = dump
+        .lines()
+        .filter(|l| l.contains("ptmx"))
+        .filter(|l| {
+            let fd_num = l.split(" -> ").next().unwrap_or("").trim();
+            !inherited_ptmx.contains(fd_num)
+        })
+        .collect();
+    assert!(
+        child_new_ptmx.is_empty(),
+        "Sibling PTY child inherited newly spawned /dev/ptmx master FD (master_a={}): {:?}",
+        master_a,
+        child_new_ptmx
+    );
+    mgr.terminate_all().await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn test_pty_child_reaped_by_pdeathsig_when_parent_exits_without_drop() {
+    if std::env::var("TUNER_PDEATHSIG_CHILD_HELPER").as_deref() == Ok("1") {
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let args = vec!["-c".to_string(), "trap '' TERM HUP; sleep 60".to_string()];
+        let holder = spawn_session(&ws, "sh", &args, &HashMap::new()).unwrap();
+        println!("GRANDCHILD_PID={}", holder.child.id().unwrap());
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        std::process::exit(42);
+    }
+
+    let exe = std::env::current_exe().unwrap();
+    let out = tokio::process::Command::new(exe)
+        .args([
+            "--exact",
+            "cli::antigravity::session_tests::test_pty_child_reaped_by_pdeathsig_when_parent_exits_without_drop",
+            "--nocapture",
+        ])
+        .env("TUNER_PDEATHSIG_CHILD_HELPER", "1")
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(42));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let gpid: i32 = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("GRANDCHILD_PID="))
+        .expect("Missing GRANDCHILD_PID")
+        .trim()
+        .parse()
+        .unwrap();
+
+    let nix_pid = nix::unistd::Pid::from_raw(gpid);
+    let mut dead = false;
+    for _ in 0..25 {
+        if nix::sys::signal::kill(nix_pid, None).is_err() {
+            dead = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(dead, "Orphaned PTY grandchild {} survived parent exit(42)", gpid);
+}

@@ -100,51 +100,51 @@ struct StreamLoopState {
     last_text: String,
     pub_id: Option<MessageId>,
     last_sid: Option<String>,
+    ask_opened: bool,
 }
 
 type StreamCtx<'a> = (
     &'a CliConfig,
     &'a crate::cli::antigravity::AntigravityCli,
-    &'a crate::session::manager::SessionManager,
+    &'a SessionManager,
 );
 
 async fn process_stream_events(
     bot: &Bot,
     chat_id: ChatId,
     tid: Option<i32>,
-    mut stream: futures::stream::BoxStream<'_, StreamEvent>,
-    sdata: &crate::session::data::SessionData,
+    mut s: futures::stream::BoxStream<'_, StreamEvent>,
+    sd: &SessionData,
     ctx: StreamCtx<'_>,
-    state: &mut StreamLoopState,
+    st: &mut StreamLoopState,
 ) -> Result<(), teloxide::RequestError> {
-    let (cfg, cli, sessions) = ctx;
     let (mut last_edit, mut pending) = (Instant::now(), false);
     let mut tick = tokio::time::interval(Duration::from_millis(700));
     loop {
         tokio::select! {
-            ev = stream.next() => match ev {
+            ev = s.next() => match ev {
                 Some(StreamEvent::TextDelta(d)) => {
                     let prev = last_edit;
-                    wev::tg_delta(chat_id.0, sdata.topic_id, &d).await;
-                    handle_text_delta(bot, chat_id, tid, &d, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
-                    pending = state.pub_id.is_some() && last_edit == prev;
+                    wev::tg_delta(chat_id.0, sd.topic_id, &d).await;
+                    handle_text_delta(bot, chat_id, tid, &d, &mut st.last_text, &mut st.pub_id, &mut last_edit).await?;
+                    pending = st.pub_id.is_some() && last_edit == prev;
                 }
                 Some(StreamEvent::AskQuestion(ask)) => {
-                    super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, (cfg, cli, sessions)).await?
+                    st.ask_opened = true;
+                    super::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sd, ctx).await?
                 }
                 Some(StreamEvent::Result(resp)) => {
                     pending = false;
-                    if !resp.result.is_empty() { state.last_text = resp.result.clone(); }
-                    let topic = (sdata.topic_id, sdata.topic_name.as_deref());
-                    if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, state.pub_id, tid, topic, resp, cfg).await {
-                        state.last_sid = Some(sid);
+                    if !resp.result.is_empty() { st.last_text = resp.result.clone(); }
+                    if let Ok(Some(sid)) = handle_stream_result(bot, chat_id, st.pub_id, tid, (sd.topic_id, sd.topic_name.as_deref()), resp, ctx.0).await {
+                        st.last_sid = Some(sid);
                     }
                 }
                 None => break,
             },
             _ = tick.tick(), if pending && last_edit.elapsed() >= Duration::from_secs(2) => {
-                let cur = state.last_text.clone();
-                handle_text_delta(bot, chat_id, tid, &cur, &mut state.last_text, &mut state.pub_id, &mut last_edit).await?;
+                let cur = st.last_text.clone();
+                handle_text_delta(bot, chat_id, tid, &cur, &mut st.last_text, &mut st.pub_id, &mut last_edit).await?;
                 pending = false;
             }
         }
@@ -228,16 +228,17 @@ pub(crate) async fn consume_stream(
     bot: &Bot,
     target: (ChatId, Option<i32>),
     stream: futures::stream::BoxStream<'_, StreamEvent>,
-    sessions: &crate::session::manager::SessionManager,
-    session_data: crate::session::data::SessionData,
+    sessions: &SessionManager,
+    session_data: SessionData,
     config: &CliConfig,
     cli: &crate::cli::antigravity::AntigravityCli,
-) -> Result<(), teloxide::RequestError> {
+) -> Result<bool, teloxide::RequestError> {
     let (chat_id, thread_id) = target;
     let mut state = StreamLoopState {
         last_text: String::new(),
         pub_id: None,
         last_sid: None,
+        ask_opened: false,
     };
     let mut updated = session_data.clone();
     let mut cleared = false;
@@ -260,5 +261,5 @@ pub(crate) async fn consume_stream(
     if state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
         persist_stream_session_update(sessions, &session_data, updated, state.last_sid, config).await;
     }
-    Ok(())
+    Ok(state.ask_opened)
 }

@@ -21,7 +21,7 @@ use crate::messenger::web::events_bridge as wev;
 use crate::session::data::SessionData;
 use crate::session::key::SessionKey;
 use crate::session::manager::SessionManager;
-use notify::{Watcher, RecursiveMode, EventKind};
+pub(crate) use crate::cli::antigravity::polling::create_brain_dir_watcher;
 
 static WATCHED_SESSIONS: LazyLock<Arc<Mutex<HashSet<String>>>> = LazyLock::new(|| Arc::new(Mutex::new(HashSet::new())));
 
@@ -96,17 +96,6 @@ async fn handle_async_turn_output(ctx: &ObserverCtx, msg_id: Option<MessageId>, 
     let tname = persist_async_antigravity_turn(&ctx.sessions, &key, &ctx.session_id, &ctx.config.provider).await;
     super::history::log_telegram_message(&ctx.config.working_dir, &ctx.session_id, (tid64, tname.as_deref()), "bot", sent_id, txt, (ok, err.as_deref()));
     wev::emit_turn_res(&ctx.transport, ctx.chat_id.0, tid64, Some(ctx.session_id.clone()), txt, !ok).await;
-}
-
-fn create_brain_dir_watcher(brain_dir: &Path, fs_tx: tokio::sync::mpsc::UnboundedSender<()>) -> Option<notify::RecommendedWatcher> {
-    if let Ok(mut w) = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-            let _ = fs_tx.send(());
-        }
-    }) && w.watch(brain_dir, RecursiveMode::Recursive).is_ok() {
-        return Some(w);
-    }
-    None
 }
 
 struct ActiveAsyncTurn {

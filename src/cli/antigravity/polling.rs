@@ -10,7 +10,7 @@
 use crate::cli::{CliResponse, StreamEvent};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use notify::{Watcher, RecommendedWatcher, RecursiveMode, EventKind};
+pub(crate) use super::log_watcher::{create_brain_dir_watcher, resolve_watch_target, setup_path_watcher, sync_nonrecursive_watcher};
 
 fn extract_exit_code(msg: &str) -> Option<i32> {
     let lower = msg.to_lowercase();
@@ -85,6 +85,30 @@ fn parse_and_stream(
     }
 }
 
+struct PollState {
+    prev_size: Option<u64>,
+    active_path: Option<PathBuf>,
+    parser: super::log_parser::AntigravityLogParser,
+    watcher: Option<notify::RecommendedWatcher>,
+    watched_dir: Option<PathBuf>,
+}
+
+impl PollState {
+    fn step(
+        &mut self,
+        ws: &Path,
+        env: &HashMap<String, String>,
+        brain_root: &Path,
+        tx: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
+        fs_tx: &tokio::sync::mpsc::UnboundedSender<()>,
+        sid: Option<&str>,
+    ) {
+        parse_and_stream(ws, env, &mut self.active_path, &mut self.prev_size, &mut self.parser, tx, sid);
+        let tgt = resolve_watch_target(brain_root, sid, self.active_path.as_deref());
+        sync_nonrecursive_watcher(&mut self.watcher, &mut self.watched_dir, tgt, fs_tx);
+    }
+}
+
 async fn poll_loop_async(
     mut oneshot_handle: tokio::task::JoinHandle<Result<CliResponse, String>>,
     tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
@@ -93,47 +117,41 @@ async fn poll_loop_async(
     initial_size: Option<u64>,
     session_id: Option<String>,
 ) {
-    let mut prev_size = initial_size;
-    let mut active_path = None;
-    let mut parser = super::log_parser::AntigravityLogParser::new();
-
+    let mut st = PollState {
+        prev_size: initial_size,
+        active_path: None,
+        parser: super::log_parser::AntigravityLogParser::new(),
+        watcher: None,
+        watched_dir: None,
+    };
     let (fs_tx, mut fs_rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut watcher = None;
     let brain_root = super::events::agy_state_root(Some(&env)).join("brain");
-
-    if let Ok(mut w) = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res
-            && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                let _ = fs_tx.send(());
-            }
-    })
-        && w.watch(&brain_root, RecursiveMode::Recursive).is_ok() {
-            watcher = Some(w);
-        }
-
-    let mut fallback = tokio::time::interval(tokio::time::Duration::from_secs(5));
-    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
+    let mut fallback = tokio::time::interval(tokio::time::Duration::from_millis(500));
+    st.step(&agy_ws, &env, &brain_root, &tx, &fs_tx, session_id.as_deref());
 
     let mut fs_rx_closed = false;
     loop {
         tokio::select! {
             res = &mut oneshot_handle => {
+                let drain_sid = session_id.as_deref().or_else(|| {
+                    res.as_ref().ok().and_then(|r| r.as_ref().ok()).and_then(|c| c.session_id.as_deref())
+                });
+                parse_and_stream(&agy_ws, &env, &mut st.active_path, &mut st.prev_size, &mut st.parser, &tx, drain_sid);
                 handle_oneshot_finish(res, &tx, session_id);
                 break;
             }
             res = fs_rx.recv(), if !fs_rx_closed => {
                 if res.is_some() {
-                    parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
+                    st.step(&agy_ws, &env, &brain_root, &tx, &fs_tx, session_id.as_deref());
                 } else {
                     fs_rx_closed = true;
                 }
             }
             _ = fallback.tick() => {
-                parse_and_stream(&agy_ws, &env, &mut active_path, &mut prev_size, &mut parser, &tx, session_id.as_deref());
+                st.step(&agy_ws, &env, &brain_root, &tx, &fs_tx, session_id.as_deref());
             }
         }
     }
-    drop(watcher);
 }
 
 pub(crate) fn spawn_log_polling(
@@ -145,21 +163,6 @@ pub(crate) fn spawn_log_polling(
     session_id: Option<String>,
 ) {
     tokio::spawn(poll_loop_async(oneshot_handle, tx, agy_ws, env, initial_size, session_id));
-}
-
-fn setup_path_watcher(
-    path: Option<&PathBuf>,
-    tx: tokio::sync::mpsc::UnboundedSender<()>,
-) -> Option<RecommendedWatcher> {
-    let p = path?.parent()?;
-    let mut w = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
-        if let Ok(e) = res
-            && matches!(e.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                let _ = tx.send(());
-            }
-    }).ok()?;
-    w.watch(p, RecursiveMode::NonRecursive).ok()?;
-    Some(w)
 }
 
 async fn check_interruption(sessions: &super::session::SessionManager, session_id: &str) -> Result<(), String> {
