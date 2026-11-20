@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["completion","discovery","error_parser","events","log_helpers","log_parser","model_spec","polling","provider","pty_model_sync","pty_spawner","pty_sync","session","trust"],"struct":["AntigravityCli"]};
+window.SIDEBAR_ITEMS = {"mod":["completion","discovery","error_parser","events","log_helpers","log_parser","log_watcher","model_spec","polling","provider","pty_model_sync","pty_spawner","pty_sync","session","trust"],"struct":["AntigravityCli"]};

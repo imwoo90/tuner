@@ -100,51 +100,51 @@
 <a href=#100 id=100 data-nosnippet>100</a>    last_text: String,
 <a href=#101 id=101 data-nosnippet>101</a>    pub_id: <span class="prelude-ty">Option</span>&lt;MessageId&gt;,
 <a href=#102 id=102 data-nosnippet>102</a>    last_sid: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#103 id=103 data-nosnippet>103</a>}
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a><span class="kw">type </span>StreamCtx&lt;<span class="lifetime">'a</span>&gt; = (
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CliConfig,
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli,
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#109 id=109 data-nosnippet>109</a>);
-<a href=#110 id=110 data-nosnippet>110</a>
-<a href=#111 id=111 data-nosnippet>111</a><span class="kw">async fn </span>process_stream_events(
-<a href=#112 id=112 data-nosnippet>112</a>    bot: <span class="kw-2">&amp;</span>Bot,
-<a href=#113 id=113 data-nosnippet>113</a>    chat_id: ChatId,
-<a href=#114 id=114 data-nosnippet>114</a>    tid: <span class="prelude-ty">Option</span>&lt;i32&gt;,
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw-2">mut </span>stream: futures::stream::BoxStream&lt;<span class="lifetime">'_</span>, StreamEvent&gt;,
-<a href=#116 id=116 data-nosnippet>116</a>    sdata: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::data::SessionData,
-<a href=#117 id=117 data-nosnippet>117</a>    ctx: StreamCtx&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#118 id=118 data-nosnippet>118</a>    state: <span class="kw-2">&amp;mut </span>StreamLoopState,
-<a href=#119 id=119 data-nosnippet>119</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>(cfg, cli, sessions) = ctx;
+<a href=#103 id=103 data-nosnippet>103</a>    ask_opened: bool,
+<a href=#104 id=104 data-nosnippet>104</a>}
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">type </span>StreamCtx&lt;<span class="lifetime">'a</span>&gt; = (
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CliConfig,
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw">crate</span>::cli::antigravity::AntigravityCli,
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw-2">&amp;</span><span class="lifetime">'a </span>SessionManager,
+<a href=#110 id=110 data-nosnippet>110</a>);
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">async fn </span>process_stream_events(
+<a href=#113 id=113 data-nosnippet>113</a>    bot: <span class="kw-2">&amp;</span>Bot,
+<a href=#114 id=114 data-nosnippet>114</a>    chat_id: ChatId,
+<a href=#115 id=115 data-nosnippet>115</a>    tid: <span class="prelude-ty">Option</span>&lt;i32&gt;,
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw-2">mut </span>s: futures::stream::BoxStream&lt;<span class="lifetime">'_</span>, StreamEvent&gt;,
+<a href=#117 id=117 data-nosnippet>117</a>    sd: <span class="kw-2">&amp;</span>SessionData,
+<a href=#118 id=118 data-nosnippet>118</a>    ctx: StreamCtx&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#119 id=119 data-nosnippet>119</a>    st: <span class="kw-2">&amp;mut </span>StreamLoopState,
+<a href=#120 id=120 data-nosnippet>120</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
 <a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>last_edit, <span class="kw-2">mut </span>pending) = (Instant::now(), <span class="bool-val">false</span>);
 <a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_millis(<span class="number">700</span>));
 <a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">loop </span>{
 <a href=#124 id=124 data-nosnippet>124</a>        <span class="macro">tokio::select!</span> {
-<a href=#125 id=125 data-nosnippet>125</a>            ev = stream.next() =&gt; <span class="kw">match </span>ev {
+<a href=#125 id=125 data-nosnippet>125</a>            ev = s.next() =&gt; <span class="kw">match </span>ev {
 <a href=#126 id=126 data-nosnippet>126</a>                <span class="prelude-val">Some</span>(StreamEvent::TextDelta(d)) =&gt; {
 <a href=#127 id=127 data-nosnippet>127</a>                    <span class="kw">let </span>prev = last_edit;
-<a href=#128 id=128 data-nosnippet>128</a>                    wev::tg_delta(chat_id.<span class="number">0</span>, sdata.topic_id, <span class="kw-2">&amp;</span>d).<span class="kw">await</span>;
-<a href=#129 id=129 data-nosnippet>129</a>                    handle_text_delta(bot, chat_id, tid, <span class="kw-2">&amp;</span>d, <span class="kw-2">&amp;mut </span>state.last_text, <span class="kw-2">&amp;mut </span>state.pub_id, <span class="kw-2">&amp;mut </span>last_edit).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#130 id=130 data-nosnippet>130</a>                    pending = state.pub_id.is_some() &amp;&amp; last_edit == prev;
+<a href=#128 id=128 data-nosnippet>128</a>                    wev::tg_delta(chat_id.<span class="number">0</span>, sd.topic_id, <span class="kw-2">&amp;</span>d).<span class="kw">await</span>;
+<a href=#129 id=129 data-nosnippet>129</a>                    handle_text_delta(bot, chat_id, tid, <span class="kw-2">&amp;</span>d, <span class="kw-2">&amp;mut </span>st.last_text, <span class="kw-2">&amp;mut </span>st.pub_id, <span class="kw-2">&amp;mut </span>last_edit).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#130 id=130 data-nosnippet>130</a>                    pending = st.pub_id.is_some() &amp;&amp; last_edit == prev;
 <a href=#131 id=131 data-nosnippet>131</a>                }
 <a href=#132 id=132 data-nosnippet>132</a>                <span class="prelude-val">Some</span>(StreamEvent::AskQuestion(ask)) =&gt; {
-<a href=#133 id=133 data-nosnippet>133</a>                    <span class="kw">super</span>::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sdata, (cfg, cli, sessions)).<span class="kw">await</span><span class="question-mark">?
-<a href=#134 id=134 data-nosnippet>134</a>                </span>}
-<a href=#135 id=135 data-nosnippet>135</a>                <span class="prelude-val">Some</span>(StreamEvent::Result(resp)) =&gt; {
-<a href=#136 id=136 data-nosnippet>136</a>                    pending = <span class="bool-val">false</span>;
-<a href=#137 id=137 data-nosnippet>137</a>                    <span class="kw">if </span>!resp.result.is_empty() { state.last_text = resp.result.clone(); }
-<a href=#138 id=138 data-nosnippet>138</a>                    <span class="kw">let </span>topic = (sdata.topic_id, sdata.topic_name.as_deref());
-<a href=#139 id=139 data-nosnippet>139</a>                    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(sid)) = handle_stream_result(bot, chat_id, state.pub_id, tid, topic, resp, cfg).<span class="kw">await </span>{
-<a href=#140 id=140 data-nosnippet>140</a>                        state.last_sid = <span class="prelude-val">Some</span>(sid);
+<a href=#133 id=133 data-nosnippet>133</a>                    st.ask_opened = <span class="bool-val">true</span>;
+<a href=#134 id=134 data-nosnippet>134</a>                    <span class="kw">super</span>::ask_process::handle_ask_question_event(bot, chat_id, tid, ask, sd, ctx).<span class="kw">await</span><span class="question-mark">?
+<a href=#135 id=135 data-nosnippet>135</a>                </span>}
+<a href=#136 id=136 data-nosnippet>136</a>                <span class="prelude-val">Some</span>(StreamEvent::Result(resp)) =&gt; {
+<a href=#137 id=137 data-nosnippet>137</a>                    pending = <span class="bool-val">false</span>;
+<a href=#138 id=138 data-nosnippet>138</a>                    <span class="kw">if </span>!resp.result.is_empty() { st.last_text = resp.result.clone(); }
+<a href=#139 id=139 data-nosnippet>139</a>                    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(sid)) = handle_stream_result(bot, chat_id, st.pub_id, tid, (sd.topic_id, sd.topic_name.as_deref()), resp, ctx.<span class="number">0</span>).<span class="kw">await </span>{
+<a href=#140 id=140 data-nosnippet>140</a>                        st.last_sid = <span class="prelude-val">Some</span>(sid);
 <a href=#141 id=141 data-nosnippet>141</a>                    }
 <a href=#142 id=142 data-nosnippet>142</a>                }
 <a href=#143 id=143 data-nosnippet>143</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">break</span>,
 <a href=#144 id=144 data-nosnippet>144</a>            },
 <a href=#145 id=145 data-nosnippet>145</a>            <span class="kw">_ </span>= tick.tick(), <span class="kw">if </span>pending &amp;&amp; last_edit.elapsed() &gt;= Duration::from_secs(<span class="number">2</span>) =&gt; {
-<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">let </span>cur = state.last_text.clone();
-<a href=#147 id=147 data-nosnippet>147</a>                handle_text_delta(bot, chat_id, tid, <span class="kw-2">&amp;</span>cur, <span class="kw-2">&amp;mut </span>state.last_text, <span class="kw-2">&amp;mut </span>state.pub_id, <span class="kw-2">&amp;mut </span>last_edit).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">let </span>cur = st.last_text.clone();
+<a href=#147 id=147 data-nosnippet>147</a>                handle_text_delta(bot, chat_id, tid, <span class="kw-2">&amp;</span>cur, <span class="kw-2">&amp;mut </span>st.last_text, <span class="kw-2">&amp;mut </span>st.pub_id, <span class="kw-2">&amp;mut </span>last_edit).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#148 id=148 data-nosnippet>148</a>                pending = <span class="bool-val">false</span>;
 <a href=#149 id=149 data-nosnippet>149</a>            }
 <a href=#150 id=150 data-nosnippet>150</a>        }
@@ -228,38 +228,39 @@
 <a href=#228 id=228 data-nosnippet>228</a>    bot: <span class="kw-2">&amp;</span>Bot,
 <a href=#229 id=229 data-nosnippet>229</a>    target: (ChatId, <span class="prelude-ty">Option</span>&lt;i32&gt;),
 <a href=#230 id=230 data-nosnippet>230</a>    stream: futures::stream::BoxStream&lt;<span class="lifetime">'_</span>, StreamEvent&gt;,
-<a href=#231 id=231 data-nosnippet>231</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">crate</span>::session::manager::SessionManager,
-<a href=#232 id=232 data-nosnippet>232</a>    session_data: <span class="kw">crate</span>::session::data::SessionData,
+<a href=#231 id=231 data-nosnippet>231</a>    sessions: <span class="kw-2">&amp;</span>SessionManager,
+<a href=#232 id=232 data-nosnippet>232</a>    session_data: SessionData,
 <a href=#233 id=233 data-nosnippet>233</a>    config: <span class="kw-2">&amp;</span>CliConfig,
 <a href=#234 id=234 data-nosnippet>234</a>    cli: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::antigravity::AntigravityCli,
-<a href=#235 id=235 data-nosnippet>235</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, teloxide::RequestError&gt; {
 <a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">let </span>(chat_id, thread_id) = target;
 <a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">let </span><span class="kw-2">mut </span>state = StreamLoopState {
 <a href=#238 id=238 data-nosnippet>238</a>        last_text: String::new(),
 <a href=#239 id=239 data-nosnippet>239</a>        pub_id: <span class="prelude-val">None</span>,
 <a href=#240 id=240 data-nosnippet>240</a>        last_sid: <span class="prelude-val">None</span>,
-<a href=#241 id=241 data-nosnippet>241</a>    };
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">let </span><span class="kw-2">mut </span>updated = session_data.clone();
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">let </span><span class="kw-2">mut </span>cleared = <span class="bool-val">false</span>;
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(last_mid) = session_data.last_progress_msg_id {
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">super</span>::typing::clear_old_progress_reaction(last_mid, chat_id, tok);
-<a href=#247 id=247 data-nosnippet>247</a>        updated.last_progress_msg_id = <span class="prelude-val">None</span>;
-<a href=#248 id=248 data-nosnippet>248</a>        cleared = <span class="bool-val">true</span>;
-<a href=#249 id=249 data-nosnippet>249</a>    }
-<a href=#250 id=250 data-nosnippet>250</a>
-<a href=#251 id=251 data-nosnippet>251</a>    process_stream_events(bot, chat_id, thread_id, stream, <span class="kw-2">&amp;</span>session_data, (config, cli, sessions), <span class="kw-2">&amp;mut </span>state).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#252 id=252 data-nosnippet>252</a>
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(mid) = state.pub_id
-<a href=#254 id=254 data-nosnippet>254</a>        &amp;&amp; (state.last_text.contains(<span class="string">"🛠️ **Tool Calls:"</span>) || state.last_text.contains(<span class="string">"&lt;!-- Waiting for"</span>)) {
-<a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
-<a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">super</span>::typing::set_progress_reaction(mid.<span class="number">0</span>, chat_id, tok);
-<a href=#257 id=257 data-nosnippet>257</a>            updated.last_progress_msg_id = <span class="prelude-val">Some</span>(mid.<span class="number">0</span>);
-<a href=#258 id=258 data-nosnippet>258</a>        }
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">if </span>state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
-<a href=#261 id=261 data-nosnippet>261</a>        persist_stream_session_update(sessions, <span class="kw-2">&amp;</span>session_data, updated, state.last_sid, config).<span class="kw">await</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    }
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="prelude-val">Ok</span>(())
-<a href=#264 id=264 data-nosnippet>264</a>}
+<a href=#241 id=241 data-nosnippet>241</a>        ask_opened: <span class="bool-val">false</span>,
+<a href=#242 id=242 data-nosnippet>242</a>    };
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">let </span><span class="kw-2">mut </span>updated = session_data.clone();
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">let </span><span class="kw-2">mut </span>cleared = <span class="bool-val">false</span>;
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(last_mid) = session_data.last_progress_msg_id {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">super</span>::typing::clear_old_progress_reaction(last_mid, chat_id, tok);
+<a href=#248 id=248 data-nosnippet>248</a>        updated.last_progress_msg_id = <span class="prelude-val">None</span>;
+<a href=#249 id=249 data-nosnippet>249</a>        cleared = <span class="bool-val">true</span>;
+<a href=#250 id=250 data-nosnippet>250</a>    }
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a>    process_stream_events(bot, chat_id, thread_id, stream, <span class="kw-2">&amp;</span>session_data, (config, cli, sessions), <span class="kw-2">&amp;mut </span>state).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(mid) = state.pub_id
+<a href=#255 id=255 data-nosnippet>255</a>        &amp;&amp; (state.last_text.contains(<span class="string">"🛠️ **Tool Calls:"</span>) || state.last_text.contains(<span class="string">"&lt;!-- Waiting for"</span>)) {
+<a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">let </span>tok = std::env::var(<span class="string">"TELEGRAM_TOKEN"</span>).unwrap_or_else(|<span class="kw">_</span>| config.telegram_token.clone());
+<a href=#257 id=257 data-nosnippet>257</a>            <span class="kw">super</span>::typing::set_progress_reaction(mid.<span class="number">0</span>, chat_id, tok);
+<a href=#258 id=258 data-nosnippet>258</a>            updated.last_progress_msg_id = <span class="prelude-val">Some</span>(mid.<span class="number">0</span>);
+<a href=#259 id=259 data-nosnippet>259</a>        }
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">if </span>state.last_sid.is_some() || cleared || updated.last_progress_msg_id.is_some() {
+<a href=#262 id=262 data-nosnippet>262</a>        persist_stream_session_update(sessions, <span class="kw-2">&amp;</span>session_data, updated, state.last_sid, config).<span class="kw">await</span>;
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="prelude-val">Ok</span>(state.ask_opened)
+<a href=#265 id=265 data-nosnippet>265</a>}
 </code></pre></div></section></main></body></html>

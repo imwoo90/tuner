@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_brain_dir_watcher","resolve_watch_target","setup_path_watcher","sync_nonrecursive_watcher"]};

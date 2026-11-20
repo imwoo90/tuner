@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::session::data::SessionData;
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::session::key::SessionKey;
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::session::manager::SessionManager;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>notify::{Watcher, RecursiveMode, EventKind};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span><span class="kw">crate</span>::cli::antigravity::polling::create_brain_dir_watcher;
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">static </span>WATCHED_SESSIONS: LazyLock&lt;Arc&lt;Mutex&lt;HashSet&lt;String&gt;&gt;&gt;&gt; = LazyLock::new(|| Arc::new(Mutex::new(HashSet::new())));
 <a href=#27 id=27 data-nosnippet>27</a>
@@ -98,137 +98,126 @@
 <a href=#98 id=98 data-nosnippet>98</a>    wev::emit_turn_res(<span class="kw-2">&amp;</span>ctx.transport, ctx.chat_id.<span class="number">0</span>, tid64, <span class="prelude-val">Some</span>(ctx.session_id.clone()), txt, !ok).<span class="kw">await</span>;
 <a href=#99 id=99 data-nosnippet>99</a>}
 <a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a><span class="kw">fn </span>create_brain_dir_watcher(brain_dir: <span class="kw-2">&amp;</span>Path, fs_tx: tokio::sync::mpsc::UnboundedSender&lt;()&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;notify::RecommendedWatcher&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>w) = notify::recommended_watcher(<span class="kw">move </span>|res: <span class="prelude-ty">Result</span>&lt;notify::Event, <span class="kw">_</span>&gt;| {
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(e) = res &amp;&amp; <span class="macro">matches!</span>(e.kind, EventKind::Modify(<span class="kw">_</span>) | EventKind::Create(<span class="kw">_</span>)) {
-<a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">let _ </span>= fs_tx.send(());
-<a href=#105 id=105 data-nosnippet>105</a>        }
-<a href=#106 id=106 data-nosnippet>106</a>    }) &amp;&amp; w.watch(brain_dir, RecursiveMode::Recursive).is_ok() {
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(w);
-<a href=#108 id=108 data-nosnippet>108</a>    }
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="prelude-val">None
-<a href=#110 id=110 data-nosnippet>110</a></span>}
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a><span class="kw">struct </span>ActiveAsyncTurn {
-<a href=#113 id=113 data-nosnippet>113</a>    _guard: tokio::sync::OwnedMutexGuard&lt;()&gt;,
-<a href=#114 id=114 data-nosnippet>114</a>    typing: <span class="prelude-ty">Option</span>&lt;<span class="kw">super</span>::typing::AsyncTypingHandle&gt;,
-<a href=#115 id=115 data-nosnippet>115</a>    last_activity: Instant,
-<a href=#116 id=116 data-nosnippet>116</a>    pub_msg_id: <span class="prelude-ty">Option</span>&lt;MessageId&gt;,
-<a href=#117 id=117 data-nosnippet>117</a>    last_edit: Instant,
-<a href=#118 id=118 data-nosnippet>118</a>    last_text: String,
-<a href=#119 id=119 data-nosnippet>119</a>}
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="kw">async fn </span>dispatch_terminal_event(ctx: <span class="kw-2">&amp;</span>ObserverCtx, delta: ParsedLogDelta, active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;) {
-<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span>tid64 = ctx.tid();
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>txt) = delta.final_content {
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span>pub_msg_id = active_turn.as_ref().and_then(|t| t.pub_msg_id);
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = active_turn.as_ref().and_then(|x| x.typing.as_ref()) { t.abort(); }
-<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>lock_arc = ctx.sessions.lock_pool.get((ctx.chat_id.<span class="number">0</span>, tid64));
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>_fb = <span class="kw">if </span>active_turn.is_none() { <span class="prelude-val">Some</span>(lock_arc.lock().<span class="kw">await</span>) } <span class="kw">else </span>{ <span class="prelude-val">None </span>};
-<a href=#128 id=128 data-nosnippet>128</a>        handle_async_turn_output(ctx, pub_msg_id, txt).<span class="kw">await</span>;
+<a href=#101 id=101 data-nosnippet>101</a><span class="kw">struct </span>ActiveAsyncTurn {
+<a href=#102 id=102 data-nosnippet>102</a>    _guard: tokio::sync::OwnedMutexGuard&lt;()&gt;,
+<a href=#103 id=103 data-nosnippet>103</a>    typing: <span class="prelude-ty">Option</span>&lt;<span class="kw">super</span>::typing::AsyncTypingHandle&gt;,
+<a href=#104 id=104 data-nosnippet>104</a>    last_activity: Instant,
+<a href=#105 id=105 data-nosnippet>105</a>    pub_msg_id: <span class="prelude-ty">Option</span>&lt;MessageId&gt;,
+<a href=#106 id=106 data-nosnippet>106</a>    last_edit: Instant,
+<a href=#107 id=107 data-nosnippet>107</a>    last_text: String,
+<a href=#108 id=108 data-nosnippet>108</a>}
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">async fn </span>dispatch_terminal_event(ctx: <span class="kw-2">&amp;</span>ObserverCtx, delta: ParsedLogDelta, active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;) {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>tid64 = ctx.tid();
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>txt) = delta.final_content {
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span>pub_msg_id = active_turn.as_ref().and_then(|t| t.pub_msg_id);
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = active_turn.as_ref().and_then(|x| x.typing.as_ref()) { t.abort(); }
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>lock_arc = ctx.sessions.lock_pool.get((ctx.chat_id.<span class="number">0</span>, tid64));
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>_fb = <span class="kw">if </span>active_turn.is_none() { <span class="prelude-val">Some</span>(lock_arc.lock().<span class="kw">await</span>) } <span class="kw">else </span>{ <span class="prelude-val">None </span>};
+<a href=#117 id=117 data-nosnippet>117</a>        handle_async_turn_output(ctx, pub_msg_id, txt).<span class="kw">await</span>;
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw-2">*</span>active_turn = <span class="prelude-val">None</span>;
+<a href=#119 id=119 data-nosnippet>119</a>    }
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(ask) = delta.ask_question {
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = active_turn.as_ref().and_then(|x| x.typing.as_ref()) { t.abort(); }
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>bot) = ctx.bot {
+<a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">let </span><span class="kw-2">mut </span>sd = build_observer_ask_session(get_active_session(ctx).<span class="kw">await</span>, ctx.chat_id.<span class="number">0</span>, tid64, <span class="kw-2">&amp;</span>ctx.session_id);
+<a href=#124 id=124 data-nosnippet>124</a>            sd.transport = ctx.transport.clone();
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="kw">let _ </span>= <span class="kw">super</span>::ask_process::handle_ask_question_event(bot, ctx.chat_id, ctx.thread_id, ask, <span class="kw-2">&amp;</span>sd, (<span class="kw-2">&amp;</span>ctx.config, <span class="kw-2">&amp;</span>ctx.cli, <span class="kw-2">&amp;</span>ctx.sessions)).<span class="kw">await</span>;
+<a href=#126 id=126 data-nosnippet>126</a>        } <span class="kw">else </span>{
+<a href=#127 id=127 data-nosnippet>127</a>            wev::web_obs_ask(<span class="kw-2">&amp;</span>ctx.transport, ctx.chat_id.<span class="number">0</span>, tid64, <span class="kw-2">&amp;</span>ctx.session_id, ask).<span class="kw">await</span>;
+<a href=#128 id=128 data-nosnippet>128</a>        }
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="kw-2">*</span>active_turn = <span class="prelude-val">None</span>;
 <a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(ask) = delta.ask_question {
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = active_turn.as_ref().and_then(|x| x.typing.as_ref()) { t.abort(); }
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>bot) = ctx.bot {
-<a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">let </span><span class="kw-2">mut </span>sd = build_observer_ask_session(get_active_session(ctx).<span class="kw">await</span>, ctx.chat_id.<span class="number">0</span>, tid64, <span class="kw-2">&amp;</span>ctx.session_id);
-<a href=#135 id=135 data-nosnippet>135</a>            sd.transport = ctx.transport.clone();
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let _ </span>= <span class="kw">super</span>::ask_process::handle_ask_question_event(bot, ctx.chat_id, ctx.thread_id, ask, <span class="kw-2">&amp;</span>sd, (<span class="kw-2">&amp;</span>ctx.config, <span class="kw-2">&amp;</span>ctx.cli, <span class="kw-2">&amp;</span>ctx.sessions)).<span class="kw">await</span>;
-<a href=#137 id=137 data-nosnippet>137</a>        } <span class="kw">else </span>{
-<a href=#138 id=138 data-nosnippet>138</a>            wev::web_obs_ask(<span class="kw-2">&amp;</span>ctx.transport, ctx.chat_id.<span class="number">0</span>, tid64, <span class="kw-2">&amp;</span>ctx.session_id, ask).<span class="kw">await</span>;
-<a href=#139 id=139 data-nosnippet>139</a>        }
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw-2">*</span>active_turn = <span class="prelude-val">None</span>;
-<a href=#141 id=141 data-nosnippet>141</a>    }
-<a href=#142 id=142 data-nosnippet>142</a>}
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a><span class="kw">async fn </span>ensure_active_turn(ctx: <span class="kw-2">&amp;</span>ObserverCtx, active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;) {
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">if </span>active_turn.is_none() {
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">let </span>lock = ctx.sessions.lock_pool.get((ctx.chat_id.<span class="number">0</span>, ctx.tid()));
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(guard) = lock.try_lock_owned() {
-<a href=#148 id=148 data-nosnippet>148</a>            ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">true</span>).<span class="kw">await</span>;
-<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">let </span>typing = ctx.bot.as_ref().map(|b| <span class="kw">super</span>::typing::AsyncTypingHandle::new(b.clone(), ctx.chat_id, ctx.thread_id));
-<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw-2">*</span>active_turn = <span class="prelude-val">Some</span>(ActiveAsyncTurn { _guard: guard, typing, last_activity: Instant::now(), pub_msg_id: <span class="prelude-val">None</span>, last_edit: Instant::now(), last_text: String::new() });
-<a href=#151 id=151 data-nosnippet>151</a>        }
-<a href=#152 id=152 data-nosnippet>152</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(turn) = active_turn {
-<a href=#153 id=153 data-nosnippet>153</a>        turn.last_activity = Instant::now();
-<a href=#154 id=154 data-nosnippet>154</a>    }
-<a href=#155 id=155 data-nosnippet>155</a>}
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a><span class="kw">async fn </span>check_and_dispatch_delta(
-<a href=#158 id=158 data-nosnippet>158</a>    ctx: <span class="kw-2">&amp;</span>ObserverCtx,
-<a href=#159 id=159 data-nosnippet>159</a>    transcript_path: <span class="kw-2">&amp;</span>Path,
-<a href=#160 id=160 data-nosnippet>160</a>    last_size: <span class="kw-2">&amp;mut </span>u64,
-<a href=#161 id=161 data-nosnippet>161</a>    parser: <span class="kw-2">&amp;mut </span>AntigravityLogParser,
-<a href=#162 id=162 data-nosnippet>162</a>    active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;,
-<a href=#163 id=163 data-nosnippet>163</a>) {
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(meta) = std::fs::metadata(transcript_path) <span class="kw">else </span>{ <span class="kw">return </span>};
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">if </span>meta.len() &lt;= <span class="kw-2">*</span>last_size { <span class="kw">return</span>; }
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>delta = parser.parse_log_delta_structured(transcript_path, <span class="prelude-val">Some</span>(<span class="kw-2">*</span>last_size));
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw-2">*</span>last_size = delta.new_size;
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw-2">*</span>parser = AntigravityLogParser::new();
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>!delta.has_activity { <span class="kw">return</span>; }
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">crate</span>::upgrade::record_user_activity();
-<a href=#171 id=171 data-nosnippet>171</a>    ensure_active_turn(ctx, active_turn).<span class="kw">await</span>;
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">if </span>delta.final_content.is_some() || delta.ask_question.is_some() {
-<a href=#173 id=173 data-nosnippet>173</a>        ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
-<a href=#174 id=174 data-nosnippet>174</a>        dispatch_terminal_event(ctx, delta, active_turn).<span class="kw">await</span>;
-<a href=#175 id=175 data-nosnippet>175</a>    } <span class="kw">else if let </span>(<span class="prelude-val">Some</span>(pt), <span class="prelude-val">Some</span>(turn)) = (delta.formatted.as_deref(), active_turn.as_mut()) {
-<a href=#176 id=176 data-nosnippet>176</a>        wev::obs_delta(<span class="kw-2">&amp;</span>ctx.transport, ctx.chat_id.<span class="number">0</span>, ctx.tid(), <span class="kw-2">&amp;</span>ctx.session_id, pt).<span class="kw">await</span>;
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>bot) = ctx.bot {
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">let _ </span>= <span class="kw">super</span>::stream::handle_text_delta(bot, ctx.chat_id, ctx.thread_id, pt, <span class="kw-2">&amp;mut </span>turn.last_text, <span class="kw-2">&amp;mut </span>turn.pub_msg_id, <span class="kw-2">&amp;mut </span>turn.last_edit).<span class="kw">await</span>;
-<a href=#179 id=179 data-nosnippet>179</a>        }
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>}
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a><span class="kw">async fn </span>handle_running_state_check(
-<a href=#184 id=184 data-nosnippet>184</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
-<a href=#185 id=185 data-nosnippet>185</a>    session_id: <span class="kw-2">&amp;</span>str,
-<a href=#186 id=186 data-nosnippet>186</a>    transcript_path: <span class="kw-2">&amp;</span>Path,
-<a href=#187 id=187 data-nosnippet>187</a>    was_running: <span class="kw-2">&amp;mut </span>bool,
-<a href=#188 id=188 data-nosnippet>188</a>    last_size: <span class="kw-2">&amp;mut </span>u64,
-<a href=#189 id=189 data-nosnippet>189</a>    parser: <span class="kw-2">&amp;mut </span>AntigravityLogParser,
-<a href=#190 id=190 data-nosnippet>190</a>) -&gt; bool {
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">let </span>is_running = cli.sessions.is_running(session_id).<span class="kw">await</span>;
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span>recent_int = cli.sessions.was_recently_interrupted(session_id, Duration::from_secs(<span class="number">6</span>)).<span class="kw">await</span>;
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">if </span>is_running || recent_int || <span class="kw-2">*</span>was_running {
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw-2">*</span>was_running = is_running;
-<a href=#195 id=195 data-nosnippet>195</a>        cli.sessions.set_async_running(session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw-2">*</span>last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(<span class="kw-2">*</span>last_size);
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw-2">*</span>parser = AntigravityLogParser::new();
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="bool-val">false
-<a href=#201 id=201 data-nosnippet>201</a></span>}
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a><span class="kw">async fn </span>run_observer_loop(ctx: ObserverCtx) {
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span>bd = <span class="kw">crate</span>::cli::antigravity::events::agy_state_root(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>ctx.cli.build_env())).join(<span class="string">"brain"</span>).join(<span class="kw-2">&amp;</span>ctx.session_id);
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let </span>tp = bd.join(<span class="string">".system_generated"</span>).join(<span class="string">"logs"</span>).join(<span class="string">"transcript_full.jsonl"</span>);
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_size = std::fs::metadata(<span class="kw-2">&amp;</span>tp).map(|m| m.len()).unwrap_or(<span class="number">0</span>);
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span><span class="kw-2">mut </span>parser = AntigravityLogParser::new();
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">let </span>(fs_tx, <span class="kw-2">mut </span>fs_rx) = tokio::sync::mpsc::unbounded_channel();
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">let </span>watcher = create_brain_dir_watcher(<span class="kw-2">&amp;</span>bd, fs_tx);
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">let </span><span class="kw-2">mut </span>fs_closed = watcher.is_none();
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_secs(<span class="number">2</span>));
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>was_running, <span class="kw-2">mut </span>active_turn) = (<span class="bool-val">false</span>, <span class="prelude-val">None</span>::&lt;ActiveAsyncTurn&gt;);
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">loop </span>{
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="macro">tokio::select!</span> {
-<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">_ </span>= ctx.cli.sessions.interrupt_notify.notified() =&gt; {}
-<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
-<a href=#217 id=217 data-nosnippet>217</a>            res = fs_rx.recv(), <span class="kw">if </span>!fs_closed =&gt; <span class="kw">if </span>res.is_none() { fs_closed = <span class="bool-val">true</span>; },
-<a href=#218 id=218 data-nosnippet>218</a>        }
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>still_current = get_active_session(<span class="kw-2">&amp;</span>ctx).<span class="kw">await</span>.is_some_and(|s| s.get_session_id(<span class="string">"antigravity"</span>) == ctx.session_id);
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if </span>!ctx.cli.sessions.is_active(<span class="kw-2">&amp;</span>ctx.session_id).<span class="kw">await </span>&amp;&amp; (!still_current || !tp.exists()) { <span class="kw">break</span>; }
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">if </span>handle_running_state_check(<span class="kw-2">&amp;</span>ctx.cli, <span class="kw-2">&amp;</span>ctx.session_id, <span class="kw-2">&amp;</span>tp, <span class="kw-2">&amp;mut </span>was_running, <span class="kw-2">&amp;mut </span>last_size, <span class="kw-2">&amp;mut </span>parser).<span class="kw">await </span>{
-<a href=#222 id=222 data-nosnippet>222</a>            active_turn = <span class="prelude-val">None</span>;
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">continue</span>;
-<a href=#224 id=224 data-nosnippet>224</a>        }
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">if </span>active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() &gt; Duration::from_secs(<span class="number">300</span>)) {
-<a href=#226 id=226 data-nosnippet>226</a>            ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
-<a href=#227 id=227 data-nosnippet>227</a>            active_turn = <span class="prelude-val">None</span>;
-<a href=#228 id=228 data-nosnippet>228</a>        }
-<a href=#229 id=229 data-nosnippet>229</a>        check_and_dispatch_delta(<span class="kw-2">&amp;</span>ctx, <span class="kw-2">&amp;</span>tp, <span class="kw-2">&amp;mut </span>last_size, <span class="kw-2">&amp;mut </span>parser, <span class="kw-2">&amp;mut </span>active_turn).<span class="kw">await</span>;
-<a href=#230 id=230 data-nosnippet>230</a>    }
-<a href=#231 id=231 data-nosnippet>231</a>    ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
-<a href=#232 id=232 data-nosnippet>232</a>    drop(watcher);
-<a href=#233 id=233 data-nosnippet>233</a>}
+<a href=#131 id=131 data-nosnippet>131</a>}
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a><span class="kw">async fn </span>ensure_active_turn(ctx: <span class="kw-2">&amp;</span>ObserverCtx, active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;) {
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">if </span>active_turn.is_none() {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">let </span>lock = ctx.sessions.lock_pool.get((ctx.chat_id.<span class="number">0</span>, ctx.tid()));
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(guard) = lock.try_lock_owned() {
+<a href=#137 id=137 data-nosnippet>137</a>            ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#138 id=138 data-nosnippet>138</a>            <span class="kw">let </span>typing = ctx.bot.as_ref().map(|b| <span class="kw">super</span>::typing::AsyncTypingHandle::new(b.clone(), ctx.chat_id, ctx.thread_id));
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="kw-2">*</span>active_turn = <span class="prelude-val">Some</span>(ActiveAsyncTurn { _guard: guard, typing, last_activity: Instant::now(), pub_msg_id: <span class="prelude-val">None</span>, last_edit: Instant::now(), last_text: String::new() });
+<a href=#140 id=140 data-nosnippet>140</a>        }
+<a href=#141 id=141 data-nosnippet>141</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(turn) = active_turn {
+<a href=#142 id=142 data-nosnippet>142</a>        turn.last_activity = Instant::now();
+<a href=#143 id=143 data-nosnippet>143</a>    }
+<a href=#144 id=144 data-nosnippet>144</a>}
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a><span class="kw">async fn </span>check_and_dispatch_delta(
+<a href=#147 id=147 data-nosnippet>147</a>    ctx: <span class="kw-2">&amp;</span>ObserverCtx,
+<a href=#148 id=148 data-nosnippet>148</a>    transcript_path: <span class="kw-2">&amp;</span>Path,
+<a href=#149 id=149 data-nosnippet>149</a>    last_size: <span class="kw-2">&amp;mut </span>u64,
+<a href=#150 id=150 data-nosnippet>150</a>    parser: <span class="kw-2">&amp;mut </span>AntigravityLogParser,
+<a href=#151 id=151 data-nosnippet>151</a>    active_turn: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;ActiveAsyncTurn&gt;,
+<a href=#152 id=152 data-nosnippet>152</a>) {
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(meta) = std::fs::metadata(transcript_path) <span class="kw">else </span>{ <span class="kw">return </span>};
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if </span>meta.len() &lt;= <span class="kw-2">*</span>last_size { <span class="kw">return</span>; }
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>delta = parser.parse_log_delta_structured(transcript_path, <span class="prelude-val">Some</span>(<span class="kw-2">*</span>last_size));
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw-2">*</span>last_size = delta.new_size;
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw-2">*</span>parser = AntigravityLogParser::new();
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">if </span>!delta.has_activity { <span class="kw">return</span>; }
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">crate</span>::upgrade::record_user_activity();
+<a href=#160 id=160 data-nosnippet>160</a>    ensure_active_turn(ctx, active_turn).<span class="kw">await</span>;
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">if </span>delta.final_content.is_some() || delta.ask_question.is_some() {
+<a href=#162 id=162 data-nosnippet>162</a>        ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
+<a href=#163 id=163 data-nosnippet>163</a>        dispatch_terminal_event(ctx, delta, active_turn).<span class="kw">await</span>;
+<a href=#164 id=164 data-nosnippet>164</a>    } <span class="kw">else if let </span>(<span class="prelude-val">Some</span>(pt), <span class="prelude-val">Some</span>(turn)) = (delta.formatted.as_deref(), active_turn.as_mut()) {
+<a href=#165 id=165 data-nosnippet>165</a>        wev::obs_delta(<span class="kw-2">&amp;</span>ctx.transport, ctx.chat_id.<span class="number">0</span>, ctx.tid(), <span class="kw-2">&amp;</span>ctx.session_id, pt).<span class="kw">await</span>;
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>bot) = ctx.bot {
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let _ </span>= <span class="kw">super</span>::stream::handle_text_delta(bot, ctx.chat_id, ctx.thread_id, pt, <span class="kw-2">&amp;mut </span>turn.last_text, <span class="kw-2">&amp;mut </span>turn.pub_msg_id, <span class="kw-2">&amp;mut </span>turn.last_edit).<span class="kw">await</span>;
+<a href=#168 id=168 data-nosnippet>168</a>        }
+<a href=#169 id=169 data-nosnippet>169</a>    }
+<a href=#170 id=170 data-nosnippet>170</a>}
+<a href=#171 id=171 data-nosnippet>171</a>
+<a href=#172 id=172 data-nosnippet>172</a><span class="kw">async fn </span>handle_running_state_check(
+<a href=#173 id=173 data-nosnippet>173</a>    cli: <span class="kw-2">&amp;</span>AntigravityCli,
+<a href=#174 id=174 data-nosnippet>174</a>    session_id: <span class="kw-2">&amp;</span>str,
+<a href=#175 id=175 data-nosnippet>175</a>    transcript_path: <span class="kw-2">&amp;</span>Path,
+<a href=#176 id=176 data-nosnippet>176</a>    was_running: <span class="kw-2">&amp;mut </span>bool,
+<a href=#177 id=177 data-nosnippet>177</a>    last_size: <span class="kw-2">&amp;mut </span>u64,
+<a href=#178 id=178 data-nosnippet>178</a>    parser: <span class="kw-2">&amp;mut </span>AntigravityLogParser,
+<a href=#179 id=179 data-nosnippet>179</a>) -&gt; bool {
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>is_running = cli.sessions.is_running(session_id).<span class="kw">await</span>;
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>recent_int = cli.sessions.was_recently_interrupted(session_id, Duration::from_secs(<span class="number">6</span>)).<span class="kw">await</span>;
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">if </span>is_running || recent_int || <span class="kw-2">*</span>was_running {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw-2">*</span>was_running = is_running;
+<a href=#184 id=184 data-nosnippet>184</a>        cli.sessions.set_async_running(session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw-2">*</span>last_size = std::fs::metadata(transcript_path).map(|m| m.len()).unwrap_or(<span class="kw-2">*</span>last_size);
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw-2">*</span>parser = AntigravityLogParser::new();
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#188 id=188 data-nosnippet>188</a>    }
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="bool-val">false
+<a href=#190 id=190 data-nosnippet>190</a></span>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="kw">async fn </span>run_observer_loop(ctx: ObserverCtx) {
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>bd = <span class="kw">crate</span>::cli::antigravity::events::agy_state_root(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>ctx.cli.build_env())).join(<span class="string">"brain"</span>).join(<span class="kw-2">&amp;</span>ctx.session_id);
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>tp = bd.join(<span class="string">".system_generated"</span>).join(<span class="string">"logs"</span>).join(<span class="string">"transcript_full.jsonl"</span>);
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_size = std::fs::metadata(<span class="kw-2">&amp;</span>tp).map(|m| m.len()).unwrap_or(<span class="number">0</span>);
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span><span class="kw-2">mut </span>parser = AntigravityLogParser::new();
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>(fs_tx, <span class="kw-2">mut </span>fs_rx) = tokio::sync::mpsc::unbounded_channel();
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span>watcher = create_brain_dir_watcher(<span class="kw-2">&amp;</span>bd, fs_tx);
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">let </span><span class="kw-2">mut </span>fs_closed = watcher.is_none();
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_secs(<span class="number">2</span>));
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>was_running, <span class="kw-2">mut </span>active_turn) = (<span class="bool-val">false</span>, <span class="prelude-val">None</span>::&lt;ActiveAsyncTurn&gt;);
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">loop </span>{
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="macro">tokio::select!</span> {
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="kw">_ </span>= ctx.cli.sessions.interrupt_notify.notified() =&gt; {}
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
+<a href=#206 id=206 data-nosnippet>206</a>            res = fs_rx.recv(), <span class="kw">if </span>!fs_closed =&gt; <span class="kw">if </span>res.is_none() { fs_closed = <span class="bool-val">true</span>; },
+<a href=#207 id=207 data-nosnippet>207</a>        }
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>still_current = get_active_session(<span class="kw-2">&amp;</span>ctx).<span class="kw">await</span>.is_some_and(|s| s.get_session_id(<span class="string">"antigravity"</span>) == ctx.session_id);
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if </span>!ctx.cli.sessions.is_active(<span class="kw-2">&amp;</span>ctx.session_id).<span class="kw">await </span>&amp;&amp; (!still_current || !tp.exists()) { <span class="kw">break</span>; }
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">if </span>handle_running_state_check(<span class="kw-2">&amp;</span>ctx.cli, <span class="kw-2">&amp;</span>ctx.session_id, <span class="kw-2">&amp;</span>tp, <span class="kw-2">&amp;mut </span>was_running, <span class="kw-2">&amp;mut </span>last_size, <span class="kw-2">&amp;mut </span>parser).<span class="kw">await </span>{
+<a href=#211 id=211 data-nosnippet>211</a>            active_turn = <span class="prelude-val">None</span>;
+<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">continue</span>;
+<a href=#213 id=213 data-nosnippet>213</a>        }
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">if </span>active_turn.as_ref().is_some_and(|t| t.last_activity.elapsed() &gt; Duration::from_secs(<span class="number">300</span>)) {
+<a href=#215 id=215 data-nosnippet>215</a>            ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
+<a href=#216 id=216 data-nosnippet>216</a>            active_turn = <span class="prelude-val">None</span>;
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>        check_and_dispatch_delta(<span class="kw-2">&amp;</span>ctx, <span class="kw-2">&amp;</span>tp, <span class="kw-2">&amp;mut </span>last_size, <span class="kw-2">&amp;mut </span>parser, <span class="kw-2">&amp;mut </span>active_turn).<span class="kw">await</span>;
+<a href=#219 id=219 data-nosnippet>219</a>    }
+<a href=#220 id=220 data-nosnippet>220</a>    ctx.cli.sessions.set_async_running(<span class="kw-2">&amp;</span>ctx.session_id, <span class="bool-val">false</span>).<span class="kw">await</span>;
+<a href=#221 id=221 data-nosnippet>221</a>    drop(watcher);
+<a href=#222 id=222 data-nosnippet>222</a>}
 </code></pre></div></section></main></body></html>

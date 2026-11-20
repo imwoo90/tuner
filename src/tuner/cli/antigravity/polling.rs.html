@@ -10,7 +10,7 @@
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span><span class="kw">crate</span>::cli::{CliResponse, StreamEvent};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::collections::HashMap;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::path::{Path, PathBuf};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>notify::{Watcher, RecommendedWatcher, RecursiveMode, EventKind};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span><span class="kw">super</span>::log_watcher::{create_brain_dir_watcher, resolve_watch_target, setup_path_watcher, sync_nonrecursive_watcher};
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">fn </span>extract_exit_code(msg: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;i32&gt; {
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">let </span>lower = msg.to_lowercase();
@@ -85,124 +85,127 @@
 <a href=#85 id=85 data-nosnippet>85</a>    }
 <a href=#86 id=86 data-nosnippet>86</a>}
 <a href=#87 id=87 data-nosnippet>87</a>
-<a href=#88 id=88 data-nosnippet>88</a><span class="kw">async fn </span>poll_loop_async(
-<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw-2">mut </span>oneshot_handle: tokio::task::JoinHandle&lt;<span class="prelude-ty">Result</span>&lt;CliResponse, String&gt;&gt;,
-<a href=#90 id=90 data-nosnippet>90</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;StreamEvent&gt;,
-<a href=#91 id=91 data-nosnippet>91</a>    agy_ws: PathBuf,
-<a href=#92 id=92 data-nosnippet>92</a>    env: HashMap&lt;String, String&gt;,
-<a href=#93 id=93 data-nosnippet>93</a>    initial_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#94 id=94 data-nosnippet>94</a>    session_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#95 id=95 data-nosnippet>95</a>) {
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev_size = initial_size;
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">let </span><span class="kw-2">mut </span>active_path = <span class="prelude-val">None</span>;
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span><span class="kw-2">mut </span>parser = <span class="kw">super</span>::log_parser::AntigravityLogParser::new();
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>(fs_tx, <span class="kw-2">mut </span>fs_rx) = tokio::sync::mpsc::unbounded_channel();
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">let </span><span class="kw-2">mut </span>watcher = <span class="prelude-val">None</span>;
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span>brain_root = <span class="kw">super</span>::events::agy_state_root(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>env)).join(<span class="string">"brain"</span>);
-<a href=#103 id=103 data-nosnippet>103</a>
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>w) = notify::recommended_watcher(<span class="kw">move </span>|res: <span class="prelude-ty">Result</span>&lt;notify::Event, <span class="kw">_</span>&gt;| {
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(e) = res
-<a href=#106 id=106 data-nosnippet>106</a>            &amp;&amp; <span class="macro">matches!</span>(e.kind, EventKind::Modify(<span class="kw">_</span>) | EventKind::Create(<span class="kw">_</span>)) {
-<a href=#107 id=107 data-nosnippet>107</a>                <span class="kw">let _ </span>= fs_tx.send(());
-<a href=#108 id=108 data-nosnippet>108</a>            }
-<a href=#109 id=109 data-nosnippet>109</a>    })
-<a href=#110 id=110 data-nosnippet>110</a>        &amp;&amp; w.watch(<span class="kw-2">&amp;</span>brain_root, RecursiveMode::Recursive).is_ok() {
-<a href=#111 id=111 data-nosnippet>111</a>            watcher = <span class="prelude-val">Some</span>(w);
-<a href=#112 id=112 data-nosnippet>112</a>        }
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span><span class="kw-2">mut </span>fallback = tokio::time::interval(tokio::time::Duration::from_secs(<span class="number">5</span>));
-<a href=#115 id=115 data-nosnippet>115</a>    parse_and_stream(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;mut </span>active_path, <span class="kw-2">&amp;mut </span>prev_size, <span class="kw-2">&amp;mut </span>parser, <span class="kw-2">&amp;</span>tx, session_id.as_deref());
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span><span class="kw-2">mut </span>fs_rx_closed = <span class="bool-val">false</span>;
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">loop </span>{
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="macro">tokio::select!</span> {
-<a href=#120 id=120 data-nosnippet>120</a>            res = <span class="kw-2">&amp;mut </span>oneshot_handle =&gt; {
-<a href=#121 id=121 data-nosnippet>121</a>                handle_oneshot_finish(res, <span class="kw-2">&amp;</span>tx, session_id);
-<a href=#122 id=122 data-nosnippet>122</a>                <span class="kw">break</span>;
-<a href=#123 id=123 data-nosnippet>123</a>            }
-<a href=#124 id=124 data-nosnippet>124</a>            res = fs_rx.recv(), <span class="kw">if </span>!fs_rx_closed =&gt; {
-<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">if </span>res.is_some() {
-<a href=#126 id=126 data-nosnippet>126</a>                    parse_and_stream(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;mut </span>active_path, <span class="kw-2">&amp;mut </span>prev_size, <span class="kw-2">&amp;mut </span>parser, <span class="kw-2">&amp;</span>tx, session_id.as_deref());
-<a href=#127 id=127 data-nosnippet>127</a>                } <span class="kw">else </span>{
-<a href=#128 id=128 data-nosnippet>128</a>                    fs_rx_closed = <span class="bool-val">true</span>;
-<a href=#129 id=129 data-nosnippet>129</a>                }
-<a href=#130 id=130 data-nosnippet>130</a>            }
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw">_ </span>= fallback.tick() =&gt; {
-<a href=#132 id=132 data-nosnippet>132</a>                parse_and_stream(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;mut </span>active_path, <span class="kw-2">&amp;mut </span>prev_size, <span class="kw-2">&amp;mut </span>parser, <span class="kw-2">&amp;</span>tx, session_id.as_deref());
-<a href=#133 id=133 data-nosnippet>133</a>            }
-<a href=#134 id=134 data-nosnippet>134</a>        }
-<a href=#135 id=135 data-nosnippet>135</a>    }
-<a href=#136 id=136 data-nosnippet>136</a>    drop(watcher);
-<a href=#137 id=137 data-nosnippet>137</a>}
-<a href=#138 id=138 data-nosnippet>138</a>
-<a href=#139 id=139 data-nosnippet>139</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spawn_log_polling(
-<a href=#140 id=140 data-nosnippet>140</a>    oneshot_handle: tokio::task::JoinHandle&lt;<span class="prelude-ty">Result</span>&lt;CliResponse, String&gt;&gt;,
-<a href=#141 id=141 data-nosnippet>141</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;StreamEvent&gt;,
-<a href=#142 id=142 data-nosnippet>142</a>    agy_ws: PathBuf,
-<a href=#143 id=143 data-nosnippet>143</a>    env: HashMap&lt;String, String&gt;,
-<a href=#144 id=144 data-nosnippet>144</a>    initial_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#145 id=145 data-nosnippet>145</a>    session_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#146 id=146 data-nosnippet>146</a>) {
-<a href=#147 id=147 data-nosnippet>147</a>    tokio::spawn(poll_loop_async(oneshot_handle, tx, agy_ws, env, initial_size, session_id));
-<a href=#148 id=148 data-nosnippet>148</a>}
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="kw">fn </span>setup_path_watcher(
-<a href=#151 id=151 data-nosnippet>151</a>    path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>PathBuf&gt;,
-<a href=#152 id=152 data-nosnippet>152</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;()&gt;,
-<a href=#153 id=153 data-nosnippet>153</a>) -&gt; <span class="prelude-ty">Option</span>&lt;RecommendedWatcher&gt; {
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span>p = path<span class="question-mark">?</span>.parent()<span class="question-mark">?</span>;
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span><span class="kw-2">mut </span>w = notify::recommended_watcher(<span class="kw">move </span>|res: <span class="prelude-ty">Result</span>&lt;notify::Event, <span class="kw">_</span>&gt;| {
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(e) = res
-<a href=#157 id=157 data-nosnippet>157</a>            &amp;&amp; <span class="macro">matches!</span>(e.kind, EventKind::Modify(<span class="kw">_</span>) | EventKind::Create(<span class="kw">_</span>)) {
-<a href=#158 id=158 data-nosnippet>158</a>                <span class="kw">let _ </span>= tx.send(());
-<a href=#159 id=159 data-nosnippet>159</a>            }
-<a href=#160 id=160 data-nosnippet>160</a>    }).ok()<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>    w.watch(p, RecursiveMode::NonRecursive).ok()<span class="question-mark">?</span>;
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="prelude-val">Some</span>(w)
-<a href=#163 id=163 data-nosnippet>163</a>}
-<a href=#164 id=164 data-nosnippet>164</a>
-<a href=#165 id=165 data-nosnippet>165</a><span class="kw">async fn </span>check_interruption(sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager, session_id: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">if </span>sessions.is_interrupted(session_id).<span class="kw">await </span>{
-<a href=#167 id=167 data-nosnippet>167</a>        sessions.clear_interrupted(session_id).<span class="kw">await</span>;
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Interrupted by user (/stop)"</span>.to_string());
-<a href=#169 id=169 data-nosnippet>169</a>    }
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="prelude-val">Ok</span>(())
-<a href=#171 id=171 data-nosnippet>171</a>}
-<a href=#172 id=172 data-nosnippet>172</a>
-<a href=#173 id=173 data-nosnippet>173</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_log_completion(
-<a href=#174 id=174 data-nosnippet>174</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
-<a href=#175 id=175 data-nosnippet>175</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#176 id=176 data-nosnippet>176</a>    tp: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw-2">mut </span>sz: u64,
-<a href=#178 id=178 data-nosnippet>178</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">use </span>std::time::{Duration, Instant};
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">let </span>(inact, max_t, start, <span class="kw-2">mut </span>last_act) = (Duration::from_secs(<span class="number">300</span>), Duration::from_secs(<span class="number">3600</span>), Instant::now(), Instant::now());
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(<span class="number">0</span>);
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>t0, <span class="kw-2">mut </span>retried, <span class="kw-2">mut </span>closed) = (sz, <span class="bool-val">false</span>, <span class="bool-val">false</span>);
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>_w = setup_path_watcher(tp.as_ref(), tx);
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_millis(<span class="number">500</span>));
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">while </span>last_act.elapsed() &lt; inact &amp;&amp; start.elapsed() &lt; max_t {
-<a href=#188 id=188 data-nosnippet>188</a>        check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>prev = sz;
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">if </span><span class="kw">super</span>::completion::check_completion_step(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>sz).<span class="kw">await</span><span class="question-mark">?</span>.is_some() { <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(last_pty);
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if </span>sz &gt; prev || pty &gt; last_pty {
-<a href=#193 id=193 data-nosnippet>193</a>            (last_pty, last_act) = (pty, Instant::now());
-<a href=#194 id=194 data-nosnippet>194</a>        } <span class="kw">else if </span>last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>)
-<a href=#195 id=195 data-nosnippet>195</a>            &amp;&amp; <span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">?
-<a href=#196 id=196 data-nosnippet>196</a>        </span>{
-<a href=#197 id=197 data-nosnippet>197</a>            last_act = Instant::now();
-<a href=#198 id=198 data-nosnippet>198</a>        }
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="macro">tokio::select!</span> {
-<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">_ </span>= sessions.interrupt_notify.notified() =&gt; check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>,
-<a href=#201 id=201 data-nosnippet>201</a>            r = rx.recv(), <span class="kw">if </span>!closed =&gt; <span class="kw">if </span>r.is_none() { closed = <span class="bool-val">true</span>; } <span class="kw">else </span>{ last_act = Instant::now(); },
-<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
-<a href=#203 id=203 data-nosnippet>203</a>        }
-<a href=#204 id=204 data-nosnippet>204</a>    }
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="prelude-val">Err</span>(<span class="kw">if </span>start.elapsed() &gt;= max_t { <span class="string">"Exceeded maximum execution duration of 3600s"</span>.into() } <span class="kw">else </span>{ <span class="string">"Timed out waiting for completion (inactivity)"</span>.into() })
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">struct </span>PollState {
+<a href=#89 id=89 data-nosnippet>89</a>    prev_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#90 id=90 data-nosnippet>90</a>    active_path: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#91 id=91 data-nosnippet>91</a>    parser: <span class="kw">super</span>::log_parser::AntigravityLogParser,
+<a href=#92 id=92 data-nosnippet>92</a>    watcher: <span class="prelude-ty">Option</span>&lt;notify::RecommendedWatcher&gt;,
+<a href=#93 id=93 data-nosnippet>93</a>    watched_dir: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a><span class="kw">impl </span>PollState {
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">fn </span>step(
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#99 id=99 data-nosnippet>99</a>        ws: <span class="kw-2">&amp;</span>Path,
+<a href=#100 id=100 data-nosnippet>100</a>        env: <span class="kw-2">&amp;</span>HashMap&lt;String, String&gt;,
+<a href=#101 id=101 data-nosnippet>101</a>        brain_root: <span class="kw-2">&amp;</span>Path,
+<a href=#102 id=102 data-nosnippet>102</a>        tx: <span class="kw-2">&amp;</span>tokio::sync::mpsc::UnboundedSender&lt;StreamEvent&gt;,
+<a href=#103 id=103 data-nosnippet>103</a>        fs_tx: <span class="kw-2">&amp;</span>tokio::sync::mpsc::UnboundedSender&lt;()&gt;,
+<a href=#104 id=104 data-nosnippet>104</a>        sid: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#105 id=105 data-nosnippet>105</a>    ) {
+<a href=#106 id=106 data-nosnippet>106</a>        parse_and_stream(ws, env, <span class="kw-2">&amp;mut </span><span class="self">self</span>.active_path, <span class="kw-2">&amp;mut </span><span class="self">self</span>.prev_size, <span class="kw-2">&amp;mut </span><span class="self">self</span>.parser, tx, sid);
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">let </span>tgt = resolve_watch_target(brain_root, sid, <span class="self">self</span>.active_path.as_deref());
+<a href=#108 id=108 data-nosnippet>108</a>        sync_nonrecursive_watcher(<span class="kw-2">&amp;mut </span><span class="self">self</span>.watcher, <span class="kw-2">&amp;mut </span><span class="self">self</span>.watched_dir, tgt, fs_tx);
+<a href=#109 id=109 data-nosnippet>109</a>    }
+<a href=#110 id=110 data-nosnippet>110</a>}
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">async fn </span>poll_loop_async(
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw-2">mut </span>oneshot_handle: tokio::task::JoinHandle&lt;<span class="prelude-ty">Result</span>&lt;CliResponse, String&gt;&gt;,
+<a href=#114 id=114 data-nosnippet>114</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;StreamEvent&gt;,
+<a href=#115 id=115 data-nosnippet>115</a>    agy_ws: PathBuf,
+<a href=#116 id=116 data-nosnippet>116</a>    env: HashMap&lt;String, String&gt;,
+<a href=#117 id=117 data-nosnippet>117</a>    initial_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#118 id=118 data-nosnippet>118</a>    session_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#119 id=119 data-nosnippet>119</a>) {
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span><span class="kw-2">mut </span>st = PollState {
+<a href=#121 id=121 data-nosnippet>121</a>        prev_size: initial_size,
+<a href=#122 id=122 data-nosnippet>122</a>        active_path: <span class="prelude-val">None</span>,
+<a href=#123 id=123 data-nosnippet>123</a>        parser: <span class="kw">super</span>::log_parser::AntigravityLogParser::new(),
+<a href=#124 id=124 data-nosnippet>124</a>        watcher: <span class="prelude-val">None</span>,
+<a href=#125 id=125 data-nosnippet>125</a>        watched_dir: <span class="prelude-val">None</span>,
+<a href=#126 id=126 data-nosnippet>126</a>    };
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>(fs_tx, <span class="kw-2">mut </span>fs_rx) = tokio::sync::mpsc::unbounded_channel();
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>brain_root = <span class="kw">super</span>::events::agy_state_root(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>env)).join(<span class="string">"brain"</span>);
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span><span class="kw-2">mut </span>fallback = tokio::time::interval(tokio::time::Duration::from_millis(<span class="number">500</span>));
+<a href=#130 id=130 data-nosnippet>130</a>    st.step(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;</span>brain_root, <span class="kw-2">&amp;</span>tx, <span class="kw-2">&amp;</span>fs_tx, session_id.as_deref());
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">let </span><span class="kw-2">mut </span>fs_rx_closed = <span class="bool-val">false</span>;
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">loop </span>{
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">tokio::select!</span> {
+<a href=#135 id=135 data-nosnippet>135</a>            res = <span class="kw-2">&amp;mut </span>oneshot_handle =&gt; {
+<a href=#136 id=136 data-nosnippet>136</a>                <span class="kw">let </span>drain_sid = session_id.as_deref().or_else(|| {
+<a href=#137 id=137 data-nosnippet>137</a>                    res.as_ref().ok().and_then(|r| r.as_ref().ok()).and_then(|c| c.session_id.as_deref())
+<a href=#138 id=138 data-nosnippet>138</a>                });
+<a href=#139 id=139 data-nosnippet>139</a>                parse_and_stream(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;mut </span>st.active_path, <span class="kw-2">&amp;mut </span>st.prev_size, <span class="kw-2">&amp;mut </span>st.parser, <span class="kw-2">&amp;</span>tx, drain_sid);
+<a href=#140 id=140 data-nosnippet>140</a>                handle_oneshot_finish(res, <span class="kw-2">&amp;</span>tx, session_id);
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="kw">break</span>;
+<a href=#142 id=142 data-nosnippet>142</a>            }
+<a href=#143 id=143 data-nosnippet>143</a>            res = fs_rx.recv(), <span class="kw">if </span>!fs_rx_closed =&gt; {
+<a href=#144 id=144 data-nosnippet>144</a>                <span class="kw">if </span>res.is_some() {
+<a href=#145 id=145 data-nosnippet>145</a>                    st.step(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;</span>brain_root, <span class="kw-2">&amp;</span>tx, <span class="kw-2">&amp;</span>fs_tx, session_id.as_deref());
+<a href=#146 id=146 data-nosnippet>146</a>                } <span class="kw">else </span>{
+<a href=#147 id=147 data-nosnippet>147</a>                    fs_rx_closed = <span class="bool-val">true</span>;
+<a href=#148 id=148 data-nosnippet>148</a>                }
+<a href=#149 id=149 data-nosnippet>149</a>            }
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">_ </span>= fallback.tick() =&gt; {
+<a href=#151 id=151 data-nosnippet>151</a>                st.step(<span class="kw-2">&amp;</span>agy_ws, <span class="kw-2">&amp;</span>env, <span class="kw-2">&amp;</span>brain_root, <span class="kw-2">&amp;</span>tx, <span class="kw-2">&amp;</span>fs_tx, session_id.as_deref());
+<a href=#152 id=152 data-nosnippet>152</a>            }
+<a href=#153 id=153 data-nosnippet>153</a>        }
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spawn_log_polling(
+<a href=#158 id=158 data-nosnippet>158</a>    oneshot_handle: tokio::task::JoinHandle&lt;<span class="prelude-ty">Result</span>&lt;CliResponse, String&gt;&gt;,
+<a href=#159 id=159 data-nosnippet>159</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;StreamEvent&gt;,
+<a href=#160 id=160 data-nosnippet>160</a>    agy_ws: PathBuf,
+<a href=#161 id=161 data-nosnippet>161</a>    env: HashMap&lt;String, String&gt;,
+<a href=#162 id=162 data-nosnippet>162</a>    initial_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#163 id=163 data-nosnippet>163</a>    session_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#164 id=164 data-nosnippet>164</a>) {
+<a href=#165 id=165 data-nosnippet>165</a>    tokio::spawn(poll_loop_async(oneshot_handle, tx, agy_ws, env, initial_size, session_id));
+<a href=#166 id=166 data-nosnippet>166</a>}
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a><span class="kw">async fn </span>check_interruption(sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager, session_id: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>sessions.is_interrupted(session_id).<span class="kw">await </span>{
+<a href=#170 id=170 data-nosnippet>170</a>        sessions.clear_interrupted(session_id).<span class="kw">await</span>;
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Interrupted by user (/stop)"</span>.to_string());
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="prelude-val">Ok</span>(())
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_log_completion(
+<a href=#177 id=177 data-nosnippet>177</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
+<a href=#178 id=178 data-nosnippet>178</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#179 id=179 data-nosnippet>179</a>    tp: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw-2">mut </span>sz: u64,
+<a href=#181 id=181 data-nosnippet>181</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>(inact, max_t, start, <span class="kw-2">mut </span>last_act) = (Duration::from_secs(<span class="number">300</span>), Duration::from_secs(<span class="number">3600</span>), Instant::now(), Instant::now());
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(<span class="number">0</span>);
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>t0, <span class="kw-2">mut </span>retried, <span class="kw-2">mut </span>closed) = (sz, <span class="bool-val">false</span>, <span class="bool-val">false</span>);
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>_w = setup_path_watcher(tp.as_ref(), tx);
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_millis(<span class="number">500</span>));
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">while </span>last_act.elapsed() &lt; inact &amp;&amp; start.elapsed() &lt; max_t {
+<a href=#191 id=191 data-nosnippet>191</a>        check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>prev = sz;
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">if </span><span class="kw">super</span>::completion::check_completion_step(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>sz).<span class="kw">await</span><span class="question-mark">?</span>.is_some() { <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(last_pty);
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">if </span>sz &gt; prev || pty &gt; last_pty {
+<a href=#196 id=196 data-nosnippet>196</a>            (last_pty, last_act) = (pty, Instant::now());
+<a href=#197 id=197 data-nosnippet>197</a>        } <span class="kw">else if </span>last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>)
+<a href=#198 id=198 data-nosnippet>198</a>            &amp;&amp; <span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">?
+<a href=#199 id=199 data-nosnippet>199</a>        </span>{
+<a href=#200 id=200 data-nosnippet>200</a>            last_act = Instant::now();
+<a href=#201 id=201 data-nosnippet>201</a>        }
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="macro">tokio::select!</span> {
+<a href=#203 id=203 data-nosnippet>203</a>            <span class="kw">_ </span>= sessions.interrupt_notify.notified() =&gt; check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>,
+<a href=#204 id=204 data-nosnippet>204</a>            r = rx.recv(), <span class="kw">if </span>!closed =&gt; <span class="kw">if </span>r.is_none() { closed = <span class="bool-val">true</span>; } <span class="kw">else </span>{ last_act = Instant::now(); },
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
+<a href=#206 id=206 data-nosnippet>206</a>        }
+<a href=#207 id=207 data-nosnippet>207</a>    }
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="prelude-val">Err</span>(<span class="kw">if </span>start.elapsed() &gt;= max_t { <span class="string">"Exceeded maximum execution duration of 3600s"</span>.into() } <span class="kw">else </span>{ <span class="string">"Timed out waiting for completion (inactivity)"</span>.into() })
+<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#210 id=210 data-nosnippet>210</a>
 </code></pre></div></section></main></body></html>

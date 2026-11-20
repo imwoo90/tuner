@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["log_telegram_message"],"struct":["TelegramHistoryEntry","TopicMetadata"]};
+window.SIDEBAR_ITEMS = {"fn":["capture_pre_transcript_cursor","log_telegram_message","recover_missed_agy_ask"],"struct":["TelegramHistoryEntry","TopicMetadata"]};
