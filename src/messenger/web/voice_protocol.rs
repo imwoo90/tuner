@@ -8,8 +8,8 @@
 //! #gemini-live-protocol, #bidi-audio, #session-resumption, #voice-codec
 
 use super::auth_http::require_auth;
-use super::events::WebEvent;
 use super::provider_status::read_dotenv_map;
+pub use super::voice_schema::format_background_web_event;
 use super::voice_schema::voice_tool_declarations;
 use super::{resolve_ctx, WebAppCtx};
 use axum::{
@@ -66,30 +66,47 @@ pub fn resolve_voice_model() -> String {
     }
 }
 
+fn en_secretary_prompt(topic_hint: &str) -> String {
+    format!(
+        "You are Woo-Tuner ([우튜너]), the user's real-time Front-Desk Voice Secretary in front of the Tuner multi-agent workspace. {topic_hint}\n\
+         Rules:\n\
+         1. Speak naturally, concisely, and warmly (1-3 short sentences). Never read Markdown symbols like `**` or backticks aloud.\n\
+         2. Answer quick questions and status checks directly (`list_topics`, `get_topic_context`).\n\
+         3. Delegate coding, file editing, shell commands, builds, or deep research to background CLI topics via `delegate_to_topic`.\n\
+         4. When a `[BACKGROUND_EVENT]` message arrives announcing that a topic finished or asked an `AskQuestion`, immediately brief the user aloud (and read numbered options clearly so they can answer by voice via `answer_topic_question`).\n\
+         5. Ignore unintelligible ambient noise, distant third-party chatter, or stray single-syllable background sounds not addressed to you."
+    )
+}
+
+fn ko_secretary_prompt(topic_hint: &str) -> String {
+    format!(
+        "당신은 사용자의 멀티 에이전트 워크스페이스 앞단을 지키는 총괄 음성 비서 '우튜너'입니다. {topic_hint}\n\
+         수칙:\n\
+         1. 실제 음성 통화처럼 자연스럽고 간결하게(1~3문장 이내) 한국어로 말하세요. 별표(**)나 백틱 같은 마크다운 기호는 절대 소리 내어 읽지 마세요.\n\
+         2. 가벼운 질문이나 현황 파악은 `list_topics`, `get_topic_context`로 확인해 즉시 답변하세요.\n\
+         3. 코드 작성·수정, 빌드, 리서치 등 실무 작업은 직접 처리하려 하지 말고 즉시 `delegate_to_topic` 도구로 하위 CLI 토픽 에이전트에게 위임한 뒤 지시 완료를 짧게 알리세요.\n\
+         4. `[BACKGROUND_EVENT]`로 하위 토픽 작업 완료나 `AskQuestion`(확인 질문) 알림이 들어오면 즉시 사용자에게 음성으로 브리핑하고, 객관식 선택지가 있으면 번호와 함께 읽어준 뒤 사용자의 음성 답변을 `answer_topic_question`으로 전달하세요.\n\
+         5. 주변 생활 소음이나 멀리서 흘러들어온 제3자의 말소리·의미 없는 외마디 잡음은 나에게 한 말이 아니므로 되묻지 말고 조용히 무시하세요."
+    )
+}
+
 fn build_secretary_prompt(lang: &str, active_topic: Option<&str>) -> String {
     let topic_hint = active_topic
         .filter(|s| !s.is_empty())
         .map(|s| format!("Currently open topic on user's screen: `{s}`."))
         .unwrap_or_else(|| "User is currently on a blank Draft screen (no topic selected yet).".to_string());
-    if lang.starts_with("en") {
-        format!(
-            "You are Woo-Tuner ([우튜너]), the user's real-time Front-Desk Voice Secretary in front of the Tuner multi-agent workspace. {topic_hint}\n\
-             Rules:\n\
-             1. Speak naturally, concisely, and warmly (1-3 short sentences). Never read Markdown symbols like `**` or backticks aloud.\n\
-             2. Answer quick questions and status checks directly (`list_topics`, `get_topic_context`).\n\
-             3. Delegate coding, file editing, shell commands, builds, or deep research to background CLI topics via `delegate_to_topic`.\n\
-             4. When a `[BACKGROUND_EVENT]` message arrives announcing that a topic finished or asked an `AskQuestion`, immediately brief the user aloud (and read numbered options clearly so they can answer by voice via `answer_topic_question`)."
-        )
-    } else {
-        format!(
-            "당신은 사용자의 멀티 에이전트 워크스페이스 앞단을 지키는 총괄 음성 비서 '우튜너'입니다. {topic_hint}\n\
-             수칙:\n\
-             1. 실제 음성 통화처럼 자연스럽고 간결하게(1~3문장 이내) 한국어로 말하세요. 별표(**)나 백틱 같은 마크다운 기호는 절대 소리 내어 읽지 마세요.\n\
-             2. 가벼운 질문이나 현황 파악은 `list_topics`, `get_topic_context`로 확인해 즉시 답변하세요.\n\
-             3. 코드 작성·수정, 빌드, 리서치 등 실무 작업은 직접 처리하려 하지 말고 즉시 `delegate_to_topic` 도구로 하위 CLI 토픽 에이전트에게 위임한 뒤 지시 완료를 짧게 알리세요.\n\
-             4. `[BACKGROUND_EVENT]`로 하위 토픽 작업 완료나 `AskQuestion`(확인 질문) 알림이 들어오면 즉시 사용자에게 음성으로 브리핑하고, 객관식 선택지가 있으면 번호와 함께 읽어준 뒤 사용자의 음성 답변을 `answer_topic_question`으로 전달하세요."
-        )
-    }
+    if lang.starts_with("en") { en_secretary_prompt(&topic_hint) } else { ko_secretary_prompt(&topic_hint) }
+}
+
+fn realtime_vad_config() -> Value {
+    json!({
+        "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_LOW",
+            "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+            "prefixPaddingMs": 180,
+            "silenceDurationMs": 600
+        }
+    })
 }
 
 /// Builds the initial `BidiGenerateContent` `setup` JSON message.
@@ -102,17 +119,20 @@ pub fn build_live_setup_frame(
         Some(h) => json!({ "handle": h }),
         None => json!({}),
     };
+    let speech_lang = if lang.starts_with("en") { "en-US" } else { "ko-KR" };
     json!({
         "setup": {
             "model": resolve_voice_model(),
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
                 "speechConfig": {
+                    "languageCode": speech_lang,
                     "voiceConfig": {
                         "prebuiltVoiceConfig": { "voiceName": "Kore" }
                     }
                 }
             },
+            "realtimeInputConfig": realtime_vad_config(),
             "inputAudioTranscription": {},
             "outputAudioTranscription": {},
             "contextWindowCompression": { "slidingWindow": {} },
@@ -126,47 +146,6 @@ pub fn build_live_setup_frame(
         }
     })
     .to_string()
-}
-
-/// Formats background `WebEvent` completions and `AskQuestion` prompts into live voice triggers.
-pub fn format_background_web_event(ev: &WebEvent) -> Option<String> {
-    match ev {
-        WebEvent::TurnResult {
-            session_key,
-            text,
-            is_error,
-            ..
-        } => {
-            let status = if *is_error { "ERROR" } else { "COMPLETED" };
-            let snippet: String = text.chars().take(500).collect();
-            Some(format!(
-                "[BACKGROUND_EVENT] Topic `{session_key}` {status}. Output summary:\n{snippet}\nPlease briefly inform the user by voice."
-            ))
-        }
-        WebEvent::AskQuestion {
-            session_key,
-            questions,
-            current_index,
-            ..
-        } => {
-            let q = questions.get(*current_index)?;
-            let opts = q
-                .options
-                .iter()
-                .enumerate()
-                .map(|(i, o)| format!("{}. {}", i + 1, o))
-                .collect::<Vec<_>>()
-                .join(" / ");
-            Some(format!(
-                "[BACKGROUND_EVENT] Topic `{session_key}` is waiting on AskQuestion ({}/{}): \"{}\" Options: [{}]. Please read this question and options clearly to the user so they can answer by voice.",
-                current_index + 1,
-                questions.len(),
-                q.question,
-                opts
-            ))
-        }
-        _ => None,
-    }
 }
 
 /// Parsed action emitted from a single upstream Gemini Live WebSocket JSON frame.

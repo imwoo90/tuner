@@ -8,7 +8,49 @@
 //! ## Search Tags
 //! #voice-schema, #gemini-function-declarations, #realtime-input
 
+use super::events::WebEvent;
 use serde_json::{json, Value};
+
+/// Formats background `WebEvent` completions and `AskQuestion` prompts into live voice triggers.
+pub fn format_background_web_event(ev: &WebEvent) -> Option<String> {
+    match ev {
+        WebEvent::TurnResult {
+            session_key,
+            text,
+            is_error,
+            ..
+        } => {
+            let status = if *is_error { "ERROR" } else { "COMPLETED" };
+            let snippet: String = text.chars().take(500).collect();
+            Some(format!(
+                "[BACKGROUND_EVENT] Topic `{session_key}` {status}. Output summary:\n{snippet}\nPlease briefly inform the user by voice."
+            ))
+        }
+        WebEvent::AskQuestion {
+            session_key,
+            questions,
+            current_index,
+            ..
+        } => {
+            let q = questions.get(*current_index)?;
+            let opts = q
+                .options
+                .iter()
+                .enumerate()
+                .map(|(i, o)| format!("{}. {}", i + 1, o))
+                .collect::<Vec<_>>()
+                .join(" / ");
+            Some(format!(
+                "[BACKGROUND_EVENT] Topic `{session_key}` is waiting on AskQuestion ({}/{}): \"{}\" Options: [{}]. Please read this question and options clearly to the user so they can answer by voice.",
+                current_index + 1,
+                questions.len(),
+                q.question,
+                opts
+            ))
+        }
+        _ => None,
+    }
+}
 
 const DEFAULT_GEMINI_LIVE_URL: &str =
     "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";

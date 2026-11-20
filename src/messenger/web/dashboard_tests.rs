@@ -1468,6 +1468,11 @@ async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
         let setup1: serde_json::Value =
             serde_json::from_str(&ws1.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
         assert_eq!(setup1["setup"]["model"], "models/gemini-3.8-live");
+        assert_eq!(setup1["setup"]["generationConfig"]["speechConfig"]["languageCode"], "ko-KR");
+        assert_eq!(
+            setup1["setup"]["realtimeInputConfig"]["automaticActivityDetection"]["startOfSpeechSensitivity"],
+            "START_SENSITIVITY_LOW"
+        );
         assert!(setup1["setup"]["contextWindowCompression"]["slidingWindow"].is_object());
         let decls = setup1["setup"]["tools"][0]["functionDeclarations"].as_array().unwrap();
         assert_eq!(decls.len(), 6);

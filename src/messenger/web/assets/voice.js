@@ -94,7 +94,12 @@ export function createVoiceController({
     textDrawer: document.getElementById("voice-text-drawer"),
     input: document.getElementById("voice-quick-input"),
     sendTextBtn: document.getElementById("btn-voice-send-text"),
-    volSlider: document.getElementById("voice-volume"),
+    cfgBtn: document.getElementById("btn-voice-audio-cfg"),
+    cfgSummary: document.getElementById("voice-cfg-summary"),
+    cfgPanel: document.getElementById("voice-cfg-panel"),
+    volPresets: document.getElementById("voice-vol-presets"),
+    micModes: document.getElementById("voice-mic-modes"),
+    micModeDesc: document.getElementById("voice-mic-mode-desc"),
     muteBtn: document.getElementById("btn-voice-mute"),
     muteIcon: document.getElementById("voice-mute-icon"),
     muteLabel: document.getElementById("voice-mute-label"),
@@ -112,6 +117,9 @@ export function createVoiceController({
   let active = false;
   let muted = false;
   let kbdOpen = false;
+  let cfgOpen = false;
+  let pttTalking = false;
+  let pttDownAt = 0;
   let peekSessionKey = "";
   let cachedCsrf = "";
   let reconnectTimer = null;
@@ -120,6 +128,7 @@ export function createVoiceController({
   let wakeLockSentinel = null;
   let audioCtx = null;
   let outGain = null;
+  let outLimiter = null;
   let mediaStream = null;
   let micSourceNode = null;
   let workletNode = null;
@@ -129,7 +138,11 @@ export function createVoiceController({
   let aiSpeakingUntilMs = 0;
   let bargeHoldUntil = 0;
   let bargeStreak = 0;
-  let pendingBargeFrame = null;
+  let pendingBargeFrames = [];
+  let noiseFloor = 0.002;
+  let speechOpenUntilMs = 0;
+  let voiceOnsetStreak = 0;
+  let preRollFrames = [];
   const playingSources = new Set();
 
   let turns = [];
@@ -139,22 +152,46 @@ export function createVoiceController({
   const recentResults = new Map();
   const fetchingAskKeys = new Set();
 
-  const savedVol = Number(localStorage.getItem("tuner_voice_vol"));
-  let currentGain = Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 200 ? savedVol / 100 : 1.0;
-  if (els.volSlider) {
-    els.volSlider.value = `${Math.round(currentGain * 100)}`;
-  }
+  const VOL_PRESETS = [60, 100, 135, 170];
+  const rawSavedVol = Number(localStorage.getItem("tuner_voice_vol"));
+  let currentVolPct = Number.isFinite(rawSavedVol) && rawSavedVol > 0
+    ? VOL_PRESETS.reduce((best, p) => (Math.abs(p - rawSavedVol) < Math.abs(best - rawSavedVol) ? p : best), 100)
+    : 100;
+  let currentGain = currentVolPct / 100;
+
+  const savedMicMode = localStorage.getItem("tuner_voice_mic_mode");
+  let micMode = savedMicMode === "strict" || savedMicMode === "ptt" ? savedMicMode : "near";
 
   window.__voiceAudioChunksReceived = 0;
 
+  function micConstraints() {
+    return {
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false,
+        voiceIsolation: true,
+        channelCount: 1
+      }
+    };
+  }
+
+  function idleStatePair() {
+    if (micMode === "ptt") {
+      return pttTalking ? ["voiceListening", "listening"] : ["voicePttReadyBadge", "muted"];
+    }
+    return muted ? ["voiceMuted", "muted"] : ["voiceListening", "listening"];
+  }
+
   function setStatus(stateKey, mode = "listening") {
+    const isMutedLook = mode === "muted" || (micMode !== "ptt" && muted);
     if (els.badge) {
       els.badge.textContent = t(stateKey);
-      els.badge.className = `pill voice-status-pill ${mode === "thinking" ? "pill-warn" : (muted ? "" : "pill-ok")}`;
+      els.badge.className = `pill voice-status-pill ${mode === "thinking" ? "pill-warn" : (isMutedLook ? "" : "pill-ok")}`;
     }
     if (els.wave) {
-      els.wave.dataset.mode = muted ? "muted" : mode;
-      if (muted || mode !== "listening") {
+      els.wave.dataset.mode = isMutedLook ? "muted" : mode;
+      if (isMutedLook || mode !== "listening") {
         els.wave.style.setProperty("--mic-scale", "1");
       }
     }
@@ -380,7 +417,7 @@ export function createVoiceController({
     playingSources.clear();
     aiSpeakingUntilMs = 0;
     bargeStreak = 0;
-    pendingBargeFrame = null;
+    pendingBargeFrames = [];
     if (audioCtx) nextPlayTime = audioCtx.currentTime;
   }
 
@@ -407,7 +444,14 @@ export function createVoiceController({
         audioCtx = new Ctx({ latencyHint: "interactive" });
         outGain = audioCtx.createGain();
         outGain.gain.value = currentGain;
-        outGain.connect(audioCtx.destination);
+        outLimiter = audioCtx.createDynamicsCompressor();
+        outLimiter.threshold.value = -5;
+        outLimiter.knee.value = 10;
+        outLimiter.ratio.value = 8;
+        outLimiter.attack.value = 0.003;
+        outLimiter.release.value = 0.14;
+        outGain.connect(outLimiter);
+        outLimiter.connect(audioCtx.destination);
         workletLoaded = false;
       }
     }
@@ -465,7 +509,8 @@ export function createVoiceController({
         listenDebounceTimer = setTimeout(() => {
           listenDebounceTimer = null;
           if (playingSources.size === 0 && active) {
-            setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+            const [stKey, stMode] = idleStatePair();
+            setStatus(stKey, stMode);
           }
         }, 180);
       }
@@ -480,14 +525,7 @@ export function createVoiceController({
       return;
     }
     const stream = initialStream || (navigator.mediaDevices?.getUserMedia
-      ? await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1
-          }
-        }).catch(() => null)
+      ? await navigator.mediaDevices.getUserMedia(micConstraints()).catch(() => null)
       : null);
     if (!stream) {
       const warnKey = window.isSecureContext ? "voiceMicDeniedWarn" : "voiceInsecureOriginWarn";
@@ -528,48 +566,104 @@ export function createVoiceController({
       zeroGainNode.gain.value = 0;
 
       workletNode.port.onmessage = (ev) => {
-        if (!active || muted || !vws || vws.readyState !== WebSocket.OPEN) return;
+        if (!active || !vws || vws.readyState !== WebSocket.OPEN) return;
         const { pcm, rms } = ev.data || {};
         if (!pcm) return;
+        const valRms = rms || 0;
         const nowMs = performance.now();
         const b64 = bytesToBase64(new Uint8Array(pcm));
-        const inSpeakerWindow = playingSources.size > 0 || nowMs < aiSpeakingUntilMs;
-        if (!inSpeakerWindow && els.wave) {
-          const scale = (1 + Math.min(0.26, (rms || 0) * 2.8)).toFixed(3);
-          els.wave.style.setProperty("--mic-scale", scale);
+
+        // 1. Push-to-Talk (PTT) mode: 100% hard gate unless user is actively pressing/toggled [Talk]
+        if (micMode === "ptt") {
+          if (pttTalking) {
+            if (els.wave) {
+              els.wave.style.setProperty("--mic-scale", (1 + Math.min(0.26, valRms * 2.8)).toFixed(3));
+            }
+            vws.send(JSON.stringify({ type: "audio", data: b64 }));
+          } else {
+            vws.send(JSON.stringify({ type: "audio", data: SILENT_PCM960_B64 }));
+          }
+          return;
         }
-        // Speakerphone residual-echo & transient-pop guard: while AI audio is playing (plus 340ms acoustic room tail),
-        // require 2 consecutive 60ms frames (120ms) >= 0.045 RMS before opening a 1.4s barge-in pass-through window,
-        // flushing the buffered 1st syllable frame so genuine human interruption never clips!
+
+        if (muted) return;
+
+        // 2. Speakerphone acoustic echo & distant-voice guard while AI is speaking (+340ms room tail)
+        const inSpeakerWindow = playingSources.size > 0 || nowMs < aiSpeakingUntilMs;
         if (inSpeakerWindow) {
+          const bargeRms = micMode === "strict" ? 0.085 : 0.065;
           if (nowMs <= bargeHoldUntil) {
-            if ((rms || 0) >= 0.045) bargeHoldUntil = nowMs + 1400;
+            if (valRms >= bargeRms) bargeHoldUntil = nowMs + 1400;
             vws.send(JSON.stringify({ type: "audio", data: b64 }));
             return;
           }
-          if ((rms || 0) >= 0.045) {
+          if (valRms >= bargeRms) {
             bargeStreak += 1;
-            if (bargeStreak >= 2) {
+            pendingBargeFrames.push(b64);
+            if (bargeStreak >= 3) {
               bargeHoldUntil = nowMs + 1400;
               bargeStreak = 0;
-              if (pendingBargeFrame) {
-                vws.send(JSON.stringify({ type: "audio", data: pendingBargeFrame }));
-                pendingBargeFrame = null;
+              for (const pf of pendingBargeFrames) {
+                vws.send(JSON.stringify({ type: "audio", data: pf }));
               }
-              vws.send(JSON.stringify({ type: "audio", data: b64 }));
+              pendingBargeFrames = [];
               return;
             }
-            pendingBargeFrame = b64;
           } else {
             bargeStreak = 0;
-            pendingBargeFrame = null;
+            pendingBargeFrames = [];
           }
           vws.send(JSON.stringify({ type: "audio", data: SILENT_PCM960_B64 }));
           return;
         }
         bargeStreak = 0;
-        pendingBargeFrame = null;
-        vws.send(JSON.stringify({ type: "audio", data: b64 }));
+        pendingBargeFrames = [];
+
+        // 3. Adaptive Near-Field Foreground Voice Gate (blocks distant room chatter / TV murmurs)
+        const minGateRms = micMode === "strict" ? 0.030 : 0.013;
+        const snrMult = micMode === "strict" ? 3.2 : 2.6;
+        const gateThr = Math.max(minGateRms, noiseFloor * snrMult);
+        const holdMs = micMode === "strict" ? 650 : 780;
+
+        if (nowMs <= speechOpenUntilMs) {
+          if (valRms >= gateThr * 0.72) {
+            speechOpenUntilMs = nowMs + holdMs;
+          }
+          if (els.wave) {
+            els.wave.style.setProperty("--mic-scale", (1 + Math.min(0.26, valRms * 2.8)).toFixed(3));
+          }
+          vws.send(JSON.stringify({ type: "audio", data: b64 }));
+          return;
+        }
+
+        if (valRms >= gateThr) {
+          voiceOnsetStreak += 1;
+          if (voiceOnsetStreak >= 2) {
+            speechOpenUntilMs = nowMs + holdMs;
+            voiceOnsetStreak = 0;
+            for (const pre of preRollFrames) {
+              vws.send(JSON.stringify({ type: "audio", data: pre }));
+            }
+            preRollFrames = [];
+            if (els.wave) {
+              els.wave.style.setProperty("--mic-scale", (1 + Math.min(0.26, valRms * 2.8)).toFixed(3));
+            }
+            vws.send(JSON.stringify({ type: "audio", data: b64 }));
+            return;
+          }
+        } else {
+          voiceOnsetStreak = 0;
+          if (valRms < 0.035) {
+            noiseFloor = valRms < noiseFloor
+              ? noiseFloor * 0.85 + valRms * 0.15
+              : Math.min(0.018, noiseFloor * 0.985 + valRms * 0.015);
+          }
+        }
+
+        preRollFrames.push(b64);
+        if (preRollFrames.length > 2) preRollFrames.shift();
+        if (els.wave) els.wave.style.setProperty("--mic-scale", "1");
+        vws.send(JSON.stringify({ type: "audio", data: SILENT_PCM960_B64 }));
       };
 
       micSourceNode.connect(workletNode);
@@ -600,24 +694,61 @@ export function createVoiceController({
     }
   }
 
+  function renderCfgUi() {
+    const modeShortKey = micMode === "strict"
+      ? "voiceModeShortStrict"
+      : (micMode === "ptt" ? "voiceModeShortPtt" : "voiceModeShortNear");
+    const volIcon = currentVolPct <= 60 ? "🔈" : (currentVolPct >= 170 ? "📢" : "🔊");
+    if (els.cfgSummary) {
+      els.cfgSummary.textContent = `${volIcon} ${currentVolPct}% · ${t(modeShortKey)}`;
+    }
+    els.cfgBtn?.classList.toggle("active", cfgOpen);
+    els.cfgPanel?.classList.toggle("hidden", !active || !cfgOpen);
+    els.volPresets?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+      b.classList.toggle("active", Number(b.dataset.vol) === currentVolPct);
+    });
+    els.micModes?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.micMode === micMode);
+    });
+    if (els.micModeDesc) {
+      const descKey = micMode === "strict"
+        ? "voiceModeStrictDesc"
+        : (micMode === "ptt" ? "voiceModePttDesc" : "voiceModeNearDesc");
+      els.micModeDesc.textContent = t(descKey);
+    }
+  }
+
   function syncButtons() {
     els.chatPane?.classList.toggle("voice-stage-open", active);
     els.btn?.classList.toggle("active", active);
     els.bar?.classList.toggle("hidden", !active);
     els.textDrawer?.classList.toggle("hidden", !active || !kbdOpen);
     els.kbdBtn?.classList.toggle("active", active && kbdOpen);
+    renderCfgUi();
     if (els.muteBtn) {
-      els.muteBtn.title = muted ? t("voiceUnmuteTitle") : t("voiceMuteTitle");
-      els.muteBtn.classList.toggle("muted", muted);
+      const isPtt = micMode === "ptt";
+      els.muteBtn.classList.toggle("muted", !isPtt && muted);
+      els.muteBtn.classList.toggle("ptt-ready", isPtt && !pttTalking);
+      els.muteBtn.classList.toggle("ptt-talking", isPtt && pttTalking);
+      els.muteBtn.title = isPtt
+        ? t("voiceModePttDesc")
+        : (muted ? t("voiceUnmuteTitle") : t("voiceMuteTitle"));
     }
-    if (els.muteIcon) els.muteIcon.textContent = muted ? "🔇" : "🎤";
-    if (els.muteLabel) els.muteLabel.textContent = t(muted ? "voiceMicMutedBtn" : "voiceMicOnBtn");
+    if (micMode === "ptt") {
+      if (els.muteIcon) els.muteIcon.textContent = pttTalking ? "🟢" : "🎙️";
+      if (els.muteLabel) els.muteLabel.textContent = t(pttTalking ? "voicePttTalkingBtn" : "voicePttHoldBtn");
+    } else {
+      if (els.muteIcon) els.muteIcon.textContent = muted ? "🔇" : "🎤";
+      if (els.muteLabel) els.muteLabel.textContent = t(muted ? "voiceMicMutedBtn" : "voiceMicOnBtn");
+    }
   }
 
   function stopCall() {
     active = false;
     muted = false;
     kbdOpen = false;
+    cfgOpen = false;
+    pttTalking = false;
     reconnectAttempts = 0;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -655,12 +786,16 @@ export function createVoiceController({
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
       if (msg.type === "ready") {
         reconnectAttempts = 0;
-        setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
-        if (turns.length === 0 && els.sub) els.sub.textContent = t("voiceReadyHint");
+        const [stKey, stMode] = idleStatePair();
+        setStatus(stKey, stMode);
+        if (turns.length === 0 && els.sub) {
+          els.sub.textContent = t(micMode === "ptt" ? "voicePttReadyHint" : "voiceReadyHint");
+        }
       } else if (msg.type === "interrupted") {
         flushPlayback();
         closeOpenTurns();
-        setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+        const [stKey, stMode] = idleStatePair();
+        setStatus(stKey, stMode);
       } else if (msg.type === "audio" && msg.data) {
         enqueuePcm24(msg.data);
       } else if (msg.type === "user_transcript" && msg.text) {
@@ -677,7 +812,8 @@ export function createVoiceController({
       } else if (msg.type === "turn_complete") {
         closeOpenTurns();
         if (playingSources.size === 0) {
-          setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+          const [stKey, stMode] = idleStatePair();
+          setStatus(stKey, stMode);
         }
       } else if (msg.type === "error") {
         appendCaption("tool", `⚠️ ${msg.error || "Voice error"}`, true);
@@ -705,14 +841,7 @@ export function createVoiceController({
     // 1. Unlock AudioContext + request getUserMedia IMMEDIATELY inside the synchronous user click gesture!
     unlockAudioGestureSync();
     const pendingMicPromise = navigator.mediaDevices?.getUserMedia
-      ? navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            channelCount: 1
-          }
-        }).catch(() => null)
+      ? navigator.mediaDevices.getUserMedia(micConstraints()).catch(() => null)
       : Promise.resolve(null);
 
     const stRes = await apiFetch("/dashboard/api/voice/status");
@@ -731,6 +860,12 @@ export function createVoiceController({
     active = true;
     muted = false;
     kbdOpen = false;
+    cfgOpen = false;
+    pttTalking = false;
+    noiseFloor = 0.002;
+    speechOpenUntilMs = 0;
+    voiceOnsetStreak = 0;
+    preRollFrames = [];
     reconnectAttempts = 0;
     turns = [];
     touchedKeys.clear();
@@ -765,9 +900,59 @@ export function createVoiceController({
     }
   }
 
+  function setPttTalking(next) {
+    if (!active || micMode !== "ptt" || pttTalking === next) return;
+    pttTalking = next;
+    if (pttTalking && playingSources.size > 0) {
+      flushPlayback();
+      closeOpenTurns();
+    }
+    syncButtons();
+    if (playingSources.size === 0) {
+      const [stKey, stMode] = idleStatePair();
+      setStatus(stKey, stMode);
+    }
+  }
+
   els.btn?.addEventListener("click", () => {
     if (active) stopCall();
     else startCall();
+  });
+
+  els.cfgBtn?.addEventListener("click", () => {
+    if (!active) return;
+    cfgOpen = !cfgOpen;
+    renderCfgUi();
+  });
+
+  els.volPresets?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const v = Number(b.dataset.vol) || 100;
+      currentVolPct = v;
+      currentGain = v / 100;
+      try { localStorage.setItem("tuner_voice_vol", `${v}`); } catch (_) {}
+      if (outGain) outGain.gain.value = currentGain;
+      renderCfgUi();
+    });
+  });
+
+  els.micModes?.querySelectorAll(".voice-seg-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const next = b.dataset.micMode || "near";
+      micMode = next === "strict" || next === "ptt" ? next : "near";
+      pttTalking = false;
+      speechOpenUntilMs = 0;
+      voiceOnsetStreak = 0;
+      try { localStorage.setItem("tuner_voice_mic_mode", micMode); } catch (_) {}
+      syncButtons();
+      if (turns.length === 0 && els.sub) {
+        els.sub.textContent = t(micMode === "ptt" ? "voicePttReadyHint" : "voiceReadyHint");
+      }
+      if (playingSources.size === 0) {
+        const [stKey, stMode] = idleStatePair();
+        setStatus(stKey, stMode);
+      }
+    });
   });
 
   // Tap Audio Orb while assistant is speaking to instantly interrupt playback (manual 0ms Barge-In)!
@@ -775,22 +960,52 @@ export function createVoiceController({
     if (active && playingSources.size > 0) {
       flushPlayback();
       closeOpenTurns();
-      setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+      const [stKey, stMode] = idleStatePair();
+      setStatus(stKey, stMode);
     }
   });
 
+  els.muteBtn?.addEventListener("pointerdown", (e) => {
+    if (!active || micMode !== "ptt") return;
+    e.preventDefault();
+    try { els.muteBtn.setPointerCapture(e.pointerId); } catch (_) {}
+    pttDownAt = performance.now();
+    if (pttTalking) {
+      // Tapping again while toggled ON finishes talking
+      pttDownAt = 0;
+      setPttTalking(false);
+    } else {
+      setPttTalking(true);
+    }
+  });
+
+  const endPttHold = (e) => {
+    if (!active || micMode !== "ptt" || !pttDownAt) return;
+    const heldMs = performance.now() - pttDownAt;
+    pttDownAt = 0;
+    try { els.muteBtn.releasePointerCapture(e.pointerId); } catch (_) {}
+    // If held >= 260ms, release ends talk (walkie-talkie hold); if quick-tapped < 260ms, stay latched until next tap!
+    if (heldMs >= 260) {
+      setPttTalking(false);
+    }
+  };
+  els.muteBtn?.addEventListener("pointerup", endPttHold);
+  els.muteBtn?.addEventListener("pointercancel", endPttHold);
+
   els.muteBtn?.addEventListener("click", () => {
-    if (!active) return;
+    if (!active || micMode === "ptt") return;
     muted = !muted;
     syncButtons();
     if (playingSources.size === 0) {
-      setStatus(muted ? "voiceMuted" : "voiceListening", muted ? "muted" : "listening");
+      const [stKey, stMode] = idleStatePair();
+      setStatus(stKey, stMode);
     }
   });
 
   els.kbdBtn?.addEventListener("click", () => {
     if (!active) return;
     kbdOpen = !kbdOpen;
+    if (kbdOpen) cfgOpen = false;
     syncButtons();
     if (kbdOpen) setTimeout(() => els.input?.focus(), 20);
   });
@@ -798,13 +1013,6 @@ export function createVoiceController({
   els.sendTextBtn?.addEventListener("click", submitTextDrawer);
 
   els.hangupBtn?.addEventListener("click", stopCall);
-
-  els.volSlider?.addEventListener("input", () => {
-    const v = Math.max(0, Math.min(200, Number(els.volSlider.value) || 0));
-    currentGain = v / 100;
-    localStorage.setItem("tuner_voice_vol", `${v}`);
-    if (outGain) outGain.gain.value = currentGain;
-  });
 
   els.input?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {

@@ -85,11 +85,31 @@
               <strong class="voice-stage-title" data-i18n="voiceStageTitle">우튜너 음성 데스크</strong>
               <span id="voice-status-badge" class="pill pill-ok voice-status-pill" data-i18n="voiceListening">듣는 중</span>
             </div>
-            <label class="voice-vol-wrap" title="출력 음량 증폭 (0%~200%)">
-              <span class="voice-vol-icon">🔊</span>
-              <input id="voice-volume" class="voice-vol-slider" type="range" min="0" max="200" step="5" value="100" aria-label="Voice Volume">
-            </label>
+            <button id="btn-voice-audio-cfg" class="btn btn-sm voice-cfg-btn" type="button" data-i18n-title="voiceCfgBtnTitle">
+              <span id="voice-cfg-summary">🔊 100% · 근거리</span>
+            </button>
           </header>
+
+          <div id="voice-cfg-panel" class="voice-cfg-panel hidden" role="region" aria-label="Voice Audio Settings">
+            <div class="voice-cfg-group">
+              <div class="voice-cfg-label" data-i18n="voiceVolSectionLabel">출력 음량</div>
+              <div class="voice-seg-row" id="voice-vol-presets">
+                <button type="button" class="voice-seg-btn" data-vol="60" data-i18n="voiceVolLow">🔈 작게</button>
+                <button type="button" class="voice-seg-btn active" data-vol="100" data-i18n="voiceVolMid">🔉 기본</button>
+                <button type="button" class="voice-seg-btn" data-vol="135" data-i18n="voiceVolHigh">🔊 크게</button>
+                <button type="button" class="voice-seg-btn" data-vol="170" data-i18n="voiceVolMax">📢 최대</button>
+              </div>
+            </div>
+            <div class="voice-cfg-group">
+              <div class="voice-cfg-label" data-i18n="voiceNoiseSectionLabel">주변 말소리 차단 모드</div>
+              <div class="voice-seg-row" id="voice-mic-modes">
+                <button type="button" class="voice-seg-btn active" data-mic-mode="near" data-i18n="voiceModeNear">🎯 근거리 집중</button>
+                <button type="button" class="voice-seg-btn" data-mic-mode="strict" data-i18n="voiceModeStrict">🛡️ 강력 차폐</button>
+                <button type="button" class="voice-seg-btn" data-mic-mode="ptt" data-i18n="voiceModePtt">🎙️ 무전기(PTT)</button>
+              </div>
+              <div id="voice-mic-mode-desc" class="voice-cfg-desc muted" data-i18n="voiceModeNearDesc">멀리서 들리는 TV·주변 대화 증폭을 끄고 가까운 목소리만 자동 인식합니다.</div>
+            </div>
+          </div>
 
           <div id="voice-stage-body" class="voice-stage-body">
             <div id="voice-orb-wrap" class="voice-orb-wrap">
