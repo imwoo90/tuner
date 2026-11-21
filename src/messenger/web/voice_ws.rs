@@ -8,50 +8,37 @@
 //! ## Search Tags
 //! #voice-websocket, #gemini-live-bridge, #desk-assistant, #session-resumption
 
-use super::auth_http::{json_err, require_auth};
 use super::events::WebEvent;
-pub use super::voice_protocol::handle_voice_status;
+pub use super::voice_briefing::{handle_voice_status, VoiceWsQuery};
+use super::voice_briefing::{authorize_voice_ws, VoiceBriefingState};
 use super::voice_protocol::{
-    action_to_client_frame, build_live_setup_frame, format_background_web_event,
-    parse_gemini_server_frame, resolve_gemini_api_key, UpstreamAction,
+    action_to_client_frame, build_live_setup_frame, parse_gemini_server_frame, UpstreamAction,
 };
 use super::voice_schema::{build_upstream_url, translate_browser_msg};
 use super::voice_tools::execute_voice_tool;
-use super::ws::is_valid_ws_origin;
-use super::{resolve_ctx, WebAppCtx};
-use crate::security::vault_auth::proxy::constant_time_eq;
+use super::WebAppCtx;
 use axum::{
     extract::{
         ws::{Message as AxumWsMsg, WebSocket, WebSocketUpgrade},
         Query,
     },
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::Response,
     Extension,
 };
 use futures::{SinkExt, StreamExt};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio_tungstenite::tungstenite::{Error as TungErr, Message as TungMsg};
 
 type ClientSink = futures::stream::SplitSink<WebSocket, AxumWsMsg>;
 type ClientStream = futures::stream::SplitStream<WebSocket>;
-type LegState<'a> = (&'a mut Option<String>, &'a mut Option<String>, &'a mut bool);
-
-/// Query parameters for `GET /dashboard/api/voice/ws`.
-#[derive(Deserialize)]
-pub struct VoiceWsQuery {
-    /// Session CSRF token.
-    #[serde(default)]
-    pub csrf: String,
-    /// Interface language (`ko` or `en`).
-    #[serde(default)]
-    pub lang: String,
-    /// Optional currently viewed session key.
-    #[serde(default)]
-    pub topic: String,
-}
+type LegState<'a> = (
+    &'a mut Option<String>,
+    &'a mut Option<String>,
+    &'a mut bool,
+    &'a mut VoiceBriefingState,
+);
 
 /// Upgrades `/dashboard/api/voice/ws` to a real-time bidirectional Gemini Live session.
 pub async fn handle_voice_ws(
@@ -60,25 +47,10 @@ pub async fn handle_voice_ws(
     Query(q): Query<VoiceWsQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let ctx = match resolve_ctx(ext) {
-        Ok(c) => c,
-        Err(r) => return *r,
-    };
-    if !is_valid_ws_origin(&headers) {
-        return json_err(StatusCode::FORBIDDEN, "WebSocket origin mismatch");
+    match authorize_voice_ws(ext, &headers, &q).await {
+        Ok((ctx, sid, api_key)) => ws.on_upgrade(move |socket| run_voice_bridge(socket, ctx, sid, api_key, q)),
+        Err(resp) => *resp,
     }
-    let sess = match require_auth(&ctx, &headers).await {
-        Ok(s) => s,
-        Err(r) => return *r,
-    };
-    if q.csrf.is_empty() || !constant_time_eq(q.csrf.as_bytes(), sess.csrf_token.as_bytes()) {
-        return json_err(StatusCode::FORBIDDEN, "Invalid WebSocket CSRF token");
-    }
-    let Some(api_key) = resolve_gemini_api_key(&ctx.tuner_home) else {
-        return json_err(StatusCode::PRECONDITION_FAILED, "GEMINI_API_KEY is not configured");
-    };
-    let sid = sess.sid;
-    ws.on_upgrade(move |socket| run_voice_bridge(socket, ctx, sid, api_key, q))
 }
 
 async fn send_client_json(client_tx: &mut ClientSink, payload: Value) -> bool {
@@ -89,6 +61,7 @@ async fn run_tool_calls_and_respond<S: futures::Sink<TungMsg> + Unpin>(
     calls: Vec<(String, String, Value)>,
     ctx: &Arc<WebAppCtx>,
     current_topic: &mut Option<String>,
+    briefing: &mut VoiceBriefingState,
     client_tx: &mut ClientSink,
     up_tx: &mut S,
 ) -> bool {
@@ -97,6 +70,9 @@ async fn run_tool_calls_and_respond<S: futures::Sink<TungMsg> + Unpin>(
         let _ = send_client_json(client_tx, json!({ "type": "tool_call", "name": name })).await;
         let (output, focus) = execute_voice_tool(ctx, current_topic, &name, &args).await;
         if let Some(sk) = focus {
+            if name == "delegate_to_topic" {
+                briefing.record_delegated(&sk);
+            }
             let _ = send_client_json(client_tx, json!({ "type": "focus_topic", "session_key": sk })).await;
         }
         responses.push(json!({ "id": id, "name": name, "response": { "output": output } }));
@@ -112,8 +88,9 @@ async fn handle_upstream_actions<S: futures::Sink<TungMsg> + Unpin>(
     client_tx: &mut ClientSink,
     up_tx: &mut S,
 ) -> Result<bool, ()> {
-    let (current_topic, resume_handle, got_ready) = state;
+    let (current_topic, resume_handle, got_ready, briefing) = state;
     for act in actions {
+        briefing.on_upstream_action(&act);
         if matches!(act, UpstreamAction::Ready) {
             *got_ready = true;
         }
@@ -127,7 +104,7 @@ async fn handle_upstream_actions<S: futures::Sink<TungMsg> + Unpin>(
             UpstreamAction::ResumeHandle(h) => *resume_handle = Some(h),
             UpstreamAction::GoAway => return Ok(true),
             UpstreamAction::ToolCalls(calls) => {
-                if run_tool_calls_and_respond(calls, ctx, current_topic, client_tx, up_tx).await {
+                if run_tool_calls_and_respond(calls, ctx, current_topic, briefing, client_tx, up_tx).await {
                     return Ok(true);
                 }
             }
@@ -204,15 +181,17 @@ async fn pump_single_upstream<S, R>(
     events_rx: &mut tokio::sync::broadcast::Receiver<WebEvent>,
     up_tx: &mut S,
     up_rx: &mut R,
-    state: (&mut Option<String>, &mut Option<String>),
+    state: (&mut Option<String>, &mut Option<String>, &mut VoiceBriefingState),
 ) -> BridgeExit
 where
     S: futures::Sink<TungMsg> + Unpin,
     R: futures::Stream<Item = Result<TungMsg, TungErr>> + Unpin,
 {
-    let (current_topic, resume_handle) = state;
+    let (current_topic, resume_handle, briefing) = state;
+    briefing.on_upstream_reconnect();
     let mut got_ready = false;
     let mut ka = tokio::time::interval(std::time::Duration::from_secs(20));
+    let mut brief_tick = tokio::time::interval(std::time::Duration::from_millis(400));
     ka.tick().await;
     loop {
         tokio::select! {
@@ -220,6 +199,11 @@ where
                 let _ = client_tx.send(AxumWsMsg::Ping(Vec::new())).await;
                 let _ = up_tx.send(TungMsg::Ping(Vec::new())).await;
             }
+            _ = brief_tick.tick() => if got_ready
+                && let Some(note) = briefing.poll_ready_briefing(ctx).await
+            {
+                let _ = up_tx.send(TungMsg::Text(json!({ "realtimeInput": { "text": note } }).to_string())).await;
+            },
             cmsg = client_rx.next() => {
                 let rc = (resume_handle.is_some(), got_ready);
                 if let Some(ex) = dispatch_client_frame(cmsg, current_topic, rc, client_tx, up_tx).await {
@@ -227,15 +211,13 @@ where
                 }
             },
             umsg = up_rx.next() => {
-                let ls = (&mut *current_topic, &mut *resume_handle, &mut got_ready);
+                let ls = (&mut *current_topic, &mut *resume_handle, &mut got_ready, &mut *briefing);
                 if let Some(ex) = dispatch_raw_upstream(umsg, ctx, ls, client_tx, up_tx).await {
                     return ex;
                 }
             },
-            ev = events_rx.recv() => if let Ok(web_ev) = ev
-                && let Some(note) = format_background_web_event(&web_ev)
-            {
-                let _ = up_tx.send(TungMsg::Text(json!({ "realtimeInput": { "text": note } }).to_string())).await;
+            ev = events_rx.recv() => if let Ok(web_ev) = ev {
+                briefing.ingest_web_event(ctx, &web_ev).await;
             }
         }
     }
@@ -253,6 +235,7 @@ async fn run_voice_bridge(
     let mut events_rx = ctx.events.subscribe();
     let mut current_topic = (!q.topic.trim().is_empty()).then(|| q.topic.trim().to_string());
     let mut resume_handle: Option<String> = None;
+    let mut briefing = VoiceBriefingState::new();
     let mut bad_legs = 0u8;
     let lang = if q.lang.trim().is_empty() { "ko".to_string() } else { q.lang };
 
@@ -266,7 +249,7 @@ async fn run_voice_bridge(
         if up_tx.send(TungMsg::Text(setup)).await.is_err() {
             break;
         }
-        match pump_single_upstream(&ctx, &mut client_tx, &mut client_rx, &mut events_rx, &mut up_tx, &mut up_rx, (&mut current_topic, &mut resume_handle)).await {
+        match pump_single_upstream(&ctx, &mut client_tx, &mut client_rx, &mut events_rx, &mut up_tx, &mut up_rx, (&mut current_topic, &mut resume_handle, &mut briefing)).await {
             BridgeExit::Reconnect(true) => bad_legs = 0,
             BridgeExit::Reconnect(false) if bad_legs < 2 => {
                 bad_legs += 1;

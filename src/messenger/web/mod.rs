@@ -32,6 +32,8 @@
 //! - [`turn_boot`] (`turn_boot.rs`): Session init & boot.
 //! - [`turn_runner`] (`turn_runner.rs`): Lock-pooled turn runner.
 //! - [`turn_stream`] (`turn_stream.rs`): Live `StreamEvent` pump.
+//! - [`voice_briefing`] (`voice_briefing.rs`): Batch-synthesized voice briefings.
+//! - [`voice_models`] (`voice_models.rs`): Spoken model/provider resolver.
 //! - [`voice_protocol`] (`voice_protocol.rs`): `gemini-3.8-live` codec.
 //! - [`voice_schema`] (`voice_schema.rs`): Voice tool schemas.
 //! - [`voice_tools`] (`voice_tools.rs`): Voice secretary tools.
@@ -68,6 +70,8 @@ pub mod tg_topics;
 pub mod turn_boot;
 pub mod turn_runner;
 pub mod turn_stream;
+pub mod voice_briefing;
+pub mod voice_models;
 pub mod voice_protocol;
 pub mod voice_schema;
 pub mod voice_tools;
@@ -295,42 +299,45 @@ fn attach_auth_routes(r: Router) -> Router {
         .route("/dashboard/api/voice/ws", get(voice_ws::handle_voice_ws))
 }
 
-fn attach_session_routes(r: Router) -> Router {
-    r.route(
-        "/dashboard/api/sessions",
-        get(api_sessions::handle_list_sessions)
-            .post(api_sessions::handle_create_session)
-            .delete(api_chat::handle_delete_session),
-    )
-        .route("/dashboard/api/sessions/config", patch(api_sessions::handle_patch_session_config))
-        .route("/dashboard/api/sessions/history", get(api_history::handle_session_history))
-        .route("/dashboard/api/sessions/upload", post(api_history::handle_upload_file).layer(DefaultBodyLimit::max(32 * 1024 * 1024)))
-        .route("/dashboard/api/sessions/send", post(api_chat::handle_send_prompt))
-        .route("/dashboard/api/sessions/ask", post(api_ask::handle_answer_ask))
-        .route("/dashboard/api/sessions/stop", post(api_chat::handle_stop_session))
-        .route("/dashboard/api/sessions/new", post(api_chat::handle_new_session))
-        .route("/dashboard/api/sessions/prune", post(api_chat::handle_prune_sessions))
-        .route("/dashboard/api/models", get(api_models::handle_list_models))
+fn api_session_routes() -> Router {
+    Router::new()
+        .route(
+            "/sessions",
+            get(api_sessions::handle_list_sessions)
+                .post(api_sessions::handle_create_session)
+                .delete(api_chat::handle_delete_session),
+        )
+        .route("/sessions/config", patch(api_sessions::handle_patch_session_config))
+        .route("/sessions/history", get(api_history::handle_session_history))
+        .route("/sessions/upload", post(api_history::handle_upload_file).layer(DefaultBodyLimit::max(32 * 1024 * 1024)))
+        .route("/sessions/send", post(api_chat::handle_send_prompt))
+        .route("/sessions/ask", post(api_ask::handle_answer_ask))
+        .route("/sessions/stop", post(api_chat::handle_stop_session))
+        .route("/sessions/new", post(api_chat::handle_new_session))
+        .route("/sessions/prune", post(api_chat::handle_prune_sessions))
+        .route("/models", get(api_models::handle_list_models))
 }
 
-fn attach_ops_routes(r: Router) -> Router {
-    r.route("/dashboard/api/subagents", get(subagent_tree::handle_get_subagents))
-        .route("/dashboard/api/usage", get(api_ops::handle_get_usage))
-        .route("/dashboard/api/cron", get(api_ops::handle_list_cron))
-        .route("/dashboard/api/cron/:id/toggle", post(api_ops::handle_toggle_cron))
-        .route("/dashboard/api/cron/:id/run", post(api_ops::handle_run_cron))
-        .route("/dashboard/api/file", get(api_files::handle_get_file))
-        .route("/dashboard/api/vault/entries", get(api_files::handle_vault_list).post(api_files::handle_vault_upsert))
-        .route("/dashboard/api/vault/entries/:site_key", delete(api_files::handle_vault_delete))
-        .route("/dashboard/api/hitl", get(api_hitl::handle_hitl_status))
-        .route("/dashboard/api/hitl/start", post(api_hitl::handle_hitl_start))
-        .merge(api_providers::provider_routes())
-        .merge(api_telegram::telegram_routes())
+fn api_ops_routes() -> Router {
+    Router::new()
+        .route("/subagents", get(subagent_tree::handle_get_subagents))
+        .route("/usage", get(api_ops::handle_get_usage))
+        .route("/cron", get(api_ops::handle_list_cron))
+        .route("/cron/:id/toggle", post(api_ops::handle_toggle_cron))
+        .route("/cron/:id/run", post(api_ops::handle_run_cron))
+        .route("/file", get(api_files::handle_get_file))
+        .route("/vault/entries", get(api_files::handle_vault_list).post(api_files::handle_vault_upsert))
+        .route("/vault/entries/:site_key", delete(api_files::handle_vault_delete))
+        .route("/hitl", get(api_hitl::handle_hitl_status))
+        .route("/hitl/start", post(api_hitl::handle_hitl_start))
 }
 
 /// Builds the `/dashboard` and `/dashboard/api/*` Axum router.
 pub fn dashboard_routes() -> Router {
-    attach_ops_routes(attach_session_routes(attach_auth_routes(Router::new())))
+    attach_auth_routes(Router::new())
+        .nest("/dashboard/api", api_session_routes().merge(api_ops_routes()))
+        .merge(api_providers::provider_routes())
+        .merge(api_telegram::telegram_routes())
 }
 
 /// Builds an isolated `/dashboard` router with an explicit [`WebAppCtx`] layer (for tests).

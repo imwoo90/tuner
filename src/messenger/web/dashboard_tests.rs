@@ -1485,7 +1485,7 @@ async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
         );
         assert!(setup1["setup"]["contextWindowCompression"]["slidingWindow"].is_object());
         let decls = setup1["setup"]["tools"][0]["functionDeclarations"].as_array().unwrap();
-        assert_eq!(decls.len(), 6);
+        assert_eq!(decls.len(), 8);
 
         ws1.send(TMsg::Text(r#"{"setupComplete":{}}"#.into())).await.unwrap();
         ws1.send(TMsg::Text(r#"{"sessionResumptionUpdate":{"resumable":true,"newHandle":"res-handle-777"}}"#.into())).await.unwrap();
@@ -1603,4 +1603,127 @@ async fn test_voice_desk_assistant_ws_bridge_tools_barge_in_and_resumption() {
             None => std::env::remove_var("TUNER_GEMINI_LIVE_WS_URL"),
         }
     }
+}
+
+#[tokio::test]
+async fn test_voice_spoken_model_resolution_and_parallel_batch_briefing() {
+    let dir = tempfile::tempdir().unwrap();
+    let ctx = build_test_ctx(dir.path());
+
+    // 1. Spoken Korean & space-separated model names resolve to canonical IDs even if config had gemini-3.8-flash
+    let (p1, m1, _) = super::voice_models::resolve_spoken_model_spec(
+        &ctx,
+        "antigravity",
+        None,
+        Some("gemini 4 hydrogen"),
+        Some("xhigh"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(p1, "antigravity");
+    assert_eq!(m1, "gemini-4-hydrogen");
+
+    let (p2, m2, _) = super::voice_models::resolve_spoken_model_spec(
+        &ctx,
+        "antigravity",
+        Some("클로드"),
+        Some("소넷"),
+        Some("high"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(p2, "claude");
+    assert!(m2.contains("sonnet"));
+
+    // 2. configure_topic updates an existing topic's provider/model/effort cleanly
+    let s_init = ctx
+        .sessions
+        .create_web_session(Some("Topic A".into()), "antigravity", "gemini-3.8-flash", None)
+        .await
+        .unwrap();
+    let mut cur_topic = Some(s_init.session_key().storage_key());
+    let (cfg_out, _) = super::voice_tools::execute_voice_tool(
+        &ctx,
+        &mut cur_topic,
+        "configure_topic",
+        &serde_json::json!({ "model": "제미나이 4 하이드로젠", "effort": "high" }),
+    )
+    .await;
+    assert_eq!(cfg_out["ok"], true);
+    assert_eq!(cfg_out["topic"]["model"], "gemini-4-hydrogen");
+    assert_eq!(cfg_out["topic"]["effort"], "high");
+
+    // 3. Parallel Batch Synthesis & Turn-Safe Non-Interruption in VoiceBriefingState
+    let mut s_b = ctx
+        .sessions
+        .create_web_session(Some("타 모델 비교 분석".into()), "antigravity", "gemini-4-hydrogen", None)
+        .await
+        .unwrap();
+    s_b.set_session_id("antigravity", "sid-busy-b");
+    let key_b = s_b.session_key();
+    let _ = ctx
+        .sessions
+        .mutate_session(&key_b, Some(&s_b), |c| {
+            c.set_session_id("antigravity", "sid-busy-b");
+            true
+        })
+        .await
+        .unwrap();
+
+    let mut brief = super::voice_briefing::VoiceBriefingState::new();
+    brief.record_delegated("web:0:1");
+    brief.record_delegated("web:0:2");
+
+    // Mark web:0:2 as actively running in background while web:0:1 finishes first!
+    ctx.cli
+        .sessions
+        .boot_cancels
+        .lock()
+        .await
+        .insert((0, Some(2)), tokio::sync::oneshot::channel().0);
+    brief
+        .ingest_web_event(
+            &ctx,
+            &WebEvent::TurnResult {
+                session_key: "web:0:1".into(),
+                session_id: Some("sid-a".into()),
+                text: "클로드 스킬 상세 정리 완료".into(),
+                is_error: false,
+                files: vec![],
+                timestamp: "2026-11-21T00:00:00Z".into(),
+            },
+        )
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    // Sibling web:0:2 is still busy -> must NOT prematurely report web:0:1 alone!
+    assert!(brief.poll_ready_briefing(&ctx).await.is_none());
+
+    // Now web:0:2 finishes, BUT assistant is currently speaking -> must NOT interrupt mid-sentence!
+    ctx.cli.sessions.boot_cancels.lock().await.remove(&(0, Some(2)));
+    brief.on_upstream_action(&super::voice_protocol::UpstreamAction::AudioPcm24("AAAA".into()));
+    brief
+        .ingest_web_event(
+            &ctx,
+            &WebEvent::TurnResult {
+                session_key: "web:0:2".into(),
+                session_id: Some("sid-busy-b".into()),
+                text: "타 모델 대비 Remotion 코드 기반 차별점 완료".into(),
+                is_error: false,
+                files: vec![],
+                timestamp: "2026-11-21T00:00:01Z".into(),
+            },
+        )
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    assert!(brief.poll_ready_briefing(&ctx).await.is_none());
+
+    // Assistant finishes current sentence (`TurnComplete`) + 950ms drain -> ONE unified [BATCH_COMPLETION_BRIEFING]!
+    brief.on_upstream_action(&super::voice_protocol::UpstreamAction::TurnComplete);
+    tokio::time::sleep(std::time::Duration::from_millis(950)).await;
+    let synthesized = brief.poll_ready_briefing(&ctx).await.expect("expected batch briefing");
+    assert!(synthesized.contains("[BATCH_COMPLETION_BRIEFING]"));
+    assert!(synthesized.contains("Topic A"));
+    assert!(synthesized.contains("타 모델 비교 분석"));
+    assert!(synthesized.contains("클로드 스킬 상세 정리 완료"));
+    assert!(synthesized.contains("타 모델 대비 Remotion 코드 기반 차별점 완료"));
 }

@@ -13,6 +13,10 @@ use super::api_history::{build_active_ask_view, collect_history_messages};
 use super::api_sessions::{build_session_summary, CreateSessionPayload};
 use super::events::emit_session_updated;
 use super::turn_runner::execute_web_turn;
+use super::voice_models::{
+    apply_voice_spec_to_session, exec_configure_topic, exec_list_available_models,
+    resolve_spoken_model_spec,
+};
 use super::WebAppCtx;
 use crate::session::{data::SessionData, key::SessionKey};
 use serde_json::{json, Value};
@@ -101,43 +105,53 @@ async fn exec_get_context(ctx: &WebAppCtx, args: &Value, cur: Option<&str>) -> V
     json!({ "session": summary, "active_ask": ask, "live_stream_tail": stream_tail, "recent_messages": recent })
 }
 
-async fn create_voice_topic(ctx: &Arc<WebAppCtx>, title: &str, tr: Option<String>) -> Option<SessionKey> {
+fn opt_str<'a>(args: &'a Value, field: &str) -> Option<&'a str> {
+    args.get(field).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty())
+}
+
+async fn create_voice_topic(
+    ctx: &Arc<WebAppCtx>,
+    title: &str,
+    tr: Option<String>,
+    raw_spec: (Option<&str>, Option<&str>, Option<&str>),
+) -> Result<(SessionKey, String, String, Option<String>), String> {
+    let (p, m, e) = resolve_spoken_model_spec(ctx, &ctx.config.provider, raw_spec.0, raw_spec.1, raw_spec.2).await?;
     let req = CreateSessionPayload {
         transport: tr,
         chat_id: None,
         silent_greeting: true,
         topic_name: Some(title.to_string()),
-        provider: None,
-        model: None,
-        effort: None,
+        provider: Some(p.clone()),
+        model: Some(m.clone()),
+        effort: e.clone(),
     };
-    let sess = super::tg_topics::create_session_from_payload(ctx, req).await.ok()?;
+    let sess = super::tg_topics::create_session_from_payload(ctx, req)
+        .await
+        .map_err(|_| "Failed to create topic".to_string())?;
     emit_session_updated(ctx, &sess, false, false).await;
-    Some(sess.session_key())
+    Ok((sess.session_key(), p, m, e))
 }
 
 async fn exec_delegate(ctx: &Arc<WebAppCtx>, args: &Value, cur: &mut Option<String>) -> (Value, Option<String>) {
-    let prompt = args.get("prompt").and_then(Value::as_str).unwrap_or("").trim().to_string();
-    if prompt.is_empty() {
+    let Some(prompt) = opt_str(args, "prompt").map(str::to_string) else {
         return (json!({ "error": "prompt is required" }), None);
-    }
-    let new_title = args.get("create_new_topic_title").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
-    let sk_arg = args.get("session_key").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
-    let tr = args.get("transport").and_then(Value::as_str).map(str::to_string);
+    };
+    let tr = opt_str(args, "transport").map(str::to_string);
+    let raw_spec = (opt_str(args, "provider"), opt_str(args, "model"), opt_str(args, "effort"));
 
-    let target_key = if let Some(title) = new_title {
-        let Some(k) = create_voice_topic(ctx, title, tr).await else {
-            return (json!({ "error": "Failed to create topic" }), None);
-        };
-        k
-    } else if let Some(k) = resolve_key_or_default(ctx, sk_arg, cur.as_deref(), false).await {
-        k
+    let resolved = if let Some(title) = opt_str(args, "create_new_topic_title") {
+        create_voice_topic(ctx, title, tr, raw_spec).await
+    } else if let Some(k) = resolve_key_or_default(ctx, opt_str(args, "session_key"), cur.as_deref(), false).await {
+        apply_voice_spec_to_session(ctx, &k, raw_spec.0, raw_spec.1, raw_spec.2, None)
+            .await
+            .map(|(p, m, e)| (k, p, m, e))
     } else {
         let auto_title: String = prompt.chars().take(28).collect();
-        let Some(k) = create_voice_topic(ctx, &auto_title, Some("web".to_string())).await else {
-            return (json!({ "error": "Failed to initialize topic" }), None);
-        };
-        k
+        create_voice_topic(ctx, &auto_title, Some("web".to_string()), raw_spec).await
+    };
+    let (target_key, eff_prov, eff_model, eff_effort) = match resolved {
+        Ok(v) => v,
+        Err(e) => return (json!({ "error": e }), None),
     };
 
     let sk = target_key.storage_key();
@@ -146,7 +160,14 @@ async fn exec_delegate(ctx: &Arc<WebAppCtx>, args: &Value, cur: &mut Option<Stri
     tokio::spawn(async move {
         execute_web_turn(ctx_bg, target_key, prompt, Vec::new()).await;
     });
-    (json!({ "delegated": true, "session_key": sk }), Some(sk))
+    let out = json!({
+        "delegated": true,
+        "session_key": sk,
+        "provider": eff_prov,
+        "model": eff_model,
+        "effort": eff_effort
+    });
+    (out, Some(sk))
 }
 
 async fn exec_answer_ask(ctx: &Arc<WebAppCtx>, args: &Value, cur: Option<&str>) -> Value {
@@ -190,7 +211,15 @@ pub async fn execute_voice_tool(
     match name {
         "list_topics" => (exec_list_topics(ctx).await, None),
         "get_topic_context" => (exec_get_context(ctx, args, current_topic.as_deref()).await, None),
+        "list_available_models" => (exec_list_available_models(ctx, args).await, None),
         "delegate_to_topic" => exec_delegate(ctx, args, current_topic).await,
+        "configure_topic" => {
+            let sk_arg = args.get("session_key").and_then(Value::as_str);
+            match resolve_key_or_default(ctx, sk_arg, current_topic.as_deref(), false).await {
+                Some(k) => (exec_configure_topic(ctx, &k, args).await, None),
+                None => (json!({ "error": "No active topic found." }), None),
+            }
+        }
         "answer_topic_question" => (exec_answer_ask(ctx, args, current_topic.as_deref()).await, None),
         "stop_topic" => (exec_stop_topic(ctx, args, current_topic.as_deref()).await, None),
         "switch_active_topic" => {

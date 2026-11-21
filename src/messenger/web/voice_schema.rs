@@ -1,14 +1,13 @@
 //! # Voice Desk Secretary Tool Schema & Client Frame Translator (`voice_schema.rs`)
 //!
 //! ## Overview
-//! Declares the 6 Gemini Live function-calling schemas (`list_topics`, `get_topic_context`,
-//! `delegate_to_topic`, `answer_topic_question`, `stop_topic`, `switch_active_topic`) and
-//! translates incoming browser WebSocket JSON frames into Gemini `realtimeInput` payloads.
+//! Declares the 8 Gemini Live function-calling schemas (`list_topics`, `get_topic_context`,
+//! `list_available_models`, `delegate_to_topic`, `configure_topic`, `answer_topic_question`,
+//! `stop_topic`, `switch_active_topic`) and translates browser WebSocket frames.
 //!
 //! ## Search Tags
 //! #voice-schema, #gemini-function-declarations, #realtime-input
 
-use super::events::WebEvent;
 use super::provider_status::read_dotenv_map;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -33,47 +32,6 @@ pub fn resolve_voice_model() -> String {
         raw
     } else {
         format!("models/{raw}")
-    }
-}
-
-/// Formats background `WebEvent` completions and `AskQuestion` prompts into live voice triggers.
-pub fn format_background_web_event(ev: &WebEvent) -> Option<String> {
-    match ev {
-        WebEvent::TurnResult {
-            session_key,
-            text,
-            is_error,
-            ..
-        } => {
-            let status = if *is_error { "ERROR" } else { "COMPLETED" };
-            let snippet: String = text.chars().take(500).collect();
-            Some(format!(
-                "[BACKGROUND_EVENT] Topic `{session_key}` {status}. Output summary:\n{snippet}\nPlease briefly inform the user by voice."
-            ))
-        }
-        WebEvent::AskQuestion {
-            session_key,
-            questions,
-            current_index,
-            ..
-        } => {
-            let q = questions.get(*current_index)?;
-            let opts = q
-                .options
-                .iter()
-                .enumerate()
-                .map(|(i, o)| format!("{}. {}", i + 1, o))
-                .collect::<Vec<_>>()
-                .join(" / ");
-            Some(format!(
-                "[BACKGROUND_EVENT] Topic `{session_key}` is waiting on AskQuestion ({}/{}): \"{}\" Options: [{}]. Please read this question and options clearly to the user so they can answer by voice.",
-                current_index + 1,
-                questions.len(),
-                q.question,
-                opts
-            ))
-        }
-        _ => None,
     }
 }
 
@@ -135,6 +93,16 @@ fn read_tool_decls() -> Vec<Value> {
                 }
             }
         }),
+        json!({
+            "name": "list_available_models",
+            "description": "Lists available CLI providers (antigravity, claude, codex), models (e.g. gemini-4-hydrogen, gemini-4-neon, gemini-4-argon, gemini-pro-orchestrator, sonnet, opus, astra), and effort levels.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "provider": { "type": "STRING", "description": "Optional filter: 'antigravity', 'claude', or 'codex'." }
+                }
+            }
+        }),
     ]
 }
 
@@ -142,16 +110,38 @@ fn delegation_decls() -> Vec<Value> {
     vec![
         json!({
             "name": "delegate_to_topic",
-            "description": "Delegates a coding, file, build, or research task asynchronously to a CLI topic.",
+            "description": "Delegates a task asynchronously to an existing or newly created CLI topic. For parallel multi-topic work, call this tool multiple times in the same turn with distinct create_new_topic_title values.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "prompt": { "type": "STRING", "description": "Instruction for the CLI agent." },
-                    "session_key": { "type": "STRING", "description": "Target topic key (omit for active/new)." },
-                    "create_new_topic_title": { "type": "STRING", "description": "Title when creating a new topic." },
-                    "transport": { "type": "STRING", "description": "Optional transport: 'web' or 'tg'." }
+                    "prompt": { "type": "STRING", "description": "Detailed task instruction for the CLI agent." },
+                    "session_key": { "type": "STRING", "description": "Existing topic key (omit when creating a new topic)." },
+                    "create_new_topic_title": { "type": "STRING", "description": "Set a concise topic title to create a brand-new topic." },
+                    "transport": { "type": "STRING", "description": "Optional transport: 'web' (default) or 'tg'." },
+                    "provider": { "type": "STRING", "description": "Optional CLI engine: 'antigravity', 'claude', or 'codex'." },
+                    "model": { "type": "STRING", "description": "Optional model ID or alias (e.g. 'gemini-4-hydrogen', 'gemini-4-neon', 'gemini-4-argon', 'gemini-pro-orchestrator', 'gemini-3.8-flash', 'sonnet', 'opus', 'astra')." },
+                    "effort": { "type": "STRING", "description": "Optional reasoning effort ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')." }
                 },
                 "required": ["prompt"]
+            }
+        }),
+    ]
+}
+
+fn session_mutation_decls() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "configure_topic",
+            "description": "Changes provider, model, reasoning effort, or title on an existing topic without running a prompt.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "session_key": { "type": "STRING", "description": "Target topic key (defaults to active topic)." },
+                    "provider": { "type": "STRING", "description": "New provider ('antigravity', 'claude', 'codex')." },
+                    "model": { "type": "STRING", "description": "New model ID or alias (e.g. 'gemini-4-hydrogen', 'neon', 'argon', 'sonnet', 'astra')." },
+                    "effort": { "type": "STRING", "description": "New effort level ('low', 'medium', 'high', 'xhigh', 'max')." },
+                    "topic_name": { "type": "STRING", "description": "Optional new topic title." }
+                }
             }
         }),
         json!({
@@ -196,6 +186,7 @@ fn control_decls() -> Vec<Value> {
 pub fn voice_tool_declarations() -> Value {
     let mut all = read_tool_decls();
     all.extend(delegation_decls());
+    all.extend(session_mutation_decls());
     all.extend(control_decls());
     Value::Array(all)
 }

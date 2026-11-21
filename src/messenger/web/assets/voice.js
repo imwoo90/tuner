@@ -137,6 +137,7 @@ export function createVoiceController({
   let workletLoaded = false;
   let nextPlayTime = 0;
   let aiSpeakingUntilMs = 0;
+  let speechNormGain = 1.0;
   let bargeHoldUntil = 0;
   let bargeStreak = 0;
   let pendingBargeFrames = [];
@@ -452,15 +453,19 @@ export function createVoiceController({
     if (!audioCtx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) {
-        audioCtx = new Ctx({ latencyHint: "interactive" });
+        try {
+          audioCtx = new Ctx({ latencyHint: "interactive", sampleRate: 48000 });
+        } catch (_) {
+          audioCtx = new Ctx({ latencyHint: "interactive" });
+        }
         outGain = audioCtx.createGain();
         outGain.gain.value = currentGain;
         outLimiter = audioCtx.createDynamicsCompressor();
-        outLimiter.threshold.value = -5;
-        outLimiter.knee.value = 10;
-        outLimiter.ratio.value = 8;
-        outLimiter.attack.value = 0.003;
-        outLimiter.release.value = 0.14;
+        outLimiter.threshold.value = -10;
+        outLimiter.knee.value = 8;
+        outLimiter.ratio.value = 12;
+        outLimiter.attack.value = 0.002;
+        outLimiter.release.value = 0.12;
         outGain.connect(outLimiter);
         outLimiter.connect(audioCtx.destination);
         workletLoaded = false;
@@ -497,10 +502,23 @@ export function createVoiceController({
       clearTimeout(listenDebounceTimer);
       listenDebounceTimer = null;
     }
+    // Per-chunk Automatic Loudness Leveler: prevents Gemini Live native audio from suddenly spiking +12~16 dB mid-call!
+    let sumSq = 0;
+    for (let i = 0; i < pcm.length; i++) {
+      const x = pcm[i] / 32768;
+      sumSq += x * x;
+    }
+    const chunkRms = Math.sqrt(sumSq / pcm.length);
+    if (chunkRms > 0.018) {
+      const target = Math.max(0.28, Math.min(1.18, 0.115 / chunkRms));
+      const alpha = target < speechNormGain ? 0.48 : 0.10;
+      speechNormGain = speechNormGain * (1 - alpha) + target * alpha;
+    }
     const buf = ctx.createBuffer(1, pcm.length, 24000);
     const ch = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) {
-      ch[i] = pcm[i] / 32768;
+      const scaled = (pcm[i] / 32768) * speechNormGain;
+      ch[i] = scaled > 0.65 || scaled < -0.65 ? Math.tanh(scaled) * 0.72 : scaled;
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -836,6 +854,7 @@ export function createVoiceController({
     sock.addEventListener("close", () => {
       if (vws !== sock || !active) return;
       vws = null;
+      flushPlayback();
       if (reconnectAttempts < 4) {
         reconnectAttempts += 1;
         setStatus("voiceReconnecting", "thinking");
