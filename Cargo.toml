@@ -1,11 +1,11 @@
 [package]
 name = "tuner"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 license = "Apache-2.0"
 
 [package.metadata.antigravity]
-verified_version = "1.5.9"
+verified_version = "1.5.14"
 
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
