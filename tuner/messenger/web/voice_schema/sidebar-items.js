@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_GEMINI_LIVE_URL"],"fn":["build_upstream_url","control_decls","delegation_decls","read_tool_decls","resolve_gemini_api_key","resolve_voice_model","session_mutation_decls","translate_browser_msg","voice_tool_declarations"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BridgeExit"],"fn":["dispatch_client_frame","dispatch_raw_upstream","exit_for_drop","handle_upstream_actions","handle_voice_ws","pump_single_upstream","run_tool_calls_and_respond","run_voice_bridge","send_client_json"],"type":["ClientSink","ClientStream","LegState"]};

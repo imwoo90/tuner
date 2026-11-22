@@ -173,39 +173,72 @@
 <a href=#173 id=173 data-nosnippet>173</a>    <span class="prelude-val">Ok</span>(())
 <a href=#174 id=174 data-nosnippet>174</a>}
 <a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_log_completion(
-<a href=#177 id=177 data-nosnippet>177</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
-<a href=#178 id=178 data-nosnippet>178</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#179 id=179 data-nosnippet>179</a>    tp: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw-2">mut </span>sz: u64,
-<a href=#181 id=181 data-nosnippet>181</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">use </span>std::time::{Duration, Instant};
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span>(inact, max_t, start, <span class="kw-2">mut </span>last_act) = (Duration::from_secs(<span class="number">300</span>), Duration::from_secs(<span class="number">3600</span>), Instant::now(), Instant::now());
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(<span class="number">0</span>);
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>t0, <span class="kw-2">mut </span>retried, <span class="kw-2">mut </span>closed) = (sz, <span class="bool-val">false</span>, <span class="bool-val">false</span>);
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>_w = setup_path_watcher(tp.as_ref(), tx);
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_millis(<span class="number">500</span>));
-<a href=#189 id=189 data-nosnippet>189</a>
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">while </span>last_act.elapsed() &lt; inact &amp;&amp; start.elapsed() &lt; max_t {
-<a href=#191 id=191 data-nosnippet>191</a>        check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>prev = sz;
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">if </span><span class="kw">super</span>::completion::check_completion_step(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>sz).<span class="kw">await</span><span class="question-mark">?</span>.is_some() { <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(last_pty);
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">if </span>sz &gt; prev || pty &gt; last_pty {
-<a href=#196 id=196 data-nosnippet>196</a>            (last_pty, last_act) = (pty, Instant::now());
-<a href=#197 id=197 data-nosnippet>197</a>        } <span class="kw">else if </span>last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>)
-<a href=#198 id=198 data-nosnippet>198</a>            &amp;&amp; <span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">?
-<a href=#199 id=199 data-nosnippet>199</a>        </span>{
-<a href=#200 id=200 data-nosnippet>200</a>            last_act = Instant::now();
-<a href=#201 id=201 data-nosnippet>201</a>        }
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="macro">tokio::select!</span> {
-<a href=#203 id=203 data-nosnippet>203</a>            <span class="kw">_ </span>= sessions.interrupt_notify.notified() =&gt; check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>,
-<a href=#204 id=204 data-nosnippet>204</a>            r = rx.recv(), <span class="kw">if </span>!closed =&gt; <span class="kw">if </span>r.is_none() { closed = <span class="bool-val">true</span>; } <span class="kw">else </span>{ last_act = Instant::now(); },
-<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
-<a href=#206 id=206 data-nosnippet>206</a>        }
-<a href=#207 id=207 data-nosnippet>207</a>    }
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="prelude-val">Err</span>(<span class="kw">if </span>start.elapsed() &gt;= max_t { <span class="string">"Exceeded maximum execution duration of 3600s"</span>.into() } <span class="kw">else </span>{ <span class="string">"Timed out waiting for completion (inactivity)"</span>.into() })
-<a href=#209 id=209 data-nosnippet>209</a>}
-<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="attr">#[cfg(test)]
+<a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_log_completion(
+<a href=#178 id=178 data-nosnippet>178</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
+<a href=#179 id=179 data-nosnippet>179</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#180 id=180 data-nosnippet>180</a>    tp: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#181 id=181 data-nosnippet>181</a>    sz: u64,
+<a href=#182 id=182 data-nosnippet>182</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#183 id=183 data-nosnippet>183</a>    wait_for_log_completion_with_prompt(sessions, sid, tp, sz, <span class="prelude-val">None</span>).<span class="kw">await
+<a href=#184 id=184 data-nosnippet>184</a></span>}
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a><span class="kw">async fn </span>maybe_reinject_prompt(
+<a href=#187 id=187 data-nosnippet>187</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
+<a href=#188 id=188 data-nosnippet>188</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#189 id=189 data-nosnippet>189</a>    tp: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>PathBuf&gt;,
+<a href=#190 id=190 data-nosnippet>190</a>    t0: u64,
+<a href=#191 id=191 data-nosnippet>191</a>    elapsed: std::time::Duration,
+<a href=#192 id=192 data-nosnippet>192</a>    prompt: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#193 id=193 data-nosnippet>193</a>    reinjected: <span class="kw-2">&amp;mut </span>bool,
+<a href=#194 id=194 data-nosnippet>194</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, String&gt; {
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">if </span>!<span class="kw-2">*</span>reinjected
+<a href=#196 id=196 data-nosnippet>196</a>        &amp;&amp; elapsed &gt;= std::time::Duration::from_millis(<span class="number">800</span>)
+<a href=#197 id=197 data-nosnippet>197</a>        &amp;&amp; <span class="kw">let </span>(<span class="prelude-val">Some</span>(p_txt), <span class="prelude-val">Some</span>(p_path)) = (prompt, tp)
+<a href=#198 id=198 data-nosnippet>198</a>        &amp;&amp; <span class="kw">super</span>::turn_settle::scan_turn_slice(p_path, t0).needs_prompt_reinject()
+<a href=#199 id=199 data-nosnippet>199</a>    {
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw-2">*</span>reinjected = <span class="bool-val">true</span>;
+<a href=#201 id=201 data-nosnippet>201</a>        sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{p_txt}\r"</span>)).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>);
+<a href=#203 id=203 data-nosnippet>203</a>    }
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>)
+<a href=#205 id=205 data-nosnippet>205</a>}
+<a href=#206 id=206 data-nosnippet>206</a>
+<a href=#207 id=207 data-nosnippet>207</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>wait_for_log_completion_with_prompt(
+<a href=#208 id=208 data-nosnippet>208</a>    sessions: <span class="kw-2">&amp;</span><span class="kw">super</span>::session::SessionManager,
+<a href=#209 id=209 data-nosnippet>209</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#210 id=210 data-nosnippet>210</a>    tp: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw-2">mut </span>sz: u64,
+<a href=#212 id=212 data-nosnippet>212</a>    prompt: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#213 id=213 data-nosnippet>213</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span>(inact, max_t, start, <span class="kw-2">mut </span>last_act) = (Duration::from_secs(<span class="number">300</span>), Duration::from_secs(<span class="number">3600</span>), Instant::now(), Instant::now());
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(<span class="number">0</span>);
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>t0, <span class="kw-2">mut </span>retried, <span class="kw-2">mut </span>reinj, <span class="kw-2">mut </span>closed) = (sz, <span class="bool-val">false</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>);
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>_w = setup_path_watcher(tp.as_ref(), tx);
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span><span class="kw-2">mut </span>tick = tokio::time::interval(Duration::from_millis(<span class="number">500</span>));
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">while </span>last_act.elapsed() &lt; inact &amp;&amp; start.elapsed() &lt; max_t {
+<a href=#223 id=223 data-nosnippet>223</a>        check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>prev = sz;
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">if </span><span class="kw">super</span>::completion::check_completion_step(sessions, sid, tp.as_ref(), t0, <span class="kw-2">&amp;mut </span>sz).<span class="kw">await</span><span class="question-mark">?</span>.is_some() { <span class="kw">return </span><span class="prelude-val">Ok</span>(()); }
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>pty = sessions.get_output_len(sid).<span class="kw">await</span>.unwrap_or(last_pty);
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">if </span>sz &gt; prev || pty &gt; last_pty {
+<a href=#228 id=228 data-nosnippet>228</a>            (last_pty, last_act) = (pty, Instant::now());
+<a href=#229 id=229 data-nosnippet>229</a>        } <span class="kw">else if </span>maybe_reinject_prompt(sessions, sid, tp.as_ref(), t0, last_act.elapsed(), prompt, <span class="kw-2">&amp;mut </span>reinj).<span class="kw">await</span><span class="question-mark">?
+<a href=#230 id=230 data-nosnippet>230</a>            </span>|| (last_act.elapsed() &gt;= Duration::from_secs(<span class="number">3</span>)
+<a href=#231 id=231 data-nosnippet>231</a>                &amp;&amp; <span class="kw">super</span>::completion::handle_thinking_only_stall(sessions, sid, tp.as_ref(), <span class="kw-2">&amp;mut </span>t0, sz, <span class="kw-2">&amp;mut </span>retried).<span class="kw">await</span><span class="question-mark">?</span>)
+<a href=#232 id=232 data-nosnippet>232</a>        {
+<a href=#233 id=233 data-nosnippet>233</a>            last_act = Instant::now();
+<a href=#234 id=234 data-nosnippet>234</a>        }
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="macro">tokio::select!</span> {
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">_ </span>= sessions.interrupt_notify.notified() =&gt; check_interruption(sessions, sid).<span class="kw">await</span><span class="question-mark">?</span>,
+<a href=#237 id=237 data-nosnippet>237</a>            r = rx.recv(), <span class="kw">if </span>!closed =&gt; <span class="kw">if </span>r.is_none() { closed = <span class="bool-val">true</span>; } <span class="kw">else </span>{ last_act = Instant::now(); },
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">_ </span>= tick.tick() =&gt; {}
+<a href=#239 id=239 data-nosnippet>239</a>        }
+<a href=#240 id=240 data-nosnippet>240</a>    }
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="prelude-val">Err</span>(<span class="kw">if </span>start.elapsed() &gt;= max_t { <span class="string">"Exceeded maximum execution duration of 3600s"</span>.into() } <span class="kw">else </span>{ <span class="string">"Timed out waiting for completion (inactivity)"</span>.into() })
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
 </code></pre></div></section></main></body></html>

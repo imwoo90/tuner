@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["auto_close_cli_hitl_browser","spawn_oauth_completion_watcher","try_auto_harvest_hitl_code"]};
+window.SIDEBAR_ITEMS = {"fn":["auto_close_cli_hitl_browser","handle_gemini_browser_start","inspect_gemini_api_status","mask_secret","seed_google_state_from_agy_if_missing","spawn_gemini_key_watcher","spawn_oauth_completion_watcher","try_auto_harvest_hitl_code"]};

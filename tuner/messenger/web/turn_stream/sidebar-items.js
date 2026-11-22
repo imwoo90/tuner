@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["capture_pre_transcript_cursor","finalize_web_result","finish_stream_state","flush_pending_tg_edit","handle_single_stream_event","handle_stream_delta","handle_web_ask_event","recover_missed_agy_ask","stream_web_turn"],"struct":["StreamUiState"]};
+window.SIDEBAR_ITEMS = {"fn":["finalize_web_result","finish_stream_state","flush_pending_tg_edit","handle_single_stream_event","handle_stream_delta","handle_web_ask_event","recover_missed_agy_ask","stream_web_turn"],"struct":["StreamUiState"]};

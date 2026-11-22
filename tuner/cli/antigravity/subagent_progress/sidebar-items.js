@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_child_entries","collect_subagent_jsons","collect_swarm_json","count_active_descendants","discover_active_descendants","is_safe_cid","is_swarm_killed","mtime_secs","now_secs","read_tail_utf8"],"struct":["SubagentProgressTracker"]};

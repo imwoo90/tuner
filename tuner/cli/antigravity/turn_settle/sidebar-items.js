@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_scan_line","combine_turn_answers","entry_has_interactive_tool","has_unsettled_turn_on_disk","ingest_answer_line","read_slice_answers","scan_turn_slice","settle_before_pty_prompt"],"struct":["TurnSliceScan"]};

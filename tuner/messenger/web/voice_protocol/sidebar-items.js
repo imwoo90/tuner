@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["UpstreamAction"],"fn":["action_to_client_frame","auto_secretary_prompt","build_live_setup_frame","build_secretary_prompt","build_speech_config","en_secretary_prompt","ko_secretary_prompt","parse_gemini_server_frame","parse_server_content","realtime_vad_config"]};

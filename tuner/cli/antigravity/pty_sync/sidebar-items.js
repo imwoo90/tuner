@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["PtySyncState","TopicTurnGuard"],"type":["TopicKey"]};
+window.SIDEBAR_ITEMS = {"fn":["sanitize_pty_turn_prompt"],"struct":["PtySyncState","TopicTurnGuard"],"type":["TopicKey"]};

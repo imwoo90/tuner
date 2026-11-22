@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_voice_spec_to_session","canonicalize_spoken_provider","exec_configure_topic","exec_list_available_models","infer_provider_for_model","map_spoken_model_token","persist_voice_spec_mutation","resolve_spoken_model_spec"]};

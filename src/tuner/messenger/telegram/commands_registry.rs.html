@@ -174,40 +174,47 @@
 <a href=#174 id=174 data-nosnippet>174</a>
 <a href=#175 id=175 data-nosnippet>175</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>escape_non_workflow_slash(text: <span class="kw-2">&amp;</span>str) -&gt; String {
 <a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">let </span>trimmed = text.trim_start();
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">if </span>trimmed.starts_with(<span class="string">'/'</span>) &amp;&amp; !is_workflow_slash_command(trimmed) { <span class="macro">format!</span>(<span class="string">" {}"</span>, text) } <span class="kw">else </span>{ text.to_string() }
-<a href=#178 id=178 data-nosnippet>178</a>}
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>register_commands(bot: <span class="kw-2">&amp;</span>Bot) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>cmds = get_bot_commands();
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">for </span>s <span class="kw">in </span>[<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(teloxide::types::BotCommandScope::AllPrivateChats), <span class="prelude-val">Some</span>(teloxide::types::BotCommandScope::AllGroupChats)] {
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sc) = s.clone() { <span class="kw">let _ </span>= bot.delete_my_commands().scope(sc).<span class="kw">await</span>; } <span class="kw">else </span>{ <span class="kw">let _ </span>= bot.delete_my_commands().<span class="kw">await</span>; }
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sc) = s { <span class="kw">let _ </span>= bot.set_my_commands(cmds.clone()).scope(sc).<span class="kw">await</span>; } <span class="kw">else </span>{ <span class="kw">let _ </span>= bot.set_my_commands(cmds.clone()).<span class="kw">await</span>; }
-<a href=#185 id=185 data-nosnippet>185</a>    }
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="prelude-val">Ok</span>(())
-<a href=#187 id=187 data-nosnippet>187</a>}
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>format_help_text_for_provider(provider: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>prov = <span class="kw">crate</span>::session::data::SessionData::canonical_provider(provider).unwrap_or(<span class="string">"antigravity"</span>);
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">let </span><span class="kw-2">mut </span>text = String::from(<span class="string">"🤖 &lt;b&gt;[tuner] Command Reference:&lt;/b&gt;\n\n"</span>);
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">for </span>(cmd, desc) <span class="kw">in </span>COMMON_COMMANDS {
-<a href=#193 id=193 data-nosnippet>193</a>        text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"• /{} - {}\n"</span>, cmd, desc));
-<a href=#194 id=194 data-nosnippet>194</a>    }
-<a href=#195 id=195 data-nosnippet>195</a>    text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\n⚡ &lt;b&gt;Workflow Commands ({}):&lt;/b&gt;\n"</span>, prov));
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">for </span>(cmd, desc) <span class="kw">in </span>workflow_commands_for_provider(prov) {
-<a href=#197 id=197 data-nosnippet>197</a>        text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"• /{} - {}\n"</span>, cmd, desc));
-<a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>    text
-<a href=#200 id=200 data-nosnippet>200</a>}
-<a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_help_command_for_provider(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message, provider: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, format_help_text_for_provider(provider)).parse_mode(teloxide::types::ParseMode::Html);
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id { req = req.message_thread_id(tid); }
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let _ </span>= req.<span class="kw">await</span>;
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="prelude-val">Ok</span>(())
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>needs_escape = trimmed.starts_with(<span class="string">'?'</span>)
+<a href=#178 id=178 data-nosnippet>178</a>        || trimmed.starts_with(<span class="string">'!'</span>)
+<a href=#179 id=179 data-nosnippet>179</a>        || (trimmed.starts_with(<span class="string">'/'</span>) &amp;&amp; !is_workflow_slash_command(trimmed));
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">if </span>needs_escape &amp;&amp; !text.starts_with(<span class="string">' '</span>) {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">format!</span>(<span class="string">" {}"</span>, text)
+<a href=#182 id=182 data-nosnippet>182</a>    } <span class="kw">else </span>{
+<a href=#183 id=183 data-nosnippet>183</a>        text.to_string()
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>}
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>register_commands(bot: <span class="kw-2">&amp;</span>Bot) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">let </span>cmds = get_bot_commands();
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">for </span>s <span class="kw">in </span>[<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(teloxide::types::BotCommandScope::AllPrivateChats), <span class="prelude-val">Some</span>(teloxide::types::BotCommandScope::AllGroupChats)] {
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sc) = s.clone() { <span class="kw">let _ </span>= bot.delete_my_commands().scope(sc).<span class="kw">await</span>; } <span class="kw">else </span>{ <span class="kw">let _ </span>= bot.delete_my_commands().<span class="kw">await</span>; }
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(sc) = s { <span class="kw">let _ </span>= bot.set_my_commands(cmds.clone()).scope(sc).<span class="kw">await</span>; } <span class="kw">else </span>{ <span class="kw">let _ </span>= bot.set_my_commands(cmds.clone()).<span class="kw">await</span>; }
+<a href=#192 id=192 data-nosnippet>192</a>    }
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="prelude-val">Ok</span>(())
+<a href=#194 id=194 data-nosnippet>194</a>}
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>format_help_text_for_provider(provider: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>prov = <span class="kw">crate</span>::session::data::SessionData::canonical_provider(provider).unwrap_or(<span class="string">"antigravity"</span>);
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span><span class="kw-2">mut </span>text = String::from(<span class="string">"🤖 &lt;b&gt;[tuner] Command Reference:&lt;/b&gt;\n\n"</span>);
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">for </span>(cmd, desc) <span class="kw">in </span>COMMON_COMMANDS {
+<a href=#200 id=200 data-nosnippet>200</a>        text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"• /{} - {}\n"</span>, cmd, desc));
+<a href=#201 id=201 data-nosnippet>201</a>    }
+<a href=#202 id=202 data-nosnippet>202</a>    text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"\n⚡ &lt;b&gt;Workflow Commands ({}):&lt;/b&gt;\n"</span>, prov));
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">for </span>(cmd, desc) <span class="kw">in </span>workflow_commands_for_provider(prov) {
+<a href=#204 id=204 data-nosnippet>204</a>        text.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"• /{} - {}\n"</span>, cmd, desc));
+<a href=#205 id=205 data-nosnippet>205</a>    }
+<a href=#206 id=206 data-nosnippet>206</a>    text
 <a href=#207 id=207 data-nosnippet>207</a>}
 <a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a><span class="attr">#[allow(dead_code)]
-<a href=#210 id=210 data-nosnippet>210</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_help_command(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
-<a href=#211 id=211 data-nosnippet>211</a>    handle_help_command_for_provider(bot, msg, <span class="string">"antigravity"</span>).<span class="kw">await
-<a href=#212 id=212 data-nosnippet>212</a></span>}
+<a href=#209 id=209 data-nosnippet>209</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_help_command_for_provider(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message, provider: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">let </span><span class="kw-2">mut </span>req = bot.send_message(msg.chat.id, format_help_text_for_provider(provider)).parse_mode(teloxide::types::ParseMode::Html);
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = msg.thread_id { req = req.message_thread_id(tid); }
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let _ </span>= req.<span class="kw">await</span>;
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="prelude-val">Ok</span>(())
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="attr">#[allow(dead_code)]
+<a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_help_command(bot: <span class="kw-2">&amp;</span>Bot, msg: <span class="kw-2">&amp;</span>Message) -&gt; <span class="prelude-ty">Result</span>&lt;(), teloxide::RequestError&gt; {
+<a href=#218 id=218 data-nosnippet>218</a>    handle_help_command_for_provider(bot, msg, <span class="string">"antigravity"</span>).<span class="kw">await
+<a href=#219 id=219 data-nosnippet>219</a></span>}
 </code></pre></div></section></main></body></html>

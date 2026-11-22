@@ -59,179 +59,182 @@
 <a href=#59 id=59 data-nosnippet>59</a>    prev_text: <span class="kw-2">&amp;</span>str,
 <a href=#60 id=60 data-nosnippet>60</a>    txt: <span class="kw-2">&amp;</span>str,
 <a href=#61 id=61 data-nosnippet>61</a>) {
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>w_idx = find_write_in_index(<span class="kw-2">&amp;</span>q.options);
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, w_idx + <span class="number">1</span>)).<span class="kw">await</span>;
-<a href=#64 id=64 data-nosnippet>64</a>    tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">if </span>!prev_text.is_empty() {
-<a href=#66 id=66 data-nosnippet>66</a>        <span class="kw">let </span>bs = <span class="string">"\x7F"</span>.repeat(prev_text.chars().count());
-<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span>bs).<span class="kw">await</span>;
-<a href=#68 id=68 data-nosnippet>68</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
-<a href=#69 id=69 data-nosnippet>69</a>    }
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{txt}\r"</span>)).<span class="kw">await</span>;
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">if </span>q.is_multi_select {
-<a href=#72 id=72 data-nosnippet>72</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\r"</span>).<span class="kw">await</span>;
-<a href=#74 id=74 data-nosnippet>74</a>    }
-<a href=#75 id=75 data-nosnippet>75</a>}
-<a href=#76 id=76 data-nosnippet>76</a>
-<a href=#77 id=77 data-nosnippet>77</a><span class="kw">async fn </span>apply_single_or_writein(
-<a href=#78 id=78 data-nosnippet>78</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#79 id=79 data-nosnippet>79</a>    is_agy: bool,
-<a href=#80 id=80 data-nosnippet>80</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#81 id=81 data-nosnippet>81</a>    state: <span class="kw-2">&amp;mut </span>AskState,
-<a href=#82 id=82 data-nosnippet>82</a>    q: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
-<a href=#83 id=83 data-nosnippet>83</a>    payload: <span class="kw-2">&amp;</span>AskAnswerPayload,
-<a href=#84 id=84 data-nosnippet>84</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>ans = <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>idx) = payload.selected_indices.first() {
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>label = q.options.get(idx).cloned().ok_or(<span class="string">"Option index out of bounds"</span>)<span class="question-mark">?</span>;
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">if </span>is_agy {
-<a href=#88 id=88 data-nosnippet>88</a>            clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
-<a href=#89 id=89 data-nosnippet>89</a>            <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, idx + <span class="number">1</span>)).<span class="kw">await</span>;
-<a href=#90 id=90 data-nosnippet>90</a>        }
-<a href=#91 id=91 data-nosnippet>91</a>        label
-<a href=#92 id=92 data-nosnippet>92</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(txt) = payload.answer.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>matched_idx = (!q.is_multi_select &amp;&amp; !state.waiting_for_write_in)
-<a href=#94 id=94 data-nosnippet>94</a>            .then(|| <span class="kw">crate</span>::messenger::telegram::formatting::find_best_option(txt, <span class="kw-2">&amp;</span>q.options))
-<a href=#95 id=95 data-nosnippet>95</a>            .flatten()
-<a href=#96 id=96 data-nosnippet>96</a>            .filter(|<span class="kw-2">&amp;</span>i| {
-<a href=#97 id=97 data-nosnippet>97</a>                <span class="kw">let </span>low = q.options[i].to_lowercase();
-<a href=#98 id=98 data-nosnippet>98</a>                !low.contains(<span class="string">"write-in"</span>) &amp;&amp; !q.options[i].contains(<span class="string">"직접 입력"</span>)
-<a href=#99 id=99 data-nosnippet>99</a>            });
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(idx) = matched_idx {
-<a href=#101 id=101 data-nosnippet>101</a>            <span class="kw">if </span>is_agy {
-<a href=#102 id=102 data-nosnippet>102</a>                clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
-<a href=#103 id=103 data-nosnippet>103</a>                <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, idx + <span class="number">1</span>)).<span class="kw">await</span>;
-<a href=#104 id=104 data-nosnippet>104</a>            }
-<a href=#105 id=105 data-nosnippet>105</a>            q.options[idx].clone()
-<a href=#106 id=106 data-nosnippet>106</a>        } <span class="kw">else </span>{
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">if </span>is_agy {
-<a href=#108 id=108 data-nosnippet>108</a>                <span class="kw">let </span>prev = state.answers.get(state.current_index).map(String::as_str).unwrap_or(<span class="string">""</span>);
-<a href=#109 id=109 data-nosnippet>109</a>                send_agy_writein_keystrokes(ctx, sid, q, prev, txt).<span class="kw">await</span>;
-<a href=#110 id=110 data-nosnippet>110</a>            }
-<a href=#111 id=111 data-nosnippet>111</a>            txt.to_string()
-<a href=#112 id=112 data-nosnippet>112</a>        }
-<a href=#113 id=113 data-nosnippet>113</a>    } <span class="kw">else </span>{
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Missing selected_indices or answer"</span>);
-<a href=#115 id=115 data-nosnippet>115</a>    };
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
-<a href=#117 id=117 data-nosnippet>117</a>        state.answers[state.current_index] = ans.clone();
-<a href=#118 id=118 data-nosnippet>118</a>    }
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="prelude-val">Ok</span>(ans)
-<a href=#120 id=120 data-nosnippet>120</a>}
-<a href=#121 id=121 data-nosnippet>121</a>
-<a href=#122 id=122 data-nosnippet>122</a><span class="kw">async fn </span>apply_ask_prev(
-<a href=#123 id=123 data-nosnippet>123</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#124 id=124 data-nosnippet>124</a>    is_agy: bool,
-<a href=#125 id=125 data-nosnippet>125</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#126 id=126 data-nosnippet>126</a>    state: <span class="kw-2">&amp;mut </span>AskState,
-<a href=#127 id=127 data-nosnippet>127</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">if </span>state.current_index == <span class="number">0 </span>{
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Already at first question"</span>);
-<a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>is_agy {
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\x1B[D"</span>).<span class="kw">await</span>;
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">use </span><span class="kw">crate</span>::messenger::telegram::commands_registry::escape_non_workflow_slash;
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>w_idx = find_write_in_index(<span class="kw-2">&amp;</span>q.options);
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, w_idx + <span class="number">1</span>)).<span class="kw">await</span>;
+<a href=#65 id=65 data-nosnippet>65</a>    tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">if </span>!prev_text.is_empty() {
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let </span>prev_safe = escape_non_workflow_slash(prev_text);
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">let </span>bs = <span class="string">"\x7F"</span>.repeat(prev_safe.chars().count());
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span>bs).<span class="kw">await</span>;
+<a href=#70 id=70 data-nosnippet>70</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
+<a href=#71 id=71 data-nosnippet>71</a>    }
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span>safe_txt = escape_non_workflow_slash(txt);
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{safe_txt}\r"</span>)).<span class="kw">await</span>;
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">if </span>q.is_multi_select {
+<a href=#75 id=75 data-nosnippet>75</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\r"</span>).<span class="kw">await</span>;
+<a href=#77 id=77 data-nosnippet>77</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">async fn </span>apply_single_or_writein(
+<a href=#81 id=81 data-nosnippet>81</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#82 id=82 data-nosnippet>82</a>    is_agy: bool,
+<a href=#83 id=83 data-nosnippet>83</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#84 id=84 data-nosnippet>84</a>    state: <span class="kw-2">&amp;mut </span>AskState,
+<a href=#85 id=85 data-nosnippet>85</a>    q: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
+<a href=#86 id=86 data-nosnippet>86</a>    payload: <span class="kw-2">&amp;</span>AskAnswerPayload,
+<a href=#87 id=87 data-nosnippet>87</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">let </span>ans = <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>idx) = payload.selected_indices.first() {
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>label = q.options.get(idx).cloned().ok_or(<span class="string">"Option index out of bounds"</span>)<span class="question-mark">?</span>;
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">if </span>is_agy {
+<a href=#91 id=91 data-nosnippet>91</a>            clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#92 id=92 data-nosnippet>92</a>            <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, idx + <span class="number">1</span>)).<span class="kw">await</span>;
+<a href=#93 id=93 data-nosnippet>93</a>        }
+<a href=#94 id=94 data-nosnippet>94</a>        label
+<a href=#95 id=95 data-nosnippet>95</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(txt) = payload.answer.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>matched_idx = (!q.is_multi_select &amp;&amp; !state.waiting_for_write_in)
+<a href=#97 id=97 data-nosnippet>97</a>            .then(|| <span class="kw">crate</span>::messenger::telegram::formatting::find_best_option(txt, <span class="kw-2">&amp;</span>q.options))
+<a href=#98 id=98 data-nosnippet>98</a>            .flatten()
+<a href=#99 id=99 data-nosnippet>99</a>            .filter(|<span class="kw-2">&amp;</span>i| {
+<a href=#100 id=100 data-nosnippet>100</a>                <span class="kw">let </span>low = q.options[i].to_lowercase();
+<a href=#101 id=101 data-nosnippet>101</a>                !low.contains(<span class="string">"write-in"</span>) &amp;&amp; !q.options[i].contains(<span class="string">"직접 입력"</span>)
+<a href=#102 id=102 data-nosnippet>102</a>            });
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(idx) = matched_idx {
+<a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">if </span>is_agy {
+<a href=#105 id=105 data-nosnippet>105</a>                clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#106 id=106 data-nosnippet>106</a>                <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, idx + <span class="number">1</span>)).<span class="kw">await</span>;
+<a href=#107 id=107 data-nosnippet>107</a>            }
+<a href=#108 id=108 data-nosnippet>108</a>            q.options[idx].clone()
+<a href=#109 id=109 data-nosnippet>109</a>        } <span class="kw">else </span>{
+<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">if </span>is_agy {
+<a href=#111 id=111 data-nosnippet>111</a>                <span class="kw">let </span>prev = state.answers.get(state.current_index).map(String::as_str).unwrap_or(<span class="string">""</span>);
+<a href=#112 id=112 data-nosnippet>112</a>                send_agy_writein_keystrokes(ctx, sid, q, prev, txt).<span class="kw">await</span>;
+<a href=#113 id=113 data-nosnippet>113</a>            }
+<a href=#114 id=114 data-nosnippet>114</a>            txt.to_string()
+<a href=#115 id=115 data-nosnippet>115</a>        }
+<a href=#116 id=116 data-nosnippet>116</a>    } <span class="kw">else </span>{
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Missing selected_indices or answer"</span>);
+<a href=#118 id=118 data-nosnippet>118</a>    };
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
+<a href=#120 id=120 data-nosnippet>120</a>        state.answers[state.current_index] = ans.clone();
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="prelude-val">Ok</span>(ans)
+<a href=#123 id=123 data-nosnippet>123</a>}
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a><span class="kw">async fn </span>apply_ask_prev(
+<a href=#126 id=126 data-nosnippet>126</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#127 id=127 data-nosnippet>127</a>    is_agy: bool,
+<a href=#128 id=128 data-nosnippet>128</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#129 id=129 data-nosnippet>129</a>    state: <span class="kw-2">&amp;mut </span>AskState,
+<a href=#130 id=130 data-nosnippet>130</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>state.current_index == <span class="number">0 </span>{
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Already at first question"</span>);
 <a href=#133 id=133 data-nosnippet>133</a>    }
-<a href=#134 id=134 data-nosnippet>134</a>    state.current_index -= <span class="number">1</span>;
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span>pq = <span class="kw-2">&amp;</span>state.questions[state.current_index];
-<a href=#136 id=136 data-nosnippet>136</a>    state.current_bitmap = get_bitmap_for_question(pq, <span class="kw-2">&amp;</span>state.answers, state.current_index);
-<a href=#137 id=137 data-nosnippet>137</a>    state.waiting_for_write_in = <span class="bool-val">false</span>;
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="prelude-val">Ok</span>(<span class="string">"prev"</span>.to_string())
-<a href=#139 id=139 data-nosnippet>139</a>}
-<a href=#140 id=140 data-nosnippet>140</a>
-<a href=#141 id=141 data-nosnippet>141</a><span class="kw">async fn </span>apply_ask_skip(
-<a href=#142 id=142 data-nosnippet>142</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#143 id=143 data-nosnippet>143</a>    is_agy: bool,
-<a href=#144 id=144 data-nosnippet>144</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#145 id=145 data-nosnippet>145</a>    state: <span class="kw-2">&amp;mut </span>AskState,
-<a href=#146 id=146 data-nosnippet>146</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">if </span>is_agy {
-<a href=#148 id=148 data-nosnippet>148</a>        clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\x1B"</span>).<span class="kw">await</span>;
-<a href=#150 id=150 data-nosnippet>150</a>    }
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
-<a href=#152 id=152 data-nosnippet>152</a>        state.answers[state.current_index] = <span class="string">"User Skipped"</span>.to_string();
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">if </span>is_agy {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\x1B[D"</span>).<span class="kw">await</span>;
+<a href=#136 id=136 data-nosnippet>136</a>    }
+<a href=#137 id=137 data-nosnippet>137</a>    state.current_index -= <span class="number">1</span>;
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">let </span>pq = <span class="kw-2">&amp;</span>state.questions[state.current_index];
+<a href=#139 id=139 data-nosnippet>139</a>    state.current_bitmap = get_bitmap_for_question(pq, <span class="kw-2">&amp;</span>state.answers, state.current_index);
+<a href=#140 id=140 data-nosnippet>140</a>    state.waiting_for_write_in = <span class="bool-val">false</span>;
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="prelude-val">Ok</span>(<span class="string">"prev"</span>.to_string())
+<a href=#142 id=142 data-nosnippet>142</a>}
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a><span class="kw">async fn </span>apply_ask_skip(
+<a href=#145 id=145 data-nosnippet>145</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#146 id=146 data-nosnippet>146</a>    is_agy: bool,
+<a href=#147 id=147 data-nosnippet>147</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#148 id=148 data-nosnippet>148</a>    state: <span class="kw-2">&amp;mut </span>AskState,
+<a href=#149 id=149 data-nosnippet>149</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">if </span>is_agy {
+<a href=#151 id=151 data-nosnippet>151</a>        clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="string">"\x1B"</span>).<span class="kw">await</span>;
 <a href=#153 id=153 data-nosnippet>153</a>    }
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="prelude-val">Ok</span>(<span class="string">"User Skipped"</span>.to_string())
-<a href=#155 id=155 data-nosnippet>155</a>}
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a><span class="kw">async fn </span>apply_ask_submit(
-<a href=#158 id=158 data-nosnippet>158</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#159 id=159 data-nosnippet>159</a>    is_agy: bool,
-<a href=#160 id=160 data-nosnippet>160</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#161 id=161 data-nosnippet>161</a>    state: <span class="kw-2">&amp;mut </span>AskState,
-<a href=#162 id=162 data-nosnippet>162</a>    q: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
-<a href=#163 id=163 data-nosnippet>163</a>    selected_indices: <span class="kw-2">&amp;</span>[usize],
-<a href=#164 id=164 data-nosnippet>164</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>prev = state.answers.get(state.current_index).map(String::as_str).unwrap_or(<span class="string">""</span>);
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>(ks, opts) = build_multi_keystrokes_from_indices(<span class="kw-2">&amp;</span>q.options, selected_indices, prev);
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>joined = <span class="kw">if </span>opts.is_empty() { <span class="string">"None"</span>.to_string() } <span class="kw">else </span>{ opts.join(<span class="string">", "</span>) };
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">if </span>is_agy {
-<a href=#169 id=169 data-nosnippet>169</a>        clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span>ks).<span class="kw">await</span>;
-<a href=#171 id=171 data-nosnippet>171</a>    }
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
-<a href=#173 id=173 data-nosnippet>173</a>        state.answers[state.current_index] = joined.clone();
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
+<a href=#155 id=155 data-nosnippet>155</a>        state.answers[state.current_index] = <span class="string">"User Skipped"</span>.to_string();
+<a href=#156 id=156 data-nosnippet>156</a>    }
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="prelude-val">Ok</span>(<span class="string">"User Skipped"</span>.to_string())
+<a href=#158 id=158 data-nosnippet>158</a>}
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a><span class="kw">async fn </span>apply_ask_submit(
+<a href=#161 id=161 data-nosnippet>161</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#162 id=162 data-nosnippet>162</a>    is_agy: bool,
+<a href=#163 id=163 data-nosnippet>163</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#164 id=164 data-nosnippet>164</a>    state: <span class="kw-2">&amp;mut </span>AskState,
+<a href=#165 id=165 data-nosnippet>165</a>    q: <span class="kw-2">&amp;</span><span class="kw">crate</span>::cli::AskQuestionData,
+<a href=#166 id=166 data-nosnippet>166</a>    selected_indices: <span class="kw-2">&amp;</span>[usize],
+<a href=#167 id=167 data-nosnippet>167</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>prev = state.answers.get(state.current_index).map(String::as_str).unwrap_or(<span class="string">""</span>);
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">let </span>(ks, opts) = build_multi_keystrokes_from_indices(<span class="kw-2">&amp;</span>q.options, selected_indices, prev);
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>joined = <span class="kw">if </span>opts.is_empty() { <span class="string">"None"</span>.to_string() } <span class="kw">else </span>{ opts.join(<span class="string">", "</span>) };
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">if </span>is_agy {
+<a href=#172 id=172 data-nosnippet>172</a>        clear_previous_write_in_if_any(sid, <span class="kw-2">&amp;</span>ctx.cli, state, <span class="bool-val">true</span>).<span class="kw">await</span>;
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">let _ </span>= ctx.cli.sessions.write_to_session(sid, <span class="kw-2">&amp;</span>ks).<span class="kw">await</span>;
 <a href=#174 id=174 data-nosnippet>174</a>    }
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="prelude-val">Ok</span>(joined)
-<a href=#176 id=176 data-nosnippet>176</a>}
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a><span class="kw">async fn </span>is_ask_tui_prompt_rendered(
-<a href=#179 id=179 data-nosnippet>179</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#180 id=180 data-nosnippet>180</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#181 id=181 data-nosnippet>181</a>    q_idx: usize,
-<a href=#182 id=182 data-nosnippet>182</a>    q_total: usize,
-<a href=#183 id=183 data-nosnippet>183</a>) -&gt; bool {
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">let </span>slice = {
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let </span>holders = ctx.cli.sessions.holders.lock().<span class="kw">await</span>;
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(h) = holders.get(sid) <span class="kw">else </span>{
-<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#188 id=188 data-nosnippet>188</a>        };
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>off = h.turn_start_offset;
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>raw = h.output.lock().<span class="kw">await</span>;
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>start = off.min(raw.len()).max(raw.len().saturating_sub(<span class="number">65_536</span>));
-<a href=#192 id=192 data-nosnippet>192</a>        raw[start..].to_vec()
-<a href=#193 id=193 data-nosnippet>193</a>    };
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>clean = <span class="kw">crate</span>::cli::antigravity::pty_spawner::strip_ansi(<span class="kw-2">&amp;</span>String::from_utf8_lossy(<span class="kw-2">&amp;</span>slice));
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>marker = <span class="macro">format!</span>(<span class="string">"Question {}/{}:"</span>, q_idx + <span class="number">1</span>, q_total);
-<a href=#196 id=196 data-nosnippet>196</a>    clean.contains(<span class="kw-2">&amp;</span>marker)
-<a href=#197 id=197 data-nosnippet>197</a>        || (q_idx == <span class="number">0 </span>&amp;&amp; clean.contains(<span class="string">"Question"</span>) &amp;&amp; (clean.contains(<span class="string">"esc Skip"</span>) || clean.contains(<span class="string">"Navigate ·"</span>)))
-<a href=#198 id=198 data-nosnippet>198</a>}
-<a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a><span class="kw">async fn </span>wait_for_agy_ask_tui_ready(ctx: <span class="kw-2">&amp;</span>WebAppCtx, sid: <span class="kw-2">&amp;</span>str, q_idx: usize, q_total: usize) {
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">if </span><span class="macro">cfg!</span>(test) || sid.starts_with(<span class="string">"mock-"</span>) || !ctx.cli.sessions.is_active(sid).<span class="kw">await </span>{
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return</span>;
-<a href=#203 id=203 data-nosnippet>203</a>    }
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span>deadline = std::time::Instant::now() + std::time::Duration::from_millis(<span class="number">4500</span>);
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">while </span>std::time::Instant::now() &lt; deadline {
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">if </span>is_ask_tui_prompt_rendered(ctx, sid, q_idx, q_total).<span class="kw">await </span>{
-<a href=#207 id=207 data-nosnippet>207</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
-<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">return</span>;
-<a href=#209 id=209 data-nosnippet>209</a>        }
-<a href=#210 id=210 data-nosnippet>210</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">60</span>)).<span class="kw">await</span>;
-<a href=#211 id=211 data-nosnippet>211</a>    }
-<a href=#212 id=212 data-nosnippet>212</a>}
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>apply_ask_step_input(
-<a href=#215 id=215 data-nosnippet>215</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
-<a href=#216 id=216 data-nosnippet>216</a>    sess: <span class="kw-2">&amp;</span>SessionData,
-<a href=#217 id=217 data-nosnippet>217</a>    sid: <span class="kw-2">&amp;</span>str,
-<a href=#218 id=218 data-nosnippet>218</a>    state: <span class="kw-2">&amp;mut </span>AskState,
-<a href=#219 id=219 data-nosnippet>219</a>    payload: <span class="kw-2">&amp;</span>AskAnswerPayload,
-<a href=#220 id=220 data-nosnippet>220</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>q = state.questions.get(state.current_index).cloned().ok_or(<span class="string">"Invalid question index"</span>)<span class="question-mark">?</span>;
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span>is_agy = SessionData::effective_provider(<span class="kw-2">&amp;</span>sess.provider, <span class="kw-2">&amp;</span>ctx.config.provider) == <span class="string">"antigravity"</span>;
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">if </span>is_agy {
-<a href=#224 id=224 data-nosnippet>224</a>        wait_for_agy_ask_tui_ready(ctx, sid, state.current_index, state.questions.len()).<span class="kw">await</span>;
-<a href=#225 id=225 data-nosnippet>225</a>    }
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">let </span>res = <span class="kw">match </span>payload.action.as_str() {
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="string">"prev" </span>=&gt; apply_ask_prev(ctx, is_agy, sid, state).<span class="kw">await</span>,
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="string">"skip" </span>=&gt; apply_ask_skip(ctx, is_agy, sid, state).<span class="kw">await</span>,
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="string">"submit" </span>=&gt; apply_ask_submit(ctx, is_agy, sid, state, <span class="kw-2">&amp;</span>q, <span class="kw-2">&amp;</span>payload.selected_indices).<span class="kw">await</span>,
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">_ </span>=&gt; apply_single_or_writein(ctx, is_agy, sid, state, <span class="kw-2">&amp;</span>q, payload).<span class="kw">await</span>,
-<a href=#231 id=231 data-nosnippet>231</a>    };
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">if </span>is_agy &amp;&amp; !<span class="macro">cfg!</span>(test) &amp;&amp; res.is_ok() {
-<a href=#233 id=233 data-nosnippet>233</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>    res
-<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">if </span>state.current_index &lt; state.answers.len() {
+<a href=#176 id=176 data-nosnippet>176</a>        state.answers[state.current_index] = joined.clone();
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="prelude-val">Ok</span>(joined)
+<a href=#179 id=179 data-nosnippet>179</a>}
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a><span class="kw">async fn </span>is_ask_tui_prompt_rendered(
+<a href=#182 id=182 data-nosnippet>182</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#183 id=183 data-nosnippet>183</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#184 id=184 data-nosnippet>184</a>    q_idx: usize,
+<a href=#185 id=185 data-nosnippet>185</a>    q_total: usize,
+<a href=#186 id=186 data-nosnippet>186</a>) -&gt; bool {
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">let </span>slice = {
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>holders = ctx.cli.sessions.holders.lock().<span class="kw">await</span>;
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(h) = holders.get(sid) <span class="kw">else </span>{
+<a href=#190 id=190 data-nosnippet>190</a>            <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#191 id=191 data-nosnippet>191</a>        };
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>off = h.turn_start_offset;
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>raw = h.output.lock().<span class="kw">await</span>;
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>start = off.min(raw.len()).max(raw.len().saturating_sub(<span class="number">65_536</span>));
+<a href=#195 id=195 data-nosnippet>195</a>        raw[start..].to_vec()
+<a href=#196 id=196 data-nosnippet>196</a>    };
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>clean = <span class="kw">crate</span>::cli::antigravity::pty_spawner::strip_ansi(<span class="kw-2">&amp;</span>String::from_utf8_lossy(<span class="kw-2">&amp;</span>slice));
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span>marker = <span class="macro">format!</span>(<span class="string">"Question {}/{}:"</span>, q_idx + <span class="number">1</span>, q_total);
+<a href=#199 id=199 data-nosnippet>199</a>    clean.contains(<span class="kw-2">&amp;</span>marker)
+<a href=#200 id=200 data-nosnippet>200</a>        || (q_idx == <span class="number">0 </span>&amp;&amp; clean.contains(<span class="string">"Question"</span>) &amp;&amp; (clean.contains(<span class="string">"esc Skip"</span>) || clean.contains(<span class="string">"Navigate ·"</span>)))
+<a href=#201 id=201 data-nosnippet>201</a>}
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a><span class="kw">async fn </span>wait_for_agy_ask_tui_ready(ctx: <span class="kw-2">&amp;</span>WebAppCtx, sid: <span class="kw-2">&amp;</span>str, q_idx: usize, q_total: usize) {
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">if </span><span class="macro">cfg!</span>(test) || sid.starts_with(<span class="string">"mock-"</span>) || !ctx.cli.sessions.is_active(sid).<span class="kw">await </span>{
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">return</span>;
+<a href=#206 id=206 data-nosnippet>206</a>    }
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>deadline = std::time::Instant::now() + std::time::Duration::from_millis(<span class="number">4500</span>);
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">while </span>std::time::Instant::now() &lt; deadline {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">if </span>is_ask_tui_prompt_rendered(ctx, sid, q_idx, q_total).<span class="kw">await </span>{
+<a href=#210 id=210 data-nosnippet>210</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">120</span>)).<span class="kw">await</span>;
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">return</span>;
+<a href=#212 id=212 data-nosnippet>212</a>        }
+<a href=#213 id=213 data-nosnippet>213</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">60</span>)).<span class="kw">await</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    }
+<a href=#215 id=215 data-nosnippet>215</a>}
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>apply_ask_step_input(
+<a href=#218 id=218 data-nosnippet>218</a>    ctx: <span class="kw-2">&amp;</span>WebAppCtx,
+<a href=#219 id=219 data-nosnippet>219</a>    sess: <span class="kw-2">&amp;</span>SessionData,
+<a href=#220 id=220 data-nosnippet>220</a>    sid: <span class="kw-2">&amp;</span>str,
+<a href=#221 id=221 data-nosnippet>221</a>    state: <span class="kw-2">&amp;mut </span>AskState,
+<a href=#222 id=222 data-nosnippet>222</a>    payload: <span class="kw-2">&amp;</span>AskAnswerPayload,
+<a href=#223 id=223 data-nosnippet>223</a>) -&gt; <span class="prelude-ty">Result</span>&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let </span>q = state.questions.get(state.current_index).cloned().ok_or(<span class="string">"Invalid question index"</span>)<span class="question-mark">?</span>;
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>is_agy = SessionData::effective_provider(<span class="kw-2">&amp;</span>sess.provider, <span class="kw-2">&amp;</span>ctx.config.provider) == <span class="string">"antigravity"</span>;
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if </span>is_agy {
+<a href=#227 id=227 data-nosnippet>227</a>        wait_for_agy_ask_tui_ready(ctx, sid, state.current_index, state.questions.len()).<span class="kw">await</span>;
+<a href=#228 id=228 data-nosnippet>228</a>    }
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">let </span>res = <span class="kw">match </span>payload.action.as_str() {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="string">"prev" </span>=&gt; apply_ask_prev(ctx, is_agy, sid, state).<span class="kw">await</span>,
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="string">"skip" </span>=&gt; apply_ask_skip(ctx, is_agy, sid, state).<span class="kw">await</span>,
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="string">"submit" </span>=&gt; apply_ask_submit(ctx, is_agy, sid, state, <span class="kw-2">&amp;</span>q, <span class="kw-2">&amp;</span>payload.selected_indices).<span class="kw">await</span>,
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">_ </span>=&gt; apply_single_or_writein(ctx, is_agy, sid, state, <span class="kw-2">&amp;</span>q, payload).<span class="kw">await</span>,
+<a href=#234 id=234 data-nosnippet>234</a>    };
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">if </span>is_agy &amp;&amp; !<span class="macro">cfg!</span>(test) &amp;&amp; res.is_ok() {
+<a href=#236 id=236 data-nosnippet>236</a>        tokio::time::sleep(std::time::Duration::from_millis(<span class="number">150</span>)).<span class="kw">await</span>;
+<a href=#237 id=237 data-nosnippet>237</a>    }
+<a href=#238 id=238 data-nosnippet>238</a>    res
+<a href=#239 id=239 data-nosnippet>239</a>}
 </code></pre></div></section></main></body></html>

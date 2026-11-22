@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["append_topic_status","build_status_report","handle_commands","handle_cron_command","handle_info_commands","handle_pref_commands","resolve_topic_provider","send_reply"]};
+window.SIDEBAR_ITEMS = {"fn":["append_topic_status","build_status_report","handle_commands","handle_cron_command","handle_info_commands","handle_pref_commands","resolve_session_state_label","resolve_topic_provider","send_reply"]};

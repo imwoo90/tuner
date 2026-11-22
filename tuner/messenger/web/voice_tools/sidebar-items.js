@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_voice_topic","exec_answer_ask","exec_delegate","exec_get_context","exec_list_topics","exec_stop_topic","execute_voice_tool","opt_str","resolve_key_or_default"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["authorize_voice_ws","format_synthesized_briefing","handle_voice_status","resolve_topic_title"],"struct":["CompletedItem","VoiceBriefingState","VoiceWsQuery"]};

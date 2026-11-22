@@ -79,7 +79,7 @@
 <a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">let </span>current = <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>);
 <a href=#80 id=80 data-nosnippet>80</a>            <span class="kw">let </span>latest = release.tag_name.trim_start_matches(<span class="string">'v'</span>);
 <a href=#81 id=81 data-nosnippet>81</a>            <span class="kw">if </span><span class="kw">crate</span>::upgrade::is_newer_version(current, latest) {
-<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw">if </span>release.assets.iter().any(|a| a.name.ends_with(<span class="string">".tar.gz"</span>)) {
+<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw">if </span><span class="kw">crate</span>::upgrade::select_arch_tarball_asset(<span class="kw-2">&amp;</span>release.assets, std::env::consts::ARCH).is_some() {
 <a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw">let </span>has_body = release.body.as_ref().map(|b| !b.is_empty()).unwrap_or(<span class="bool-val">false</span>);
 <a href=#84 id=84 data-nosnippet>84</a>                    <span class="kw">let </span>markup = build_upgrade_keyboard(<span class="kw-2">&amp;</span>release.tag_name, latest, has_body);
 <a href=#85 id=85 data-nosnippet>85</a>                    <span class="kw">let </span>header = <span class="macro">crate::t!</span>(<span class="string">"upgrade.available_header"</span>);

@@ -167,7 +167,7 @@
 <a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>ver = tag.trim_start_matches(<span class="string">'v'</span>);
 <a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, <span class="macro">crate::t!</span>(<span class="string">"upgrade_handler.in_progress"</span>, version = ver)).<span class="kw">await</span>;
 <a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">match </span><span class="kw">crate</span>::upgrade::get_latest_release().<span class="kw">await </span>{
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="prelude-val">Ok</span>(rel) =&gt; <span class="kw">if let </span><span class="prelude-val">Some</span>(a) = rel.assets.iter().find(|a| a.name.ends_with(<span class="string">".tar.gz"</span>)) {
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="prelude-val">Ok</span>(rel) =&gt; <span class="kw">if let </span><span class="prelude-val">Some</span>(a) = <span class="kw">crate</span>::upgrade::select_arch_tarball_asset(<span class="kw-2">&amp;</span>rel.assets, std::env::consts::ARCH) {
 <a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">match </span><span class="kw">crate</span>::upgrade::perform_upgrade(<span class="kw-2">&amp;</span>a.browser_download_url).<span class="kw">await </span>{
 <a href=#172 id=172 data-nosnippet>172</a>                <span class="prelude-val">Ok</span>(()) =&gt; {
 <a href=#173 id=173 data-nosnippet>173</a>                    <span class="kw">let _ </span>= bot.edit_message_text(msg.chat.id, msg.id, <span class="macro">crate::t!</span>(<span class="string">"upgrade_handler.restarting"</span>)).<span class="kw">await</span>;
