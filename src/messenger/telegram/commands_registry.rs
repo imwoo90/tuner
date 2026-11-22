@@ -174,7 +174,14 @@ pub(crate) fn is_workflow_slash_command(text: &str) -> bool {
 
 pub(crate) fn escape_non_workflow_slash(text: &str) -> String {
     let trimmed = text.trim_start();
-    if trimmed.starts_with('/') && !is_workflow_slash_command(trimmed) { format!(" {}", text) } else { text.to_string() }
+    let needs_escape = trimmed.starts_with('?')
+        || trimmed.starts_with('!')
+        || (trimmed.starts_with('/') && !is_workflow_slash_command(trimmed));
+    if needs_escape && !text.starts_with(' ') {
+        format!(" {}", text)
+    } else {
+        text.to_string()
+    }
 }
 
 pub(crate) async fn register_commands(bot: &Bot) -> Result<(), teloxide::RequestError> {

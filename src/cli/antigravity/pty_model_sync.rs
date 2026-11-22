@@ -214,8 +214,9 @@ impl AntigravityCli {
         if let Some(h) = self.sessions.holders.lock().await.get_mut(sid) {
             h.turn_start_offset = h.output.lock().await.len();
         }
-        self.sessions.write_to_session(sid, &format!("{}\r", prompt)).await?;
-        let p_opt = (!prompt.is_empty()).then_some(prompt);
+        let safe_p = super::pty_sync::sanitize_pty_turn_prompt(prompt);
+        self.sessions.write_to_session(sid, &format!("{safe_p}\r")).await?;
+        let p_opt = (!safe_p.is_empty()).then_some(safe_p.as_str());
         super::polling::wait_for_log_completion_with_prompt(&self.sessions, sid, Some(p_tp.to_path_buf()), sz, p_opt).await?;
         use std::os::unix::process::ExitStatusExt;
         Ok((String::new(), String::new(), std::process::ExitStatus::from_raw(0)))

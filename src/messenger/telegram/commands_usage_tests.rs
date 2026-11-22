@@ -194,6 +194,18 @@ Press Esc or q to exit
         // Normal inputs without leading slash are untouched
         assert_eq!(escape_non_workflow_slash("일반 텍스트"), "일반 텍스트");
         assert_eq!(escape_non_workflow_slash("hello /world"), "hello /world");
+
+        // Leading '?' (shortcuts modal hotkey) and '!' (bash mode hotkey) are escaped idempotently
+        assert_eq!(
+            escape_non_workflow_slash("??? why does that fail...\n\nsecond paragraph?"),
+            " ??? why does that fail...\n\nsecond paragraph?"
+        );
+        assert_eq!(escape_non_workflow_slash("? single question"), " ? single question");
+        assert_eq!(escape_non_workflow_slash("! echo injected"), " ! echo injected");
+        assert_eq!(escape_non_workflow_slash("!!! urgent check"), " !!! urgent check");
+        assert_eq!(escape_non_workflow_slash("\n??? leading newline"), " \n??? leading newline");
+        assert_eq!(escape_non_workflow_slash(" ??? already escaped"), " ??? already escaped");
+        assert_eq!(escape_non_workflow_slash(" /etc/hosts"), " /etc/hosts");
     }
 
     #[test]

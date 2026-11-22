@@ -213,3 +213,12 @@ impl AntigravityCli {
         self.pty_sync.clear_all_applied().await;
     }
 }
+
+/// Escapes leading interactive `agy` TUI hotkeys (`?`, `!`, and non-workflow `/`)
+/// so column-0 user prompts cannot trigger the shortcuts modal or local bash mode.
+pub(crate) fn sanitize_pty_turn_prompt(prompt: &str) -> String {
+    if prompt.is_empty() {
+        return String::new();
+    }
+    crate::messenger::telegram::commands_registry::escape_non_workflow_slash(prompt)
+}

@@ -60,12 +60,14 @@ async fn send_write_in_input(
     tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
     
     if !prev_text.is_empty() {
-        let backspaces = "\x7F".repeat(prev_text.chars().count());
+        let prev_safe = super::commands_registry::escape_non_workflow_slash(prev_text);
+        let backspaces = "\x7F".repeat(prev_safe.chars().count());
         let _ = cli.sessions.write_to_session(sid, &backspaces).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
     }
     
-    let ip = format!("{}\r", current_text);
+    let safe_text = super::commands_registry::escape_non_workflow_slash(current_text);
+    let ip = format!("{}\r", safe_text);
     let _ = cli.sessions.write_to_session(sid, &ip).await;
     if is_multi_select {
         tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;

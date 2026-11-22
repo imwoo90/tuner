@@ -59,15 +59,18 @@ async fn send_agy_writein_keystrokes(
     prev_text: &str,
     txt: &str,
 ) {
+    use crate::messenger::telegram::commands_registry::escape_non_workflow_slash;
     let w_idx = find_write_in_index(&q.options);
     let _ = ctx.cli.sessions.write_to_session(sid, &format!("{}", w_idx + 1)).await;
     tokio::time::sleep(std::time::Duration::from_millis(120)).await;
     if !prev_text.is_empty() {
-        let bs = "\x7F".repeat(prev_text.chars().count());
+        let prev_safe = escape_non_workflow_slash(prev_text);
+        let bs = "\x7F".repeat(prev_safe.chars().count());
         let _ = ctx.cli.sessions.write_to_session(sid, &bs).await;
         tokio::time::sleep(std::time::Duration::from_millis(120)).await;
     }
-    let _ = ctx.cli.sessions.write_to_session(sid, &format!("{txt}\r")).await;
+    let safe_txt = escape_non_workflow_slash(txt);
+    let _ = ctx.cli.sessions.write_to_session(sid, &format!("{safe_txt}\r")).await;
     if q.is_multi_select {
         tokio::time::sleep(std::time::Duration::from_millis(120)).await;
         let _ = ctx.cli.sessions.write_to_session(sid, "\r").await;

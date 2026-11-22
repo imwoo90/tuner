@@ -403,3 +403,18 @@ async fn test_pty_child_reaped_by_pdeathsig_when_parent_exits_without_drop() {
     }
     assert!(dead, "Orphaned PTY grandchild {} survived parent exit(42)", gpid);
 }
+
+#[test]
+fn test_sanitize_pty_turn_prompt_guards_column_zero_hotkeys() {
+    use super::pty_sync::sanitize_pty_turn_prompt;
+
+    assert_eq!(sanitize_pty_turn_prompt(""), "");
+    assert_eq!(
+        sanitize_pty_turn_prompt("??? puzzled follow-up\n\nwhat if a proxy employee is used?"),
+        " ??? puzzled follow-up\n\nwhat if a proxy employee is used?"
+    );
+    assert_eq!(sanitize_pty_turn_prompt("! rm -rf /tmp/x"), " ! rm -rf /tmp/x");
+    assert_eq!(sanitize_pty_turn_prompt("/etc/hosts"), " /etc/hosts");
+    assert_eq!(sanitize_pty_turn_prompt("/plan step by step"), "/plan step by step");
+    assert_eq!(sanitize_pty_turn_prompt(" ??? idempotent"), " ??? idempotent");
+}
